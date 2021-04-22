@@ -518,7 +518,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_1(
     struct wolfsentry_route *i;
     wolfsentry_priority_t highest_priority_seen = 0;
     struct wolfsentry_route *highest_priority_match_seen = NULL;
-    wolfsentry_route_flags_t highest_priority_inexact_matches;
+    wolfsentry_route_flags_t highest_priority_inexact_matches = 0;
     wolfsentry_errcode_t ret;
 
     if ((ret = wolfsentry_table_cursor_init(wolfsentry, &cursor)) < 0)

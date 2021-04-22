@@ -116,9 +116,20 @@ uninstall:
 	$(RM) $(INSTALL_LIBDIR)/$(LIB_NAME) $(addprefix $(INSTALL_INCDIR)/,$(INSTALL_HEADERS))
 	@rmdir $(INSTALL_LIBDIR) $(INSTALL_INCDIR)/wolfsentry $(INSTALL_INCDIR) 2>/dev/null || exit 0
 
+# $(TAR) must be gnu tar, for its --transform capability.  This is the default on Linux, but on Mac,
+# it will need to be installed, and TAR=gtar will be needed.
+ifndef TAR
+    TAR=tar
+endif
+
+ifndef VERSION
+    VERSION:=$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo xxxxxxxx)
+    VERSION:=$(VERSION)$(shell git diff --quiet || [ $$? -ne 1 ] || echo "-dirty")
+endif
+
 .PHONY: dist
 dist:
-	tar --transform 's+^+wolfsentry/+' --gzip -cf wolfsentry.tgz README.md Makefile Makefile.minimal wolfsentry/ src/wolfsentry_internal.h $(addprefix src/,$(SRCS)) tests/unittests.c
+	$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.minimal wolfsentry/ src/wolfsentry_internal.h $(addprefix src/,$(SRCS)) tests/unittests.c
 
 .PHONY: clean
 clean:

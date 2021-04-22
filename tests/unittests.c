@@ -205,8 +205,9 @@ static int test_rw_locks (void) {
         (measured_sequence[6] != 4) ||
         (measured_sequence[1] != 7) ||
         (measured_sequence[7] != 8)) {
+        size_t i;
         printf("wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
-        for (size_t i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
+        for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             printf("%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         return 1;
     }
@@ -264,15 +265,19 @@ static int test_rw_locks (void) {
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(thread3, 0 /* retval */));
 
     int measured_sequence_transposed[8];
-    for (int i=0; i<8; ++i)
-        measured_sequence_transposed[measured_sequence[i] - 1] = i + 1;
+    {
+        int i;
+        for (i=0; i<8; ++i)
+            measured_sequence_transposed[measured_sequence[i] - 1] = i + 1;
+    }
 #define SEQ(x) measured_sequence_transposed[(x)-1]
     if ((SEQ(6) > SEQ(3)) ||
         (SEQ(7) - SEQ(3) != 1) ||
         (SEQ(6) > SEQ(4)) ||
         (SEQ(8) - SEQ(4) != 1)) {
+        size_t i;
         printf("wrong sequence at L%d.  got {", __LINE__);
-        for (size_t i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
+        for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             printf("%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         return 1;
     }
@@ -422,16 +427,19 @@ static int test_static_routes (void) {
                                  &private_data_size));
 
     if (private_data_size < PRIVATE_DATA_SIZE) {
-        printf("private_data_size is %lu but expected %d.\n",private_data_size,PRIVATE_DATA_SIZE);
+        printf("private_data_size is %zu but expected %d.\n",private_data_size,PRIVATE_DATA_SIZE);
         return 1;
     }
-    if ((PRIVATE_DATA_ALIGNMENT > 0) && ((uint64_t)private_data % (uint64_t)PRIVATE_DATA_ALIGNMENT)) {
+    if ((PRIVATE_DATA_ALIGNMENT > 0) && ((uintptr_t)private_data % (uintptr_t)PRIVATE_DATA_ALIGNMENT)) {
         printf("private_data (%p) is not aligned to %d.\n",private_data,PRIVATE_DATA_ALIGNMENT);
         return 1;
     }
 
-    for (byte *i = private_data, *i_end = private_data + private_data_size; i < i_end; ++i)
-        *i = 'x';
+    {
+        byte *i, *i_end;
+        for (i = private_data, i_end = private_data + private_data_size; i < i_end; ++i)
+            *i = 'x';
+    }
 
 #if 0
     puts("table after deleting 4.5.6.7 and inserting 3 more:");
@@ -510,7 +518,8 @@ static int test_static_routes (void) {
     memcpy(remote.sa.addr,"\4\5\6\7",sizeof remote.addr_buf);
     memcpy(local.sa.addr,"\373\372\371\370",sizeof local.addr_buf);
 
-    for (int prefixlen = sizeof remote.addr_buf * BITS_PER_BYTE;
+    int prefixlen;
+    for (prefixlen = sizeof remote.addr_buf * BITS_PER_BYTE;
          prefixlen >= 8;
          --prefixlen) {
         remote.sa.addr_len = (wolfsentry_addr_bits_t)prefixlen;

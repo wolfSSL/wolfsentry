@@ -21,20 +21,27 @@
 
 SRCS = util.c internal.c routes.c events.c actions.c
 
-DEBUG=-ggdb
+ifndef DEBUG
+    DEBUG=-ggdb
+endif
 
-OPTIM=-O3
-
-CFLAGS=-I. $(OPTIM) $(DEBUG) -MMD -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast $(EXTRA_CFLAGS)
+ifndef OPTIM
+    OPTIM=-O3
+endif
 
 CC_IS_GCC:=$(shell if $(CC) -v 2>&1 | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
 
-ifdef USER_SETTINGS_FILE
-    CFLAGS+=-DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
+ifndef C_WARNFLAGS
+    C_WARNFLAGS=-Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast
+    ifeq "$(CC_IS_GCC)" "1"
+        C_WARNFLAGS+=-Wjump-misses-init -Wlogical-op
+    endif
 endif
 
-ifeq "$(CC_IS_GCC)" "1"
-    CFLAGS+=-Wjump-misses-init -Wlogical-op
+CFLAGS=-I. $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+
+ifdef USER_SETTINGS_FILE
+    CFLAGS+=-DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
 endif
 
 ifeq "$(SINGLETHREADED)" "1"
@@ -111,7 +118,7 @@ uninstall:
 
 .PHONY: dist
 dist:
-	tar --gzip -cf wolfsentry.tgz README.md Makefile.minimal wolfsentry/ src/wolfsentry_internal.h $(addprefix src/,$(SRCS)) tests/unittests.c
+	tar --transform 's+^+wolfsentry/+' --gzip -cf wolfsentry.tgz README.md Makefile Makefile.minimal wolfsentry/ src/wolfsentry_internal.h $(addprefix src/,$(SRCS)) tests/unittests.c
 
 .PHONY: clean
 clean:

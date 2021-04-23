@@ -53,6 +53,10 @@
 #include <stdint.h>
 #endif
 
+#ifndef WOLFSENTRY_NO_STDDEF_H
+#include <stddef.h>
+#endif
+
 #ifndef WOLFSENTRY_NO_INTTYPES_H
 #include <inttypes.h>
 #endif

@@ -26,6 +26,7 @@
 #include <wolfsentry/wolfsentry.h>
 
 #ifndef offsetof
+/* gcc and clang define this in stddef.h to use sanitizer-safe builtins. */
 #define offsetof(structure, element) ((uintptr_t)&(((structure *)0)->element))
 #endif
 

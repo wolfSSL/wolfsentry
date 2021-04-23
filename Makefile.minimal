@@ -107,12 +107,44 @@ test: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
 	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all tests succeeded.'; else exit $$exitcode; fi
 
 .PHONY: valgrind
-valgrind: VALGRIND=valgrind --leak-check=full --error-exitcode=10
+valgrind: VALGRIND=valgrind --tool=memcheck --leak-check=full --error-exitcode=10 $(VALGRIND_ARGS)
 valgrind: test
 
+.PHONY: valgrind-drd
+valgrind-drd: VALGRIND=valgrind --tool=drd --error-exitcode=10 $(VALGRIND_ARGS)
+valgrind-drd: test
+
+.PHONY: valgrind-helgrind
+valgrind-helgrind: VALGRIND=valgrind --tool=helgrind --error-exitcode=10 $(VALGRIND_ARGS)
+valgrind-helgrind: test
+
+.PHONY: valgrind-all
+valgrind-all:
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds clean >/dev/null
+	@echo "valgrind memcheck"
+	@echo "================="
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds VALGRIND_ARGS=-q valgrind
+	@echo
+	@echo "valgrind drd"
+	@echo "============"
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds VALGRIND_ARGS=-q valgrind-drd
+	@echo
+	@echo "valgrind helgrind"
+	@echo "================="
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds VALGRIND_ARGS=-q valgrind-helgrind
+	@echo
+	@echo "valgrind found no defects."
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds clean >/dev/null
+
 .PHONY: sanitize
-sanitize: CFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined
-sanitize: LDFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined
+sanitize: CFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
+sanitize: LDFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
+
+ifeq "$(CC_IS_GCC)" "1"
+sanitize: CFLAGS+=-fsanitize=bounds-strict
+sanitize: LDFLAGS+=-fsanitize=bounds-strict
+endif
+
 sanitize: TEST_ENV+=ASAN_OPTIONS=detect_invalid_pointer_pairs=2
 sanitize: test
 
@@ -123,18 +155,27 @@ sanitize-thread: test
 
 .PHONY: sanitize-all
 sanitize-all:
-	@echo "sanitize address, leak, and undefined"
-	@echo "====================================="
+ifeq "$(CC_IS_GCC)" "1"
+	@echo "sanitize address, leak, undefined, float-cast-overflow, float-divide-by-zero, and bounds-strict"
+	@echo "==============================================================================================="
+else
+	@echo "sanitize address, leak, undefined, float-cast-overflow, and float-divide-by-zero"
+	@echo "================================================================================"
+endif
 	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds sanitize
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS="$(EXTRA_CFLAGS) -fno-sanitize-recover=all" sanitize
 	@echo
 	@echo "sanitize thread"
 	@echo "==============="
 	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds sanitize-thread
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS="$(EXTRA_CFLAGS) -fno-sanitize-recover=all" sanitize-thread
 	@echo
 	@echo "sanitizers found no defects."
 	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
+
+.PHONY: analyze-all
+analyze-all: valgrind-all sanitize-all
+	@echo "analyzers found no defects."
 
 ifndef INSTALL_DIR
     INSTALL_DIR := /usr/local

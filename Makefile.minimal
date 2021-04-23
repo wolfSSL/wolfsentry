@@ -18,113 +18,157 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
 
 SRCS = util.c internal.c routes.c events.c actions.c
 
+ifndef BUILD_TOP
+    BUILD_TOP := .
+endif
+
 ifndef DEBUG
-    DEBUG=-ggdb
+    DEBUG := -ggdb
 endif
 
 ifndef OPTIM
-    OPTIM=-O3
+    OPTIM := -O3
 endif
 
-CC_IS_GCC:=$(shell if $(CC) -v 2>&1 | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
+CC_IS_GCC := $(shell if $(CC) -v 2>&1 | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
 
 ifndef C_WARNFLAGS
-    C_WARNFLAGS=-Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast
+    C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast
     ifeq "$(CC_IS_GCC)" "1"
-        C_WARNFLAGS+=-Wjump-misses-init -Wlogical-op
+        C_WARNFLAGS += -Wjump-misses-init -Wlogical-op
     endif
 endif
 
-CFLAGS=-I. $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I. $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+LDFLAGS := $(EXTRA_LDFLAGS)
 
 ifdef USER_SETTINGS_FILE
-    CFLAGS+=-DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
+    CFLAGS += -DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
 endif
 
 ifeq "$(SINGLETHREADED)" "1"
-    CFLAGS+=-DWOLFSENTRY_SINGLETHREADED
+    CFLAGS += -DWOLFSENTRY_SINGLETHREADED
 endif
 
 ifneq "$(SINGLETHREADED)" "1"
-    LDFLAGS+=-pthread
+    LDFLAGS += -pthread
 endif
 
 ifeq "$(STATIC)" "1"
-    LDFLAGS+=-static
+    LDFLAGS += -static
 endif
 
 ifeq "$(STRIPPED)" "1"
-    DEBUG=
-    CFLAGS+=-ffunction-sections -fdata-sections
-    LDFLAGS+=-Wl,--gc-sections -Wl,--strip-all
+    DEBUG :=
+    CFLAGS += -ffunction-sections -fdata-sections
+    LDFLAGS += -Wl,--gc-sections -Wl,--strip-all
 endif
 
 .PHONY: all
 
-LIB_NAME=libwolfsentry.a
+LIB_NAME := libwolfsentry.a
 
-INSTALL_LIBS=$(LIB_NAME)
+INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS=wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h
 
-all: $(LIB_NAME)
+all: $(BUILD_TOP)/$(LIB_NAME)
 
-.c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD_TOP)/src/%.o: src/%.c
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+ifeq "$(V)" "1"
+	$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
+else
+	@echo "compile $@"
+	@$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
+endif
 
-libwolfsentry.a: $(addprefix src/,$(SRCS:.c=.o))
+$(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
 	$(AR) crs $@ $+
 
-UNITTEST_LIST=test_init test_rwlocks test_static_routes test_dynamic_rules
+UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules
 
-$(addprefix tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
-$(addprefix tests/,$(UNITTEST_LIST)): tests/unittests.c libwolfsentry.a
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+ifeq "$(V)" "1"
 	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+else
+	@echo "build $@"
+	@$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+endif
 
 .PHONY: test
-test: $(addprefix tests/,$(UNITTEST_LIST))
-	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(VALGRIND) "./tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all tests succeeded.'; else exit $$exitcode; fi
+test: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
+	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all tests succeeded.'; else exit $$exitcode; fi
 
 .PHONY: valgrind
 valgrind: VALGRIND=valgrind --leak-check=full --error-exitcode=10
 valgrind: test
 
+.PHONY: sanitize
+sanitize: CFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined
+sanitize: LDFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined
+sanitize: TEST_ENV+=ASAN_OPTIONS=detect_invalid_pointer_pairs=2
+sanitize: test
+
+.PHONY: sanitize-thread
+sanitize-thread: CFLAGS+=-fsanitize=thread
+sanitize-thread: LDFLAGS+=-fsanitize=thread
+sanitize-thread: test
+
+.PHONY: sanitize-all
+sanitize-all:
+	@echo "sanitize address, leak, and undefined"
+	@echo "====================================="
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds sanitize
+	@echo
+	@echo "sanitize thread"
+	@echo "==============="
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds sanitize-thread
+	@echo
+	@echo "sanitizers found no defects."
+	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
+
 ifndef INSTALL_DIR
-    INSTALL_DIR=/usr/local
+    INSTALL_DIR := /usr/local
 endif
 
 ifndef INSTALL_LIBDIR
-    INSTALL_LIBDIR=$(INSTALL_DIR)/lib
+    INSTALL_LIBDIR := $(INSTALL_DIR)/lib
 endif
 
 ifndef INSTALL_INCDIR
-    INSTALL_INCDIR=$(INSTALL_DIR)/include
+    INSTALL_INCDIR := $(INSTALL_DIR)/include
 endif
 
 .PHONY: install
 install: all
 	@mkdir -p $(INSTALL_LIBDIR)
-	install -p -m 0644 $(LIB_NAME) $(INSTALL_LIBDIR)
+	install -p -m 0644 $(INSTALL_LIBS) $(INSTALL_LIBDIR)
 	@mkdir -p $(INSTALL_INCDIR)/wolfsentry
 	install -p -m 0644 $(INSTALL_HEADERS) $(INSTALL_INCDIR)/wolfsentry
 
 .PHONY: uninstall
 uninstall:
-	$(RM) $(INSTALL_LIBDIR)/$(LIB_NAME) $(addprefix $(INSTALL_INCDIR)/,$(INSTALL_HEADERS))
+	$(RM) $(addprefix $(INSTALL_LIBDIR)/,$(notdir $(INSTALL_LIBS))) $(addprefix $(INSTALL_INCDIR)/,$(INSTALL_HEADERS))
 	@rmdir $(INSTALL_LIBDIR) $(INSTALL_INCDIR)/wolfsentry $(INSTALL_INCDIR) 2>/dev/null || exit 0
 
 # $(TAR) must be gnu tar, for its --transform capability.  This is the default on Linux, but on Mac,
 # it will need to be installed, and TAR=gtar will be needed.
 ifndef TAR
-    TAR=tar
+    TAR := tar
 endif
 
 ifndef VERSION
-    VERSION:=$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo xxxxxxxx)
-    VERSION:=$(VERSION)$(shell git diff --quiet || [ $$? -ne 1 ] || echo "-dirty")
+    VERSION := $(shell git rev-parse --short=8 HEAD 2>/dev/null || echo xxxxxxxx)
+    VERSION := $(VERSION)$(shell git diff --quiet || [ $$? -ne 1 ] || echo "-dirty")
 endif
 
 .PHONY: dist
@@ -133,6 +177,7 @@ dist:
 
 .PHONY: clean
 clean:
-	rm -f $(addprefix src/,$(SRCS:.c=.o)) $(addprefix src/,$(SRCS:.c=.d)) libwolfsentry.a $(addprefix tests/,$(UNITTEST_LIST))
+	rm -f $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
+	@[ "$(BUILD_TOP)" != "." ] && rmdir $(BUILD_TOP)/* $(BUILD_TOP) 2>/dev/null || exit 0
 
--include $(addprefix src/,$(SRCS:.c=.d))
+-include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))

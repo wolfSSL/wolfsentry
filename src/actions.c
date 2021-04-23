@@ -28,11 +28,11 @@ static inline int wolfsentry_action_key_cmp_1(const char *left_label, unsigned c
     int ret;
 
     if (left_label_len >= right_label_len) {
-        ret = memcmp(left_label, right_label, left_label_len);
+        ret = memcmp(left_label, right_label, right_label_len);
         if ((ret == 0) && (left_label_len != right_label_len))
             ret = 1;
     } else {
-        ret = memcmp(left_label, right_label, right_label_len);
+        ret = memcmp(left_label, right_label, left_label_len);
         if (ret == 0)
             ret = -1;
     }

@@ -28,11 +28,11 @@ static inline int wolfsentry_event_key_cmp_1(const char *left_label, const unsig
     int ret;
 
     if (left_label_len >= right_label_len) {
-        ret = memcmp(left_label, right_label, left_label_len);
+        ret = memcmp(left_label, right_label, right_label_len);
         if ((ret == 0) && (left_label_len != right_label_len))
             ret = 1;
     } else {
-        ret = memcmp(left_label, right_label, right_label_len);
+        ret = memcmp(left_label, right_label, left_label_len);
         if (ret == 0)
             ret = -1;
     }
@@ -131,7 +131,7 @@ wolfsentry_errcode_t wolfsentry_event_insert(
     WOLFSENTRY_RETURN_OK;
 }
 
-static inline wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_event **event) {
+static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_event **event) {
     wolfsentry_errcode_t ret;
     struct {
         struct wolfsentry_event event;

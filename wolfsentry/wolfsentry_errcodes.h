@@ -118,6 +118,8 @@ enum wolfsentry_error_id {
     WOLFSENTRY_ERROR_ID_NOT_INSERTED           =  19,
     WOLFSENTRY_ERROR_ID_DATA_MISSING           =  20,
     WOLFSENTRY_ERROR_ID_NOT_PERMITTED          =  21,
+    WOLFSENTRY_ERROR_ID_ALREADY                =  22,
+
     WOLFSENTRY_ERROR_ID_USER_BASE              = 224
 };
 

@@ -99,6 +99,8 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Requested data or buffer is not present";
     case WOLFSENTRY_ERROR_ID_NOT_PERMITTED:
         return "Illegal access attempted";
+    case WOLFSENTRY_ERROR_ID_ALREADY:
+        return "Object already has requested condition";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
     }
@@ -495,9 +497,8 @@ wolfsentry_errcode_t wolfsentry_lock_mutex_timed(struct wolfsentry_context *wolf
 }
 
 wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock) {
-    /* silently and cheaply tolerate repeat calls to _mutex2shared(). */
     if (lock->state == WOLFSENTRY_LOCK_SHARED)
-        WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_ERROR_RETURN(ALREADY);
 
     if (sem_wait(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -522,14 +523,13 @@ wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock
 }
 
 /* if another thread is already waiting for read2write, then this
- * returns -EBUSY, and the caller must _unlock() to resolve the
+ * returns BUSY, and the caller must _unlock() to resolve the
  * deadlock, then reattempt its transaction with a fresh lock (ideally
  * with a _lock_mutex() at the open).
  */
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock) {
-    /* silently and cheaply tolerate repeat calls to _shared2mutex*(). */
     if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
-        WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_ERROR_RETURN(ALREADY);
   again:
     if (sem_wait(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);

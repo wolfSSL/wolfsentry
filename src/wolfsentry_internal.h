@@ -199,7 +199,7 @@ static inline void wolfsentry_list_ent_get_prev(struct wolfsentry_list_header *l
 
 struct wolfsentry_context;
 
-typedef int (*wolfsentry_ent_cmp_fn_t)(struct wolfsentry_table_ent_header *left, struct wolfsentry_table_ent_header *right);
+typedef int (*wolfsentry_ent_cmp_fn_t)(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right);
 typedef wolfsentry_errcode_t (*wolfsentry_ent_free_fn_t)(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
 
 typedef wolfsentry_errcode_t (*wolfsentry_filter_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
@@ -267,13 +267,6 @@ struct wolfsentry_event_table {
     struct wolfsentry_table_header header;
 };
 
-struct wolfsentry_route_endpoint {
-    wolfsentry_port_t sa_port;
-    wolfsentry_addr_bits_t addr_len;
-    byte extra_port_count;
-    byte interface;
-};
-
 struct wolfsentry_route {
     struct wolfsentry_table_ent_header header;
 
@@ -284,7 +277,6 @@ struct wolfsentry_route {
     wolfsentry_family_t sa_family;
     wolfsentry_proto_t sa_proto;
     struct wolfsentry_route_endpoint remote, local;
-
     uint16_t data_addr_offset; /* 0 if there's no private_data */
     uint16_t data_addr_size;
 
@@ -301,8 +293,8 @@ struct wolfsentry_route {
 #define WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) WOLFSENTRY_BITS_TO_BYTES((r)->remote.addr_len)
 #define WOLFSENTRY_ROUTE_LOCAL_ADDR(r) ((r)->data + (r)->data_addr_offset + WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r))
 #define WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) WOLFSENTRY_BITS_TO_BYTES((r)->local.addr_len)
-#define WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) (1 + (r)->remote_extra_port_count)
-#define WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) (1 + (r)->local_extra_port_count)
+#define WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) (1 + (r)->remote.extra_port_count)
+#define WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) (1 + (r)->local.extra_port_count)
 #define WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) ((wolfsentry_port_t *)(WOLFSENTRY_ROUTE_LOCAL_ADDR(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) + ((WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r)) & 1)))
 #define WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r) (WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) + WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r))
 #define WOLFSENTRY_ROUTE_BUF_SIZE(r) (WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) + ((WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r)) & 1) + (WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) * sizeof(wolfsentry_port_t)) + (WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) * sizeof(wolfsentry_port_t)))
@@ -369,12 +361,12 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(struct wolfsentry_context
 wolfsentry_errcode_t wolfsentry_table_free_ents(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_header *table);
 
 wolfsentry_errcode_t wolfsentry_table_cursor_init(struct wolfsentry_context *wolfsentry, struct wolfsentry_cursor *cursor);
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(struct wolfsentry_cursor *cursor);
+wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
+wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
+struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor);
 struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor);
 struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor);
-wolfsentry_errcode_t wolfsentry_table_cursor_seek(struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position);
+wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_header *table, const struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position);
 
 wolfsentry_errcode_t wolfsentry_table_filter(
     struct wolfsentry_context *wolfsentry,

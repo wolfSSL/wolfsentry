@@ -44,7 +44,7 @@ int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_ev
     return wolfsentry_event_key_cmp_1(left->label, left->label_len, right->label, right->label_len);
 }
 
-static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label_len, wolfsentry_priority_t priority, struct wolfsentry_eventconfig *config, struct wolfsentry_event *event, size_t event_size) {
+static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label_len, wolfsentry_priority_t priority, const struct wolfsentry_eventconfig *config, struct wolfsentry_event *event, size_t event_size) {
     if (label_len <= 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
@@ -67,7 +67,7 @@ static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label
     WOLFSENTRY_RETURN_OK;
 }
 
-static wolfsentry_errcode_t wolfsentry_event_new_1(struct wolfsentry_context *wolfsentry, const char *label, int label_len, wolfsentry_priority_t priority, struct wolfsentry_eventconfig *config, struct wolfsentry_event **event) {
+static wolfsentry_errcode_t wolfsentry_event_new_1(struct wolfsentry_context *wolfsentry, const char *label, int label_len, wolfsentry_priority_t priority, const struct wolfsentry_eventconfig *config, struct wolfsentry_event **event) {
     size_t new_size;
     wolfsentry_errcode_t ret;
 
@@ -110,7 +110,7 @@ wolfsentry_errcode_t wolfsentry_event_insert(
     const char *label,
     int label_len,
     wolfsentry_priority_t priority,
-    struct wolfsentry_eventconfig *config,
+    const struct wolfsentry_eventconfig *config,
     wolfsentry_ent_id_t *id)
 {
     struct wolfsentry_event *new;

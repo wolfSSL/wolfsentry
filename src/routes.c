@@ -437,8 +437,8 @@ static wolfsentry_errcode_t wolfsentry_route_insert_2(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     struct wolfsentry_route_table *route_table,
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     struct wolfsentry_event *parent_event,
     wolfsentry_ent_id_t *id,
@@ -477,8 +477,8 @@ static wolfsentry_errcode_t wolfsentry_route_insert_2(
 wolfsentry_errcode_t wolfsentry_route_insert_static(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     const char *event_label,
     int event_label_len,
@@ -500,9 +500,9 @@ wolfsentry_errcode_t wolfsentry_route_insert_static(
 
 static wolfsentry_errcode_t wolfsentry_route_lookup_1(
     struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_route_table *table,
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_route_table *table,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     struct wolfsentry_event *parent_event,
     int exact_p,
@@ -634,9 +634,9 @@ wolfsentry_errcode_t wolfsentry_route_table_default_policy_get(
 
 wolfsentry_errcode_t wolfsentry_route_get_reference(
     struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_route_table *table,
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_route_table *table,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     const char *event_label,
     int event_label_len,
@@ -691,8 +691,8 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_1(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route_table *route_table,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     struct wolfsentry_event *event,
     wolfsentry_action_res_t *action_results,
@@ -719,8 +719,8 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_1(
 wolfsentry_errcode_t wolfsentry_route_delete_static(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     const char *event_label,
     int event_label_len,
@@ -745,8 +745,8 @@ wolfsentry_errcode_t wolfsentry_route_delete_static(
 wolfsentry_errcode_t wolfsentry_route_delete_dynamic(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     const char *event_label,
     int event_label_len,
@@ -770,8 +770,8 @@ wolfsentry_errcode_t wolfsentry_route_delete_dynamic(
 wolfsentry_errcode_t wolfsentry_route_delete_everywhere(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     const char *event_label,
     int event_label_len,
@@ -916,8 +916,8 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
 
 wolfsentry_errcode_t wolfsentry_route_event_dispatch(
     struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_sockaddr *remote,
-    struct wolfsentry_sockaddr *local,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
     const char *event_label,
     int event_label_len,
@@ -1211,18 +1211,146 @@ wolfsentry_errcode_t wolfsentry_route_set_penaltybox_duration_seconds(
     WOLFSENTRY_RETURN_OK;
 }
 
+wolfsentry_errcode_t wolfsentry_route_export(
+    const struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    struct wolfsentry_route_exports *route_exports)
+{
+    const struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
+    if (route->parent_event) {
+        route_exports->parent_event_label = route->parent_event->label;
+        route_exports->parent_event_label_len = route->parent_event->label_len;
+    } else {
+        route_exports->parent_event_label = NULL;
+        route_exports->parent_event_label_len = 0;
+    }
+    route_exports->flags = route->flags;
+    route_exports->sa_family = route->sa_family;
+    route_exports->sa_proto = route->sa_proto;
+    route_exports->remote = route->remote;
+    route_exports->local = route->local;
+    route_exports->remote_address = WOLFSENTRY_ROUTE_REMOTE_ADDR(route);
+    route_exports->local_address = WOLFSENTRY_ROUTE_LOCAL_ADDR(route);
+    if (route->remote.extra_port_count > 0)
+        route_exports->remote_extra_ports = WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(route);
+    else
+        route_exports->remote_extra_ports = NULL;
+    if (route->local.extra_port_count > 0)
+        route_exports->local_extra_ports = WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(route);
+    else
+        route_exports->local_extra_ports = NULL;
+    route_exports->meta = &route->meta;
+    if (config->config.route_private_data_size == 0) {
+        route_exports->private_data = NULL;
+        route_exports->private_data_size = 0;
+    } else {
+        route_exports->private_data = route->data + config->route_private_data_padding;
+        route_exports->private_data_size = config->config.route_private_data_size - config->route_private_data_padding;
+    }
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_table_iterate_start(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor **cursor)
+{
+    int ret;
+    if ((*cursor = WOLFSENTRY_MALLOC(sizeof **cursor)) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    if ((ret = wolfsentry_table_cursor_init(wolfsentry, *cursor)) < 0)
+        goto out;
+    if ((ret = wolfsentry_table_cursor_seek_to_head((const struct wolfsentry_table_header *)table, *cursor)) < 0)
+        goto out;
+  out:
+    if (ret < 0)
+        WOLFSENTRY_FREE(*cursor);
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_route_table_iterate_seek_to_head(
+    const struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor *cursor)
+{
+    (void)wolfsentry;
+    return wolfsentry_table_cursor_seek_to_head((const struct wolfsentry_table_header *)table, cursor);
+}
+
+wolfsentry_errcode_t wolfsentry_route_table_iterate_seek_to_tail(
+    const struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor *cursor)
+{
+    (void)wolfsentry;
+    return wolfsentry_table_cursor_seek_to_tail((const struct wolfsentry_table_header *)table, cursor);
+}
+
+wolfsentry_errcode_t wolfsentry_route_table_iterate_current(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_route **route)
+{
+    (void)wolfsentry;
+    (void)table;
+    *route = (struct wolfsentry_route *)wolfsentry_table_cursor_current(cursor);
+    if (*route == NULL)
+        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_table_iterate_prev(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_route **route)
+{
+    (void)wolfsentry;
+    (void)table;
+    *route = (struct wolfsentry_route *)wolfsentry_table_cursor_prev(cursor);
+    if (*route == NULL)
+        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_table_iterate_next(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_route **route)
+{
+    (void)wolfsentry;
+    (void)table;
+    *route = (struct wolfsentry_route *)wolfsentry_table_cursor_next(cursor);
+    if (*route == NULL)
+        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_table_iterate_end(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor **cursor)
+{
+    (void)table;
+    WOLFSENTRY_FREE(*cursor);
+    *cursor = NULL;
+    WOLFSENTRY_RETURN_OK;
+}
+
 #ifndef WOLFSENTRY_NO_STDIO
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-static wolfsentry_errcode_t wolfsentry_route_render_endpoint(struct wolfsentry_route *r, int sa_local_p, FILE *f) {
+static wolfsentry_errcode_t wolfsentry_route_render_endpoint(const struct wolfsentry_route *r, int sa_local_p, FILE *f) {
     char addr_buf[16], fmt_buf[256];
 
-    struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
+    const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
     size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
-    void *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
+    const void *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
 
     if (addr_bytes > sizeof addr_buf)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
@@ -1243,7 +1371,7 @@ static wolfsentry_errcode_t wolfsentry_route_render_endpoint(struct wolfsentry_r
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_route_render(struct wolfsentry_route *r, FILE *f) {
+wolfsentry_errcode_t wolfsentry_route_render(const struct wolfsentry_route *r, FILE *f) {
     wolfsentry_errcode_t ret = wolfsentry_route_render_endpoint(r, 0 /* sa_local_p */, f);
     if (ret < 0)
         return ret;
@@ -1253,6 +1381,49 @@ wolfsentry_errcode_t wolfsentry_route_render(struct wolfsentry_route *r, FILE *f
             (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN) ? ">" : "");
 
     if ((ret = wolfsentry_route_render_endpoint(r, 1 /* sa_local_p */, f)) < 0)
+        return ret;
+
+    fputc('\n',f);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(const struct wolfsentry_route_exports *r, int sa_local_p, FILE *f) {
+    char addr_buf[16], fmt_buf[256];
+
+    const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
+    size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
+    const void *addr = (sa_local_p ? r->local_address : r->remote_address);
+
+    if (addr_bytes > sizeof addr_buf)
+        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+
+    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD))
+        fputs("*", stdout);
+    else {
+        memset(addr_buf, 0, sizeof addr_buf);
+        memcpy(addr_buf, addr, addr_bytes);
+        if (inet_ntop(r->sa_family, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
+
+        fprintf(f, "%s/%d", fmt_buf, (int)e->addr_len);
+    }
+
+    fprintf(f, ":%d", (int)e->sa_port);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_exports_render(const struct wolfsentry_route_exports *r, FILE *f) {
+    wolfsentry_errcode_t ret = wolfsentry_route_exports_render_endpoint(r, 0 /* sa_local_p */, f);
+    if (ret < 0)
+        return ret;
+
+    fprintf(f, " %s-%s ",
+            (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT) ? "<" : "",
+            (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN) ? ">" : "");
+
+    if ((ret = wolfsentry_route_exports_render_endpoint(r, 1 /* sa_local_p */, f)) < 0)
         return ret;
 
     fputc('\n',f);

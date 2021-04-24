@@ -746,6 +746,24 @@ static int test_static_routes (void) {
     WOLFSENTRY_EXIT_ON_SUCCESS(wolfsentry_route_delete_static(wolfsentry, NULL /* caller_arg */, &remote_wildcard.sa, &local_wildcard.sa, flags_wildcard, 0 /* event_label_len */, 0 /* event_label */, &action_results, &n_deleted));
 
 
+    {
+        wolfsentry_errcode_t ret;
+        struct wolfsentry_cursor *cursor;
+        struct wolfsentry_route *route;
+        struct wolfsentry_route_exports route_exports;
+        wolfsentry_hitcount_t n_seen = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_start(wolfsentry, static_routes, &cursor));
+        for (ret = wolfsentry_route_table_iterate_current(wolfsentry, static_routes, cursor, &route);
+             ret >= 0;
+             ret = wolfsentry_route_table_iterate_next(wolfsentry, static_routes, cursor, &route)) {
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(wolfsentry, route, &route_exports));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_exports_render(&route_exports, stdout));
+            ++n_seen;
+        }
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(wolfsentry, static_routes, &cursor));
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes_static.header.n_ents);
+    }
+
     remote.sa.sa_family = local.sa.sa_family = AF_INET;
     remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
     remote.sa.sa_port = 12345;

@@ -254,17 +254,17 @@ wolfsentry_errcode_t wolfsentry_table_cursor_init(struct wolfsentry_context *wol
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
+wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
     cursor->point = table->head;
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
+wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
     cursor->point = table->tail;
     WOLFSENTRY_RETURN_OK;
 }
 
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(struct wolfsentry_cursor *cursor) {
+struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor) {
     return cursor->point;
 }
 
@@ -288,7 +288,7 @@ struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsen
  * before where the search ent would be, right on the search ent, or
  * immediately after where the search ent would be.
  */
-wolfsentry_errcode_t wolfsentry_table_cursor_seek(struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position) {
+wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_header *table, const struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position) {
     struct wolfsentry_table_ent_header *i = table->head;
     while (i) {
         int c = table->cmp_fn(i, ent);

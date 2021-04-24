@@ -968,7 +968,7 @@ wolfsentry_errcode_t wolfsentry_init(
         (timecbs->interval_from_seconds == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if ((allocator->memalign == NULL) && (config->route_private_data_alignment > 0))
+    if ((allocator->memalign == NULL) && config && (config->route_private_data_alignment > 0))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((*wolfsentry = (struct wolfsentry_context *)allocator->malloc(allocator->context, sizeof **wolfsentry)) == NULL)

@@ -20,6 +20,10 @@
 
 THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
 
+ifdef USER_MAKE_CONF
+    include $(USER_MAKE_CONF)
+endif
+
 SRCS = util.c internal.c routes.c events.c actions.c
 
 ifndef BUILD_TOP
@@ -83,12 +87,18 @@ $(BUILD_TOP)/src/%.o: src/%.c
 ifeq "$(V)" "1"
 	$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
 else
-	@echo "compile $@"
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
 	@$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
 endif
 
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
+ifdef VERY_QUIET
+	@$(AR) crs $@ $+
+else
 	$(AR) crs $@ $+
+endif
 
 UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules
 
@@ -98,84 +108,21 @@ $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): tests/unittests.c $(BUILD_TOP
 ifeq "$(V)" "1"
 	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
 else
-	@echo "build $@"
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
 	@$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
 endif
 
 .PHONY: test
 test: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
-	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all tests succeeded.'; else exit $$exitcode; fi
-
-.PHONY: valgrind
-valgrind: VALGRIND=valgrind --tool=memcheck --leak-check=full --error-exitcode=10 $(VALGRIND_ARGS)
-valgrind: test
-
-.PHONY: valgrind-drd
-valgrind-drd: VALGRIND=valgrind --tool=drd --error-exitcode=10 $(VALGRIND_ARGS)
-valgrind-drd: test
-
-.PHONY: valgrind-helgrind
-valgrind-helgrind: VALGRIND=valgrind --tool=helgrind --error-exitcode=10 $(VALGRIND_ARGS)
-valgrind-helgrind: test
-
-.PHONY: valgrind-all
-valgrind-all:
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds clean >/dev/null
-	@echo "valgrind memcheck"
-	@echo "================="
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds VALGRIND_ARGS=-q valgrind
-	@echo
-	@echo "valgrind drd"
-	@echo "============"
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds VALGRIND_ARGS=-q valgrind-drd
-	@echo
-	@echo "valgrind helgrind"
-	@echo "================="
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds VALGRIND_ARGS=-q valgrind-helgrind
-	@echo
-	@echo "valgrind found no defects."
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds clean >/dev/null
-
-.PHONY: sanitize
-sanitize: CFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
-sanitize: LDFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
-
-ifeq "$(CC_IS_GCC)" "1"
-sanitize: CFLAGS+=-fsanitize=bounds-strict
-sanitize: LDFLAGS+=-fsanitize=bounds-strict
-endif
-
-sanitize: TEST_ENV+=ASAN_OPTIONS=detect_invalid_pointer_pairs=2
-sanitize: test
-
-.PHONY: sanitize-thread
-sanitize-thread: CFLAGS+=-fsanitize=thread
-sanitize-thread: LDFLAGS+=-fsanitize=thread
-sanitize-thread: test
-
-.PHONY: sanitize-all
-sanitize-all:
-ifeq "$(CC_IS_GCC)" "1"
-	@echo "sanitize address, leak, undefined, float-cast-overflow, float-divide-by-zero, and bounds-strict"
-	@echo "==============================================================================================="
+ifdef VERY_QUIET
+	@for test in $(basename $(UNITTEST_LIST)); do $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then echo "$${test} failed" 1>&2; break; fi; done; exit $$exitcode
 else
-	@echo "sanitize address, leak, undefined, float-cast-overflow, and float-divide-by-zero"
-	@echo "================================================================================"
+	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all tests succeeded.'; else exit $$exitcode; fi
 endif
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS="$(EXTRA_CFLAGS) -fno-sanitize-recover=all" sanitize
-	@echo
-	@echo "sanitize thread"
-	@echo "==============="
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS="$(EXTRA_CFLAGS) -fno-sanitize-recover=all" sanitize-thread
-	@echo
-	@echo "sanitizers found no defects."
-	@$(MAKE) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean >/dev/null
 
-.PHONY: analyze-all
-analyze-all: valgrind-all sanitize-all
-	@echo "analyzers found no defects."
+-include Makefile.analyzers
 
 ifndef INSTALL_DIR
     INSTALL_DIR := /usr/local

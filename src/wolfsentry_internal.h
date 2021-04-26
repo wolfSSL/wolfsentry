@@ -282,21 +282,21 @@ struct wolfsentry_route {
 
     struct wolfsentry_route_metadata meta;
 
-    byte data[0]; /* first the caller's private data area (if any),
+    uint16_t data[0]; /* first the caller's private data area (if any),
                    * then the remote addr in big endian padded up to
                    * nearest byte, then local addr, then
                    * remote_extra_ports, then local_extra_ports.
                    */
 };
 
-#define WOLFSENTRY_ROUTE_REMOTE_ADDR(r) ((r)->data + (r)->data_addr_offset)
+#define WOLFSENTRY_ROUTE_REMOTE_ADDR(r) ((byte *)(r)->data + (r)->data_addr_offset)
 #define WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) WOLFSENTRY_BITS_TO_BYTES((r)->remote.addr_len)
-#define WOLFSENTRY_ROUTE_LOCAL_ADDR(r) ((r)->data + (r)->data_addr_offset + WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r))
+#define WOLFSENTRY_ROUTE_LOCAL_ADDR(r) ((byte *)(r)->data + (r)->data_addr_offset + WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r))
 #define WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) WOLFSENTRY_BITS_TO_BYTES((r)->local.addr_len)
-#define WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) (1 + (r)->remote.extra_port_count)
-#define WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) (1 + (r)->local.extra_port_count)
-#define WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) ((wolfsentry_port_t *)(WOLFSENTRY_ROUTE_LOCAL_ADDR(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) + ((WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r)) & 1)))
-#define WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r) (WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) + WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r))
+#define WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) (1U + (r)->remote.extra_port_count)
+#define WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) (1U + (r)->local.extra_port_count)
+#define WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) ((wolfsentry_port_t *)(r)->data + (((r)->data_addr_offset + (unsigned)WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + (unsigned)WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) + 1U) / sizeof (r)->data[0]))
+#define WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r) (WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) + (r)->remote.extra_port_count)
 #define WOLFSENTRY_ROUTE_BUF_SIZE(r) (WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) + ((WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r)) & 1) + (WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) * sizeof(wolfsentry_port_t)) + (WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) * sizeof(wolfsentry_port_t)))
 
 #define WOLFSENTRY_ROUTE_REMOTE_PORT_GET(r, i) (i ? WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r)[i-1] : (r)->sa_remote_port)

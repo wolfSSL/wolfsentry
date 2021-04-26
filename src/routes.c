@@ -365,6 +365,9 @@ static wolfsentry_errcode_t wolfsentry_route_new(
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     new_size += offsetof(struct wolfsentry_route, data);
     new_size += config->config.route_private_data_size;
+    if (new_size & 1)
+        ++new_size;
+    /* extra_ports storage will go here. */
 
     if (config->config.route_private_data_alignment == 0)
         *new = WOLFSENTRY_MALLOC(new_size);
@@ -1096,7 +1099,7 @@ wolfsentry_errcode_t wolfsentry_route_get_private_data(
     struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
     if (config->config.route_private_data_size == 0)
         WOLFSENTRY_ERROR_RETURN(DATA_MISSING);
-    *private_data = route->data + config->route_private_data_padding;
+    *private_data = (byte *)route->data + config->route_private_data_padding;
     if (private_data_size)
         *private_data_size = config->config.route_private_data_size - config->route_private_data_padding;
     WOLFSENTRY_RETURN_OK;
@@ -1232,11 +1235,11 @@ wolfsentry_errcode_t wolfsentry_route_export(
     route_exports->remote_address = WOLFSENTRY_ROUTE_REMOTE_ADDR(route);
     route_exports->local_address = WOLFSENTRY_ROUTE_LOCAL_ADDR(route);
     if (route->remote.extra_port_count > 0)
-        route_exports->remote_extra_ports = WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(route);
+        route_exports->remote_extra_ports = (wolfsentry_port_t *)WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(route);
     else
         route_exports->remote_extra_ports = NULL;
     if (route->local.extra_port_count > 0)
-        route_exports->local_extra_ports = WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(route);
+        route_exports->local_extra_ports = (wolfsentry_port_t *)WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(route);
     else
         route_exports->local_extra_ports = NULL;
     route_exports->meta = &route->meta;
@@ -1244,7 +1247,7 @@ wolfsentry_errcode_t wolfsentry_route_export(
         route_exports->private_data = NULL;
         route_exports->private_data_size = 0;
     } else {
-        route_exports->private_data = route->data + config->route_private_data_padding;
+        route_exports->private_data = (byte *)route->data + config->route_private_data_padding;
         route_exports->private_data_size = config->config.route_private_data_size - config->route_private_data_padding;
     }
     WOLFSENTRY_RETURN_OK;

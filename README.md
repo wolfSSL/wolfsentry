@@ -22,7 +22,7 @@ these dependencies can be avoided with various build-time options.  In
 particular, the recipe
 
 ```
-make -f Makefile.minimal STATIC=1 SINGLETHREADED=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_STDIO -DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN'
+make STATIC=1 SINGLETHREADED=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_STDIO -DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN'
 ```
 
 generates a libwolfsentry.a that depends on only a handful of basic string
@@ -30,34 +30,62 @@ functions.  Allocator and time callbacks must then be set in a `struct
 wolfsentry_host_platform_interface` supplied to `wolfsentry_init()`.
 
 
-## Building and testing using Makefile.minimal
+## Building and testing
 
 Build and test libwolfsentry.a:
 
-`make -j -f Makefile.minimal test`
+`make -j test`
 
-Build libwolfsentry.a and test it under valgrind:
+Build verbosely:
 
-`make -j -f Makefile.minimal valgrind`
+`make V=1 -j test`
+
+Build with artifacts in an alternate location (outside or in a subdirectory of the source tree):
+
+`make BUILD_TOP=./build -j test`
+
+Install from an alternate build location to a non-standard destination:
+
+`make BUILD_TOP=./build INSTALL_DIR=/usr INSTALL_LIBDIR=/usr/lib64 install`
+
+Build libwolfsentry.a and test it under various valgrind tools:
+
+`make -j valgrind-all`
+
+Test under various sanitizer tools:
+
+`make -j sanitize-all`
+
+Test tersely with all supported static and dynamic analysis tools:
+
+`make -j analyze-all`
 
 Build and test libwolfsentry.a without support for multithreading:
 
-`make -j -f Makefile.minimal WOLFSENTRY_SINGLETHREADED=1 test`
+`make -j SINGLETHREADED=1 test`
 
-(Other available make flags are STATIC=1 and STRIPPED=1
+Other available make flags are `STATIC=1` and `STRIPPED=1`, and the defaults values
+for `DEBUG`, `OPTIM`, and `C_WARNFLAGS` can also be usefully overridden.
 
-Build and test libwolfsentry.a with extra C flags:
+Build with a user-supplied makefile preamble to override defaults:
 
-`make -j -f Makefile.minimal EXTRA_CFLAGS=-DWOLFSENTRY_NO_ERROR_STRINGS test`
+`make -j USER_MAKE_CONF=Makefile.settings`
 
+(`Makefile.settings` can contain simple settings like `OPTIM := -Os`, or
+elaborate makefile code including additional rules and dependency mechanisms.)
 
-## Building and testing using autotools
+Build the smallest simplest possible library:
 
-To Do
+`make -j SINGLETHREADED=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_STDIO -Wno-error=inline -Wno-inline'`
+
+Build and test with user settings:
+
+`make -j USER_SETTINGS_FILE=user_settings.h test`
 
 
 ## Examples
 
 See examples/server/server.c (sections gated on `WOLFSSL_WOLFSENTRY_HOOKS`) in
-[wolfSSL PR#3889](https://github.com/wolfSSL/wolfssl/pull/3889).  Use `configure
+[the master branch of wolfSSL](https://github.com/wolfSSL/wolfssl),
+introduced by [PR #3889](https://github.com/wolfSSL/wolfssl/pull/3889).  Use `configure
 --enable-wolfsentry` to build with wolfSentry integration.

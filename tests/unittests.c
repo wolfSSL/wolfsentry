@@ -811,7 +811,7 @@ static int test_static_routes (void) {
 
     WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes_static.header.n_ents == 0);
 
-    printf("all subtests succeeded -- %d distinct ents inserted and deleted.\n",wolfsentry->id_counter);
+    printf("all subtests succeeded -- %d distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
 

@@ -201,7 +201,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete(struct wolfsentry_context *wolf
     struct wolfsentry_table_ent_header *i;
 
     if ((*ent)->parent_table == NULL) {
-        WOLFSENTRY_WARN("%s called with null parent table\n",__FUNCTION__);
+        WOLFSENTRY_WARN("%s called with null parent table\n", "wolfsentry_table_ent_delete");
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 

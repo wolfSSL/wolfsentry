@@ -295,9 +295,9 @@ static wolfsentry_errcode_t wolfsentry_route_init(
 {
     if (data_addr_size < WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len))
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-    if (data_addr_size > MAX_UINT_OF(uint16_t))
+    if ((unsigned)data_addr_size > MAX_UINT_OF(uint16_t))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
-    if (data_addr_offset > MAX_UINT_OF(uint16_t))
+    if ((unsigned)data_addr_offset > MAX_UINT_OF(uint16_t))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     if (! (flags & (WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN | WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT)))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -675,7 +675,7 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
     if (route->parent_event && route->parent_event->delete_event) {
         ret = wolfsentry_action_list_dispatch(wolfsentry, caller_arg, &route->parent_event->delete_event->action_list, trigger_event, route_table, route, action_results);
         if (ret < 0)
-            WOLFSENTRY_WARN("%s returned " WOLFSENTRY_ERROR_FMT, __FUNCTION__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            WOLFSENTRY_WARN("wolfsentry_route_delete_0 returned " WOLFSENTRY_ERROR_FMT, WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
     if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, &route->header)) < 0)

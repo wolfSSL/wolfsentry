@@ -153,8 +153,10 @@ static inline void wolfsentry_list_ent_append(struct wolfsentry_list_header *lis
 }
 
 static inline void wolfsentry_list_ent_insert_after(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *point_ent, struct wolfsentry_list_ent_header *new_ent) {
-    if (point_ent == NULL)
-        return wolfsentry_list_ent_prepend(list, new_ent);
+    if (point_ent == NULL) {
+        wolfsentry_list_ent_prepend(list, new_ent);
+        return;
+    }
     new_ent->prev = point_ent;
     if (point_ent->next)
         new_ent->next = point_ent->next;
@@ -222,7 +224,7 @@ struct wolfsentry_action {
     wolfsentry_action_callback_t handler;
     void *handler_arg;
     byte label_len;
-    char label[0];
+    char label[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE];
 };
 
 struct wolfsentry_action_table {
@@ -260,7 +262,7 @@ struct wolfsentry_event {
     wolfsentry_priority_t priority;
 
     byte label_len;
-    char label[0];
+    char label[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE];
 };
 
 struct wolfsentry_event_table {
@@ -282,7 +284,7 @@ struct wolfsentry_route {
 
     struct wolfsentry_route_metadata meta;
 
-    uint16_t data[0]; /* first the caller's private data area (if any),
+    uint16_t data[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE]; /* first the caller's private data area (if any),
                    * then the remote addr in big endian padded up to
                    * nearest byte, then local addr, then
                    * remote_extra_ports, then local_extra_ports.
@@ -319,7 +321,7 @@ struct wolfsentry_context {
     union {
         void *mk_id_cb_arg;
         wolfsentry_ent_id_t id_counter;
-    };
+    } mk_id_cb_state;
     struct wolfsentry_eventconfig_internal config;
     struct wolfsentry_event_table events;
     struct wolfsentry_action_table actions;

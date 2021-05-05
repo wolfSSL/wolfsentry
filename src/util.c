@@ -173,11 +173,11 @@ wolfsentry_errcode_t wolfsentry_id_generate(
 {
     for (;;) {
         if (wolfsentry->mk_id_cb) {
-            wolfsentry_errcode_t ret = wolfsentry->mk_id_cb(wolfsentry->mk_id_cb_arg, object_type, id);
+            wolfsentry_errcode_t ret = wolfsentry->mk_id_cb(wolfsentry->mk_id_cb_state.mk_id_cb_arg, object_type, id);
             if (ret < 0)
                 return ret;
         } else {
-            *id = ++wolfsentry->id_counter;
+            *id = ++wolfsentry->mk_id_cb_state.id_counter;
         }
 
         if (wolfsentry->ents_by_id.head == NULL)
@@ -689,7 +689,7 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock) {
     } else if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
         lock->state = WOLFSENTRY_LOCK_UNLOCKED;
     else {
-        WOLFSENTRY_WARN("%s with state=%d\n", __FUNCTION__, lock->state);
+        WOLFSENTRY_WARN("wolfsentry_lock_unlock with state=%d\n", lock->state);
         ret = WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
         goto out;
     }
@@ -806,12 +806,16 @@ static wolfsentry_time_t wolfsentry_builtin_add_time(wolfsentry_time_t start_tim
 }
 
 static wolfsentry_errcode_t wolfsentry_builtin_to_epoch_time(wolfsentry_time_t when, long *epoch_secs, long *epoch_nsecs) {
-    *epoch_secs = when / (wolfsentry_time_t)1000000;
-    *epoch_nsecs = (when % (wolfsentry_time_t)1000000) * (wolfsentry_time_t)1000;
+    if (when / (wolfsentry_time_t)1000000 > MAX_SINT_OF(*epoch_secs))
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+    *epoch_secs = (long)(when / (wolfsentry_time_t)1000000);
+    *epoch_nsecs = (long)((when % (wolfsentry_time_t)1000000) * (wolfsentry_time_t)1000);
     WOLFSENTRY_RETURN_OK;
 }
 
 static wolfsentry_errcode_t wolfsentry_builtin_from_epoch_time(long epoch_secs, long epoch_nsecs, wolfsentry_time_t *when) {
+    if ((wolfsentry_time_t)epoch_secs > MAX_SINT_OF(*when) / (wolfsentry_time_t)1000000)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     *when = ((wolfsentry_time_t)epoch_secs * (wolfsentry_time_t)1000000) + ((wolfsentry_time_t)epoch_nsecs / (wolfsentry_time_t)1000);
     WOLFSENTRY_RETURN_OK;
 }

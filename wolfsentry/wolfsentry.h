@@ -49,6 +49,26 @@
 #define WOLFSENTRY_ERROR_STRINGS
 #endif
 
+#if defined(WOLFSENTRY_HAVE_POSIX_SEMAPHORES) || defined(WOLFSENTRY_CLOCK_BUILTINS) || defined(WOLFSENTRY_MALLOC_BUILTINS)
+#ifndef _XOPEN_SOURCE
+#if __STDC_VERSION__ >= 201112L
+#define _XOPEN_SOURCE 700
+#elif __STDC_VERSION__ >= 199901L
+#define _XOPEN_SOURCE 600
+#else
+#define _XOPEN_SOURCE 500
+#endif /* __STDC_VERSION__ */
+#endif
+#endif
+
+#if defined(__STRICT_ANSI__)
+#define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 1
+#elif defined(__GNUC__) && !defined(__clang__)
+#define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE
+#else
+#define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 0
+#endif
+
 #ifndef WOLFSENTRY_NO_STDINT_H
 #include <stdint.h>
 #endif
@@ -117,8 +137,8 @@ typedef uint16_t wolfsentry_priority_t;
 #define BITS_PER_BYTE 8
 #endif
 
-#define MAX_UINT_OF(x) (((1 << ((sizeof(x) * BITS_PER_BYTE) - 1)) - 1) | (1 << ((sizeof(x) * BITS_PER_BYTE) - 1)))
-#define MAX_SINT_OF(x) (((1 << ((sizeof(x) * BITS_PER_BYTE) - 2)) - 1) | (1 << ((sizeof(x) * BITS_PER_BYTE) - 2)))
+#define MAX_UINT_OF(x) (((1ULL << ((sizeof(x) * (unsigned long long)BITS_PER_BYTE) - 1ULL)) - 1ULL) | (1ULL << ((sizeof(x) * BITS_PER_BYTE) - 1ULL)))
+#define MAX_SINT_OF(x) (((1LL << ((sizeof(x) * (long long)BITS_PER_BYTE) - 2LL)) - 1LL) | (1LL << ((sizeof(x) * BITS_PER_BYTE) - 2LL)))
 
 #include <wolfsentry/wolfsentry_errcodes.h>
 
@@ -308,7 +328,7 @@ struct wolfsentry_sockaddr {
     wolfsentry_port_t sa_port; /* host byte order */
     wolfsentry_addr_bits_t addr_len;
     byte interface;
-    byte addr[0]; /* network byte order (big endian) */
+    byte addr[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE]; /* network byte order (big endian) */
 };
 
 typedef wolfsentry_errcode_t (*wolfsentry_get_time_cb_t)(void *context, wolfsentry_time_t *ts);

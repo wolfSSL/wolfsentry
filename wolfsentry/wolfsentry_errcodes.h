@@ -73,7 +73,12 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e);
 
 #include <errno.h>
 
+#ifdef __STRICT_ANSI__
+#define WOLFSENTRY_WARN(fmt,...) fprintf(stderr, "%s@L%d " fmt, __FILE__, __LINE__, __VA_ARGS__)
+#else
 #define WOLFSENTRY_WARN(fmt,...) fprintf(stderr, "%s@L%d " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
+#endif
+
 #define WOLFSENTRY_WARN_ON_FAILURE(...) do { wolfsentry_errcode_t _ret = (__VA_ARGS__); if (_ret < 0) { WOLFSENTRY_WARN(#__VA_ARGS__ ": " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(_ret)); }} while(0)
 #define WOLFSENTRY_WARN_ON_FAILURE_LIBC(...) do { if ((__VA_ARGS__) < 0) { WOLFSENTRY_WARN(#__VA_ARGS__ ": %s\n", strerror(errno)); }} while(0)
 

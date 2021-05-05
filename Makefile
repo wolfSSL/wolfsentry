@@ -18,6 +18,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+ifeq "$(V)" "1"
+    override undefine VERY_QUIET
+endif
+
 THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
 
 ifdef USER_MAKE_CONF
@@ -41,7 +45,7 @@ endif
 CC_IS_GCC := $(shell if $(CC) -v 2>&1 | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
 
 ifndef C_WARNFLAGS
-    C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast
+    C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast -Wno-type-limits
     ifeq "$(CC_IS_GCC)" "1"
         C_WARNFLAGS += -Wjump-misses-init -Wlogical-op
     endif

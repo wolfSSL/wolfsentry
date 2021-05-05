@@ -153,6 +153,34 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wo
     WOLFSENTRY_RETURN_OK;
 }
 
+wolfsentry_errcode_t wolfsentry_event_get_config(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_eventconfig *config) {
+    struct wolfsentry_event *event;
+    wolfsentry_errcode_t ret = wolfsentry_event_get_1(wolfsentry, label, label_len, &event);
+    if (ret < 0)
+        return ret;
+    if (event->config == NULL)
+        return wolfsentry_eventconfig_get_1(&wolfsentry->config, config);
+    else
+        return wolfsentry_eventconfig_get_1(event->config, config);
+}
+
+wolfsentry_errcode_t wolfsentry_event_update_config(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_eventconfig *config) {
+    struct wolfsentry_event *event;
+    wolfsentry_errcode_t ret = wolfsentry_event_get_1(wolfsentry, label, label_len, &event);
+    if (ret < 0)
+        return ret;
+    if (event->config == NULL) {
+        if ((event->config = (struct wolfsentry_eventconfig_internal *)WOLFSENTRY_MALLOC(sizeof *event->config)) == NULL)
+            WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+        if ((ret = wolfsentry_eventconfig_load(config, event->config)) < 0) {
+            WOLFSENTRY_FREE(event->config);
+            event->config = NULL;
+        }
+        return ret;
+    } else
+        return wolfsentry_eventconfig_load(config, event->config);
+}
+
 wolfsentry_errcode_t wolfsentry_event_get_reference(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_event **event) {
     wolfsentry_errcode_t ret;
 

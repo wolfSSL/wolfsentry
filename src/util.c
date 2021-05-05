@@ -101,6 +101,12 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Illegal access attempted";
     case WOLFSENTRY_ERROR_ID_ALREADY:
         return "Object already has requested condition";
+    case WOLFSENTRY_ERROR_ID_CONFIG_INVALID_KEY:
+        return "Configuration contains an invalid key";
+    case WOLFSENTRY_ERROR_ID_CONFIG_INVALID_VALUE:
+        return "Configuration contains an invalid value";
+    case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
+        return "Configuration has unexpected or invalid structure";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
     }
@@ -875,12 +881,51 @@ wolfsentry_errcode_t wolfsentry_time_now_plus_delta_timespec(struct wolfsentry_c
 }
 #endif /* WOLFSENTRY_THREADSAFE */
 
+void *wolfsentry_malloc(struct wolfsentry_context *wolfsentry, size_t size) {
+    return wolfsentry->allocator.malloc(wolfsentry->allocator.context, size);
+}
+void wolfsentry_free(struct wolfsentry_context *wolfsentry, void *ptr) {
+    wolfsentry->allocator.free(wolfsentry->allocator.context, ptr);
+}
+void *wolfsentry_realloc(struct wolfsentry_context *wolfsentry, void *ptr, size_t size) {
+    return wolfsentry->allocator.realloc(wolfsentry->allocator.context, ptr, size);
+}
+void *wolfsentry_memalign(struct wolfsentry_context *wolfsentry, size_t alignment, size_t size) {
+    return wolfsentry->allocator.memalign ? wolfsentry->allocator.memalign(wolfsentry->allocator.context, alignment, size) : NULL;
+}
+
+wolfsentry_errcode_t wolfsentry_get_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t *time_p) {
+    return wolfsentry->timecbs.get_time(wolfsentry->timecbs.context, time_p);
+}
+wolfsentry_time_t wolfsentry_diff_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t later, wolfsentry_time_t earlier) {
+    return wolfsentry->timecbs.diff_time(later, earlier);
+}
+wolfsentry_time_t wolfsentry_add_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t start_time, wolfsentry_time_t time_interval) {
+    return wolfsentry->timecbs.add_time(start_time, time_interval);
+}
+wolfsentry_errcode_t wolfsentry_to_epoch_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t when, long *epoch_secs, long *epoch_nsecs) {
+    return wolfsentry->timecbs.to_epoch_time(when, epoch_secs, epoch_nsecs);
+}
+wolfsentry_errcode_t wolfsentry_from_epoch_time(struct wolfsentry_context *wolfsentry, long epoch_secs, long epoch_nsecs, wolfsentry_time_t *when) {
+    return wolfsentry->timecbs.from_epoch_time(epoch_secs, epoch_nsecs, when);
+}
+wolfsentry_errcode_t wolfsentry_interval_to_seconds(struct wolfsentry_context *wolfsentry, wolfsentry_time_t howlong, long *howlong_secs, long *howlong_nsecs) {
+    return wolfsentry->timecbs.interval_to_seconds(howlong, howlong_secs, howlong_nsecs);
+}
+wolfsentry_errcode_t wolfsentry_interval_from_seconds(struct wolfsentry_context *wolfsentry, long howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
+    return wolfsentry->timecbs.interval_from_seconds(howlong_secs, howlong_nsecs, howlong);
+}
+
 wolfsentry_errcode_t wolfsentry_eventconfig_init(
+    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_eventconfig *config)
 {
     if (config == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    memset(config, 0, sizeof *config);
+    if (wolfsentry)
+        *config = wolfsentry->config.config;
+    else
+        memset(config, 0, sizeof *config);
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -914,6 +959,8 @@ wolfsentry_errcode_t wolfsentry_eventconfig_load(
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal)
 {
+    if (internal == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     memset(internal, 0, sizeof *internal);
     if (supplied == NULL)
         WOLFSENTRY_RETURN_OK;
@@ -927,6 +974,45 @@ wolfsentry_errcode_t wolfsentry_eventconfig_load(
     }
 
     WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_eventconfig_update_1(
+    const struct wolfsentry_eventconfig *supplied,
+    struct wolfsentry_eventconfig_internal *internal)
+{
+    if (supplied == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (internal == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    internal->config.max_connection_count = supplied->max_connection_count;
+    internal->config.penaltybox_duration = supplied->penaltybox_duration;
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
+    const struct wolfsentry_eventconfig_internal *internal,
+    struct wolfsentry_eventconfig *exported)
+{
+    if (internal == NULL)
+        WOLFSENTRY_ERROR_RETURN(DATA_MISSING);
+    if (exported == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    *exported = internal->config;
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_defaultconfig_get(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_eventconfig *config)
+{
+    return wolfsentry_eventconfig_get_1(&wolfsentry->config, config);
+}
+
+wolfsentry_errcode_t wolfsentry_defaultconfig_update(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_eventconfig *config)
+{
+    return wolfsentry_eventconfig_update_1(config, &wolfsentry->config);
 }
 
 wolfsentry_errcode_t wolfsentry_init(

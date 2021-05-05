@@ -36,9 +36,25 @@ typedef WOLFSENTRY_REFCOUNT_TYPE wolfsentry_refcount_t;
 typedef uint32_t wolfsentry_refcount_t;
 #endif
 
+#include "wolfsentry_ll.h"
+
 #ifdef WOLFSENTRY_THREADSAFE
 
 #ifdef WOLFSENTRY_HAVE_POSIX_SEMAPHORES
+
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+struct wolfsentry_thread_list_ent {
+    struct wolfsentry_list_ent_header header;
+    wolfsentry_thread_id_t thread;
+};
+
+struct wolfsentry_thread_list {
+    struct wolfsentry_list_header header;
+};
+
+#define WOLFSENTRY_THREAD_ID_SENT ~0UL
+
+#endif
 
 struct wolfsentry_rwlock {
     sem_t sem;
@@ -54,6 +70,9 @@ struct wolfsentry_rwlock {
         WOLFSENTRY_LOCK_SHARED,
         WOLFSENTRY_LOCK_EXCLUSIVE
     } state;
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    struct wolfsentry_thread_list lock_holders;
+#endif
 };
 
 #endif
@@ -119,86 +138,6 @@ struct wolfsentry_table_ent_header {
     wolfsentry_refcount_t refcount;
 };
 
-struct wolfsentry_list_ent_header {
-    struct wolfsentry_list_ent_header *prev, *next;
-};
-
-struct wolfsentry_list_header {
-    struct wolfsentry_list_ent_header *head, *tail;
-    /* note no cmp_fn slot */
-};
-
-static inline void wolfsentry_list_ent_prepend(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
-    ent->prev = NULL;
-    if (list->head) {
-        list->head->prev = ent;
-        ent->next = list->head;
-        list->head = ent;
-    } else {
-        ent->next = NULL;
-        list->head = list->tail = ent;
-    }
-}
-
-static inline void wolfsentry_list_ent_append(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
-    ent->next = NULL;
-    if (list->tail) {
-        list->tail->next = ent;
-        ent->prev = list->tail;
-        list->tail = ent;
-    } else {
-        ent->prev = NULL;
-        list->head = list->tail = ent;
-    }
-}
-
-static inline void wolfsentry_list_ent_insert_after(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *point_ent, struct wolfsentry_list_ent_header *new_ent) {
-    if (point_ent == NULL) {
-        wolfsentry_list_ent_prepend(list, new_ent);
-        return;
-    }
-    new_ent->prev = point_ent;
-    if (point_ent->next)
-        new_ent->next = point_ent->next;
-    else
-        list->tail = new_ent;
-    point_ent->next = new_ent;
-}
-
-static inline void wolfsentry_list_ent_delete(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
-    if (ent == list->head) {
-        list->head = ent->next;
-        if (list->head)
-            ent->next->prev = NULL;
-        else
-            list->tail = NULL;
-    } else if (ent == list->tail) {
-        list->tail = ent->prev;
-        list->tail->next = NULL;
-    } else {
-        ent->next->prev = ent->prev;
-        ent->prev->next = ent->next;
-    }
-}
-
-static inline void wolfsentry_list_ent_get_first(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header **ent) {
-    *ent = list->head;
-}
-
-static inline void wolfsentry_list_ent_get_last(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header **ent) {
-    *ent = list->tail;
-}
-
-static inline void wolfsentry_list_ent_get_next(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header **ent) {
-    (void)list;
-    *ent = (*ent)->next;
-}
-
-static inline void wolfsentry_list_ent_get_prev(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header **ent) {
-    (void)list;
-    *ent = (*ent)->prev;
-}
-
 struct wolfsentry_context;
 
 typedef int (*wolfsentry_ent_cmp_fn_t)(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right);
@@ -223,6 +162,7 @@ struct wolfsentry_action {
     struct wolfsentry_table_ent_header header;
     wolfsentry_action_callback_t handler;
     void *handler_arg;
+    wolfsentry_action_flags_t flags;
     byte label_len;
     char label[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE];
 };
@@ -418,6 +358,14 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     wolfsentry_action_res_t *action_results);
 
 wolfsentry_errcode_t wolfsentry_eventconfig_load(
+    const struct wolfsentry_eventconfig *supplied,
+    struct wolfsentry_eventconfig_internal *internal);
+
+wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
+    const struct wolfsentry_eventconfig_internal *internal,
+    struct wolfsentry_eventconfig *exported);
+
+wolfsentry_errcode_t wolfsentry_eventconfig_update_1(
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal);
 

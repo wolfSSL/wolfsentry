@@ -194,6 +194,12 @@ enum {
     WOLFSENTRY_OBJECT_TYPE_ROUTE
 };
 
+typedef enumint_t wolfsentry_action_flags_t;
+enum {
+    WOLFSENTRY_ACTION_FLAG_NONE       = 0U,
+    WOLFSENTRY_ACTION_FLAG_DISABLED   = 1U << 0U
+};
+
 typedef enumint_t wolfsentry_action_type_t;
 enum {
     WOLFSENTRY_ACTION_TYPE_POST = 1, /* called when an event is posted. */
@@ -236,6 +242,7 @@ struct wolfsentry_cursor;
 
 typedef wolfsentry_errcode_t (*wolfsentry_action_callback_t)(
     struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
     const struct wolfsentry_event *trigger_event,
@@ -286,7 +293,6 @@ struct wolfsentry_route_metadata {
     wolfsentry_time_t insert_time;
     wolfsentry_time_t last_hit_time;
     wolfsentry_time_t last_penaltybox_time;
-    uint16_t penaltybox_duration_seconds; /* zero means time-unbounded. */
     uint16_t connection_count;
     uint16_t derogatory_count;
     uint16_t commendable_count;}
@@ -310,6 +316,7 @@ struct wolfsentry_eventconfig {
     size_t route_private_data_size; /* includes padding needed for route_private_data_alignment. */
     size_t route_private_data_alignment;
     uint32_t max_connection_count;
+    wolfsentry_time_t penaltybox_duration; /* zero means time-unbounded. */
 };
 
 #define WOLFSENTRY_TIME_NEVER ((wolfsentry_time_t)0)
@@ -372,12 +379,26 @@ struct wolfsentry_timecbs {
     wolfsentry_interval_from_seconds_cb_t interval_from_seconds;
 };
 
+void *wolfsentry_malloc(struct wolfsentry_context *wolfsentry, size_t size);
+void wolfsentry_free(struct wolfsentry_context *wolfsentry, void *ptr);
+void *wolfsentry_realloc(struct wolfsentry_context *wolfsentry, void *ptr, size_t size);
+void *wolfsentry_memalign(struct wolfsentry_context *wolfsentry, size_t alignment, size_t size);
+
+wolfsentry_errcode_t wolfsentry_get_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t *time_p);
+wolfsentry_time_t wolfsentry_diff_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t later, wolfsentry_time_t earlier);
+wolfsentry_time_t wolfsentry_add_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t start_time, wolfsentry_time_t time_interval);
+wolfsentry_errcode_t wolfsentry_to_epoch_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t when, long *epoch_secs, long *epoch_nsecs);
+wolfsentry_errcode_t wolfsentry_from_epoch_time(struct wolfsentry_context *wolfsentry, long epoch_secs, long epoch_nsecs, wolfsentry_time_t *when);
+wolfsentry_errcode_t wolfsentry_interval_to_seconds(struct wolfsentry_context *wolfsentry, wolfsentry_time_t howlong, long *howlong_secs, long *howlong_nsecs);
+wolfsentry_errcode_t wolfsentry_interval_from_seconds(struct wolfsentry_context *wolfsentry, long howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong);
+
 struct wolfsentry_host_platform_interface {
     struct wolfsentry_allocator *allocator;
     struct wolfsentry_timecbs *timecbs;
 };
 
 wolfsentry_errcode_t wolfsentry_eventconfig_init(
+    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_eventconfig *config);
 wolfsentry_errcode_t wolfsentry_eventconfig_check(
     const struct wolfsentry_eventconfig *config);
@@ -385,6 +406,12 @@ wolfsentry_errcode_t wolfsentry_init(
     const struct wolfsentry_host_platform_interface *hpi,
     const struct wolfsentry_eventconfig *config,
     struct wolfsentry_context **wolfsentry);
+wolfsentry_errcode_t wolfsentry_defaultconfig_get(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_eventconfig *config);
+wolfsentry_errcode_t wolfsentry_defaultconfig_update(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_eventconfig *config);
 wolfsentry_errcode_t wolfsentry_shutdown(struct wolfsentry_context **wolfsentry);
 
 #ifdef WOLFSENTRY_THREADSAFE
@@ -606,10 +633,6 @@ wolfsentry_errcode_t wolfsentry_route_get_metadata(
     struct wolfsentry_route *route,
     const struct wolfsentry_route_metadata **metadata);
 
-wolfsentry_errcode_t wolfsentry_route_set_penaltybox_duration_seconds(
-    struct wolfsentry_route *route,
-    int penaltybox_duration_seconds);
-
 wolfsentry_errcode_t wolfsentry_route_update_flags(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route *route,
@@ -631,6 +654,7 @@ wolfsentry_errcode_t wolfsentry_action_insert(
     struct wolfsentry_context *wolfsentry,
     const char *label,
     int label_len,
+    wolfsentry_action_flags_t flags,
     wolfsentry_action_callback_t handler,
     void *handler_arg,
     wolfsentry_ent_id_t *id);
@@ -652,6 +676,17 @@ wolfsentry_errcode_t wolfsentry_action_drop_reference(
     const struct wolfsentry_action *action,
     wolfsentry_action_res_t *action_results);
 
+wolfsentry_errcode_t wolfsentry_action_get_flags(
+    struct wolfsentry_action *action,
+    wolfsentry_action_flags_t *flags);
+
+wolfsentry_errcode_t wolfsentry_action_update_flags(
+    struct wolfsentry_action *action,
+    wolfsentry_action_flags_t flags_to_set,
+    wolfsentry_action_flags_t flags_to_clear,
+    wolfsentry_action_flags_t *flags_before,
+    wolfsentry_action_flags_t *flags_after);
+
 wolfsentry_errcode_t wolfsentry_event_insert(
     struct wolfsentry_context *wolfsentry,
     const char *label,
@@ -665,6 +700,18 @@ wolfsentry_errcode_t wolfsentry_event_delete(
     const char *label,
     int label_len,
     wolfsentry_action_res_t *action_results);
+
+wolfsentry_errcode_t wolfsentry_event_get_config(
+    struct wolfsentry_context *wolfsentry,
+    const char *label,
+    int label_len,
+    struct wolfsentry_eventconfig *config);
+
+wolfsentry_errcode_t wolfsentry_event_update_config(
+    struct wolfsentry_context *wolfsentry,
+    const char *label,
+    int label_len,
+    struct wolfsentry_eventconfig *config);
 
 wolfsentry_errcode_t wolfsentry_event_get_reference(
     struct wolfsentry_context *wolfsentry,

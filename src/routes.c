@@ -881,15 +881,12 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(route->meta.commendable_count);
 
     if ((route->flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)) {
-        if (route->meta.penaltybox_duration_seconds > 0) {
-            wolfsentry_time_t penaltybox_duration, now;
+        if (config->config.penaltybox_duration > 0) {
+            wolfsentry_time_t now;
             wolfsentry_errcode_t ret = WOLFSENTRY_GET_TIME(&now);
             if (ret < 0)
                 return ret;
-            ret = WOLFSENTRY_INTERVAL_FROM_SECONDS(route->meta.penaltybox_duration_seconds, 0, &penaltybox_duration);
-            if (ret < 0)
-                return ret;
-            if (WOLFSENTRY_DIFF_TIME(now, route->meta.last_penaltybox_time) > penaltybox_duration) {
+            if (WOLFSENTRY_DIFF_TIME(now, route->meta.last_penaltybox_time) > config->config.penaltybox_duration) {
                 wolfsentry_route_flags_t flags_before, flags_after;
                 WOLFSENTRY_WARN_ON_FAILURE(
                     wolfsentry_route_update_flags(
@@ -1199,18 +1196,6 @@ wolfsentry_errcode_t wolfsentry_route_get_metadata(
     const struct wolfsentry_route_metadata **metadata)
 {
     *metadata = &route->meta;
-    WOLFSENTRY_RETURN_OK;
-}
-
-wolfsentry_errcode_t wolfsentry_route_set_penaltybox_duration_seconds(
-    struct wolfsentry_route *route,
-    int penaltybox_duration_seconds)
-{
-    if (penaltybox_duration_seconds < 0)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (penaltybox_duration_seconds > MAX_UINT_OF(route->meta.penaltybox_duration_seconds))
-        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
-    route->meta.penaltybox_duration_seconds = (uint16_t)penaltybox_duration_seconds;
     WOLFSENTRY_RETURN_OK;
 }
 

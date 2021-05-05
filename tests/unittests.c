@@ -838,6 +838,7 @@ static int test_static_routes (void) {
 
 static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_action *action,
     void *handler_context,
     void *caller_arg,
     const struct wolfsentry_event *event,
@@ -846,6 +847,7 @@ static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     wolfsentry_action_res_t *action_results)
 {
     (void)wolfsentry;
+    (void)action;
     (void)handler_context;
     (void)caller_arg;
     (void)event;
@@ -879,7 +881,6 @@ static int test_dynamic_rules (void) {
             WOLFSENTRY_TEST_HPI,
             &config,
             &wolfsentry));
-
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_event_insert(
@@ -978,6 +979,7 @@ int wolfsentry_event_set_subevent(
             wolfsentry,
             "insert_always",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
@@ -987,6 +989,7 @@ int wolfsentry_event_set_subevent(
             wolfsentry,
             "set_connect_wildcards",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
@@ -996,6 +999,7 @@ int wolfsentry_event_set_subevent(
             wolfsentry,
             "set_connectionreset_wildcards",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
@@ -1005,6 +1009,7 @@ int wolfsentry_event_set_subevent(
             wolfsentry,
             "increment_derogatory",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
@@ -1014,6 +1019,7 @@ int wolfsentry_event_set_subevent(
             wolfsentry,
             "increment_commendable",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
@@ -1023,15 +1029,76 @@ int wolfsentry_event_set_subevent(
             wolfsentry,
             "check_counts",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
+
+    {
+        struct wolfsentry_action *action;
+        wolfsentry_action_flags_t flags;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_get_reference(
+                wolfsentry,
+                "check_counts",
+                -1 /* label_len */,
+                &action));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_get_flags(
+                action,
+                &flags));
+        WOLFSENTRY_EXIT_ON_FALSE(flags == WOLFSENTRY_ACTION_FLAG_NONE);
+
+        {
+            wolfsentry_action_flags_t flags_before, flags_after;
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_action_update_flags(
+                    action,
+                    WOLFSENTRY_ACTION_FLAG_DISABLED,
+                    WOLFSENTRY_ACTION_FLAG_NONE,
+                    &flags_before,
+                    &flags_after));
+            WOLFSENTRY_EXIT_ON_FALSE(flags_before == WOLFSENTRY_ACTION_FLAG_NONE);
+            WOLFSENTRY_EXIT_ON_FALSE(flags_after == WOLFSENTRY_ACTION_FLAG_DISABLED);
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_get_flags(
+                action,
+                &flags));
+        WOLFSENTRY_EXIT_ON_FALSE(flags == WOLFSENTRY_ACTION_FLAG_DISABLED);
+
+        {
+            wolfsentry_action_flags_t flags_before, flags_after;
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_action_update_flags(
+                    action,
+                    WOLFSENTRY_ACTION_FLAG_NONE,
+                    WOLFSENTRY_ACTION_FLAG_DISABLED,
+                    &flags_before,
+                    &flags_after));
+            WOLFSENTRY_EXIT_ON_FALSE(flags_before == WOLFSENTRY_ACTION_FLAG_DISABLED);
+            WOLFSENTRY_EXIT_ON_FALSE(flags_after == WOLFSENTRY_ACTION_FLAG_NONE);
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_get_flags(
+                action,
+                &flags));
+        WOLFSENTRY_EXIT_ON_FALSE(flags == WOLFSENTRY_ACTION_FLAG_NONE);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_drop_reference(wolfsentry, action, NULL));
+    }
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_action_insert(
             wolfsentry,
             "add_to_greenlist",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
@@ -1041,6 +1108,7 @@ int wolfsentry_event_set_subevent(
             wolfsentry,
             "del_from_greenlist",
             -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));

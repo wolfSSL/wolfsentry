@@ -44,7 +44,7 @@ int wolfsentry_action_key_cmp(struct wolfsentry_action *left, struct wolfsentry_
     return wolfsentry_action_key_cmp_1(left->label, left->label_len, right->label, right->label_len);
 }
 
-static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int label_len, wolfsentry_action_callback_t handler, void *handler_arg, struct wolfsentry_action *action, size_t action_size) {
+static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int label_len, wolfsentry_action_flags_t flags, wolfsentry_action_callback_t handler, void *handler_arg, struct wolfsentry_action *action, size_t action_size) {
     if (label_len <= 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
@@ -55,6 +55,7 @@ static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int labe
     action->handler_arg = handler_arg;
     memcpy(action->label, label, (size_t)label_len);
     action->label_len = (byte)label_len;
+    action->flags = flags;
 
     action->header.refcount = 1;
     action->header.id = WOLFSENTRY_ENT_ID_NONE;
@@ -62,7 +63,7 @@ static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int labe
     WOLFSENTRY_RETURN_OK;
 }
 
-static wolfsentry_errcode_t wolfsentry_action_new_1(struct wolfsentry_context *wolfsentry, const char *label, int label_len, wolfsentry_action_callback_t handler, void *handler_arg, struct wolfsentry_action **action) {
+static wolfsentry_errcode_t wolfsentry_action_new_1(struct wolfsentry_context *wolfsentry, const char *label, int label_len, wolfsentry_action_flags_t flags, wolfsentry_action_callback_t handler, void *handler_arg, struct wolfsentry_action **action) {
     size_t new_size;
     wolfsentry_errcode_t ret;
 
@@ -79,7 +80,7 @@ static wolfsentry_errcode_t wolfsentry_action_new_1(struct wolfsentry_context *w
 
     if ((*action = (struct wolfsentry_action *)WOLFSENTRY_MALLOC(new_size)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
-    ret = wolfsentry_action_init_1(label, label_len, handler, handler_arg, *action, new_size);
+    ret = wolfsentry_action_init_1(label, label_len, flags, handler, handler_arg, *action, new_size);
     if (ret < 0) {
         WOLFSENTRY_FREE(*action);
         *action = NULL;
@@ -87,11 +88,11 @@ static wolfsentry_errcode_t wolfsentry_action_new_1(struct wolfsentry_context *w
     return ret;
 }
 
-wolfsentry_errcode_t wolfsentry_action_insert(struct wolfsentry_context *wolfsentry, const char *label, int label_len, wolfsentry_action_callback_t handler, void *handler_arg, wolfsentry_ent_id_t *id) {
+wolfsentry_errcode_t wolfsentry_action_insert(struct wolfsentry_context *wolfsentry, const char *label, int label_len, wolfsentry_action_flags_t flags, wolfsentry_action_callback_t handler, void *handler_arg, wolfsentry_ent_id_t *id) {
     struct wolfsentry_action *new;
     wolfsentry_errcode_t ret;
 
-    if ((ret = wolfsentry_action_new_1(wolfsentry, label, label_len, handler, handler_arg, &new)) < 0)
+    if ((ret = wolfsentry_action_new_1(wolfsentry, label, label_len, flags, handler, handler_arg, &new)) < 0)
         return ret;
     if ((ret = wolfsentry_id_generate(wolfsentry, WOLFSENTRY_OBJECT_TYPE_ACTION, &new->header.id)) < 0) {
         WOLFSENTRY_FREE(new);
@@ -114,7 +115,7 @@ wolfsentry_errcode_t wolfsentry_action_delete(struct wolfsentry_context *wolfsen
     } target;
     struct wolfsentry_table_ent_header *target_p = &target.action.header;
 
-    if ((ret = wolfsentry_action_init_1(label, label_len, NULL, NULL, &target.action, sizeof target)) < 0)
+    if ((ret = wolfsentry_action_init_1(label, label_len, WOLFSENTRY_ACTION_FLAG_NONE, NULL, NULL, &target.action, sizeof target)) < 0)
         return ret;
 
     if ((ret = wolfsentry_table_ent_delete(wolfsentry, &target_p)) < 0)
@@ -136,8 +137,10 @@ static wolfsentry_errcode_t wolfsentry_action_get_reference_1(struct wolfsentry_
 wolfsentry_errcode_t wolfsentry_action_get_reference(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_action **action) {
     struct wolfsentry_action *action_template;
     wolfsentry_errcode_t ret;
-    if (label_len <= 0)
+    if (label_len == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (label_len < 0)
+        label_len = (int)strlen(label);
     if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     if ((action_template = WOLFSENTRY_MALLOC(sizeof *action_template + (size_t)label_len)) == NULL)
@@ -151,6 +154,25 @@ wolfsentry_errcode_t wolfsentry_action_get_reference(struct wolfsentry_context *
 
 wolfsentry_errcode_t wolfsentry_action_drop_reference(struct wolfsentry_context *wolfsentry, const struct wolfsentry_action *action, wolfsentry_action_res_t *action_results) {
     return wolfsentry_table_ent_drop_reference(wolfsentry, (struct wolfsentry_table_ent_header *)action, action_results);
+}
+
+wolfsentry_errcode_t wolfsentry_action_get_flags(
+    struct wolfsentry_action *action,
+    wolfsentry_action_flags_t *flags)
+{
+    *flags = action->flags;
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_action_update_flags(
+    struct wolfsentry_action *action,
+    wolfsentry_action_flags_t flags_to_set,
+    wolfsentry_action_flags_t flags_to_clear,
+    wolfsentry_action_flags_t *flags_before,
+    wolfsentry_action_flags_t *flags_after)
+{
+    WOLFSENTRY_ATOMIC_UPDATE(action->flags, flags_to_set, flags_to_clear, flags_before, flags_after);
+    WOLFSENTRY_RETURN_OK;
 }
 
 static inline int wolfsentry_action_list_find_1(
@@ -348,7 +370,9 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
          i = (struct wolfsentry_action_list_ent *)i->header.next) {
         if (! (route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS))
             WOLFSENTRY_ATOMIC_INCREMENT(i->action->header.hitcount, 1);
-        if ((ret = i->action->handler(wolfsentry, i->action->handler_arg, caller_arg, trigger_event, route_table, route, action_results)) < 0)
+        if (WOLFSENTRY_CHECK_BITS(i->action->flags, WOLFSENTRY_ACTION_FLAG_DISABLED))
+            continue;
+        if ((ret = i->action->handler(wolfsentry, i->action, i->action->handler_arg, caller_arg, trigger_event, route_table, route, action_results)) < 0)
             return ret;
         if (WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP))
             WOLFSENTRY_RETURN_OK;

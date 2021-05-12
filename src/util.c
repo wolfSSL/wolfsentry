@@ -42,6 +42,8 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
         return "routes.c";
     case WOLFSENTRY_SOURCE_ID_UTIL_C:
         return "util.c";
+    case WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C:
+        return "json/load_config.c";
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
         break;
     }
@@ -107,6 +109,8 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Configuration contains an invalid value";
     case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
         return "Configuration has unexpected or invalid structure";
+    case WOLFSENTRY_ERROR_ID_CONFIG_PARSER:
+        return "Configuration parsing failed";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
     }

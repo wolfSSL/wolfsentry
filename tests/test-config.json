@@ -1,0 +1,66 @@
+{
+    "config-update" : {
+	"max-connection-count" : 5,
+	"penaltybox-duration" : "1h",
+	"default-policy-static" : "reject"
+    },
+    "static-routes-insert" : [
+	{
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penaltyboxed" : false,
+	    "greenlisted" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : "inet",
+	    "protocol" : "tcp",
+	    "remote" : {
+		"address" : "192.168.0.0",
+		"prefix-bits" : 16,
+		"interface" : 1
+	    },
+	    "local" : {
+		"port" : "smtp",
+		"address" : "192.168.0.0",
+		"prefix-bits" : 16,
+		"interface" : 1
+	    }
+	},
+	{
+	    "tcplike-port-numbers" : true,
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penaltyboxed" : false,
+	    "greenlisted" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : "inet6",
+	    "protocol" : "tcp",
+	    "remote" : {
+		"address" : "fd00::",
+		"prefix-bits" : 8,
+		"interface" : 1
+	    },
+	    "local" : {
+		"port" : "ssh",
+		"interface" : 1
+	    }
+	},
+	{
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penaltyboxed" : false,
+	    "greenlisted" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : "mac",
+	    "remote" : {
+		"address" : "ab:cd:ef:01:23:45"
+	    },
+	    "local" : {
+		"address" : "54:32:10:fe:dc:ba"
+	    }
+	}
+
+    ]
+}

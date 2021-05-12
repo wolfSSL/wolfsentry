@@ -139,8 +139,10 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wo
     } target;
     *event = &target.event;
 
-    if (label_len <= 0)
+    if (label_len == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (label_len < 0)
+        label_len = (int)strlen(label);
     if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
 

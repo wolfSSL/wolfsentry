@@ -28,7 +28,11 @@ ifdef USER_MAKE_CONF
     include $(USER_MAKE_CONF)
 endif
 
-SRCS = util.c internal.c routes.c events.c actions.c
+SRCS := util.c internal.c routes.c events.c actions.c
+
+ifneq "$(NO_JSON)" "1"
+    SRCS += json/centijson_sax.c json/load_config.c
+endif
 
 ifndef BUILD_TOP
     BUILD_TOP := .
@@ -54,15 +58,15 @@ endif
 CFLAGS := -I. $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
+$(BUILD_TOP)/src/json/centijson_sax.o: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
+
 ifdef USER_SETTINGS_FILE
     CFLAGS += -DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
 endif
 
 ifeq "$(SINGLETHREADED)" "1"
     CFLAGS += -DWOLFSENTRY_SINGLETHREADED
-endif
-
-ifneq "$(SINGLETHREADED)" "1"
+else
     LDFLAGS += -pthread
 endif
 
@@ -97,14 +101,22 @@ endif
 	@$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
 endif
 
+AR_FLAGS := Dcqs
+
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
 ifdef VERY_QUIET
-	@$(AR) crs $@ $+
+	@rm -f $@
+	@$(AR) $(AR_FLAGS) $@ $+
 else
-	$(AR) crs $@ $+
+	@rm -f $@
+	$(AR) $(AR_FLAGS) $@ $+
 endif
 
 UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules
+
+ifneq "$(NO_JSON)" "1"
+    UNITTEST_LIST += test_json
+endif
 
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
@@ -119,12 +131,15 @@ endif
 endif
 
 .PHONY: test
-test: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
+test: $(BUILD_TOP)/.tested
+
+$(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
 ifdef VERY_QUIET
 	@for test in $(basename $(UNITTEST_LIST)); do $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then echo "$${test} failed" 1>&2; break; fi; done; exit $$exitcode
 else
 	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all tests succeeded.'; else exit $$exitcode; fi
 endif
+	@touch $(BUILD_TOP)/.tested
 
 -include Makefile.analyzers
 
@@ -141,7 +156,10 @@ ifndef INSTALL_INCDIR
 endif
 
 .PHONY: install
-install: all
+install: $(BUILD_TOP)/.tested install-untested
+
+.PHONY: install-untested
+install-untested: all
 	@mkdir -p $(INSTALL_LIBDIR)
 	install -p -m 0644 $(INSTALL_LIBS) $(INSTALL_LIBDIR)
 	@mkdir -p $(INSTALL_INCDIR)/wolfsentry
@@ -169,7 +187,7 @@ dist:
 
 .PHONY: clean
 clean:
-	rm -f $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
+	rm -f $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
 	@[ "$(BUILD_TOP)" != "." ] && rmdir $(BUILD_TOP)/* $(BUILD_TOP) 2>/dev/null || exit 0
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))

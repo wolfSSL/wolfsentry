@@ -22,7 +22,7 @@
 
 #define _GNU_SOURCE
 
-#include "../src/wolfsentry_internal.h"
+#include "src/wolfsentry_internal.h"
 
 #include <stdlib.h>
 
@@ -1179,6 +1179,88 @@ int wolfsentry_action_delete(
 }
 #endif /* TEST_DYNAMIC_RULES */
 
+#ifdef TEST_JSON
+
+#include "wolfsentry/wolfsentry_json.h"
+
+static int test_json(const char *fname) {
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_context *wolfsentry;
+    struct json_process_state *jps;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init(WOLFSENTRY_TEST_HPI,
+                                               NULL /* config */,
+                                               &wolfsentry));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_init(
+                                   wolfsentry,
+                                   WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+                                   &jps));
+
+    FILE *f;
+    if (strcmp(fname,"-"))
+        f = fopen(fname, "r");
+    else
+        f = stdin;
+    if (! f) {
+        fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
+        exit(1);
+    }
+
+    char buf[512], err_buf[512];
+    for (;;) {
+        size_t n = fread(buf, 1, sizeof buf, f);
+        if ((n < sizeof buf) && ferror(f)) {
+            fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
+            exit(1);
+        }
+
+        ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
+        if (ret < 0) {
+            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            exit(1);
+        }
+        if ((n < sizeof buf) && feof(f))
+            break;
+    }
+    if (f != stdin)
+        fclose(f);
+
+    ret = wolfsentry_config_json_fini(jps, err_buf, sizeof err_buf);
+    if (ret < 0) {
+        fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+        exit(1);
+    }
+
+    {
+        struct wolfsentry_cursor *cursor;
+        struct wolfsentry_route *route;
+        struct wolfsentry_route_exports route_exports;
+        struct wolfsentry_route_table *static_routes;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_table_static(wolfsentry, &static_routes));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_start(wolfsentry, static_routes, &cursor));
+        for (ret = wolfsentry_route_table_iterate_current(wolfsentry, static_routes, cursor, &route);
+             ret >= 0;
+             ret = wolfsentry_route_table_iterate_next(wolfsentry, static_routes, cursor, &route)) {
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(wolfsentry, route, &route_exports));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_exports_render(&route_exports, stdout));
+        }
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(wolfsentry, static_routes, &cursor));
+    }
+
+    {
+        wolfsentry_errcode_t ws_ret = wolfsentry_shutdown(&wolfsentry);
+        if (ws_ret < 0) {
+            fprintf(stderr,"wolfsentry_init(): " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ws_ret));
+            return ret;
+        }
+    }
+
+    exit(0);
+}
+
+#endif /* TEST_JSON */
+
 
 int main (int argc, char* argv[]) {
     wolfsentry_errcode_t ret = 0;
@@ -1214,6 +1296,14 @@ int main (int argc, char* argv[]) {
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         printf("test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
+
+#ifdef TEST_JSON
+    ret = test_json("tests/test-config.json");
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        printf("test_json failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

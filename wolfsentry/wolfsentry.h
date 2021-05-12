@@ -99,6 +99,14 @@
 #include <string.h>
 #endif
 
+#ifndef offsetof
+/* gcc and clang define this in stddef.h to use sanitizer-safe builtins. */
+#define offsetof(structure, element) ((uintptr_t)&(((structure *)0)->element))
+#endif
+#ifndef sizeof_field
+#define sizeof_field(structure, element) sizeof(((structure *)0)->element)
+#endif
+
 typedef unsigned char byte;
 
 typedef uint16_t wolfsentry_family_t;
@@ -254,16 +262,16 @@ typedef uint32_t wolfsentry_route_flags_t;
 
 enum {
     WOLFSENTRY_ROUTE_FLAG_NONE                           = 0U,
-    WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD               = 1U<<0U,
+    WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<0U,
     WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<1U,
     WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD       = 1U<<2U,
     WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD             = 1U<<3U,
     WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD        = 1U<<4U,
     WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD         = 1U<<5U,
     WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD              = 1U<<6U,
-    WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS           = 1U<<7U,
-    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<8U,
-    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD         = 1U<<9U,
+    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<7U,
+    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD         = 1U<<8U,
+    WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS           = 1U<<9U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN                   = 1U<<10U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT                  = 1U<<11U,
 
@@ -329,14 +337,18 @@ struct wolfsentry_eventconfig {
 #error WOLFSENTRY_MAX_ADDR_BYTES * 8 must fit in a uint16_t.
 #endif
 
-struct wolfsentry_sockaddr {
-    wolfsentry_family_t sa_family;
-    wolfsentry_proto_t sa_proto;
-    wolfsentry_port_t sa_port; /* host byte order */
-    wolfsentry_addr_bits_t addr_len;
-    byte interface;
-    byte addr[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE]; /* network byte order (big endian) */
-};
+#define WOLFSENTRY_SOCKADDR_MEMBERS(n) {        \
+    wolfsentry_family_t sa_family;              \
+    wolfsentry_proto_t sa_proto;                \
+    wolfsentry_port_t sa_port;                  \
+    wolfsentry_addr_bits_t addr_len;            \
+    byte interface;                             \
+    byte addr[n];                               \
+}
+
+struct wolfsentry_sockaddr WOLFSENTRY_SOCKADDR_MEMBERS(WOLFSENTRY_FLEXIBLE_ARRAY_SIZE);
+
+#define WOLFSENTRY_SOCKADDR(n) struct WOLFSENTRY_SOCKADDR_MEMBERS(WOLFSENTRY_BITS_TO_BYTES(n))
 
 typedef wolfsentry_errcode_t (*wolfsentry_get_time_cb_t)(void *context, wolfsentry_time_t *ts);
 typedef wolfsentry_time_t (*wolfsentry_diff_time_cb_t)(wolfsentry_time_t earlier, wolfsentry_time_t later);

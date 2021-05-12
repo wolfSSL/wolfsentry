@@ -138,29 +138,29 @@ static int wolfsentry_route_key_cmp_1(
     else if ((left->parent_event == NULL) || (right->parent_event == NULL)) {
         /* null event acts like a priority of -1, so to speak. */
         if (right->parent_event == NULL) {
-            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD)) {
+            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
                 if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD;
+                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
             } else
                 return -1;
         } else if (left->parent_event == NULL) {
-            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD)) {
+            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
                 if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD;
+                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
             } else
                 return -1;
         }
     } else {
         if (left->parent_event->priority < right->parent_event->priority) {
-            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD)) {
+            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
                 if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD;
+                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
             } else
                 return -1;
         } else if (left->parent_event->priority > right->parent_event->priority) {
-            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD)) {
+            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
                 if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD;
+                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
             } else
                 return -1;
         }
@@ -231,12 +231,12 @@ static int wolfsentry_route_key_cmp_1(
      * distinguishable.
      */
 
-    if (! ((left->parent_event == NULL) || (right->parent_event == NULL) || (inexact_matches && (*inexact_matches & WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD)))) {
+    if (! ((left->parent_event == NULL) || (right->parent_event == NULL) || (inexact_matches && (*inexact_matches & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)))) {
         cmp = wolfsentry_event_key_cmp(left->parent_event, right->parent_event);
         if (cmp) {
-            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD)) {
+            if (match_wildcards_p && (left->flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
                 if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD;
+                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
             } else
                 return cmp;
         }
@@ -1005,7 +1005,7 @@ wolfsentry_errcode_t wolfsentry_route_event_dispatch(
 
     if (route_table == NULL) {
         if (inexact_matches)
-            *inexact_matches = WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD | WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD;
+            *inexact_matches = WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD | WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD;
         *action_results = wolfsentry->routes_static.default_policy;
         if (WOLFSENTRY_CHECK_BITS(wolfsentry->routes_static.default_policy, WOLFSENTRY_ACTION_RES_STOP)) {
             WOLFSENTRY_RETURN_OK;
@@ -1153,8 +1153,8 @@ wolfsentry_errcode_t wolfsentry_route_set_wildcard(
     if (route->flags & WOLFSENTRY_ROUTE_FLAG_IN_TABLE)
         WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
 
-    if (wildcards_to_set & WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD)
-        route->flags |= WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD;
+    if (wildcards_to_set & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)
+        route->flags |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
     if (wildcards_to_set & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD) {
         route->flags |= WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
         route->remote.interface = 0;
@@ -1381,23 +1381,36 @@ static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(const struc
 
     const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
     size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
-    const void *addr = (sa_local_p ? r->local_address : r->remote_address);
+    const byte *addr = (sa_local_p ? r->local_address : r->remote_address);
 
     if (addr_bytes > sizeof addr_buf)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD))
         fputs("*", stdout);
-    else {
+    else if (r->sa_family == AF_PACKET) {
+        int i;
+        for (i=0; i < (e->addr_len >> 3); ++i)
+            fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]);
+    } else {
         memset(addr_buf, 0, sizeof addr_buf);
         memcpy(addr_buf, addr, addr_bytes);
         if (inet_ntop(r->sa_family, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
 
-        fprintf(f, "%s/%d", fmt_buf, (int)e->addr_len);
+        if (r->sa_family == AF_INET)
+            fprintf(f, "%s/%d", fmt_buf, (int)e->addr_len);
+        else
+            fprintf(f, "[%s]/%d", fmt_buf, (int)e->addr_len);
     }
 
-    fprintf(f, ":%d", (int)e->sa_port);
+    if (! (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)))
+        fprintf(f, "%%%d", e->interface);
+
+    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD))
+        fprintf(f, ":*");
+    else
+        fprintf(f, ":%d", (int)e->sa_port);
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -1413,6 +1426,21 @@ wolfsentry_errcode_t wolfsentry_route_exports_render(const struct wolfsentry_rou
 
     if ((ret = wolfsentry_route_exports_render_endpoint(r, 1 /* sa_local_p */, f)) < 0)
         return ret;
+
+    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
+        fprintf(f, ", ev = *");
+    else if (r->parent_event_label_len > 0)
+        fprintf(f, ", ev = \"%.*s\"", (int)r->parent_event_label_len, r->parent_event_label);
+
+    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD))
+        fprintf(f, ", AF = *");
+    else
+        fprintf(f, ", AF = %d", r->sa_family);
+
+    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD))
+        fprintf(f, ", proto = *");
+    else
+        fprintf(f, ", proto = %d", r->sa_proto);
 
     fputc('\n',f);
 

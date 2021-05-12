@@ -23,7 +23,11 @@
  * IN THE SOFTWARE.
  */
 
-#include "json.h"
+#ifdef WOLFSENTRY
+#include "wolfsentry/wolfsentry_json.h"
+#else
+#include "wolfsentry/centijson_sax.h"
+#endif
 
 #include <locale.h>     /* localeconv() */
 #include <stdio.h>      /* snprintf() */
@@ -51,11 +55,47 @@ static const JSON_CONFIG json_defaults = {
     512,                    /* max_key_len */
     512,                    /* max_nesting_level */
     0                       /* flags */
+#ifdef WOLFSENTRY
+    , NULL                  /* wolfsentry_context */
+#endif
 };
 
 
 #define ABS(x)          ((x) >= 0 ? (x) : -(x))
 
+#ifdef WOLFSENTRY
+
+static void *json_malloc(JSON_PARSER *parser, size_t size) {
+    if (parser->config.wolfsentry_context)
+        return wolfsentry_malloc(parser->config.wolfsentry_context, size);
+    else
+        return malloc(size);
+}
+#define JSON_MALLOC(size) json_malloc(parser, size)
+static void json_free(JSON_PARSER *parser, void *ptr) {
+    if (parser->config.wolfsentry_context)
+        wolfsentry_free(parser->config.wolfsentry_context, ptr);
+    else
+        free(ptr);
+}
+#define JSON_FREE(ptr) json_free(parser, ptr)
+static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
+    if (ptr == NULL)
+        return JSON_MALLOC(size);
+    if (parser->config.wolfsentry_context)
+        return wolfsentry_realloc(parser->config.wolfsentry_context, ptr, size);
+    else
+        return realloc(ptr, size);
+}
+#define JSON_REALLOC(ptr, size) json_realloc(parser, ptr, size)
+
+#else
+
+#define JSON_MALLOC(size) malloc(size)
+#define JSON_FREE(ptr) free(ptr)
+#define JSON_REALLOC(ptr, size) realloc(ptr, size)
+
+#endif
 
 void
 json_default_config(JSON_CONFIG* cfg)
@@ -248,7 +288,7 @@ json_buf_append(JSON_PARSER* parser, const char* data, size_t size)
         char* new_buf;
         size_t new_alloced = (parser->buf_used + size) * 2;
 
-        new_buf = (char *) realloc(parser->buf, new_alloced);
+        new_buf = (char *) JSON_REALLOC(parser->buf, new_alloced);
         if(new_buf == NULL) {
             json_raise(parser, JSON_ERR_OUTOFMEMORY);
             return -1;
@@ -827,7 +867,7 @@ json_feed(JSON_PARSER* parser, const char* input, size_t size)
 
                 if(new_nesting_stack_size == 0)
                     new_nesting_stack_size = 32;
-                new_nesting_stack = (char*) realloc(parser->nesting_stack, new_nesting_stack_size);
+                new_nesting_stack = (char*) JSON_REALLOC(parser->nesting_stack, new_nesting_stack_size);
                 if(new_nesting_stack == NULL) {
                     json_raise(parser, JSON_ERR_OUTOFMEMORY);
                     break;
@@ -905,8 +945,8 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
                 sizeof(JSON_INPUT_POS));
     }
 
-    free(parser->nesting_stack);
-    free(parser->buf);
+    JSON_FREE(parser->nesting_stack);
+    JSON_FREE(parser->buf);
     return parser->errcode;
 }
 
@@ -1126,9 +1166,13 @@ json_number_to_double(const char* num, size_t num_size, double* p_result)
         /* The number is short enough so we can avoid heap allocation. */
         buffer = local_buffer;
     } else {
+#ifdef WOLFSENTRY
+            return JSON_ERR_OUTOFMEMORY;
+#else        
         buffer = (char*) malloc(num_size + 1);
         if(buffer == NULL)
             return JSON_ERR_OUTOFMEMORY;
+#endif
     }
 
     /* Make sure the string is zero-terminated. */
@@ -1147,8 +1191,10 @@ json_number_to_double(const char* num, size_t num_size, double* p_result)
 
     *p_result = strtod(buffer, NULL);
 
+#ifndef WOLFSENTRY
     if(buffer != local_buffer)
         free(buffer);
+#endif
     return 0;
 }
 
@@ -1215,7 +1261,9 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
     char local_buffer[64];
     size_t capacity = sizeof(local_buffer) - extra_bytes;
     char* buffer = local_buffer;
+#ifndef WOLFSENTRY
     char* new_buffer;
+#endif
     char* fp;
     int ret;
 
@@ -1233,6 +1281,9 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
         else
             capacity = capacity * 2;
 
+#ifdef WOLFSENTRY
+        return JSON_ERR_OUTOFMEMORY;
+#else
         /* Make the terrain safe for realloc(). */
         if(buffer == local_buffer)
             buffer = NULL;
@@ -1243,6 +1294,7 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
             return JSON_ERR_OUTOFMEMORY;
         }
         buffer = new_buffer;
+#endif
     }
 
     /* Similar pain as above for strtod(). We need to fight with snprintf() and
@@ -1287,8 +1339,10 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 
     ret = write_func(buffer, n, user_data);
 
+#ifndef WOLFSENTRY
     if(buffer != local_buffer)
         free(buffer);
+#endif
     return ret;
 }
 

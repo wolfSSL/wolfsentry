@@ -23,11 +23,15 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef JSON_H
-#define JSON_H
+#ifndef CENTIJSON_SAX_H
+#define CENTIJSON_SAX_H
 
 #include <stdlib.h>
 #include <stdint.h>
+
+#ifdef WOLFSENTRY
+#include "wolfsentry.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -112,6 +116,9 @@ typedef struct JSON_CONFIG {
     size_t max_key_len;         /* zero means no limit; default: 512 */
     unsigned max_nesting_level; /* zero means no limit; default: 512 */
     unsigned flags;             /* default: 0 */
+#ifdef WOLFSENTRY
+    struct wolfsentry_context *wolfsentry_context;
+#endif
 } JSON_CONFIG;
 
 
@@ -304,4 +311,4 @@ int json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func
 }  /* extern "C" { */
 #endif
 
-#endif  /* JSON_H */
+#endif  /* CENTIJSON_SAX_H */

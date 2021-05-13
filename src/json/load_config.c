@@ -25,11 +25,10 @@
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C
 
 #include <arpa/inet.h>
-#include <netpacket/packet.h>
 
 #define MAX_IPV4_ADDR_BITS (sizeof(struct in_addr) * BITS_PER_BYTE)
 #define MAX_IPV6_ADDR_BITS (sizeof(struct in6_addr) * BITS_PER_BYTE)
-#define MAX_MAC_ADDR_BITS (sizeof_field(struct sockaddr_ll, sll_addr) * BITS_PER_BYTE)
+#define MAX_MAC_ADDR_BITS 64
 #define MAX_ADDR_BITS (MAX_IPV6_ADDR_BITS > MAX_IPV4_ADDR_BITS ?   \
                        ((MAX_MAC_ADDR_BITS > MAX_IPV6_ADDR_BITS) ? \
                         MAX_MAC_ADDR_BITS : MAX_IPV6_ADDR_BITS) :  \
@@ -51,6 +50,10 @@
 #define streq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
 
 /*
+
+{
+
+"wolfsentry-config-version" : 1,
 
 "config-update" : {
     "max-connection-count" : number,
@@ -109,6 +112,9 @@
         "disabled" : true|false
     }
 }
+]
+
+}
 
 */
 
@@ -120,6 +126,8 @@ struct string_list_ent {
 };
 
 struct json_process_state {
+    uint32_t config_version;
+
     wolfsentry_config_load_flags_t load_flags;
 
     enum { T_U_C_NONE = 0, T_U_C_TOPCONFIG, T_U_C_STATIC_ROUTES, T_U_C_EVENTS, T_U_C_ACTIONS } table_under_construction;
@@ -334,7 +342,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
     memcpy(d_buf, data, data_size);
     d_buf[data_size] = 0;
 
-    if (sa->sa_family == AF_PACKET) {
+    if (sa->sa_family == WOLFSENTRY_AF_LINK) {
         int n = 0;
         if ((sscanf(d_buf,
                     "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx%n",
@@ -366,7 +374,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
         }
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     }
-    else if ((sa->sa_family == AF_INET) || (sa->sa_family == AF_INET6)) {
+    else if ((sa->sa_family == WOLFSENTRY_AF_INET) || (sa->sa_family == WOLFSENTRY_AF_INET6)) {
         switch (inet_pton(sa->sa_family, d_buf, sa->addr)) {
         case 1:
             return 0;
@@ -468,13 +476,13 @@ static wolfsentry_errcode_t handle_route_family_clause(struct json_process_state
     else if (type == JSON_STRING) {
         if (streq(data, "inet", data_size))
             jps->o_u_c.route.remote.sa_family =
-                jps->o_u_c.route.local.sa_family = PF_INET;
+                jps->o_u_c.route.local.sa_family = WOLFSENTRY_AF_INET;
         else if (streq(data, "inet6", data_size))
             jps->o_u_c.route.remote.sa_family =
-                jps->o_u_c.route.local.sa_family = PF_INET6;
+                jps->o_u_c.route.local.sa_family = WOLFSENTRY_AF_INET6;
         else if (streq(data, "mac", data_size))
             jps->o_u_c.route.remote.sa_family =
-                jps->o_u_c.route.local.sa_family = PF_PACKET;
+                jps->o_u_c.route.local.sa_family = WOLFSENTRY_AF_LINK;
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         return 0;
@@ -498,8 +506,8 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct json_process_sta
         char d_buf[64];
         struct protoent *p;
 
-        if ((jps->o_u_c.route.remote.sa_family != PF_INET) &&
-            (jps->o_u_c.route.remote.sa_family != PF_INET6))
+        if ((jps->o_u_c.route.remote.sa_family != WOLFSENTRY_AF_INET) &&
+            (jps->o_u_c.route.remote.sa_family != WOLFSENTRY_AF_INET6))
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
         if (data_size >= sizeof d_buf)
@@ -520,7 +528,7 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct json_process_sta
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-    if (((jps->o_u_c.route.remote.sa_family == PF_INET) || (jps->o_u_c.route.remote.sa_family == PF_INET6)) &&
+    if (((jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET) || (jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET6)) &&
         ((jps->o_u_c.route.remote.sa_proto == IPPROTO_TCP) || (jps->o_u_c.route.remote.sa_proto == IPPROTO_UDP)))
         WOLFSENTRY_SET_BITS(jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS);
 
@@ -659,28 +667,59 @@ static wolfsentry_errcode_t json_process(
     }
 
     if (jps->table_under_construction == T_U_C_NONE) {
-        if ((type == JSON_OBJECT_BEG) && (jps->cur_depth == 2) && (jps->cur_keydepth == 1)) {
-            if (! strcmp(jps->cur_keyname, "config-update")) {
-                jps->table_under_construction = T_U_C_TOPCONFIG;
-                return 0;
-            }
+        if ((jps->cur_keydepth == 1) && (jps->cur_depth <= 2))  {
+            switch (type) {
+            case JSON_FALSE:
+            case JSON_TRUE:
+            case JSON_NUMBER:
+            case JSON_STRING:
+                if (jps->cur_depth != 1)
+                    WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
+                if (! strcmp(jps->cur_keyname, "wolfsentry-config-version")) {
+                    ret = convert_uint32(type, data, data_size, &jps->config_version);
+                    if (ret < 0)
+                        goto out;
+                    if (jps->config_version != 1)
+                        WOLFSENTRY_ERROR_OUT(CONFIG_INVALID_VALUE);
+                    return 0;
+                }
+                WOLFSENTRY_ERROR_OUT(CONFIG_INVALID_KEY);
+            case JSON_OBJECT_BEG:
+                if (jps->config_version == 0)
+                    WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
+                if (jps->cur_depth != 2)
+                    WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
+                if (! strcmp(jps->cur_keyname, "config-update")) {
+                    jps->table_under_construction = T_U_C_TOPCONFIG;
+                    return 0;
+                }
+                WOLFSENTRY_ERROR_OUT(CONFIG_INVALID_KEY);
+            case JSON_ARRAY_BEG:
+                if (jps->config_version == 0)
+                    WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
+                if (jps->cur_depth != 2)
+                    WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
+                if (! strcmp(jps->cur_keyname, "events-insert")) {
+                    jps->table_under_construction = T_U_C_EVENTS;
+                    return 0;
+                }
+                if (! strcmp(jps->cur_keyname, "static-routes-insert")) {
+                    jps->table_under_construction = T_U_C_STATIC_ROUTES;
+                    return 0;
+                }
+                if (! strcmp(jps->cur_keyname, "actions-update")) {
+                    jps->table_under_construction = T_U_C_ACTIONS;
+                    return 0;
+                }
+                WOLFSENTRY_ERROR_OUT(CONFIG_INVALID_KEY);
+            case JSON_NULL:
+            case JSON_KEY:
+            case JSON_OBJECT_END:
+            case JSON_ARRAY_END:
             WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
-        } else if ((type == JSON_ARRAY_BEG) && (jps->cur_depth == 2) && (jps->cur_keydepth == 1)) {
-            if (! strcmp(jps->cur_keyname, "events-insert")) {
-                jps->table_under_construction = T_U_C_EVENTS;
-                return 0;
             }
-            if (! strcmp(jps->cur_keyname, "static-routes-insert")) {
-                jps->table_under_construction = T_U_C_STATIC_ROUTES;
-                return 0;
-            }
-            if (! strcmp(jps->cur_keyname, "actions-update")) {
-                jps->table_under_construction = T_U_C_ACTIONS;
-                return 0;
-            }
-            WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
-        } else
-            WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
+        }
+        WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
     }
 
     if (jps->table_under_construction == T_U_C_TOPCONFIG) {

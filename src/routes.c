@@ -1329,7 +1329,6 @@ wolfsentry_errcode_t wolfsentry_route_table_iterate_end(
 
 #ifndef WOLFSENTRY_NO_STDIO
 
-#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
@@ -1388,7 +1387,7 @@ static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(const struc
 
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD))
         fputs("*", stdout);
-    else if (r->sa_family == AF_PACKET) {
+    else if (r->sa_family == WOLFSENTRY_AF_LINK) {
         int i;
         for (i=0; i < (e->addr_len >> 3); ++i)
             fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]);
@@ -1398,7 +1397,7 @@ static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(const struc
         if (inet_ntop(r->sa_family, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
 
-        if (r->sa_family == AF_INET)
+        if (r->sa_family == WOLFSENTRY_AF_INET)
             fprintf(f, "%s/%d", fmt_buf, (int)e->addr_len);
         else
             fprintf(f, "[%s]/%d", fmt_buf, (int)e->addr_len);

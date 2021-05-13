@@ -1,4 +1,5 @@
 {
+    "wolfsentry-config-version" : 1,
     "config-update" : {
 	"max-connection-count" : 5,
 	"penaltybox-duration" : "1h",

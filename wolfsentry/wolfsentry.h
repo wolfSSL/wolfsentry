@@ -49,6 +49,10 @@
 #define WOLFSENTRY_ERROR_STRINGS
 #endif
 
+#ifndef WOLFSENTRY_NO_PROTOCOL_NAMES
+#define WOLFSENTRY_PROTOCOL_NAMES
+#endif
+
 #if defined(WOLFSENTRY_HAVE_POSIX_SEMAPHORES) || defined(WOLFSENTRY_CLOCK_BUILTINS) || defined(WOLFSENTRY_MALLOC_BUILTINS)
 #ifndef _XOPEN_SOURCE
 #if __STDC_VERSION__ >= 201112L
@@ -99,12 +103,8 @@
 #include <string.h>
 #endif
 
-#ifndef offsetof
-/* gcc and clang define this in stddef.h to use sanitizer-safe builtins. */
-#define offsetof(structure, element) ((uintptr_t)&(((structure *)0)->element))
-#endif
-#ifndef sizeof_field
-#define sizeof_field(structure, element) sizeof(((structure *)0)->element)
+#ifndef WOLFSENTRY_NO_STRINGS_H
+#include <strings.h>
 #endif
 
 typedef unsigned char byte;
@@ -141,13 +141,6 @@ typedef uint16_t wolfsentry_priority_t;
 #ifndef __unused
 #define __unused __attribute__((unused))
 #endif
-
-#ifndef BITS_PER_BYTE
-#define BITS_PER_BYTE 8
-#endif
-
-#define MAX_UINT_OF(x) (((1ULL << ((sizeof(x) * (unsigned long long)BITS_PER_BYTE) - 1ULL)) - 1ULL) | (1ULL << ((sizeof(x) * BITS_PER_BYTE) - 1ULL)))
-#define MAX_SINT_OF(x) (((1LL << ((sizeof(x) * (long long)BITS_PER_BYTE) - 2LL)) - 1LL) | (1LL << ((sizeof(x) * BITS_PER_BYTE) - 2LL)))
 
 #include <wolfsentry/wolfsentry_errcodes.h>
 
@@ -188,13 +181,6 @@ wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_context *wolfsentry,
 #endif /* WOLFSENTRY_THREADSAFE */
 
 typedef uint32_t enumint_t;
-
-#define WOLFSENTRY_SET_BITS(enumint, bits) ((enumint) |= (bits))
-#define WOLFSENTRY_CHECK_BITS(enumint, bits) (((enumint) & (bits)) == (bits))
-#define WOLFSENTRY_CLEAR_BITS(enumint, bits) ((enumint) &= ~(enumint_t)(bits))
-#define WOLFSENTRY_MASKIN_BITS(enumint, bits) ((enumint) & (bits))
-#define WOLFSENTRY_MASKOUT_BITS(enumint, bits) ((enumint) & ~(enumint_t)(bits))
-#define WOLFSENTRY_CLEAR_ALL_BITS(enumint) ((enumint) = (enumint_t)0)
 
 typedef enumint_t wolfsentry_object_type_t;
 enum {
@@ -259,7 +245,7 @@ typedef wolfsentry_errcode_t (*wolfsentry_action_callback_t)(
     const struct wolfsentry_route *route,
     wolfsentry_action_res_t *action_results);
 
-typedef uint32_t wolfsentry_route_flags_t;
+typedef enumint_t wolfsentry_route_flags_t;
 
 enum {
     WOLFSENTRY_ROUTE_FLAG_NONE                           = 0U,
@@ -329,8 +315,6 @@ struct wolfsentry_eventconfig {
 };
 
 #define WOLFSENTRY_TIME_NEVER ((wolfsentry_time_t)0)
-
-#define WOLFSENTRY_BITS_TO_BYTES(x) (((x) + 7) >> 3)
 
 #ifndef WOLFSENTRY_MAX_ADDR_BYTES
 #define WOLFSENTRY_MAX_ADDR_BYTES 16

@@ -54,7 +54,7 @@
 	    "greenlisted" : true,
 	    "dont-count-hits" : false,
 	    "dont-count-current-connections" : false,
-	    "family" : "mac",
+	    "family" : "link",
 	    "remote" : {
 		"address" : "ab:cd:ef:01:23:45"
 	    },

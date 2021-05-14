@@ -345,7 +345,7 @@ static int test_static_routes (void) {
     memcpy(remote.sa.addr,"\0\1\2\3",sizeof remote.addr_buf);
     memcpy(local.sa.addr,"\377\376\375\374",sizeof local.addr_buf);
 
-    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_NONE, flags_wildcard;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS, flags_wildcard;
     WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert_static(wolfsentry, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &id, &action_results));
@@ -774,7 +774,7 @@ static int test_static_routes (void) {
     memcpy(local.sa.addr,"\377\376\375\374",sizeof local.addr_buf);
 
     WOLFSENTRY_CLEAR_ALL_BITS(flags);
-    WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+    WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS|WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_static(wolfsentry, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &action_results, &n_deleted));
     WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);

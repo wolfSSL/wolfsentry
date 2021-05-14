@@ -23,7 +23,8 @@
 #ifndef WOLFSENTRY_INTERNAL_H
 #define WOLFSENTRY_INTERNAL_H
 
-#include <wolfsentry/wolfsentry.h>
+#include "wolfsentry/wolfsentry.h"
+#include "wolfsentry/wolfsentry_util.h"
 
 #ifdef WOLFSENTRY_REFCOUNT_TYPE
 typedef WOLFSENTRY_REFCOUNT_TYPE wolfsentry_refcount_t;
@@ -71,50 +72,6 @@ struct wolfsentry_rwlock {
 };
 
 #endif
-
-#ifdef WOLFSENTRY_HAVE_GNU_ATOMICS
-
-#define WOLFSENTRY_ATOMIC_INCREMENT(i, x) __atomic_add_fetch(&(i),x,__ATOMIC_SEQ_CST)
-#define WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(i) WOLFSENTRY_ATOMIC_INCREMENT(i, 1)
-#define WOLFSENTRY_ATOMIC_DECREMENT(i, x) __atomic_sub_fetch(&(i),x,__ATOMIC_SEQ_CST)
-#define WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(i) WOLFSENTRY_ATOMIC_DECREMENT(i, 1)
-#define WOLFSENTRY_ATOMIC_POSTINCREMENT(i, x) __atomic_fetch_add(&(i),x,__ATOMIC_SEQ_CST)
-#define WOLFSENTRY_ATOMIC_POSTDECREMENT(i, x) __atomic_fetch_sub(&(i),x,__ATOMIC_SEQ_CST)
-
-#define WOLFSENTRY_ATOMIC_UPDATE(i, set_i, clear_i, pre_i, post_i)      \
-do {                                                                    \
-    *(pre_i) = (i);                                                     \
-    for (;;) {                                                          \
-        *(post_i) = (*(pre_i) | (set_i)) & ~(clear_i);                  \
-        if (*(post_i) == *(pre_i))                                      \
-            break;                                                      \
-        if (__atomic_compare_exchange_n(                                \
-                &(i),                                                   \
-                (pre_i),                                                \
-                *(post_i),                                              \
-                0 /* weak */,                                           \
-                __ATOMIC_SEQ_CST /* success_memmodel */,                \
-                __ATOMIC_SEQ_CST /* failure_memmodel */))               \
-            break;                                                      \
-    }                                                                   \
-} while (0)
-
-#endif /* WOLFSENTRY_HAVE_GNU_ATOMICS */
-
-#else /* !WOLFSENTRY_THREADSAFE */
-
-#define WOLFSENTRY_ATOMIC_INCREMENT(i, x) ((i) += (x))
-#define WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(i) (++(i))
-#define WOLFSENTRY_ATOMIC_DECREMENT(i, x) ((i) -= (x))
-#define WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(i) (--(i))
-
-#define WOLFSENTRY_ATOMIC_UPDATE(i, set_i, clear_i, pre_i, post_i)      \
-do {                                                                    \
-    *(pre_i) = (i);                                                     \
-    *(post_i) = (*(pre_i) | (set_i)) & ~(clear_i);                      \
-    if (*(post_i) != *(pre_i))                                          \
-        (i) = *(post_i);                                                \
-} while (0)
 
 #endif /* WOLFSENTRY_THREADSAFE */
 

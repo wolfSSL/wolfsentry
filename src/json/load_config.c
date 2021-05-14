@@ -21,10 +21,12 @@
  */
 
 #include "wolfsentry/wolfsentry_json.h"
+#include "wolfsentry/wolfsentry_util.h"
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C
 
 #include <arpa/inet.h>
+#include <sys/socket.h>
 
 #define MAX_IPV4_ADDR_BITS (sizeof(struct in_addr) * BITS_PER_BYTE)
 #define MAX_IPV6_ADDR_BITS (sizeof(struct in6_addr) * BITS_PER_BYTE)
@@ -35,10 +37,6 @@
                        ((MAX_MAC_ADDR_BITS > MAX_IPV4_ADDR_BITS) ? \
                         MAX_MAC_ADDR_BITS : MAX_IPV4_ADDR_BITS))
 
-#ifndef WOLFSENTRY_NO_PROTOCOL_NAMES
-#define WOLFSENTRY_PROTOCOL_NAMES
-#endif
-
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 #include <netdb.h>
 #endif
@@ -46,8 +44,6 @@
 #ifndef __unused
 #define __unused __attribute__((unused))
 #endif
-
-#define streq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
 
 /*
 
@@ -374,8 +370,19 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
         }
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     }
-    else if ((sa->sa_family == WOLFSENTRY_AF_INET) || (sa->sa_family == WOLFSENTRY_AF_INET6)) {
-        switch (inet_pton(sa->sa_family, d_buf, sa->addr)) {
+    else if (sa->sa_family == WOLFSENTRY_AF_INET) {
+        switch (inet_pton(AF_INET, d_buf, sa->addr)) {
+        case 1:
+            return 0;
+        case 0:
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        case -1:
+        default:
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+    else if (sa->sa_family == WOLFSENTRY_AF_INET6) {
+        switch (inet_pton(AF_INET6, d_buf, sa->addr)) {
         case 1:
             return 0;
         case 0:
@@ -429,8 +436,10 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct json_process_sta
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD);
         if (type == JSON_NUMBER)
             return convert_uint16(type, data, data_size, &sa->sa_port);
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
         else if (type == JSON_STRING)
             return convert_sockaddr_port_name(jps, data, data_size, sa);
+#endif
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     } else if (! strcmp(jps->cur_keyname, "address")) {
@@ -474,18 +483,11 @@ static wolfsentry_errcode_t handle_route_family_clause(struct json_process_state
     }
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     else if (type == JSON_STRING) {
-        if (streq(data, "inet", data_size))
-            jps->o_u_c.route.remote.sa_family =
-                jps->o_u_c.route.local.sa_family = WOLFSENTRY_AF_INET;
-        else if (streq(data, "inet6", data_size))
-            jps->o_u_c.route.remote.sa_family =
-                jps->o_u_c.route.local.sa_family = WOLFSENTRY_AF_INET6;
-        else if (streq(data, "mac", data_size))
-            jps->o_u_c.route.remote.sa_family =
-                jps->o_u_c.route.local.sa_family = WOLFSENTRY_AF_LINK;
-        else
+        jps->o_u_c.route.remote.sa_family = jps->o_u_c.route.local.sa_family = wolfsentry_family_pton(data, data_size);
+        if (jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
-        return 0;
+        else
+            return 0;
     }
 #endif
     else
@@ -837,7 +839,7 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
         ret = json_fini(&jps->parser, &json_pos);
         if (err_buf) {
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with centijson code %d", json_pos.offset,json_pos.line_number, json_pos.column_number, ret);
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with centijson code %d: %s", json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_error_str(ret));
             else
                 snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with " WOLFSENTRY_ERROR_FMT, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
         }
@@ -849,11 +851,14 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct json_process_state *jps, int *json_errcode)
+wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct json_process_state *jps, int *json_errcode, const char **json_errmsg)
 {
     if ((jps == NULL) || (jps->parser.user_data == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    *json_errcode = jps->parser.errcode;
+    if (json_errcode)
+        *json_errcode = jps->parser.errcode;
+    if (json_errmsg)
+        *json_errmsg = json_error_str(jps->parser.errcode);
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -867,8 +872,8 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
     wolfsentry_free(jps->wolfsentry, jps);
     if (ret != JSON_ERR_SUCCESS) {
         if (err_buf != NULL)
-            snprintf(err_buf, err_buf_size, "json_fini failed at offset %zu, L%u, col %u, with code %d.",
-                     json_pos.offset,json_pos.line_number, json_pos.column_number, ret);
+            snprintf(err_buf, err_buf_size, "json_fini failed at offset %zu, L%u, col %u, with code %d: %s.",
+                     json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_error_str(ret));
         WOLFSENTRY_ERROR_RETURN(CONFIG_PARSER);
     }
 

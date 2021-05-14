@@ -51,7 +51,7 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
     char *err_buf,
     size_t err_buf_size);
 
-wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct json_process_state *jps, int *json_errcode);
+wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct json_process_state *jps, int *json_errcode, const char **json_errmsg);
 
 wolfsentry_errcode_t wolfsentry_config_json_fini(
     struct json_process_state *jps,

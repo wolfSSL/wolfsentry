@@ -1327,33 +1327,368 @@ wolfsentry_errcode_t wolfsentry_route_table_iterate_end(
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+
+wolfsentry_family_t wolfsentry_family_pton(const char *family_name, size_t family_name_len) {
+    if (strcaseeq(family_name, "UNIX", family_name_len))
+        return WOLFSENTRY_AF_UNIX;
+    if (strcaseeq(family_name, "LOCAL", family_name_len))
+        return WOLFSENTRY_AF_LOCAL;
+    if (strcaseeq(family_name, "INET", family_name_len))
+        return WOLFSENTRY_AF_INET;
+    if (strcaseeq(family_name, "AX25", family_name_len))
+        return WOLFSENTRY_AF_AX25;
+    if (strcaseeq(family_name, "IPX", family_name_len))
+        return WOLFSENTRY_AF_IPX;
+    if (strcaseeq(family_name, "APPLETALK", family_name_len))
+        return WOLFSENTRY_AF_APPLETALK;
+    if (strcaseeq(family_name, "NETROM", family_name_len))
+        return WOLFSENTRY_AF_NETROM;
+    if (strcaseeq(family_name, "BRIDGE", family_name_len))
+        return WOLFSENTRY_AF_BRIDGE;
+    if (strcaseeq(family_name, "ATMPVC", family_name_len))
+        return WOLFSENTRY_AF_ATMPVC;
+    if (strcaseeq(family_name, "X25", family_name_len))
+        return WOLFSENTRY_AF_X25;
+    if (strcaseeq(family_name, "INET6", family_name_len))
+        return WOLFSENTRY_AF_INET6;
+    if (strcaseeq(family_name, "ROSE", family_name_len))
+        return WOLFSENTRY_AF_ROSE;
+    if (strcaseeq(family_name, "DECnet", family_name_len))
+        return WOLFSENTRY_AF_DECnet;
+    if (strcaseeq(family_name, "NETBEUI", family_name_len))
+        return WOLFSENTRY_AF_NETBEUI;
+    if (strcaseeq(family_name, "SECURITY", family_name_len))
+        return WOLFSENTRY_AF_SECURITY;
+    if (strcaseeq(family_name, "KEY", family_name_len))
+        return WOLFSENTRY_AF_KEY;
+    if (strcaseeq(family_name, "NETLINK", family_name_len))
+        return WOLFSENTRY_AF_NETLINK;
+    if (strcaseeq(family_name, "ROUTE", family_name_len))
+        return WOLFSENTRY_AF_ROUTE;
+    if (strcaseeq(family_name, "PACKET", family_name_len))
+        return WOLFSENTRY_AF_PACKET;
+    if (strcaseeq(family_name, "ASH", family_name_len))
+        return WOLFSENTRY_AF_ASH;
+    if (strcaseeq(family_name, "ECONET", family_name_len))
+        return WOLFSENTRY_AF_ECONET;
+    if (strcaseeq(family_name, "ATMSVC", family_name_len))
+        return WOLFSENTRY_AF_ATMSVC;
+    if (strcaseeq(family_name, "RDS", family_name_len))
+        return WOLFSENTRY_AF_RDS;
+    if (strcaseeq(family_name, "SNA", family_name_len))
+        return WOLFSENTRY_AF_SNA;
+    if (strcaseeq(family_name, "IRDA", family_name_len))
+        return WOLFSENTRY_AF_IRDA;
+    if (strcaseeq(family_name, "PPPOX", family_name_len))
+        return WOLFSENTRY_AF_PPPOX;
+    if (strcaseeq(family_name, "WANPIPE", family_name_len))
+        return WOLFSENTRY_AF_WANPIPE;
+    if (strcaseeq(family_name, "LLC", family_name_len))
+        return WOLFSENTRY_AF_LLC;
+    if (strcaseeq(family_name, "IB", family_name_len))
+        return WOLFSENTRY_AF_IB;
+    if (strcaseeq(family_name, "MPLS", family_name_len))
+        return WOLFSENTRY_AF_MPLS;
+    if (strcaseeq(family_name, "CAN", family_name_len))
+        return WOLFSENTRY_AF_CAN;
+    if (strcaseeq(family_name, "TIPC", family_name_len))
+        return WOLFSENTRY_AF_TIPC;
+    if (strcaseeq(family_name, "BLUETOOTH", family_name_len))
+        return WOLFSENTRY_AF_BLUETOOTH;
+    if (strcaseeq(family_name, "IUCV", family_name_len))
+        return WOLFSENTRY_AF_IUCV;
+    if (strcaseeq(family_name, "RXRPC", family_name_len))
+        return WOLFSENTRY_AF_RXRPC;
+    if (strcaseeq(family_name, "ISDN", family_name_len))
+        return WOLFSENTRY_AF_ISDN;
+    if (strcaseeq(family_name, "PHONET", family_name_len))
+        return WOLFSENTRY_AF_PHONET;
+    if (strcaseeq(family_name, "IEEE802154", family_name_len))
+        return WOLFSENTRY_AF_IEEE802154;
+    if (strcaseeq(family_name, "CAIF", family_name_len))
+        return WOLFSENTRY_AF_CAIF;
+    if (strcaseeq(family_name, "ALG", family_name_len))
+        return WOLFSENTRY_AF_ALG;
+    if (strcaseeq(family_name, "NFC", family_name_len))
+        return WOLFSENTRY_AF_NFC;
+    if (strcaseeq(family_name, "VSOCK", family_name_len))
+        return WOLFSENTRY_AF_VSOCK;
+    if (strcaseeq(family_name, "KCM", family_name_len))
+        return WOLFSENTRY_AF_KCM;
+    if (strcaseeq(family_name, "QIPCRTR", family_name_len))
+        return WOLFSENTRY_AF_QIPCRTR;
+    if (strcaseeq(family_name, "SMC", family_name_len))
+        return WOLFSENTRY_AF_SMC;
+    if (strcaseeq(family_name, "XDP", family_name_len))
+        return WOLFSENTRY_AF_XDP;
+    if (strcaseeq(family_name, "IMPLINK", family_name_len))
+        return WOLFSENTRY_AF_IMPLINK;
+    if (strcaseeq(family_name, "PUP", family_name_len))
+        return WOLFSENTRY_AF_PUP;
+    if (strcaseeq(family_name, "CHAOS", family_name_len))
+        return WOLFSENTRY_AF_CHAOS;
+    if (strcaseeq(family_name, "NETBIOS", family_name_len))
+        return WOLFSENTRY_AF_NETBIOS;
+    if (strcaseeq(family_name, "ISO", family_name_len))
+        return WOLFSENTRY_AF_ISO;
+    if (strcaseeq(family_name, "OSI", family_name_len))
+        return WOLFSENTRY_AF_OSI;
+    if (strcaseeq(family_name, "ECMA", family_name_len))
+        return WOLFSENTRY_AF_ECMA;
+    if (strcaseeq(family_name, "DATAKIT", family_name_len))
+        return WOLFSENTRY_AF_DATAKIT;
+    if (strcaseeq(family_name, "DLI", family_name_len))
+        return WOLFSENTRY_AF_DLI;
+    if (strcaseeq(family_name, "LAT", family_name_len))
+        return WOLFSENTRY_AF_LAT;
+    if (strcaseeq(family_name, "HYLINK", family_name_len))
+        return WOLFSENTRY_AF_HYLINK;
+    if (strcaseeq(family_name, "LINK", family_name_len))
+        return WOLFSENTRY_AF_LINK;
+    if (strcaseeq(family_name, "COIP", family_name_len))
+        return WOLFSENTRY_AF_COIP;
+    if (strcaseeq(family_name, "CNT", family_name_len))
+        return WOLFSENTRY_AF_CNT;
+    if (strcaseeq(family_name, "SIP", family_name_len))
+        return WOLFSENTRY_AF_SIP;
+    if (strcaseeq(family_name, "SLOW", family_name_len))
+        return WOLFSENTRY_AF_SLOW;
+    if (strcaseeq(family_name, "SCLUSTER", family_name_len))
+        return WOLFSENTRY_AF_SCLUSTER;
+    if (strcaseeq(family_name, "ARP", family_name_len))
+        return WOLFSENTRY_AF_ARP;
+    if (strcaseeq(family_name, "IEEE80211", family_name_len))
+        return WOLFSENTRY_AF_IEEE80211;
+    if (strcaseeq(family_name, "INET_SDP", family_name_len))
+        return WOLFSENTRY_AF_INET_SDP;
+    if (strcaseeq(family_name, "INET6_SDP", family_name_len))
+        return WOLFSENTRY_AF_INET6_SDP;
+    if (strcaseeq(family_name, "HYPERV", family_name_len))
+        return WOLFSENTRY_AF_HYPERV;
+    return WOLFSENTRY_AF_UNSPEC;
+}
+
+const char *wolfsentry_family_ntop(wolfsentry_family_t family) {
+    switch(family) {
+    case WOLFSENTRY_AF_UNSPEC:
+        return "UNSPEC";
+    case WOLFSENTRY_AF_LOCAL: /* AF_UNIX is an alias. */
+        return "LOCAL";
+    case WOLFSENTRY_AF_INET:
+        return "INET";
+    case WOLFSENTRY_AF_AX25:
+        return "AX25";
+    case WOLFSENTRY_AF_IPX:
+        return "IPX";
+    case WOLFSENTRY_AF_APPLETALK:
+        return "APPLETALK";
+    case WOLFSENTRY_AF_NETROM:
+        return "NETROM";
+    case WOLFSENTRY_AF_BRIDGE:
+        return "BRIDGE";
+    case WOLFSENTRY_AF_ATMPVC:
+        return "ATMPVC";
+    case WOLFSENTRY_AF_X25:
+        return "X25";
+    case WOLFSENTRY_AF_INET6:
+        return "INET6";
+    case WOLFSENTRY_AF_ROSE:
+        return "ROSE";
+    case WOLFSENTRY_AF_DECnet:
+        return "DECnet";
+    case WOLFSENTRY_AF_NETBEUI:
+        return "NETBEUI";
+    case WOLFSENTRY_AF_SECURITY:
+        return "SECURITY";
+    case WOLFSENTRY_AF_KEY:
+        return "KEY";
+    case WOLFSENTRY_AF_ROUTE: /* AF_NETLINK is an alias. */
+        return "ROUTE";
+    case WOLFSENTRY_AF_PACKET:
+        return "PACKET";
+    case WOLFSENTRY_AF_ASH:
+        return "ASH";
+    case WOLFSENTRY_AF_ECONET:
+        return "ECONET";
+    case WOLFSENTRY_AF_ATMSVC:
+        return "ATMSVC";
+    case WOLFSENTRY_AF_RDS:
+        return "RDS";
+    case WOLFSENTRY_AF_SNA:
+        return "SNA";
+    case WOLFSENTRY_AF_IRDA:
+        return "IRDA";
+    case WOLFSENTRY_AF_PPPOX:
+        return "PPPOX";
+    case WOLFSENTRY_AF_WANPIPE:
+        return "WANPIPE";
+    case WOLFSENTRY_AF_LLC:
+        return "LLC";
+    case WOLFSENTRY_AF_IB:
+        return "IB";
+    case WOLFSENTRY_AF_MPLS:
+        return "MPLS";
+    case WOLFSENTRY_AF_CAN:
+        return "CAN";
+    case WOLFSENTRY_AF_TIPC:
+        return "TIPC";
+    case WOLFSENTRY_AF_BLUETOOTH:
+        return "BLUETOOTH";
+    case WOLFSENTRY_AF_IUCV:
+        return "IUCV";
+    case WOLFSENTRY_AF_RXRPC:
+        return "RXRPC";
+    case WOLFSENTRY_AF_ISDN:
+        return "ISDN";
+    case WOLFSENTRY_AF_PHONET:
+        return "PHONET";
+    case WOLFSENTRY_AF_IEEE802154:
+        return "IEEE802154";
+    case WOLFSENTRY_AF_CAIF:
+        return "CAIF";
+    case WOLFSENTRY_AF_ALG:
+        return "ALG";
+    case WOLFSENTRY_AF_NFC:
+        return "NFC";
+    case WOLFSENTRY_AF_VSOCK:
+        return "VSOCK";
+    case WOLFSENTRY_AF_KCM:
+        return "KCM";
+    case WOLFSENTRY_AF_QIPCRTR:
+        return "QIPCRTR";
+    case WOLFSENTRY_AF_SMC:
+        return "SMC";
+    case WOLFSENTRY_AF_XDP:
+        return "XDP";
+    case WOLFSENTRY_AF_IMPLINK:
+        return "IMPLINK";
+    case WOLFSENTRY_AF_PUP:
+        return "PUP";
+    case WOLFSENTRY_AF_CHAOS:
+        return "CHAOS";
+    case WOLFSENTRY_AF_NETBIOS:
+        return "NETBIOS";
+    case WOLFSENTRY_AF_ISO: /* AF_OSI is an alias. */
+        return "ISO";
+    case WOLFSENTRY_AF_ECMA:
+        return "ECMA";
+    case WOLFSENTRY_AF_DATAKIT:
+        return "DATAKIT";
+    case WOLFSENTRY_AF_DLI:
+        return "DLI";
+    case WOLFSENTRY_AF_LAT:
+        return "LAT";
+    case WOLFSENTRY_AF_HYLINK:
+        return "HYLINK";
+    case WOLFSENTRY_AF_LINK:
+        return "LINK";
+    case WOLFSENTRY_AF_COIP:
+        return "COIP";
+    case WOLFSENTRY_AF_CNT:
+        return "CNT";
+    case WOLFSENTRY_AF_SIP:
+        return "SIP";
+    case WOLFSENTRY_AF_SLOW:
+        return "SLOW";
+    case WOLFSENTRY_AF_SCLUSTER:
+        return "SCLUSTER";
+    case WOLFSENTRY_AF_ARP:
+        return "ARP";
+    case WOLFSENTRY_AF_IEEE80211:
+        return "IEEE80211";
+    case WOLFSENTRY_AF_INET_SDP:
+        return "INET_SDP";
+    case WOLFSENTRY_AF_INET6_SDP:
+        return "INET6_SDP";
+    case WOLFSENTRY_AF_HYPERV:
+        return "HYPERV";
+    default:
+        return NULL;
+    }
+}
+
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
+
 #ifndef WOLFSENTRY_NO_STDIO
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
 
-static wolfsentry_errcode_t wolfsentry_route_render_endpoint(const struct wolfsentry_route *r, int sa_local_p, FILE *f) {
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+#include <netdb.h>
+#endif
+
+static wolfsentry_errcode_t wolfsentry_route_render_proto(int proto, wolfsentry_route_flags_t flags, FILE *f) {
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)) {
+        fprintf(f, ", proto = *");
+        WOLFSENTRY_RETURN_OK;
+    }
+#ifndef WOLFSENTRY_PROTOCOL_NAMES
+    (void)flags;
+#else
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS)) {
+        struct protoent *p = getprotobynumber(proto);
+        if (p)
+            fprintf(f, ", proto = %s", p->p_name);
+        else
+            fprintf(f, ", proto = %d", proto);
+    } else
+#endif
+        fprintf(f, ", proto = %d", proto);
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t wolfsentry_route_render_address(int sa_family, int addr_bits, const byte *addr, size_t addr_bytes, FILE *f) {
     char addr_buf[16], fmt_buf[256];
-
-    const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
-    size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
-    const void *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
 
     if (addr_bytes > sizeof addr_buf)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
+    if (sa_family == WOLFSENTRY_AF_LINK) {
+        int i;
+        for (i=0; i < (addr_bits >> 3); ++i)
+            fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]);
+    } else if (sa_family == WOLFSENTRY_AF_INET) {
+        memset(addr_buf, 0, sizeof addr_buf);
+        memcpy(addr_buf, addr, addr_bytes);
+        if (inet_ntop(AF_INET, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
+        fprintf(f, "%s/%d", fmt_buf, addr_bits);
+    } else if (sa_family == WOLFSENTRY_AF_INET6) {
+        memset(addr_buf, 0, sizeof addr_buf);
+        memcpy(addr_buf, addr, addr_bytes);
+        if (inet_ntop(AF_INET6, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
+        fprintf(f, "[%s]/%d", fmt_buf, addr_bits);
+    } else if (sa_family == WOLFSENTRY_AF_LOCAL) {
+        fprintf(f, "\"%.*s\"", (int)addr_bytes, addr);
+    } else
+        WOLFSENTRY_ERROR_RETURN(OP_NOT_SUPP_FOR_PROTO);
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t wolfsentry_route_render_endpoint(const struct wolfsentry_route *r, int sa_local_p, FILE *f) {
+    const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
+    size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
+    const void *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
+
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD))
         fputs("*", stdout);
     else {
-        memset(addr_buf, 0, sizeof addr_buf);
-        memcpy(addr_buf, addr, addr_bytes);
-        if (inet_ntop(r->sa_family, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-
-        fprintf(f, "%s/%d", fmt_buf, (int)e->addr_len);
+        wolfsentry_errcode_t ret = wolfsentry_route_render_address(r->sa_family, (int)e->addr_len, addr, addr_bytes, f);
+        if (ret < 0)
+            return ret;
     }
 
-    fprintf(f, ":%d", (int)e->sa_port);
+    if (! (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)))
+        fprintf(f, "%%%d", e->interface);
+
+    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD))
+        fprintf(f, ":*");
+    else
+        fprintf(f, ":%d", (int)e->sa_port);
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -1370,37 +1705,41 @@ wolfsentry_errcode_t wolfsentry_route_render(const struct wolfsentry_route *r, F
     if ((ret = wolfsentry_route_render_endpoint(r, 1 /* sa_local_p */, f)) < 0)
         return ret;
 
+    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
+        fprintf(f, ", ev = *");
+    else if (r->parent_event != NULL)
+        fprintf(f, ", ev = \"%.*s\"", (int)r->parent_event->label_len, r->parent_event->label);
+
+    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD))
+        fprintf(f, ", AF = *");
+    else {
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+        const char *family_name = wolfsentry_family_ntop(r->sa_family);
+        if (family_name)
+            fprintf(f, ", AF = %s", family_name);
+        else
+#endif
+            fprintf(f, ", AF = %d", r->sa_family);
+    }
+
+    wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
+
     fputc('\n',f);
 
     WOLFSENTRY_RETURN_OK;
 }
 
 static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(const struct wolfsentry_route_exports *r, int sa_local_p, FILE *f) {
-    char addr_buf[16], fmt_buf[256];
-
     const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
     size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
     const byte *addr = (sa_local_p ? r->local_address : r->remote_address);
 
-    if (addr_bytes > sizeof addr_buf)
-        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD))
         fputs("*", stdout);
-    else if (r->sa_family == WOLFSENTRY_AF_LINK) {
-        int i;
-        for (i=0; i < (e->addr_len >> 3); ++i)
-            fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]);
-    } else {
-        memset(addr_buf, 0, sizeof addr_buf);
-        memcpy(addr_buf, addr, addr_bytes);
-        if (inet_ntop(r->sa_family, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-
-        if (r->sa_family == WOLFSENTRY_AF_INET)
-            fprintf(f, "%s/%d", fmt_buf, (int)e->addr_len);
-        else
-            fprintf(f, "[%s]/%d", fmt_buf, (int)e->addr_len);
+    else {
+        wolfsentry_errcode_t ret = wolfsentry_route_render_address(r->sa_family, (int)e->addr_len, addr, addr_bytes, f);
+        if (ret < 0)
+            return ret;
     }
 
     if (! (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)))
@@ -1433,13 +1772,17 @@ wolfsentry_errcode_t wolfsentry_route_exports_render(const struct wolfsentry_rou
 
     if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD))
         fprintf(f, ", AF = *");
-    else
-        fprintf(f, ", AF = %d", r->sa_family);
+    else {
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+        const char *family_name = wolfsentry_family_ntop(r->sa_family);
+        if (family_name)
+            fprintf(f, ", AF = %s", family_name);
+        else
+#endif
+            fprintf(f, ", AF = %d", r->sa_family);
+    }
 
-    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD))
-        fprintf(f, ", proto = *");
-    else
-        fprintf(f, ", proto = %d", r->sa_proto);
+    wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
 
     fputc('\n',f);
 

@@ -3,6 +3,13 @@
 
 typedef uint16_t wolfsentry_family_t;
 
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+
+wolfsentry_family_t wolfsentry_family_pton(const char *family_name, size_t family_name_len);
+const char *wolfsentry_family_ntop(wolfsentry_family_t family);
+
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
+
 /* per Linux kernel 5.12, include/linux/socket.h */
 
 #define WOLFSENTRY_AF_UNSPEC       0

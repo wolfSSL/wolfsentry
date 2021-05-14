@@ -29,7 +29,9 @@
 #include "wolfsentry/centijson_sax.h"
 #endif
 
+#ifdef CENTIJSON_USE_LOCALE
 #include <locale.h>     /* localeconv() */
+#endif
 #include <stdio.h>      /* snprintf() */
 #include <stdlib.h>
 #include <string.h>
@@ -1131,7 +1133,9 @@ json_number_to_uint64(const char* num, size_t num_size)
 int
 json_number_to_double(const char* num, size_t num_size, double* p_result)
 {
+#ifdef CENTIJSON_USE_LOCALE
     struct lconv* locale_info;
+#endif
     char local_buffer[64];
     char* buffer;
 
@@ -1179,6 +1183,7 @@ json_number_to_double(const char* num, size_t num_size, double* p_result)
     memcpy(buffer, num, num_size);
     buffer[num_size] = '\0';
 
+#ifdef CENTIJSON_USE_LOCALE
     /* Make sure we use the locale-dependent decimal point. */
     locale_info = localeconv();
     if(locale_info->decimal_point[0] != '.') {
@@ -1188,6 +1193,7 @@ json_number_to_double(const char* num, size_t num_size, double* p_result)
         if(fp != NULL)
             *fp = locale_info->decimal_point[0];
     }
+#endif
 
     *p_result = strtod(buffer, NULL);
 
@@ -1256,7 +1262,9 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     static const char fmt[] = "%.16lg";
     static const size_t extra_bytes = 2;    /* Space reserved for ".0" */
+#ifdef CENTIJSON_USE_LOCALE
     struct lconv* locale_info;
+#endif
     int n;
     char local_buffer[64];
     size_t capacity = sizeof(local_buffer) - extra_bytes;
@@ -1297,6 +1305,7 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 #endif
     }
 
+#ifdef CENTIJSON_USE_LOCALE
     /* Similar pain as above for strtod(). We need to fight with snprintf() and
      * undo the locale-dependent stuff. */
     locale_info = localeconv();
@@ -1321,6 +1330,12 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
     fp = strchr(buffer, locale_info->decimal_point[0]);
     if(fp != NULL) {
         *fp = '.';
+#else
+    fp = strchr(buffer, ',');
+    if(fp != NULL) {
+        *fp = '.';
+#endif
+
     } else if(strchr(buffer, 'e') == NULL) {
         /* There is no decimal point present and also no 'e', i.e. it's not
          * in the scientific notation, i.e. it looks too much as an integer

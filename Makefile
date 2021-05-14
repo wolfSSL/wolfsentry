@@ -189,10 +189,12 @@ ifndef INSTALL_INCDIR
 endif
 
 .PHONY: install
-install: $(BUILD_TOP)/.tested install-untested
+install: $(BUILD_TOP)/.tested
 
 .PHONY: install-untested
 install-untested: all
+
+install install-untested:
 	@mkdir -p $(INSTALL_LIBDIR)
 	install -p -m 0644 $(INSTALL_LIBS) $(INSTALL_LIBDIR)
 	@mkdir -p $(INSTALL_INCDIR)/wolfsentry

@@ -1,0 +1,67 @@
+{
+    "wolfsentry-config-version" : 1,
+    "config-update" : {
+	"max-connection-count" : 5,
+	"penaltybox-duration" : "1h",
+	"default-policy-static" : "reject"
+    },
+    "static-routes-insert" : [
+	{
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penaltyboxed" : false,
+	    "greenlisted" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : 2,
+	    "protocol" : 6,
+	    "remote" : {
+		"address" : "192.168.0.0",
+		"prefix-bits" : 16,
+		"interface" : 1
+	    },
+	    "local" : {
+		"port" : 25,
+		"address" : "192.168.0.0",
+		"prefix-bits" : 16,
+		"interface" : 1
+	    }
+	},
+	{
+	    "tcplike-port-numbers" : true,
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penaltyboxed" : false,
+	    "greenlisted" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : 10,
+	    "protocol" : 6,
+	    "remote" : {
+		"address" : "fd00::",
+		"prefix-bits" : 8,
+		"interface" : 1
+	    },
+	    "local" : {
+		"port" : 22,
+		"interface" : 1
+	    }
+	},
+	{
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penaltyboxed" : false,
+	    "greenlisted" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : 118,
+	    "remote" : {
+		"address" : "ab:cd:ef:01:23:45"
+	    },
+	    "local" : {
+		"address" : "54:32:10:fe:dc:ba"
+	    }
+	}
+
+    ]
+}

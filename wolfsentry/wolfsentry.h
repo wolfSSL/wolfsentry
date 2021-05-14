@@ -109,7 +109,7 @@
 
 typedef unsigned char byte;
 
-#include <wolfsentry/af.h>
+#include <wolfsentry/wolfsentry_af.h>
 
 typedef uint16_t wolfsentry_proto_t;
 typedef uint16_t wolfsentry_port_t;

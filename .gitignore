@@ -12,8 +12,9 @@ configure
 *.gcda
 *.gcov
 
-# Emacs
 *~
 .#*
 
 tests/test_*
+.build_params
+.tested

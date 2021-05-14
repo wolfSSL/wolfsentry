@@ -102,7 +102,7 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h
 
 all: $(BUILD_TOP)/$(LIB_NAME)
 

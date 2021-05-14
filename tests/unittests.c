@@ -746,6 +746,7 @@ static int test_static_routes (void) {
     WOLFSENTRY_EXIT_ON_SUCCESS(wolfsentry_route_delete_static(wolfsentry, NULL /* caller_arg */, &remote_wildcard.sa, &local_wildcard.sa, flags_wildcard, 0 /* event_label_len */, 0 /* event_label */, &action_results, &n_deleted));
 
 
+#ifndef NO_STDIO
     {
         wolfsentry_errcode_t ret;
         struct wolfsentry_cursor *cursor;
@@ -763,6 +764,7 @@ static int test_static_routes (void) {
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(wolfsentry, static_routes, &cursor));
         WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes_static.header.n_ents);
     }
+#endif
 
     remote.sa.sa_family = local.sa.sa_family = AF_INET;
     remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
@@ -1301,7 +1303,11 @@ int main (int argc, char* argv[]) {
 #endif
 
 #ifdef TEST_JSON
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
     ret = test_json("tests/test-config.json");
+#else
+    ret = test_json("tests/test-config-numeric.json");
+#endif
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         printf("test_json failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;

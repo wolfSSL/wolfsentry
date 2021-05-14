@@ -18,6 +18,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
+SHELL := /bin/bash
+
 ifeq "$(V)" "1"
     override undefine VERY_QUIET
 endif
@@ -29,6 +31,10 @@ ifdef USER_MAKE_CONF
 endif
 
 SRCS := util.c internal.c routes.c events.c actions.c
+
+ifeq "$(NO_STDIO)" "1"
+    NO_JSON := 1
+endif
 
 ifneq "$(NO_JSON)" "1"
     SRCS += json/centijson_sax.c json/load_config.c
@@ -46,7 +52,13 @@ ifndef OPTIM
     OPTIM := -O3
 endif
 
-CC_IS_GCC := $(shell if $(CC) -v 2>&1 | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
+CC_V := $(shell $(CC) -v 2>&1 | (read -d '' CC_V; echo "$${CC_V@Q}"))
+
+CC_IS_GCC := $(shell if echo $(CC_V) | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
+
+AR_VERSION := $(shell $(AR) --version 2>&1 | (read -d '' AR_VERSION; echo "$${AR_VERSION@Q}"))
+
+AR_IS_GNU_AR := $(shell if echo $(AR_VERSION) | grep -q 'GNU'; then echo 1; else echo 0; fi)
 
 ifndef C_WARNFLAGS
     C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast -Wno-type-limits
@@ -70,6 +82,10 @@ else
     LDFLAGS += -pthread
 endif
 
+ifeq "$(NO_STDIO)" "1"
+    CFLAGS += -DNO_STDIO
+endif
+
 ifeq "$(STATIC)" "1"
     LDFLAGS += -static
 endif
@@ -90,6 +106,25 @@ INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h
 
 all: $(BUILD_TOP)/$(LIB_NAME)
 
+ifeq "$(AR_IS_GNU_AR)" "1"
+    AR_FLAGS := Dcqs
+else
+    AR_FLAGS := cqs
+endif
+
+#https://stackoverflow.com/questions/3236145/force-gnu-make-to-rebuild-objects-affected-by-compiler-definition/3237349#3237349
+BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'CFLAGS: $(CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo $(AR_VERSION); echo 'ARFLAGS: $(AR_FLAGS)')
+
+.PHONY: force
+$(BUILD_TOP)/.build_params: force
+ifdef VERY_QUIET
+	@$(BUILD_PARAMS) | cmp -s - $@; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi
+else
+	@$(BUILD_PARAMS) | cmp -s - $@; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi
+endif
+
+$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params
+
 $(BUILD_TOP)/src/%.o: src/%.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
@@ -100,8 +135,6 @@ ifndef VERY_QUIET
 endif
 	@$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
 endif
-
-AR_FLAGS := Dcqs
 
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
 ifdef VERY_QUIET
@@ -187,7 +220,7 @@ dist:
 
 .PHONY: clean
 clean:
-	rm -f $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
+	rm -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
 	@[ "$(BUILD_TOP)" != "." ] && rmdir $(BUILD_TOP)/* $(BUILD_TOP) 2>/dev/null || exit 0
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))

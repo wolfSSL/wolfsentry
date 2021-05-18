@@ -301,9 +301,9 @@ static wolfsentry_errcode_t convert_default_policy(JSON_TYPE type, const char *d
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
     if (streq(data, "accept", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_ACCEPT;
+        *default_policy = WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_STOP;
     else if (streq(data, "reject", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_REJECT;
+        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_STOP;
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -373,6 +373,8 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
     else if (sa->sa_family == WOLFSENTRY_AF_INET) {
         switch (inet_pton(AF_INET, d_buf, sa->addr)) {
         case 1:
+            if (sa->addr_len == 0)
+                sa->addr_len = 32;
             return 0;
         case 0:
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -384,6 +386,8 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
     else if (sa->sa_family == WOLFSENTRY_AF_INET6) {
         switch (inet_pton(AF_INET6, d_buf, sa->addr)) {
         case 1:
+            if (sa->addr_len == 0)
+                sa->addr_len = 128;
             return 0;
         case 0:
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -623,6 +627,8 @@ static wolfsentry_errcode_t handle_route_clause(struct json_process_state *jps, 
         return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS);
     else if (! strcmp(jps->cur_keyname, "dont-count-current-connections"))
         return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS);
+    else
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 
     return 0;
 }

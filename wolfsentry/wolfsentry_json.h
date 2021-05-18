@@ -38,7 +38,7 @@ typedef enumint_t wolfsentry_config_load_flags_t;
 enum {
     WOLFSENTRY_CONFIG_LOAD_FLAG_NONE = 0,
     WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH = 1 << 0,
-    WOLFSENTRY_CONFIG_LOAD_FLAG_TRIAL_FIRST = 1 << 1
+    WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN = 1 << 1
 };
 
 struct json_process_state;

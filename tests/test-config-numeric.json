@@ -9,8 +9,40 @@
 	{
 	    "direction-in" : true,
 	    "direction-out" : true,
-	    "penaltyboxed" : false,
-	    "greenlisted" : true,
+	    "penalty-boxed" : false,
+	    "green-listed" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : 2,
+	    "remote" : {
+		"address" : "127.0.0.0",
+		"prefix-bits" : 8
+	    },
+	    "local" : {
+		"address" : "127.0.0.0",
+		"prefix-bits" : 8
+	    }
+	},
+	{
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penalty-boxed" : false,
+	    "green-listed" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : 10,
+	    "remote" : {
+		"address" : "::1"
+	    },
+	    "local" : {
+		"address" : "::1"
+	    }
+	},
+	{
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penalty-boxed" : false,
+	    "green-listed" : true,
 	    "dont-count-hits" : false,
 	    "dont-count-current-connections" : false,
 	    "family" : 2,
@@ -31,8 +63,8 @@
 	    "tcplike-port-numbers" : true,
 	    "direction-in" : true,
 	    "direction-out" : true,
-	    "penaltyboxed" : false,
-	    "greenlisted" : true,
+	    "penalty-boxed" : false,
+	    "green-listed" : true,
 	    "dont-count-hits" : false,
 	    "dont-count-current-connections" : false,
 	    "family" : 10,
@@ -50,8 +82,8 @@
 	{
 	    "direction-in" : true,
 	    "direction-out" : true,
-	    "penaltyboxed" : false,
-	    "greenlisted" : true,
+	    "penalty-boxed" : false,
+	    "green-listed" : true,
 	    "dont-count-hits" : false,
 	    "dont-count-current-connections" : false,
 	    "family" : 118,

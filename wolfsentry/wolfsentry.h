@@ -277,6 +277,8 @@ enum {
 
 #define WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_IN_TABLE - 1U)
 
+#define WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD /* xxx backward compatibility */
+
 struct wolfsentry_route_endpoint {
     wolfsentry_port_t sa_port;
     wolfsentry_addr_bits_t addr_len;

@@ -45,6 +45,11 @@
 #define __unused __attribute__((unused))
 #endif
 
+/* note that the order of objects in the JSON is semantically significant.
+ * Thus, any application-level JSON preprocessing must be ES5-compliant
+ * (preserve the order of pairs exactly).
+ */
+
 /*
 
 {
@@ -59,18 +64,17 @@
 
 "events-insert" : [
 {
+    "priority" : number,
     "label" : string,
     "config" : {
-        "max_connection_count" : number
-        "penaltybox-duration" : number|string // allow suffixes s,m,h,d
-
+        "max-connection-count" : number
+        "penalty-box-duration" : number|string // allow suffixes s,m,h,d
     }
     "actions" : [ string ... ],
     "insert-event" : string,
     "match-event" : string,
-    "delete-event" : string,
+    "delete-event" : string
 
-    "priority" : number
 }
 ],
 
@@ -80,20 +84,20 @@
     "tcplike-port-numbers" : true|false,
     "direction-in" : true|false,
     "direction-out" : true|false,
-    "penaltyboxed" : true|false,
-    "greenlisted" : true|false,
+    "penalty-boxed" : true|false,
+    "green-listed" : true|false,
     "dont-count-hits" : true|false,
     "dont-count-current-connections" : true|false
     "family" : string|number,
     "protocol" : string|number,
     "remote" : {
-        "port" : number,
+        "port" : string|number,
         "address" : string,
         "prefix-bits" : number,
         "interface" : number,
     },
     "local" : {
-        "port" : number,
+        "port" : string|number,
         "address" : string,
         "prefix-bits" : number,
         "interface" : number,
@@ -114,12 +118,6 @@
 
 */
 
-
-struct string_list_ent {
-    struct string_list_ent *next;
-    size_t string_len;
-    char string[];
-};
 
 struct json_process_state {
     uint32_t config_version;
@@ -156,17 +154,12 @@ struct json_process_state {
             wolfsentry_route_flags_t flags;
         } route;
         struct {
+            wolfsentry_priority_t priority;
             char label[WOLFSENTRY_MAX_LABEL_BYTES];
             int label_len;
-            wolfsentry_priority_t priority;
             struct wolfsentry_eventconfig config;
-            struct string_list_ent *actions;
-            char *insert_event_label;
-            int insert_event_label_len;
-            char *match_event_label;
-            int match_event_label_len;
-            char *delete_event_label;
-            int delete_event_label_len;
+            int configed;
+            int inserted;
         } event;
         struct {
             char label[WOLFSENTRY_MAX_LABEL_BYTES];
@@ -176,22 +169,6 @@ struct json_process_state {
     } o_u_c;
 };
 
-static void free_event_state(struct json_process_state *jps) {
-    struct string_list_ent *i, *i_next;
-    for (i = jps->o_u_c.event.actions;
-         i;
-         i = i_next) {
-        i_next = i->next;
-        wolfsentry_free(jps->wolfsentry, i);
-    }
-    if (jps->o_u_c.event.insert_event_label)
-        wolfsentry_free(jps->wolfsentry, jps->o_u_c.event.insert_event_label);
-    if (jps->o_u_c.event.match_event_label)
-        wolfsentry_free(jps->wolfsentry, jps->o_u_c.event.match_event_label);
-    if (jps->o_u_c.event.delete_event_label)
-        wolfsentry_free(jps->wolfsentry, jps->o_u_c.event.delete_event_label);
-}
-
 static wolfsentry_errcode_t reset_o_u_c(struct json_process_state *jps) {
     switch (jps->object_under_construction) {
     case O_U_C_NONE:
@@ -199,9 +176,7 @@ static wolfsentry_errcode_t reset_o_u_c(struct json_process_state *jps) {
         return 0;
     case O_U_C_ROUTE:
     case O_U_C_ACTION:
-        break;
     case O_U_C_EVENT:
-        free_event_state(jps);
         break;
     default:
         WOLFSENTRY_ERROR_RETURN(CONFIG_UNEXPECTED);
@@ -209,6 +184,7 @@ static wolfsentry_errcode_t reset_o_u_c(struct json_process_state *jps) {
 
     memset(&jps->o_u_c, 0, sizeof jps->o_u_c);
     jps->object_under_construction = O_U_C_NONE;
+    jps->section_under_construction = S_U_C_NONE;
 
     return 0;
 }
@@ -311,11 +287,34 @@ static wolfsentry_errcode_t convert_default_policy(JSON_TYPE type, const char *d
 }
 
 static wolfsentry_errcode_t handle_eventconfig_clause(struct json_process_state *jps, JSON_TYPE type, const char *data, size_t data_size, struct wolfsentry_eventconfig *eventconfig) {
-    if (jps->cur_depth != 2)
-        WOLFSENTRY_ERROR_RETURN(CONFIG_UNEXPECTED);
+    if (type == JSON_OBJECT_END) {
+        wolfsentry_errcode_t ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
+        jps->table_under_construction = T_U_C_NONE;
+        if (ret < 0)
+            return ret;
+        if (jps->default_policy_static) {
+            struct wolfsentry_route_table *static_routes;
+            ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
+            if (ret < 0)
+                return ret;
+            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, static_routes, jps->default_policy_static);
+            if (ret < 0)
+                return ret;
+        }
+        if (jps->default_policy_dynamic) {
+            struct wolfsentry_route_table *dynamic_routes;
+            ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &dynamic_routes);
+            if (ret < 0)
+                return ret;
+            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, dynamic_routes, jps->default_policy_dynamic);
+            if (ret < 0)
+                return ret;
+        }
+        WOLFSENTRY_RETURN_OK;
+    }
     if (! strcmp(jps->cur_keyname, "max-connection-count"))
         return convert_uint32(type, data, data_size, &eventconfig->max_connection_count);
-    if (! strcmp(jps->cur_keyname, "penaltybox-duration"))
+    if (! strcmp(jps->cur_keyname, "penalty-box-duration"))
         return convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->penaltybox_duration);
     if (jps->table_under_construction != T_U_C_TOPCONFIG)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
@@ -633,6 +632,128 @@ static wolfsentry_errcode_t handle_route_clause(struct json_process_state *jps, 
     return 0;
 }
 
+static wolfsentry_errcode_t handle_event_clause(struct json_process_state *jps, JSON_TYPE type, const char *data, size_t data_size) {
+    if (jps->table_under_construction != T_U_C_EVENTS)
+        WOLFSENTRY_ERROR_RETURN(CONFIG_UNEXPECTED);
+
+    if ((jps->cur_depth == 1) && (type == JSON_ARRAY_END)) {
+        jps->table_under_construction = T_U_C_NONE;
+        return 0;
+    }
+
+    if (jps->object_under_construction != O_U_C_EVENT) {
+        if ((jps->cur_depth == 3) && (type == JSON_OBJECT_BEG) && (jps->object_under_construction == O_U_C_NONE)) {
+            jps->object_under_construction = O_U_C_EVENT;
+            return 0;
+        } else
+            WOLFSENTRY_ERROR_RETURN(CONFIG_UNEXPECTED);
+    }
+
+    if ((jps->cur_depth == 3) && (type == JSON_STRING) && (! strcmp(jps->cur_keyname, "label"))) {
+        if (data_size >= sizeof jps->o_u_c.event.label)
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        memcpy(jps->o_u_c.event.label, data, data_size);
+        jps->o_u_c.event.label_len = (int)data_size;
+        return 0;
+    }
+
+    if ((jps->cur_depth == 3) && (type == JSON_NUMBER)) {
+        if (! strcmp(jps->cur_keyname, "priority")) {
+            if (jps->o_u_c.event.inserted)
+                WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
+            return convert_uint16(type, data, data_size, &jps->o_u_c.event.priority);
+        }
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
+    }
+
+    if ((jps->cur_depth == 4) && (type == JSON_OBJECT_BEG) && (! strcmp(jps->cur_keyname, "config")) && (jps->section_under_construction == S_U_C_NONE)) {
+        if (jps->o_u_c.event.inserted)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
+        jps->section_under_construction = S_U_C_EVENTCONFIG;
+        jps->o_u_c.event.config = jps->default_config; /* initialize with global defaults, particularly to pick up route_private_data* fields */
+        jps->o_u_c.event.configed = 1;
+        return 0;
+    }
+
+    if ((jps->cur_depth == 4) && (jps->section_under_construction == S_U_C_EVENTCONFIG))
+        return handle_eventconfig_clause(jps, type, data, data_size, &jps->o_u_c.event.config);
+
+    if ((jps->cur_depth == 3) && (type == JSON_OBJECT_END) && (jps->section_under_construction == S_U_C_EVENTCONFIG)) {
+        jps->section_under_construction = S_U_C_NONE;
+        if (jps->o_u_c.event.inserted)
+            return wolfsentry_event_update_config(jps->wolfsentry, jps->o_u_c.event.label, jps->o_u_c.event.label_len, &jps->o_u_c.event.config);
+        else
+            WOLFSENTRY_RETURN_OK;
+    }
+
+    if (! jps->o_u_c.event.inserted) {
+        wolfsentry_ent_id_t id;
+        wolfsentry_errcode_t ret = wolfsentry_event_insert(
+            jps->wolfsentry,
+            jps->o_u_c.event.label,
+            jps->o_u_c.event.label_len,
+            jps->o_u_c.event.priority,
+            jps->o_u_c.event.configed ? &jps->o_u_c.event.config : NULL,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id);
+        if (ret < 0)
+            return ret;
+        jps->o_u_c.event.inserted = 1;
+    }
+
+    if ((jps->cur_depth == 2) && (type == JSON_OBJECT_END))
+        return reset_o_u_c(jps);
+
+    if ((jps->cur_depth == 3) && (type == JSON_STRING)) {
+        wolfsentry_action_type_t subevent_type = WOLFSENTRY_ACTION_TYPE_NONE;
+
+        if (! strcmp(jps->cur_keyname, "insert-event"))
+            subevent_type = WOLFSENTRY_ACTION_TYPE_INSERT;
+        else if (! strcmp(jps->cur_keyname, "match-event"))
+            subevent_type = WOLFSENTRY_ACTION_TYPE_MATCH;
+        else if (! strcmp(jps->cur_keyname, "delete-event"))
+            subevent_type = WOLFSENTRY_ACTION_TYPE_DELETE;
+
+        if (subevent_type != WOLFSENTRY_ACTION_TYPE_NONE) {
+            if (data_size > WOLFSENTRY_MAX_LABEL_BYTES)
+                WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+            return wolfsentry_event_set_subevent(
+                jps->wolfsentry,
+                jps->o_u_c.event.label,
+                jps->o_u_c.event.label_len,
+                subevent_type,
+                data,
+                (int)data_size);
+        }
+
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
+    }
+
+    if ((jps->cur_depth == 4) && (type == JSON_ARRAY_BEG) && (jps->section_under_construction == S_U_C_NONE) && (! strcmp(jps->cur_keyname, "actions"))) {
+        jps->section_under_construction = S_U_C_ACTION_LIST;
+        return 0;
+    }
+
+    if ((jps->cur_depth == 4) && (jps->section_under_construction == S_U_C_ACTION_LIST) && (type == JSON_STRING)) {
+        if (data_size > WOLFSENTRY_MAX_LABEL_BYTES)
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        return wolfsentry_event_action_append(
+                    jps->wolfsentry,
+                    jps->o_u_c.event.label,
+                    jps->o_u_c.event.label_len,
+                    data,
+                    (int)data_size);
+    }
+
+    if ((jps->cur_depth == 3) && (type == JSON_ARRAY_END) && (jps->section_under_construction == S_U_C_ACTION_LIST)) {
+        jps->section_under_construction = S_U_C_NONE;
+        return 0;
+    }
+
+    WOLFSENTRY_ERROR_RETURN(CONFIG_UNEXPECTED);
+}
+
+
 #define WOLFSENTRY_ERROR_OUT(x) { ret = WOLFSENTRY_ERROR_ENCODE(x); goto out; }
 
 static wolfsentry_errcode_t json_process(
@@ -731,31 +852,6 @@ static wolfsentry_errcode_t json_process(
     }
 
     if (jps->table_under_construction == T_U_C_TOPCONFIG) {
-        if ((jps->cur_depth == 1) && (type == JSON_OBJECT_END)) {
-            jps->table_under_construction = T_U_C_NONE;
-            ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
-            if (ret < 0)
-                goto out;
-            if (jps->default_policy_static) {
-                struct wolfsentry_route_table *static_routes;
-                ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
-                if (ret < 0)
-                    return ret;
-                ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, static_routes, jps->default_policy_static);
-                if (ret < 0)
-                    return ret;
-            }
-            if (jps->default_policy_dynamic) {
-                struct wolfsentry_route_table *dynamic_routes;
-                ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &dynamic_routes);
-                if (ret < 0)
-                    return ret;
-                ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, dynamic_routes, jps->default_policy_dynamic);
-                if (ret < 0)
-                    return ret;
-            }
-            return 0;
-        }
         ret = handle_eventconfig_clause(jps, type, data, data_size, &jps->default_config);
         goto out;
     }
@@ -768,6 +864,26 @@ static wolfsentry_errcode_t json_process(
         ret = handle_route_clause(jps, type, data, data_size);
         goto out;
     }
+
+    if (jps->table_under_construction == T_U_C_EVENTS) {
+        if ((jps->cur_depth == 1) && (type == JSON_ARRAY_END)) {
+            jps->table_under_construction = T_U_C_NONE;
+            return 0;
+        }
+        ret = handle_event_clause(jps, type, data, data_size);
+        goto out;
+    }
+
+#if 0
+    if (jps->table_under_construction == T_U_C_ACTIONS) {
+        if ((jps->cur_depth == 1) && (type == JSON_ARRAY_END)) {
+            jps->table_under_construction = T_U_C_NONE;
+            return 0;
+        }
+        ret = handle_action_clause(jps, type, data, data_size);
+        goto out;
+    }
+#endif
 
     WOLFSENTRY_ERROR_OUT(CONFIG_UNEXPECTED);
 
@@ -829,6 +945,19 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
     }
 
+    WOLFSENTRY_RETURN_OK;
+}
+
+/* use this to initialize configuration with nonzero route_private_data_size and
+ * route_private_data_alignment, which will be loaded as the default, and also
+ * subsequently be copied to any eventconfigs that are allocated for
+ * events-insert configuration.
+ */
+wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
+    struct json_process_state *jps,
+    struct wolfsentry_eventconfig *config)
+{
+    memcpy(&jps->default_config, config, sizeof jps->default_config);
     WOLFSENTRY_RETURN_OK;
 }
 

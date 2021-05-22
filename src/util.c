@@ -107,6 +107,8 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Configuration contains an invalid key";
     case WOLFSENTRY_ERROR_ID_CONFIG_INVALID_VALUE:
         return "Configuration contains an invalid value";
+    case WOLFSENTRY_ERROR_ID_CONFIG_OUT_OF_SEQUENCE:
+        return "Configuration clause is not in the correct sequence";
     case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
         return "Configuration has unexpected or invalid structure";
     case WOLFSENTRY_ERROR_ID_CONFIG_PARSER:
@@ -206,6 +208,14 @@ wolfsentry_errcode_t wolfsentry_id_generate(
         }
     }
     /* not reached */
+}
+
+wolfsentry_ent_id_t wolfsentry_get_table_id(const void *table) {
+    return ((const struct wolfsentry_table_header *)table)->id;
+}
+
+wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
+    return ((const struct wolfsentry_table_ent_header *)object)->id;
 }
 
 #ifdef WOLFSENTRY_THREADSAFE
@@ -1081,15 +1091,23 @@ wolfsentry_errcode_t wolfsentry_init(
     (*wolfsentry)->events.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_event_key_cmp;
     (*wolfsentry)->events.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_event_drop_reference;
     (*wolfsentry)->events.header.ent_type = WOLFSENTRY_OBJECT_TYPE_EVENT;
+    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->events.header.id)) < 0)
+        goto out;
     (*wolfsentry)->actions.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_action_key_cmp;
     (*wolfsentry)->actions.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_action_drop_reference;
     (*wolfsentry)->actions.header.ent_type = WOLFSENTRY_OBJECT_TYPE_ACTION;
+    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->actions.header.id)) < 0)
+        goto out;
     (*wolfsentry)->routes_static.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_route_key_cmp;
     (*wolfsentry)->routes_dynamic.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_route_key_cmp;
     (*wolfsentry)->routes_static.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_route_drop_reference;
     (*wolfsentry)->routes_dynamic.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_route_drop_reference;
     (*wolfsentry)->routes_static.header.ent_type = WOLFSENTRY_OBJECT_TYPE_ROUTE;
     (*wolfsentry)->routes_dynamic.header.ent_type = WOLFSENTRY_OBJECT_TYPE_ROUTE;
+    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->routes_static.header.id)) < 0)
+        goto out;
+    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->routes_dynamic.header.id)) < 0)
+        goto out;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 

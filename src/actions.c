@@ -48,12 +48,13 @@ static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int labe
     if (label_len <= 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (action_size < sizeof *action + (size_t)label_len)
+    if (action_size < sizeof *action + (size_t)label_len + 1)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     action->handler = handler;
     action->handler_arg = handler_arg;
     memcpy(action->label, label, (size_t)label_len);
+    action->label[label_len] = 0;
     action->label_len = (byte)label_len;
     action->flags = flags;
 
@@ -76,7 +77,7 @@ static wolfsentry_errcode_t wolfsentry_action_new_1(struct wolfsentry_context *w
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     }
 
-    new_size = sizeof **action + (size_t)label_len;
+    new_size = sizeof **action + (size_t)label_len + 1;
 
     if ((*action = (struct wolfsentry_action *)WOLFSENTRY_MALLOC(new_size)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
@@ -154,6 +155,11 @@ wolfsentry_errcode_t wolfsentry_action_get_reference(struct wolfsentry_context *
 
 wolfsentry_errcode_t wolfsentry_action_drop_reference(struct wolfsentry_context *wolfsentry, const struct wolfsentry_action *action, wolfsentry_action_res_t *action_results) {
     return wolfsentry_table_ent_drop_reference(wolfsentry, (struct wolfsentry_table_ent_header *)action, action_results);
+}
+
+const char *wolfsentry_action_get_label(const struct wolfsentry_action *action)
+{
+    return action ? action->label : (const char *)action;
 }
 
 wolfsentry_errcode_t wolfsentry_action_get_flags(
@@ -355,6 +361,7 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     void *caller_arg,
     struct wolfsentry_action_list *action_list,
     struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
     struct wolfsentry_route_table *route_table,
     struct wolfsentry_route *route,
     wolfsentry_action_res_t *action_results)
@@ -372,7 +379,7 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
             WOLFSENTRY_ATOMIC_INCREMENT(i->action->header.hitcount, 1);
         if (WOLFSENTRY_CHECK_BITS(i->action->flags, WOLFSENTRY_ACTION_FLAG_DISABLED))
             continue;
-        if ((ret = i->action->handler(wolfsentry, i->action, i->action->handler_arg, caller_arg, trigger_event, route_table, route, action_results)) < 0)
+        if ((ret = i->action->handler(wolfsentry, i->action, i->action->handler_arg, caller_arg, trigger_event, action_type, route_table, route, action_results)) < 0)
             return ret;
         if (WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP))
             WOLFSENTRY_RETURN_OK;

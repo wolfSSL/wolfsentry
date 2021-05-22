@@ -245,6 +245,8 @@ int json_parse(const char* input, size_t size,
  */
 const char* json_error_str(int err_code);
 
+const char* json_type_str(JSON_TYPE type);
+
 
 /*****************
  *** Utilities ***

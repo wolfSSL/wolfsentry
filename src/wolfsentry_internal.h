@@ -102,6 +102,7 @@ struct wolfsentry_table_header {
     struct wolfsentry_table_ent_header *head, *tail; /* these will be replaced by red-black table elements later. */
     wolfsentry_ent_cmp_fn_t cmp_fn;
     wolfsentry_ent_free_fn_t free_fn;
+    wolfsentry_ent_id_t id;
     wolfsentry_hitcount_t n_ents;
     wolfsentry_object_type_t ent_type;
 };
@@ -141,6 +142,8 @@ struct wolfsentry_eventconfig_internal {
 
 struct wolfsentry_event {
     struct wolfsentry_table_ent_header header;
+
+    wolfsentry_event_flags_t flags;
 
     struct wolfsentry_eventconfig_internal *config;
 
@@ -305,6 +308,7 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     void *caller_arg,
     struct wolfsentry_action_list *action_list,
     struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
     struct wolfsentry_route_table *route_table,
     struct wolfsentry_route *route,
     wolfsentry_action_res_t *action_results);

@@ -1470,3 +1470,20 @@ const char* json_error_str(int err_code)
         return errs[-err_code];
     return unexpected_code;
 }
+
+const char* json_type_str(JSON_TYPE type)
+{
+    switch (type) {
+    case JSON_NULL: return "NULL";
+    case JSON_FALSE: return "FALSE";
+    case JSON_TRUE: return "TRUE";
+    case JSON_NUMBER: return "NUMBER";
+    case JSON_STRING: return "STRING";
+    case JSON_KEY: return "KEY";
+    case JSON_ARRAY_BEG: return "ARRAY_BEG";
+    case JSON_ARRAY_END: return "ARRAY_END";
+    case JSON_OBJECT_BEG: return "OBJECT_BEG";
+    case JSON_OBJECT_END: return "OBJECT_END";
+    }
+    return "Unexpected type";
+}

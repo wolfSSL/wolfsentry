@@ -182,31 +182,29 @@ wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_context *wolfsentry,
 
 typedef uint32_t enumint_t;
 
-typedef enumint_t wolfsentry_object_type_t;
-enum {
+typedef enum {
+    WOLFSENTRY_OBJECT_TYPE_TABLE,
     WOLFSENTRY_OBJECT_TYPE_ACTION,
     WOLFSENTRY_OBJECT_TYPE_EVENT,
     WOLFSENTRY_OBJECT_TYPE_ROUTE
-};
+} wolfsentry_object_type_t;
 
-typedef enumint_t wolfsentry_action_flags_t;
-enum {
+typedef enum {
     WOLFSENTRY_ACTION_FLAG_NONE       = 0U,
     WOLFSENTRY_ACTION_FLAG_DISABLED   = 1U << 0U
-};
+} wolfsentry_action_flags_t;
 
-typedef enumint_t wolfsentry_action_type_t;
-enum {
+typedef enum {
+    WOLFSENTRY_ACTION_TYPE_NONE = 0,
     WOLFSENTRY_ACTION_TYPE_POST = 1, /* called when an event is posted. */
     WOLFSENTRY_ACTION_TYPE_INSERT, /* called when a route is added to the route table for this event. */
     WOLFSENTRY_ACTION_TYPE_MATCH, /* called by wolfsentry_route_dispatch() for a route match. */
     WOLFSENTRY_ACTION_TYPE_DELETE /* called when a route associated with this event expires or is otherwise deleted. */
-};
+} wolfsentry_action_type_t;
 
 #define WOLFSENTRY_ACTION_RES_USER_SHIFT 16U
 
-typedef enumint_t wolfsentry_action_res_t;
-enum {
+typedef enum {
     WOLFSENTRY_ACTION_RES_NONE        = 0U,
     WOLFSENTRY_ACTION_RES_ACCEPT      = 1U << 0U,
     WOLFSENTRY_ACTION_RES_REJECT      = 1U << 1U,
@@ -221,7 +219,7 @@ enum {
     WOLFSENTRY_ACTION_RES_DEALLOCATED = 1U << 10U, /* when an API call returns this, the route and its associated ID were deallocated from the system. */
     WOLFSENTRY_ACTION_RES_ERROR       = 1U << 11U,
     WOLFSENTRY_ACTION_RES_USER_BASE   = 1U << WOLFSENTRY_ACTION_RES_USER_SHIFT /* start of user-defined results, with user-defined scheme (bitfield, sequential, or other) */
-};
+} wolfsentry_action_res_t;
 
 #define WOLFSENTRY_ROUTE_DEFAULT_POLICY_MASK (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_STOP | WOLFSENTRY_ACTION_RES_ERROR)
 
@@ -241,13 +239,12 @@ typedef wolfsentry_errcode_t (*wolfsentry_action_callback_t)(
     void *handler_arg,
     void *caller_arg,
     const struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
     struct wolfsentry_route_table *route_table,
     const struct wolfsentry_route *route,
     wolfsentry_action_res_t *action_results);
 
-typedef enumint_t wolfsentry_route_flags_t;
-
-enum {
+typedef enum {
     WOLFSENTRY_ROUTE_FLAG_NONE                           = 0U,
     WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<0U,
     WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<1U,
@@ -273,7 +270,7 @@ enum {
     WOLFSENTRY_ROUTE_FLAG_GREENLISTED                    = 1U<<15U,
     WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS                = 1U<<16U,
     WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS = 1U<<17U
-};
+} wolfsentry_route_flags_t;
 
 #define WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_IN_TABLE - 1U)
 
@@ -309,8 +306,14 @@ struct wolfsentry_route_exports {
     size_t private_data_size;
 };
 
+typedef enum {
+    WOLFSENTRY_EVENT_FLAG_NONE = 0,
+    WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT = 1U << 0U,
+    WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT = 2U << 0U
+} wolfsentry_event_flags_t;
+
 struct wolfsentry_eventconfig {
-    size_t route_private_data_size; /* includes padding needed for route_private_data_alignment. */
+    size_t route_private_data_size;
     size_t route_private_data_alignment;
     uint32_t max_connection_count;
     wolfsentry_time_t penaltybox_duration; /* zero means time-unbounded. */
@@ -463,6 +466,11 @@ wolfsentry_errcode_t wolfsentry_context_unlock(
 #error WOLFSENTRY_MAX_LABEL_BYTES must fit in a byte.
 #endif
 
+#define WOLFSENTRY_LENGTH_NULL_TERMINATED -1
+
+wolfsentry_ent_id_t wolfsentry_get_table_id(const void *table);
+wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object);
+
 wolfsentry_errcode_t wolfsentry_route_insert_static(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
@@ -588,10 +596,14 @@ wolfsentry_errcode_t wolfsentry_route_drop_reference(
     struct wolfsentry_route *route,
     wolfsentry_action_res_t *action_results);
 
+/* route_exports remains valid only as long as the wolfsentry lock is held (shared or exclusive). */
 wolfsentry_errcode_t wolfsentry_route_export(
     const struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route *route,
     struct wolfsentry_route_exports *route_exports);
+
+/* returned wolfsentry_event remains valid only as long as the wolfsentry lock is held (shared or exclusive). */
+const struct wolfsentry_event *wolfsentry_route_parent_event(const struct wolfsentry_route *route);
 
 wolfsentry_errcode_t wolfsentry_route_event_dispatch(
     struct wolfsentry_context *wolfsentry,
@@ -675,6 +687,8 @@ wolfsentry_errcode_t wolfsentry_action_drop_reference(
     const struct wolfsentry_action *action,
     wolfsentry_action_res_t *action_results);
 
+const char *wolfsentry_action_get_label(const struct wolfsentry_action *action);
+
 wolfsentry_errcode_t wolfsentry_action_get_flags(
     struct wolfsentry_action *action,
     wolfsentry_action_flags_t *flags);
@@ -692,6 +706,7 @@ wolfsentry_errcode_t wolfsentry_event_insert(
     int label_len,
     wolfsentry_priority_t priority,
     const struct wolfsentry_eventconfig *config,
+    wolfsentry_event_flags_t flags,
     wolfsentry_ent_id_t *id);
 
 wolfsentry_errcode_t wolfsentry_event_delete(
@@ -699,6 +714,10 @@ wolfsentry_errcode_t wolfsentry_event_delete(
     const char *label,
     int label_len,
     wolfsentry_action_res_t *action_results);
+
+const char *wolfsentry_event_get_label(const struct wolfsentry_event *event);
+
+wolfsentry_event_flags_t wolfsentry_event_get_flags(const struct wolfsentry_event *event);
 
 wolfsentry_errcode_t wolfsentry_event_get_config(
     struct wolfsentry_context *wolfsentry,

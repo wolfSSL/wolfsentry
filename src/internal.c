@@ -171,6 +171,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_get(struct wolfsentry_table_header *ta
             }
             WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
         }
+        i = i->next;
     }
     WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
 }

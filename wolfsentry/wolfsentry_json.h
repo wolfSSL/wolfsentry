@@ -48,6 +48,10 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
     wolfsentry_config_load_flags_t load_flags,
     struct json_process_state **jps);
 
+wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
+    struct json_process_state *jps,
+    struct wolfsentry_eventconfig *config);
+
 wolfsentry_errcode_t wolfsentry_config_json_feed(
     struct json_process_state *jps,
     const char *json_in,

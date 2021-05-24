@@ -123,7 +123,7 @@ else
 	@$(BUILD_PARAMS) | cmp -s - $@; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi
 endif
 
-$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params
+$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params Makefile
 
 $(BUILD_TOP)/src/%.o: src/%.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)

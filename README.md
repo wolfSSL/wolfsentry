@@ -22,7 +22,7 @@ these dependencies can be avoided with various build-time options.  In
 particular, the recipe
 
 ```
-make STATIC=1 SINGLETHREADED=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_STDIO -DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN'
+make STATIC=1 SINGLETHREADED=1 NO_STDIO=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN'
 ```
 
 generates a libwolfsentry.a that depends on only a handful of basic string
@@ -48,17 +48,10 @@ Install from an alternate build location to a non-standard destination:
 
 `make BUILD_TOP=./build INSTALL_DIR=/usr INSTALL_LIBDIR=/usr/lib64 install`
 
-Build libwolfsentry.a and test it under various valgrind tools:
+Build libwolfsentry.a and test it under various analyzers (memory and thread
+testing under full battery of valgrind and sanitizer tests):
 
-`make -j valgrind-all`
-
-Test under various sanitizer tools:
-
-`make -j sanitize-all`
-
-Test tersely with all supported static and dynamic analysis tools:
-
-`make -j analyze-all`
+`make -j check`
 
 Build and test libwolfsentry.a without support for multithreading:
 
@@ -76,7 +69,7 @@ elaborate makefile code including additional rules and dependency mechanisms.)
 
 Build the smallest simplest possible library:
 
-`make -j SINGLETHREADED=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_STDIO -Wno-error=inline -Wno-inline'`
+`make -j SINGLETHREADED=1 NO_STDIO=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -Wno-error=inline -Wno-inline'`
 
 Build and test with user settings:
 
@@ -88,4 +81,6 @@ Build and test with user settings:
 See examples/server/server.c (sections gated on `WOLFSSL_WOLFSENTRY_HOOKS`) in
 [the master branch of wolfSSL](https://github.com/wolfSSL/wolfssl),
 introduced by [PR #3889](https://github.com/wolfSSL/wolfssl/pull/3889).  Use `configure
---enable-wolfsentry` to build with wolfSentry integration.
+--enable-wolfsentry` to build with wolfSentry integration, and use
+`--with-wolfsentry=/the/install/path` if wolfSentry is installed in a
+nonstandard location.

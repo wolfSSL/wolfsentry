@@ -176,26 +176,26 @@ no-json-test:
 	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON-builds clean
 	@echo "NO_JSON test passed."
 
-.PHONY: no-stdio-test
-no-stdio-test:
-	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_STDIO-builds clean
-	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_STDIO-builds NO_STDIO=1
-	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_STDIO-builds clean
-	@echo "NO_STDIO build test passed."
-
 .PHONY: no-error-strings-test
 no-error-strings-test:
 	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-error-strings-builds clean
-	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-error-strings-builds EXTRA_CFLAGS+='-DWOLFSENTRY_NO_ERROR_STRINGS'
+	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-error-strings-builds EXTRA_CFLAGS+='-DWOLFSENTRY_NO_ERROR_STRINGS' test
 	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-error-strings-builds clean
 	@echo "no-error-strings build test passed."
 
 .PHONY: no-protocol-names-test
 no-protocol-names-test:
 	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-protocol-names-builds clean
-	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-protocol-names-builds EXTRA_CFLAGS+='-DWOLFSENTRY_NO_PROTOCOL_NAMES'
+	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-protocol-names-builds EXTRA_CFLAGS+='-DWOLFSENTRY_NO_PROTOCOL_NAMES' test
 	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-protocol-names-builds clean
 	@echo "no-protocol-names build test passed."
+
+.PHONY: no-stdio-build-test
+no-stdio-test:
+	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds clean
+	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds NO_STDIO=1
+	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds clean
+	@echo "NO_STDIO build test passed."
 
 .PHONY: minimal-build-test
 minimal-build-test:
@@ -205,5 +205,5 @@ minimal-build-test:
 	@echo "minimal build test passed."
 
 .PHONY: check
-check: analyze-all c99-test m32-test singlethreaded-test no-json-test no-stdio-test no-error-strings-test no-protocol-names-test minimal-build-test
+check: analyze-all c99-test m32-test singlethreaded-test no-json-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test
 	@echo "all checks passed."

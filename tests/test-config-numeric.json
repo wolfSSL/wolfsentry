@@ -2,11 +2,41 @@
     "wolfsentry-config-version" : 1,
     "config-update" : {
 	"max-connection-count" : 5,
-	"penaltybox-duration" : "1h",
+	"penalty-box-duration" : "1h",
 	"default-policy-static" : "reject"
     },
+    "events-insert" : [
+        {
+	    "label" : "event-on-insert",
+	    "actions" : [ "handle-insert" ]
+	},
+	{
+	    "label" : "event-on-delete",
+	    "actions" : [ "handle-delete" ]
+	},
+	{
+	    "label" : "event-on-match",
+	    "actions" : [ "handle-match", "notify-on-match" ]
+	},
+	{
+	    "label" : "static-route-parent",
+	    "priority" : 1,
+	    "config" : {
+		"max-connection-count" : 10,
+		"penalty-box-duration" : "10m"
+	    },
+	    "actions" : [ "handle-connect", "handle-connect2" ],
+	    "insert-event" : "event-on-insert",
+	    "match-event" : "event-on-match",
+	    "delete-event" : "event-on-delete"
+	},
+	{
+	    "label" : "call-in-from-unit-test"
+	}
+    ],
     "static-routes-insert" : [
 	{
+	    "parent-event" : "static-route-parent",
 	    "direction-in" : true,
 	    "direction-out" : true,
 	    "penalty-boxed" : false,
@@ -24,6 +54,7 @@
 	    }
 	},
 	{
+	    "parent-event" : "static-route-parent",
 	    "direction-in" : true,
 	    "direction-out" : true,
 	    "penalty-boxed" : false,
@@ -39,6 +70,7 @@
 	    }
 	},
 	{
+	    "parent-event" : "static-route-parent",
 	    "direction-in" : true,
 	    "direction-out" : true,
 	    "penalty-boxed" : false,
@@ -60,6 +92,7 @@
 	    }
 	},
 	{
+	    "parent-event" : "static-route-parent",
 	    "tcplike-port-numbers" : true,
 	    "direction-in" : true,
 	    "direction-out" : true,
@@ -80,6 +113,7 @@
 	    }
 	},
 	{
+	    "parent-event" : "static-route-parent",
 	    "direction-in" : true,
 	    "direction-out" : true,
 	    "penalty-boxed" : false,

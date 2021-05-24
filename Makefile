@@ -221,9 +221,15 @@ endif
 dist:
 	$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.minimal wolfsentry/ src/wolfsentry_internal.h $(addprefix src/,$(SRCS)) tests/unittests.c
 
+CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
+
 .PHONY: clean
 clean:
-	rm -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
-	@[ "$(BUILD_TOP)" != "." ] && find $(BUILD_TOP) -depth -type d | xargs rmdir 2>/dev/null || exit 0
+ifdef VERY_QUIET
+	@rm $(CLEAN_RM_ARGS)
+else
+	rm $(CLEAN_RM_ARGS)
+endif
+	@[ "$(BUILD_TOP)" != "." ] && find $(BUILD_TOP) -depth -type d 2>/dev/null | xargs rmdir 2>/dev/null || exit 0
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))

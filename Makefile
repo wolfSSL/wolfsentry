@@ -117,6 +117,7 @@ BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'CFLAGS: $(CFLAGS)'; echo 'LDF
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force
+	@[ -d .git ] && ([ -d .git/hooks ] || mkdir .git/hooks) && ([ -e .git/hooks/pre-push ] || ln -s ../../scripts/pre-push.sh .git/hooks/pre-push 2>/dev/null || exit 0)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifdef VERY_QUIET
 	@$(BUILD_PARAMS) | cmp -s - $@ 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi; exit 0

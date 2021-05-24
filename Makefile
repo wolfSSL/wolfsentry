@@ -117,10 +117,11 @@ BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'CFLAGS: $(CFLAGS)'; echo 'LDF
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifdef VERY_QUIET
-	@$(BUILD_PARAMS) | cmp -s - $@; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi
+	@$(BUILD_PARAMS) | cmp -s - $@ 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi; exit 0
 else
-	@$(BUILD_PARAMS) | cmp -s - $@; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi
+	@$(BUILD_PARAMS) | cmp -s - $@ 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
 endif
 
 $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params Makefile
@@ -223,6 +224,6 @@ dist:
 .PHONY: clean
 clean:
 	rm -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
-	@[ "$(BUILD_TOP)" != "." ] && rmdir $(BUILD_TOP)/* $(BUILD_TOP) 2>/dev/null || exit 0
+	@[ "$(BUILD_TOP)" != "." ] && find $(BUILD_TOP) -depth -type d | xargs rmdir 2>/dev/null || exit 0
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))

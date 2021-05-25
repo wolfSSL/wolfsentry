@@ -93,52 +93,71 @@ struct rwlock_args {
     int thread_id;
     struct wolfsentry_rwlock *lock;
     wolfsentry_time_t max_wait;
+    pthread_mutex_t thread_phase_lock; /* need to wrap a mutex around thread_phase to blind the thread sanitizer to the spin locks on it. */
+    volatile int thread_phase;
 };
 
+#define INCREMENT_PHASE(x) do { pthread_mutex_lock(&(x)->thread_phase_lock); ++(x)->thread_phase; pthread_mutex_unlock(&(x)->thread_phase_lock); } while(0)
+
 static void *rd_routine(struct rwlock_args *args) {
+    INCREMENT_PHASE(args);
     if (args->max_wait >= 0)
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared_timed(args->wolfsentry, args->lock, args->max_wait));
     else
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(args->lock));
+    INCREMENT_PHASE(args);
     int i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id;
     usleep(10000);
     i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id + 4;
+    INCREMENT_PHASE(args);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock));
+    INCREMENT_PHASE(args);
     return 0;
 }
 
 static void *wr_routine(struct rwlock_args *args) {
+    INCREMENT_PHASE(args);
     if (args->max_wait >= 0)
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex_timed(args->wolfsentry, args->lock, args->max_wait));
     else
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(args->lock));
+    INCREMENT_PHASE(args);
     int i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id;
     usleep(10000);
     i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id + 4;
+    INCREMENT_PHASE(args);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock));
+    INCREMENT_PHASE(args);
     return 0;
 }
 
 static void *rd2wr_routine(struct rwlock_args *args) {
+    INCREMENT_PHASE(args);
     if (args->max_wait >= 0)
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared_timed(args->wolfsentry, args->lock, args->max_wait));
     else
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(args->lock));
+    INCREMENT_PHASE(args);
     int i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id;
     if (args->max_wait >= 0)
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_timed(args->wolfsentry, args->lock, args->max_wait));
     else
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex(args->lock));
+    INCREMENT_PHASE(args);
     i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id + 4;
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock));
+    INCREMENT_PHASE(args);
     return 0;
 }
+
+#define MAX_WAIT 100000
+#define WAIT_FOR_PHASE(x, atleast) do { int cur_phase; pthread_mutex_lock(&(x).thread_phase_lock); cur_phase = (x).thread_phase; pthread_mutex_unlock(&(x).thread_phase_lock); if (cur_phase >= (atleast)) break; usleep(1000); } while(1)
 
 static int test_rw_locks (void) {
     struct wolfsentry_context *wolfsentry;
@@ -168,13 +187,20 @@ static int test_rw_locks (void) {
     thread3_args.thread_id = 3;
     thread4_args.thread_id = 4;
 
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&thread1_args.thread_phase_lock, NULL));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&thread2_args.thread_phase_lock, NULL));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&thread3_args.thread_phase_lock, NULL));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&thread4_args.thread_phase_lock, NULL));
+
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex_timed(wolfsentry,lock,0));
 
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread1, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread1_args));
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread2, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread2_args));
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread3, 0 /* attr */, (void *(*)(void *))wr_routine, (void *)&thread3_args));
 
-    usleep(10000);
+    WAIT_FOR_PHASE(thread3_args, 1);
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock));
 
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(thread1, 0 /* retval */));
@@ -215,32 +241,38 @@ static int test_rw_locks (void) {
 
     /* now a scenario with shared2mutex and mutex2shared in the mix: */
 
+    thread1_args.thread_phase = thread2_args.thread_phase = thread3_args.thread_phase = thread4_args.thread_phase = 0;
+
     measured_sequence_i = 0;
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock));
 
-    thread1_args.max_wait = 100000; /* builtin wolfsentry_time_t is microseconds, same as usleep(). */
+    thread1_args.max_wait = MAX_WAIT; /* builtin wolfsentry_time_t is microseconds, same as usleep(). */
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread1, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread1_args));
-    usleep(10000);
-    thread2_args.max_wait = 100000;
+
+    WAIT_FOR_PHASE(thread1_args, 1);
+
+    thread2_args.max_wait = MAX_WAIT;
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread2, 0 /* attr */, (void *(*)(void *))rd2wr_routine, (void *)&thread2_args));
 
-    usleep(10000);
+    WAIT_FOR_PHASE(thread2_args, 1);
 
     /* this transition advances thread1 and thread2 to both hold shared locks.
      * non-negligible chance that thread2 goes into shared2mutex wait before
      * thread1 can get a shared lock.
      */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex2shared(lock));
-    usleep(10000);
+
+    WAIT_FOR_PHASE(thread2_args, 2);
 
     /* this thread has to wait until thread2 is done with its shared2mutex sequence. */
 
 /* constraint: thread2 must unlock (6) before thread3 locks (3) */
 /* constraint: thread3 lock-unlock (3, 7) must be adjacent */
-    thread3_args.max_wait = 100000;
+    thread3_args.max_wait = MAX_WAIT;
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread3, 0 /* attr */, (void *(*)(void *))wr_routine, (void *)&thread3_args));
-    usleep(10000);
+
+    WAIT_FOR_PHASE(thread3_args, 1);
 
     /* this one must fail, because at this point thread2 must be in shared2mutex wait. */
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex(lock), BUSY));

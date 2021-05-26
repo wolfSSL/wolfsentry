@@ -792,4 +792,10 @@ wolfsentry_errcode_t wolfsentry_event_action_list_next(
     const char **action_label,
     int *action_label_len);
 
+/* conditionally include wolfsentry_util.h last -- none of the above rely on it.
+ */
+#ifndef WOLFSENTRY_NO_UTIL_H
+#include <wolfsentry/wolfsentry_util.h>
+#endif
+
 #endif /* WOLFSENTRY_H */

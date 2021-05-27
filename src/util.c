@@ -584,6 +584,97 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock
     /* not reached */
 }
 
+/* a shared lock holder can use wolfsentry_lock_shared2mutex_reserve() to
+ * guarantee success of a subsequent lock promotion via
+ * wolfsentry_lock_shared2mutex_redeem().
+ * wolfsentry_lock_shared2mutex_reserve() will immediately fail if the promotion
+ * cannot be reserved.
+ */
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct wolfsentry_rwlock *lock) {
+    if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
+        WOLFSENTRY_ERROR_RETURN(ALREADY);
+
+    if (sem_wait(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    if (lock->state != WOLFSENTRY_LOCK_SHARED) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+    if (lock->read2write_waiter_count > 0) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_ERROR_RETURN(BUSY);
+    }
+    ++lock->read2write_waiter_count;
+    ++lock->shared_count; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+    if (sem_post(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwlock *lock) {
+    int debited_reservation_from_shared_count = 0;
+    if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
+        WOLFSENTRY_ERROR_RETURN(ALREADY);
+  again:
+    if (sem_wait(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    if (lock->state != WOLFSENTRY_LOCK_SHARED) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+
+    if (! debited_reservation_from_shared_count) {
+        debited_reservation_from_shared_count = 1;
+        --lock->shared_count; /* reenable posts to sem_read2write_waiters by unlockers. */
+    }
+
+    if (lock->shared_count == 1) {
+        lock->shared_count = 0;
+        lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_RETURN_OK;
+    }
+
+    if (sem_post(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    if (sem_wait(&lock->sem_read2write_waiters) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    goto again;
+
+    /* not reached */
+}
+
+/* note caller still holds its shared lock after return. */
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct wolfsentry_rwlock *lock) {
+    if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
+        WOLFSENTRY_ERROR_RETURN(ALREADY);
+
+    if (sem_wait(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    if (lock->state != WOLFSENTRY_LOCK_SHARED) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+
+    --lock->read2write_waiter_count;
+    --lock->shared_count;
+
+    if (sem_post(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
     wolfsentry_errcode_t ret;
 
@@ -687,6 +778,24 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_contex
         return wolfsentry_lock_shared2mutex_abstimed(wolfsentry, lock, &abs_timeout);
     } else
         return wolfsentry_lock_shared2mutex_abstimed(wolfsentry, lock, NULL);
+}
+
+wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock) {
+    /* when error-checking, return NOT_PERMITTED when lock is held but not by caller. */
+
+    if (lock->state == WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_RETURN_OK;
+    else
+        WOLFSENTRY_ERROR_RETURN(NOT_OK);
+}
+
+wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock) {
+    /* when error-checking, return NOT_PERMITTED when lock is held but not by caller. */
+
+    if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
+        WOLFSENTRY_RETURN_OK;
+    else
+        WOLFSENTRY_ERROR_RETURN(NOT_OK);
 }
 
 wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock) {

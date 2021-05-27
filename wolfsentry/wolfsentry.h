@@ -162,21 +162,37 @@ wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock);
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, struct timespec *abs_timeout);
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait);
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct wolfsentry_rwlock *lock);
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwlock *lock);
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct wolfsentry_rwlock *lock);
+wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock);
+wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock);
 wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock);
 wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock);
 wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock **lock);
 
 #else /* !WOLFSENTRY_THREADSAFE */
 
-#define wolfsentry_lock_init()
-#define wolfsentry_lock_alloc()
-#define wolfsentry_lock_shared()
-#define wolfsentry_lock_mutex()
-#define wolfsentry_lock_mutex2shared()
-#define wolfsentry_lock_shared2mutex()
-#define wolfsentry_lock_unlock()
-#define wolfsentry_lock_destroy()
-#define wolfsentry_lock_free()
+#define wolfsentry_lock_init(x, y) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_alloc(x, y, z) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared_abstimed(x, y, z) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_mutex_timed(x, y, z) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_mutex(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_mutex_abstimed(x, y, z) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_mutex_timed(x, y, z) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_mutex2shared(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared2mutex(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared2mutex_abstimed(x, y, z) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared2mutex_timed(x, y, z) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared2mutex_reserve(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared2mutex_redeem(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_shared2mutex_abandon(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_have_shared(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_have_mutex(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_unlock(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_destroy(x) WOLFSENTRY_ERROR_ID_OK
+#define wolfsentry_lock_free(x, y) WOLFSENTRY_ERROR_ID_OK
 
 #endif /* WOLFSENTRY_THREADSAFE */
 

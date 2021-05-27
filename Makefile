@@ -40,6 +40,10 @@ ifneq "$(NO_JSON)" "1"
     SRCS += json/centijson_sax.c json/load_config.c
 endif
 
+ifndef SRC_TOP
+    SRC_TOP := .
+endif
+
 ifndef BUILD_TOP
     BUILD_TOP := .
 endif
@@ -67,7 +71,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I. $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 $(BUILD_TOP)/src/json/centijson_sax.o: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
@@ -113,11 +117,11 @@ else
 endif
 
 #https://stackoverflow.com/questions/3236145/force-gnu-make-to-rebuild-objects-affected-by-compiler-definition/3237349#3237349
-BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'CFLAGS: $(CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo $(AR_VERSION); echo 'ARFLAGS: $(AR_FLAGS)')
+BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo $(AR_VERSION); echo 'ARFLAGS: $(AR_FLAGS)')
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force
-	@[ -d .git ] && ([ -d .git/hooks ] || mkdir .git/hooks) && ([ -e .git/hooks/pre-push ] || ln -s ../../scripts/pre-push.sh .git/hooks/pre-push 2>/dev/null || exit 0)
+	@cd $(SRC_TOP) && [ -d .git ] && ([ -d .git/hooks ] || mkdir .git/hooks) && ([ -e .git/hooks/pre-push ] || ln -s ../../scripts/pre-push.sh .git/hooks/pre-push 2>/dev/null || exit 0)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifdef VERY_QUIET
 	@$(BUILD_PARAMS) | cmp -s - $@ 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi; exit 0
@@ -125,17 +129,17 @@ else
 	@$(BUILD_PARAMS) | cmp -s - $@ 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
 endif
 
-$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params Makefile
+$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params $(SRC_TOP)/Makefile
 
-$(BUILD_TOP)/src/%.o: src/%.c
+$(BUILD_TOP)/src/%.o: $(SRC_TOP)/src/%.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
+	$(CC) $(CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
+	@$(CC) $(CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 endif
 
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
@@ -151,10 +155,12 @@ UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules
 
 ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json
+    TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
+    $(BUILD_TOP)/tests/test_json: override CFLAGS+=$(TEST_JSON_CFLAGS)
 endif
 
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
 	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
@@ -176,7 +182,7 @@ else
 endif
 	@touch $(BUILD_TOP)/.tested
 
--include Makefile.analyzers
+-include $(SRC_TOP)/Makefile.analyzers
 
 ifndef INSTALL_DIR
     INSTALL_DIR := /usr/local
@@ -220,9 +226,9 @@ endif
 
 .PHONY: dist
 dist:
-	$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.minimal wolfsentry/ src/wolfsentry_internal.h $(addprefix src/,$(SRCS)) tests/unittests.c
+	cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.minimal wolfsentry/ src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c
 
-CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST)))
+CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(ANALYZER_BUILD_ARTIFACTS)
 
 .PHONY: clean
 clean:

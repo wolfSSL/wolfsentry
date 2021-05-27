@@ -207,3 +207,41 @@ minimal-build-test:
 .PHONY: check
 check: analyze-all c99-test m32-test singlethreaded-test no-json-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test
 	@echo "all checks passed."
+
+
+ANALYZER_BUILD_ARTIFACTS+=$(BUILD_TOP)/tests/coverage-unittest.o $(BUILD_TOP)/tests/unittests.d $(BUILD_TOP)/tests/coverage-unittest.gcno $(BUILD_TOP)/tests/coverage-unittest.gcda $(BUILD_TOP)/tests/coverage-unittest $(BUILD_TOP)/*.gcov
+
+.PHONY: coverage
+coverage:
+#	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=coverage-build EXTRA_CFLAGS+=--coverage EXTRA_LDFLAGS+=--coverage coverage-build/tests/coverage-unittest
+	@mkdir -p coverage-build && cd coverage-build && $(MAKE) $(QUIET_FLAG) -f ../$(THIS_MAKEFILE) SRC_TOP=.. EXTRA_CFLAGS+=--coverage EXTRA_LDFLAGS+=--coverage ./tests/coverage-unittest
+	@cd coverage-build && ./tests/coverage-unittest >/dev/null && echo 'omnibus unittest succeeded.'
+	@cd coverage-build && gcov --relative-only src/*.o src/json/*.o tests/coverage-unittest
+
+.PHONY: coverage-clean
+coverage-clean:
+	@$(MAKE) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=coverage-build clean
+	@[ -d coverage-build ] && echo "artifacts remain in ./coverage-build/" || echo "cleaned coverage-build"
+
+$(BUILD_TOP)/tests/coverage-unittest: $(BUILD_TOP)/tests/coverage-unittest.o $(BUILD_TOP)/$(LIB_NAME)
+ifeq "$(V)" "1"
+	$(CC) $(LDFLAGS) -o $@ $+
+else
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
+	@$(CC) $(LDFLAGS) -o $@ $+
+endif
+
+$(BUILD_TOP)/tests/coverage-unittest.o: override CFLAGS+=$(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]'))
+$(BUILD_TOP)/tests/coverage-unittest.o: override CFLAGS+=$(TEST_JSON_CFLAGS)
+$(BUILD_TOP)/tests/coverage-unittest.o: $(SRC_TOP)/tests/unittests.c
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+ifeq "$(V)" "1"
+	$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
+else
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
+	@$(CC) $(CFLAGS) -MF $(BUILD_TOP)/$(<:.c=.d) -c $< -o $@
+endif

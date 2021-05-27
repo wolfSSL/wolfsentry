@@ -190,15 +190,21 @@ static wolfsentry_errcode_t reset_o_u_c(struct json_process_state *jps) {
 }
 
 static wolfsentry_errcode_t convert_uint32(JSON_TYPE type, const char *data, size_t data_size, uint32_t *out) {
+    char buf[16];
     char *endptr;
     unsigned long conv;
 
     if (type != JSON_NUMBER)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-    conv = strtoul(data, &endptr, 0);
+    if (data_size >= sizeof buf)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+    memcpy(buf, data, data_size);
+    buf[data_size] = 0;
 
-    if ((size_t)(endptr - data) != data_size)
+    conv = strtoul(buf, &endptr, 0);
+
+    if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if (conv > MAX_UINT_OF(*out))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
@@ -208,15 +214,21 @@ static wolfsentry_errcode_t convert_uint32(JSON_TYPE type, const char *data, siz
 }
 
 static wolfsentry_errcode_t convert_uint16(JSON_TYPE type, const char *data, size_t data_size, uint16_t *out) {
+    char buf[8];
     char *endptr;
     unsigned long conv;
 
     if (type != JSON_NUMBER)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-    conv = strtoul(data, &endptr, 0);
+    if (data_size >= sizeof buf)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+    memcpy(buf, data, data_size);
+    buf[data_size] = 0;
 
-    if ((size_t)(endptr - data) != data_size)
+    conv = strtoul(buf, &endptr, 0);
+
+    if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if (conv > MAX_UINT_OF(*out))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
@@ -226,15 +238,21 @@ static wolfsentry_errcode_t convert_uint16(JSON_TYPE type, const char *data, siz
 }
 
 static wolfsentry_errcode_t convert_uint8(JSON_TYPE type, const char *data, size_t data_size, uint8_t *out) {
+    char buf[4];
     char *endptr;
     unsigned long conv;
 
     if (type != JSON_NUMBER)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-    conv = strtoul(data, &endptr, 0);
+    if (data_size >= sizeof buf)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+    memcpy(buf, data, data_size);
+    buf[data_size] = 0;
 
-    if ((size_t)(endptr - data) != data_size)
+    conv = strtoul(buf, &endptr, 0);
+
+    if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if (conv > MAX_UINT_OF(*out))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);

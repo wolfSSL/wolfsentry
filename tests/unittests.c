@@ -86,6 +86,8 @@ static wolfsentry_errcode_t test_init (void) {
 
 #if defined(WOLFSENTRY_THREADSAFE)
 
+#include <signal.h>
+
 struct rwlock_args {
     struct wolfsentry_context *wolfsentry;
     volatile int *measured_sequence;
@@ -156,6 +158,29 @@ static void *rd2wr_routine(struct rwlock_args *args) {
     return 0;
 }
 
+static void *rd2wr_reserved_routine(struct rwlock_args *args) {
+    INCREMENT_PHASE(args);
+    if (args->max_wait >= 0)
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared_timed(args->wolfsentry, args->lock, args->max_wait));
+    else
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(args->lock));
+    INCREMENT_PHASE(args);
+    int i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
+    args->measured_sequence[i] = args->thread_id;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_reserve(args->lock));
+    INCREMENT_PHASE(args);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(args->lock));
+    INCREMENT_PHASE(args);
+
+    i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
+    args->measured_sequence[i] = args->thread_id + 4;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock));
+    INCREMENT_PHASE(args);
+    return 0;
+}
+
 #define MAX_WAIT 100000
 #define WAIT_FOR_PHASE(x, atleast) do { int cur_phase; pthread_mutex_lock(&(x).thread_phase_lock); cur_phase = (x).thread_phase; pthread_mutex_unlock(&(x).thread_phase_lock); if (cur_phase >= (atleast)) break; usleep(1000); } while(1)
 
@@ -199,7 +224,10 @@ static int test_rw_locks (void) {
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread2, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread2_args));
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread3, 0 /* attr */, (void *(*)(void *))wr_routine, (void *)&thread3_args));
 
+    /* go to a lot of trouble to make sure thread 3 has entered _lock_mutex() wait. */
     WAIT_FOR_PHASE(thread3_args, 1);
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_kill(thread3, 0));
+    usleep(10000);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock));
 
@@ -232,9 +260,9 @@ static int test_rw_locks (void) {
         (measured_sequence[1] != 7) ||
         (measured_sequence[7] != 8)) {
         size_t i;
-        printf("wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
+        fprintf(stderr,"wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
-            printf("%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
+            fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         return 1;
     }
 
@@ -308,9 +336,92 @@ static int test_rw_locks (void) {
         (SEQ(6) > SEQ(4)) ||
         (SEQ(8) - SEQ(4) != 1)) {
         size_t i;
-        printf("wrong sequence at L%d.  got {", __LINE__);
+        fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
-            printf("%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
+            fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
+        return 1;
+    }
+
+
+    /* again, using shared2mutex reservation: */
+
+    thread1_args.thread_phase = thread2_args.thread_phase = thread3_args.thread_phase = thread4_args.thread_phase = 0;
+
+    measured_sequence_i = 0;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock));
+
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex(lock), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_reserve(lock), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_redeem(lock), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_abandon(lock), ALREADY));
+
+    thread1_args.max_wait = MAX_WAIT; /* builtin wolfsentry_time_t is microseconds, same as usleep(). */
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread1, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread1_args));
+
+    WAIT_FOR_PHASE(thread1_args, 1);
+
+    thread2_args.max_wait = MAX_WAIT;
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread2, 0 /* attr */, (void *(*)(void *))rd2wr_reserved_routine, (void *)&thread2_args));
+
+    WAIT_FOR_PHASE(thread2_args, 1);
+
+    /* this transition advances thread1 and thread2 to both hold shared locks.
+     * non-negligible chance that thread2 goes into shared2mutex wait before
+     * thread1 can get a shared lock.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex2shared(lock));
+
+    WAIT_FOR_PHASE(thread2_args, 2);
+
+    /* this thread has to wait until thread2 is done with its shared2mutex sequence. */
+
+/* constraint: thread2 must unlock (6) before thread3 locks (3) */
+/* constraint: thread3 lock-unlock (3, 7) must be adjacent */
+    thread3_args.max_wait = MAX_WAIT;
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread3, 0 /* attr */, (void *(*)(void *))wr_routine, (void *)&thread3_args));
+
+    WAIT_FOR_PHASE(thread3_args, 1);
+
+    /* this one must fail, because at this point thread2 must be in shared2mutex wait. */
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex(lock), BUSY));
+
+    /* take the opportunity to test expected failures of the _timed() variants. */
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,0), BUSY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,1000), TIMED_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,0), BUSY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,1000), TIMED_OUT));
+
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_shared(lock), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_mutex(lock), NOT_OK));
+
+    /* this unlock allows thread2 to finally get its mutex. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock));
+
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(thread1, 0 /* retval */));
+
+/* constraint: thread2 must unlock (6) before thread4 locks (4) */
+/* constraint: thread4 lock-unlock (4, 8) must be adjacent */
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread4, 0 /* attr */, (void *(*)(void *))wr_routine, (void *)&thread4_args));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(thread4, 0 /* retval */));
+
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(thread2, 0 /* retval */));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(thread3, 0 /* retval */));
+
+    {
+        int i;
+        for (i=0; i<8; ++i)
+            measured_sequence_transposed[measured_sequence[i] - 1] = i + 1;
+    }
+#define SEQ(x) measured_sequence_transposed[(x)-1]
+    if ((SEQ(6) > SEQ(3)) ||
+        (SEQ(7) - SEQ(3) != 1) ||
+        (SEQ(6) > SEQ(4)) ||
+        (SEQ(8) - SEQ(4) != 1)) {
+        size_t i;
+        fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
+        for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
+            fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         return 1;
     }
 
@@ -339,13 +450,8 @@ TEST_SKIP(test_rw_locks)
 #include <netinet/in.h>
 #endif
 
-#ifndef PRIVATE_DATA_SIZE
 #define PRIVATE_DATA_SIZE 32
-#endif
-
-#ifndef PRIVATE_DATA_ALIGNMENT
 #define PRIVATE_DATA_ALIGNMENT 16
-#endif
 
 static int test_static_routes (void) {
 
@@ -851,6 +957,10 @@ static int test_static_routes (void) {
 
     return 0;
 }
+
+#undef PRIVATE_DATA_SIZE
+#undef PRIVATE_DATA_ALIGNMENT
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -862,13 +972,8 @@ static int test_static_routes (void) {
 #include <netinet/in.h>
 #endif
 
-#ifndef PRIVATE_DATA_SIZE
 #define PRIVATE_DATA_SIZE 32
-#endif
-
-#ifndef PRIVATE_DATA_ALIGNMENT
 #define PRIVATE_DATA_ALIGNMENT 8
-#endif
 
 static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     struct wolfsentry_context *wolfsentry,
@@ -1162,6 +1267,10 @@ int wolfsentry_event_set_subevent(
 
     return 0;
 }
+
+#undef PRIVATE_DATA_SIZE
+#undef PRIVATE_DATA_ALIGNMENT
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_JSON
@@ -1175,13 +1284,8 @@ int wolfsentry_event_set_subevent(
 #include <netinet/in.h>
 #endif
 
-#ifndef PRIVATE_DATA_SIZE
 #define PRIVATE_DATA_SIZE 32
-#endif
-
-#ifndef PRIVATE_DATA_ALIGNMENT
 #define PRIVATE_DATA_ALIGNMENT 16
-#endif
 
 static wolfsentry_errcode_t test_action(
     struct wolfsentry_context *wolfsentry,
@@ -1409,12 +1513,15 @@ int main (int argc, char* argv[]) {
 
 #ifdef TEST_JSON
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-    ret = test_json("tests/test-config.json");
-#else
-    ret = test_json("tests/test-config-numeric.json");
-#endif
+    ret = test_json(TEST_JSON_CONFIG_PATH);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_json failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        printf("test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
+    ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH);
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        printf("test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

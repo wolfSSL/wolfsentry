@@ -158,7 +158,7 @@ c99-test:
 .PHONY: m32-test
 m32-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=m32-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=m32-builds NO_DYNAMIC=1 EXTRA_CFLAGS+=-m32 EXTRA_LDFLAGS+=-m32 test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=m32-builds EXTRA_CFLAGS+=-m32 EXTRA_LDFLAGS+=-m32 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=m32-builds clean
 	@echo "-m32 test passed."
 
@@ -214,7 +214,6 @@ dynamic-build-test:
 
 
 .PHONY: check
-check: EXTRA_MAKE_FLAGS+=NO_DYNAMIC=1
 check: analyze-all dynamic-build-test c99-test m32-test singlethreaded-test no-json-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test
 	@echo "all checks passed."
 
@@ -226,7 +225,7 @@ pre-push-check:
 ANALYZER_BUILD_ARTIFACTS+=$(BUILD_TOP)/tests/coverage-unittest.o $(BUILD_TOP)/tests/unittests.d $(BUILD_TOP)/tests/coverage-unittest.gcno $(BUILD_TOP)/tests/coverage-unittest.gcda $(BUILD_TOP)/tests/coverage-unittest $(BUILD_TOP)/*.gcov
 
 .PHONY: coverage
-coverage: EXTRA_MAKE_FLAGS+=NO_DYNAMIC=1 OPTIM=-O0
+coverage: OPTIM=-O0
 coverage:
 	@mkdir -p coverage-build && cd coverage-build && $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f ../$(THIS_MAKEFILE) SRC_TOP=.. EXTRA_CFLAGS+=--coverage EXTRA_LDFLAGS+=--coverage ./tests/coverage-unittest
 	@cd coverage-build && ./tests/coverage-unittest >/dev/null && echo 'omnibus unittest succeeded.'

@@ -123,7 +123,7 @@ endif
 
 DYNLIB_NAME := libwolfsentry.so
 
-ifneq "$(NO_DYNAMIC)" "1"
+ifdef BUILD_DYNAMIC
 INSTALL_LIBS += $(BUILD_TOP)/$(DYNLIB_NAME)
 all: $(BUILD_TOP)/$(DYNLIB_NAME)
 endif
@@ -223,7 +223,7 @@ endif
 	@$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
 endif
 
-ifneq "$(NO_DYNAMIC)" "1"
+ifdef BUILD_DYNAMIC
 $(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED))
 endif
 
@@ -241,7 +241,7 @@ else
 		@for test in $(basename $(UNITTEST_LIST)); do echo -n "$${test}..."; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo ' succeeded'; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
 endif
 endif
-ifneq "$(NO_DYNAMIC)" "1"
+ifdef BUILD_DYNAMIC
 	@for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH=$(BUILD_TOP) $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null || exit $?; done
 ifndef VERY_QUIET
 	@echo '$(UNITTEST_LIST_SHARED) succeeded.'

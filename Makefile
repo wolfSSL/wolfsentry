@@ -74,7 +74,12 @@ endif
 CFLAGS := -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
+VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
+DYNAMIC_CFLAGS := -fpic
+DYNAMIC_LDFLAGS := -shared
+
 $(BUILD_TOP)/src/json/centijson_sax.o: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
+$(BUILD_TOP)/src/json/centijson_sax.So: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
 
 ifdef USER_SETTINGS_FILE
     CFLAGS += -DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
@@ -116,8 +121,15 @@ else
     AR_FLAGS := cqs
 endif
 
+DYNLIB_NAME := libwolfsentry.so
+
+ifneq "$(NO_DYNAMIC)" "1"
+INSTALL_LIBS += $(BUILD_TOP)/$(DYNLIB_NAME)
+all: $(BUILD_TOP)/$(DYNLIB_NAME)
+endif
+
 #https://stackoverflow.com/questions/3236145/force-gnu-make-to-rebuild-objects-affected-by-compiler-definition/3237349#3237349
-BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo $(AR_VERSION); echo 'ARFLAGS: $(AR_FLAGS)')
+BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS) $(VISIBILITY_CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo $(AR_VERSION); echo 'ARFLAGS: $(AR_FLAGS)')
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force
@@ -133,13 +145,14 @@ $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params $(SRC_T
 
 $(BUILD_TOP)/src/%.o: $(SRC_TOP)/src/%.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	@rm -f $(@:.o=.gcda)
 ifeq "$(V)" "1"
-	$(CC) $(CFLAGS) -MF $(@:.o=.d) -c $< -o $@
+	$(CC) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(CFLAGS) -MF $(@:.o=.d) -c $< -o $@
+	@$(CC) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 endif
 
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
@@ -150,6 +163,30 @@ else
 	@rm -f $@
 	$(AR) $(AR_FLAGS) $@ $+
 endif
+
+
+# again, but to build the shared object:
+$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(SRC_TOP)/Makefile
+
+$(BUILD_TOP)/src/%.So: $(SRC_TOP)/src/%.c
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	@rm -f $(@:.So=.gcda)
+ifeq "$(V)" "1"
+	$(CC) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
+else
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
+	@$(CC) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
+endif
+
+$(BUILD_TOP)/$(DYNLIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So))
+ifdef VERY_QUIET
+	@$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
+else
+	$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
+endif
+
 
 UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules
 
@@ -171,6 +208,26 @@ endif
 	@$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
 endif
 
+
+UNITTEST_LIST_SHARED=test_all_shared
+UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]')) $(TEST_JSON_CFLAGS)
+
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME)
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+ifeq "$(V)" "1"
+	$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+else
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
+	@$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+endif
+
+ifneq "$(NO_DYNAMIC)" "1"
+$(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED))
+endif
+
+
 .PHONY: test
 test: $(BUILD_TOP)/.tested
 
@@ -178,7 +235,17 @@ $(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
 ifdef VERY_QUIET
 	@for test in $(basename $(UNITTEST_LIST)); do $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then echo "$${test} failed" 1>&2; break; fi; done; exit $$exitcode
 else
-	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all tests succeeded.'; else exit $$exitcode; fi
+ifeq "$(V)" "1"
+		@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
+else
+		@for test in $(basename $(UNITTEST_LIST)); do echo -n "$${test}..."; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo ' succeeded'; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
+endif
+endif
+ifneq "$(NO_DYNAMIC)" "1"
+	@for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH=$(BUILD_TOP) $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null || exit $?; done
+ifndef VERY_QUIET
+	@echo '$(UNITTEST_LIST_SHARED) succeeded.'
+endif
 endif
 	@touch $(BUILD_TOP)/.tested
 
@@ -228,7 +295,7 @@ endif
 dist:
 	cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.minimal wolfsentry/ src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c
 
-CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(ANALYZER_BUILD_ARTIFACTS)
+CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
 .PHONY: clean
 clean:
@@ -240,3 +307,4 @@ endif
 	@[ "$(BUILD_TOP)" != "." ] && find $(BUILD_TOP) -depth -type d 2>/dev/null | xargs rmdir 2>/dev/null || exit 0
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))
+-include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd))

@@ -19,8 +19,8 @@ cd "$WORKDIR" || exit 1
 while read local_ref local_oid remote_ref remote_oid
 do
 	git checkout -q "$local_oid" || exit 1
-	echo "make -j check for ${local_ref} at ${local_oid} ..."
-	make -j check || exit 1
+	echo "make --quiet -j check for ${local_ref} at ${local_oid} ..."
+	make --quiet -j check || exit 1
 done
 
 exit 0

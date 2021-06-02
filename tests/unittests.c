@@ -143,9 +143,9 @@ static void *rd2wr_routine(struct rwlock_args *args) {
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared_timed(args->wolfsentry, args->lock, args->max_wait));
     else
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(args->lock));
-    INCREMENT_PHASE(args);
     int i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id;
+    INCREMENT_PHASE(args);
     if (args->max_wait >= 0)
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_timed(args->wolfsentry, args->lock, args->max_wait));
     else
@@ -163,11 +163,11 @@ static void *rd2wr_reserved_routine(struct rwlock_args *args) {
     if (args->max_wait >= 0)
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared_timed(args->wolfsentry, args->lock, args->max_wait));
     else
-        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(args->lock));
-    INCREMENT_PHASE(args);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(args->lock)); // GCOV_EXCL_LINE
     int i = WOLFSENTRY_ATOMIC_POSTINCREMENT(*args->measured_sequence_i,1);
     args->measured_sequence[i] = args->thread_id;
 
+    INCREMENT_PHASE(args);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_reserve(args->lock));
     INCREMENT_PHASE(args);
 
@@ -259,11 +259,13 @@ static int test_rw_locks (void) {
         (measured_sequence[6] != 4) ||
         (measured_sequence[1] != 7) ||
         (measured_sequence[7] != 8)) {
+    // GCOV_EXCL_START
         size_t i;
         fprintf(stderr,"wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         return 1;
+    // GCOV_EXCL_STOP
     }
 
 
@@ -279,7 +281,6 @@ static int test_rw_locks (void) {
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread1, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread1_args));
 
     WAIT_FOR_PHASE(thread1_args, 1);
-
     thread2_args.max_wait = MAX_WAIT;
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread2, 0 /* attr */, (void *(*)(void *))rd2wr_routine, (void *)&thread2_args));
 
@@ -335,11 +336,13 @@ static int test_rw_locks (void) {
         (SEQ(7) - SEQ(3) != 1) ||
         (SEQ(6) > SEQ(4)) ||
         (SEQ(8) - SEQ(4) != 1)) {
+    // GCOV_EXCL_START
         size_t i;
         fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         return 1;
+    // GCOV_EXCL_STOP
     }
 
 
@@ -372,7 +375,7 @@ static int test_rw_locks (void) {
      */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex2shared(lock));
 
-    WAIT_FOR_PHASE(thread2_args, 2);
+    WAIT_FOR_PHASE(thread2_args, 3);
 
     /* this thread has to wait until thread2 is done with its shared2mutex sequence. */
 
@@ -418,17 +421,21 @@ static int test_rw_locks (void) {
         (SEQ(7) - SEQ(3) != 1) ||
         (SEQ(6) > SEQ(4)) ||
         (SEQ(8) - SEQ(4) != 1)) {
+    // GCOV_EXCL_START
         size_t i;
         fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         return 1;
+    // GCOV_EXCL_STOP
     }
 
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(wolfsentry, &lock));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
+
+    (void)alarm(0);
 
     return 0;
 }
@@ -565,12 +572,16 @@ static int test_static_routes (void) {
                                  &private_data_size));
 
     if (private_data_size < PRIVATE_DATA_SIZE) {
+    // GCOV_EXCL_START
         printf("private_data_size is %zu but expected %d.\n",private_data_size,PRIVATE_DATA_SIZE);
         return 1;
+    // GCOV_EXCL_STOP
     }
     if ((PRIVATE_DATA_ALIGNMENT > 0) && ((uintptr_t)private_data % (uintptr_t)PRIVATE_DATA_ALIGNMENT)) {
+    // GCOV_EXCL_START
         printf("private_data (%p) is not aligned to %d.\n",private_data,PRIVATE_DATA_ALIGNMENT);
         return 1;
+    // GCOV_EXCL_STOP
     }
 
     {
@@ -975,6 +986,7 @@ static int test_static_routes (void) {
 #define PRIVATE_DATA_SIZE 32
 #define PRIVATE_DATA_ALIGNMENT 8
 
+// GCOV_EXCL_START
 static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     struct wolfsentry_context *wolfsentry,
     const struct wolfsentry_action *action,
@@ -998,6 +1010,7 @@ static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
 
     return 0;
 }
+// GCOV_EXCL_STOP
 
 
 static int test_dynamic_rules (void) {
@@ -1137,6 +1150,111 @@ int wolfsentry_event_set_subevent(
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_action_insert(
             wolfsentry,
+            "insert_alway",
+            -1 /* label_len */,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            wolfsentry_action_dummy_callback,
+            NULL /* handler_context */,
+            &id));
+
+    {
+        static char too_long_label[WOLFSENTRY_MAX_LABEL_BYTES + 2];
+        memset(too_long_label, 'x', sizeof too_long_label - 1);
+
+        too_long_label[sizeof too_long_label - 1] = 0;
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_insert(
+                                         wolfsentry,
+                                         too_long_label,
+                                         -1 /* label_len */,
+                                         WOLFSENTRY_ACTION_FLAG_NONE,
+                                         wolfsentry_action_dummy_callback,
+                                         NULL /* handler_context */,
+                                         &id), STRING_ARG_TOO_LONG));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_insert(
+                                         wolfsentry,
+                                         too_long_label,
+                                         sizeof too_long_label - 1,
+                                         WOLFSENTRY_ACTION_FLAG_NONE,
+                                         wolfsentry_action_dummy_callback,
+                                         NULL /* handler_context */,
+                                         &id), STRING_ARG_TOO_LONG));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
+                                       wolfsentry,
+                                       too_long_label,
+                                       sizeof too_long_label - 2,
+                                       WOLFSENTRY_ACTION_FLAG_NONE,
+                                       wolfsentry_action_dummy_callback,
+                                       NULL /* handler_context */,
+                                       &id));
+
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_delete(
+                                         wolfsentry,
+                                         too_long_label,
+                                         sizeof too_long_label - 1,
+                                         NULL /* action_results */), STRING_ARG_TOO_LONG));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_delete(
+                                         wolfsentry,
+                                         too_long_label,
+                                         -1,
+                                         NULL /* action_results */), STRING_ARG_TOO_LONG));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_delete(
+                                         wolfsentry,
+                                         NULL,
+                                         -1,
+                                         NULL /* action_results */), INVALID_ARG));
+
+        too_long_label[sizeof too_long_label - 2] = 0;
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_insert(
+                                         wolfsentry,
+                                         too_long_label,
+                                         -1 /* label_len */,
+                                         WOLFSENTRY_ACTION_FLAG_NONE,
+                                         wolfsentry_action_dummy_callback,
+                                         NULL /* handler_context */,
+                                         &id), ITEM_ALREADY_PRESENT));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_insert(
+                                         wolfsentry,
+                                         NULL,
+                                         -1 /* label_len */,
+                                         WOLFSENTRY_ACTION_FLAG_NONE,
+                                         wolfsentry_action_dummy_callback,
+                                         NULL /* handler_context */,
+                                         &id), INVALID_ARG));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
+                                     wolfsentry_action_insert(
+                                         wolfsentry,
+                                         too_long_label,
+                                         0 /* label_len */,
+                                         WOLFSENTRY_ACTION_FLAG_NONE,
+                                         wolfsentry_action_dummy_callback,
+                                         NULL /* handler_context */,
+                                         &id), INVALID_ARG));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_delete(
+                                       wolfsentry,
+                                       too_long_label,
+                                       -1 /* label_len */,
+                                       NULL /* action_results */));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            wolfsentry,
             "set_connect_wildcards",
             -1 /* label_len */,
             WOLFSENTRY_ACTION_FLAG_NONE,
@@ -1187,6 +1305,33 @@ int wolfsentry_event_set_subevent(
     {
         struct wolfsentry_action *action;
         wolfsentry_action_flags_t flags;
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_ERROR_CODE_IS(
+                wolfsentry_action_get_reference(
+                    wolfsentry,
+                    "checXXXounts",
+                    -1 /* label_len */,
+                    &action),
+                ITEM_NOT_FOUND));
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_ERROR_CODE_IS(
+                wolfsentry_action_get_reference(
+                    wolfsentry,
+                    "checXXXounts",
+                    0 /* label_len */,
+                    &action),
+                INVALID_ARG));
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_ERROR_CODE_IS(
+                wolfsentry_action_get_reference(
+                    wolfsentry,
+                    "checXXXounts",
+                    WOLFSENTRY_MAX_LABEL_BYTES + 1 /* label_len */,
+                    &action),
+                STRING_ARG_TOO_LONG));
 
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_action_get_reference(
@@ -1389,24 +1534,30 @@ static int test_json(const char *fname) {
     if (strcmp(fname,"-"))
         f = fopen(fname, "r");
     else
-        f = stdin;
+        f = stdin; // GCOV_EXCL_LINE
     if (! f) {
+    // GCOV_EXCL_START
         fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
         exit(1);
+    // GCOV_EXCL_STOP
     }
 
     char buf[512], err_buf[512];
     for (;;) {
         size_t n = fread(buf, 1, sizeof buf, f);
         if ((n < sizeof buf) && ferror(f)) {
+        // GCOV_EXCL_START
             fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
             exit(1);
+        // GCOV_EXCL_STOP
         }
 
         ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
         if (ret < 0) {
+        // GCOV_EXCL_START
             fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
             exit(1);
+        // GCOV_EXCL_STOP
         }
         if ((n < sizeof buf) && feof(f))
             break;
@@ -1415,8 +1566,10 @@ static int test_json(const char *fname) {
         fclose(f);
     ret = wolfsentry_config_json_fini(jps, err_buf, sizeof err_buf);
     if (ret < 0) {
+    // GCOV_EXCL_START
         fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
         exit(1);
+    // GCOV_EXCL_STOP
     }
 
     {
@@ -1482,32 +1635,40 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_INIT
     ret = test_init();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
         printf("test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
+    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_RWLOCKS
     ret = test_rw_locks();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
         printf("test_rw_locks failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
+    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_STATIC_ROUTES
     ret = test_static_routes();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
         printf("test_static_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
+    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_DYNAMIC_RULES
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
         printf("test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
+    // GCOV_EXCL_STOP
     }
 #endif
 
@@ -1515,14 +1676,18 @@ int main (int argc, char* argv[]) {
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     ret = test_json(TEST_JSON_CONFIG_PATH);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
         printf("test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
+    // GCOV_EXCL_STOP
     }
 #endif
     ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
         printf("test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
+    // GCOV_EXCL_STOP
     }
 #endif
 

@@ -51,6 +51,8 @@ static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label
     if (event_size < sizeof *event + (size_t)label_len + 1)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
+    memset(&event->header, 0, sizeof event->header);
+
     event->priority = priority;
     memcpy(event->label, label, (size_t)label_len);
     event->label[label_len] = 0;
@@ -79,10 +81,12 @@ static wolfsentry_errcode_t wolfsentry_event_new_1(struct wolfsentry_context *wo
     size_t new_size;
     wolfsentry_errcode_t ret;
 
-    if ((label_len == 0) || (label_len > WOLFSENTRY_MAX_LABEL_BYTES) || (label == NULL) || (event == NULL))
+    if ((label_len == 0) || (label == NULL) || (event == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (label_len < 0) {
+    if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+    else if (label_len < 0) {
         label_len = (int)strlen(label);
         if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);

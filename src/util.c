@@ -77,6 +77,8 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Supplied argument was invalid";
     case WOLFSENTRY_ERROR_ID_BUSY:
         return "A resource required to fulfill the request was unavailable because busy";
+    case WOLFSENTRY_ERROR_ID_INTERRUPTED:
+        return "Operation was interrupted by a signal";
     case WOLFSENTRY_ERROR_ID_NUMERIC_ARG_TOO_BIG:
         return "Numeric arg is impermissibly large";
     case WOLFSENTRY_ERROR_ID_NUMERIC_ARG_TOO_SMALL:
@@ -324,61 +326,100 @@ wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_context *wolfsentry,
 }
 
 wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwlock *lock) {
-  again:
-    if (sem_wait(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0) || (lock->read2write_waiter_count > 0)) {
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
+    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0)) {
+
         ++lock->read_waiter_count;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-        if (sem_wait(&lock->sem_read_waiters) < 0)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-        goto again;
-    } else if (lock->state == WOLFSENTRY_LOCK_UNLOCKED)
+
+        for (;;) {
+            int ret = sem_wait(&lock->sem_read_waiters);
+            if (ret == 0)
+                break;
+            else {
+                if (errno != EINTR)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            }
+        }
+
+        WOLFSENTRY_RETURN_OK;
+    }
+
+    if (lock->state == WOLFSENTRY_LOCK_UNLOCKED)
         lock->state = WOLFSENTRY_LOCK_SHARED;
+    else if (lock->state != WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+
     ++lock->shared_count;
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
     else
         WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
-    wolfsentry_errcode_t ret;
+wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
+    int ret;
 
-    (void)wolfsentry;
-
-  again:
     if (abs_timeout == NULL) {
         ret = sem_trywait(&lock->sem);
         if ((ret < 0) && (errno == EAGAIN))
             WOLFSENTRY_ERROR_RETURN(BUSY);
-    } else
-        ret = sem_wait(&lock->sem);
+    } else {
+        ret = sem_timedwait(&lock->sem, abs_timeout);
+        if (ret < 0) {
+            if (errno == ETIMEDOUT)
+                WOLFSENTRY_ERROR_RETURN(TIMED_OUT);
+            else if (errno == EINTR)
+                WOLFSENTRY_ERROR_RETURN(INTERRUPTED);
+        }
+    }
     if (ret < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0) || (lock->read2write_waiter_count > 0)) {
+
+    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0)) {
+
         if (abs_timeout == NULL) {
             if (sem_post(&lock->sem) < 0)
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
             else
                 WOLFSENTRY_ERROR_RETURN(BUSY);
         }
+
         ++lock->read_waiter_count;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
         if (sem_timedwait(&lock->sem_read_waiters, abs_timeout) < 0) {
-            wolfsentry_errcode_t ret2;
             if (errno == ETIMEDOUT)
                 ret = WOLFSENTRY_ERROR_ENCODE(TIMED_OUT);
+            else if (errno == EINTR)
+                ret = WOLFSENTRY_ERROR_ENCODE(INTERRUPTED);
             else
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
-            /* trap and retry for EINTR to avoid unnecessary failures. */
-            do {
-                WOLFSENTRY_WARN_ON_FAILURE_LIBC(ret2 = sem_wait(&lock->sem));
-            } while ((ret2 < 0) && (errno == EINTR));
-            if (ret2 < 0)
-                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+            /* note, recovery from timeout/interruption requires untimed and uninterruptible wait on lock->sem. */
+            for (;;) {
+                int ret2 = sem_wait(&lock->sem);
+                if (ret2 == 0)
+                    break;
+                else {
+                    if (errno != EINTR)
+                        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+                }
+            }
 
             /*
              * now that we own lock->sem, we can retry lock->sem_read_waiters,
@@ -388,17 +429,26 @@ wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_context *
             if (sem_trywait(&lock->sem_read_waiters) == 0) {
                 if (sem_post(&lock->sem) < 0)
                     WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-                goto again;
+                WOLFSENTRY_RETURN_OK;
             }
 
             --lock->read_waiter_count;
-            WOLFSENTRY_WARN_ON_FAILURE_LIBC(sem_post(&lock->sem));
+
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
             return ret;
         }
-        goto again;
-    } else if (lock->state == WOLFSENTRY_LOCK_UNLOCKED)
+        WOLFSENTRY_RETURN_OK;
+    }
+
+    if (lock->state == WOLFSENTRY_LOCK_UNLOCKED)
         lock->state = WOLFSENTRY_LOCK_SHARED;
+    else if (lock->state != WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+
     ++lock->shared_count;
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
     else
@@ -417,84 +467,125 @@ wolfsentry_errcode_t wolfsentry_lock_shared_timed(struct wolfsentry_context *wol
             return ret;
         if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
-        return wolfsentry_lock_shared_abstimed(wolfsentry, lock, &abs_timeout);
+        return wolfsentry_lock_shared_abstimed(lock, &abs_timeout);
     } else
-        return wolfsentry_lock_shared_abstimed(wolfsentry, lock, NULL);
+        return wolfsentry_lock_shared_abstimed(lock, NULL);
 }
 
 wolfsentry_errcode_t wolfsentry_lock_mutex(struct wolfsentry_rwlock *lock) {
-  again:
-    if (sem_wait(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
     if (lock->state != WOLFSENTRY_LOCK_UNLOCKED) {
+
         ++lock->write_waiter_count;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-        if (sem_wait(&lock->sem_write_waiters) < 0)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-        goto again;
+
+        for (;;) {
+            int ret = sem_wait(&lock->sem_write_waiters);
+            if (ret == 0)
+                break;
+            else {
+                if (errno != EINTR)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            }
+        }
+
+        WOLFSENTRY_RETURN_OK;
     }
+
     lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
     else
         WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
+wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
     wolfsentry_errcode_t ret;
 
-    (void)wolfsentry;
-
-  again:
     if (abs_timeout == NULL) {
         ret = sem_trywait(&lock->sem);
         if ((ret < 0) && (errno == EAGAIN))
             WOLFSENTRY_ERROR_RETURN(BUSY);
-    } else
-        ret = sem_wait(&lock->sem);
+    } else {
+        ret = sem_timedwait(&lock->sem, abs_timeout);
+        if (ret < 0) {
+            if (errno == ETIMEDOUT)
+                WOLFSENTRY_ERROR_RETURN(TIMED_OUT);
+            else if (errno == EINTR)
+                WOLFSENTRY_ERROR_RETURN(INTERRUPTED);
+        }
+    }
     if (ret < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
     if (lock->state != WOLFSENTRY_LOCK_UNLOCKED) {
         if (abs_timeout == NULL) {
             if (sem_post(&lock->sem) < 0)
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
             WOLFSENTRY_ERROR_RETURN(BUSY);
         }
+
         ++lock->write_waiter_count;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
         if (sem_timedwait(&lock->sem_write_waiters, abs_timeout) < 0) {
-            wolfsentry_errcode_t ret2;
             if (errno == ETIMEDOUT)
                 ret = WOLFSENTRY_ERROR_ENCODE(TIMED_OUT);
+            else if (errno == EINTR)
+                ret = WOLFSENTRY_ERROR_ENCODE(INTERRUPTED);
             else
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
-            /* trap and retry for EINTR to avoid unnecessary failures. */
-            do {
-                WOLFSENTRY_WARN_ON_FAILURE_LIBC(ret2 = sem_wait(&lock->sem));
-            } while ((ret2 < 0) && (errno == EINTR));
-            if (ret2 < 0)
-                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+            /* note, recovery from timeout/interruption requires untimed and uninterruptible wait on lock->sem. */
+            for (;;) {
+                int ret2 = sem_wait(&lock->sem);
+                if (ret2 == 0)
+                    break;
+                else {
+                    if (errno != EINTR)
+                        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+                }
+            }
 
             /*
              * now that we own lock->sem, we can retry lock->sem_write_waiters,
              * in case an unlock (and associated post to
-             * lock->sem_write_waiters) occured after a sem_timedwait() timeout.
+             * lock->sem_write_waiters) occured after a sem_timedwait() timeout
+             * but before this thread retook lock->sem.
              */
             if (sem_trywait(&lock->sem_write_waiters) == 0) {
                 if (sem_post(&lock->sem) < 0)
                     WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-                goto again;
+                WOLFSENTRY_RETURN_OK;
             }
 
             --lock->write_waiter_count;
-            WOLFSENTRY_WARN_ON_FAILURE_LIBC(sem_post(&lock->sem));
+
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
             return ret;
         }
-        goto again;
+
+        WOLFSENTRY_RETURN_OK;
     }
+
     lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
     else
@@ -513,34 +604,48 @@ wolfsentry_errcode_t wolfsentry_lock_mutex_timed(struct wolfsentry_context *wolf
             return ret;
         if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
-        return wolfsentry_lock_mutex_abstimed(wolfsentry, lock, &abs_timeout);
+        return wolfsentry_lock_mutex_abstimed(lock, &abs_timeout);
     } else
-        return wolfsentry_lock_mutex_abstimed(wolfsentry, lock, NULL);
+        return wolfsentry_lock_mutex_abstimed(lock, NULL);
 }
 
 wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock) {
     if (lock->state == WOLFSENTRY_LOCK_SHARED)
         WOLFSENTRY_ERROR_RETURN(ALREADY);
 
-    if (sem_wait(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
     if (lock->state != WOLFSENTRY_LOCK_EXCLUSIVE) {
-        WOLFSENTRY_WARN_ON_FAILURE_LIBC(sem_post(&lock->sem));
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
+
     lock->state = WOLFSENTRY_LOCK_SHARED;
     lock->shared_count = 1;
+
     if ((lock->write_waiter_count == 0) &&
         (lock->read_waiter_count > 0)) {
-        int i;
-        for (i = 0; i < lock->read_waiter_count; ++i) {
+        int read_waiter_count = lock->read_waiter_count;
+        lock->shared_count += lock->read_waiter_count;
+        lock->read_waiter_count = 0;
+        for (; read_waiter_count > 0; --read_waiter_count) {
             if (sem_post(&lock->sem_read_waiters) < 0)
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         }
-        lock->read_waiter_count = 0;
     }
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -552,36 +657,58 @@ wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock) {
     if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
         WOLFSENTRY_ERROR_RETURN(ALREADY);
-  again:
-    if (sem_wait(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
     if (lock->state != WOLFSENTRY_LOCK_SHARED) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
             WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
+
     if (lock->read2write_waiter_count > 0) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         WOLFSENTRY_ERROR_RETURN(BUSY);
     }
+
     if (lock->shared_count == 1) {
+
         lock->shared_count = 0;
         lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
         WOLFSENTRY_RETURN_OK;
     }
 
     ++lock->read2write_waiter_count;
+    ++lock->write_waiter_count; /* force shared lockers to wait. */
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if (sem_wait(&lock->sem_read2write_waiters) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    goto again;
 
-    /* not reached */
+    for (;;) {
+        int ret = sem_wait(&lock->sem_read2write_waiters);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
+    WOLFSENTRY_RETURN_OK;
 }
 
 /* a shared lock holder can use wolfsentry_lock_shared2mutex_reserve() to
@@ -594,21 +721,33 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct wolfsentry_rwlo
     if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
         WOLFSENTRY_ERROR_RETURN(ALREADY);
 
-    if (sem_wait(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
     if (lock->state != WOLFSENTRY_LOCK_SHARED) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
             WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
+
     if (lock->read2write_waiter_count > 0) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         WOLFSENTRY_ERROR_RETURN(BUSY);
     }
+
     ++lock->read2write_waiter_count;
+    /* note, not incrementing write_waiter_count, to allow shared lockers to get locks until the redemption phase. */
     ++lock->shared_count; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
 
@@ -616,12 +755,19 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct wolfsentry_rwlo
 }
 
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwlock *lock) {
-    int debited_reservation_from_shared_count = 0;
     if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
         WOLFSENTRY_ERROR_RETURN(ALREADY);
-  again:
-    if (sem_wait(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
     if (lock->state != WOLFSENTRY_LOCK_SHARED) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -629,26 +775,159 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwloc
             WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
 
-    if (! debited_reservation_from_shared_count) {
-        debited_reservation_from_shared_count = 1;
-        --lock->shared_count; /* reenable posts to sem_read2write_waiters by unlockers. */
-    }
+    --lock->shared_count; /* reenable posts to sem_read2write_waiters by unlockers. */
+    ++lock->write_waiter_count; /* and force shared lockers to wait. */
 
     if (lock->shared_count == 1) {
-        lock->shared_count = 0;
+
         lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
+        lock->shared_count = 0;
+        --lock->read2write_waiter_count;
+        --lock->write_waiter_count;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
         WOLFSENTRY_RETURN_OK;
     }
 
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if (sem_wait(&lock->sem_read2write_waiters) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    goto again;
 
-    /* not reached */
+    for (;;) {
+        int ret = sem_wait(&lock->sem_read2write_waiters);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+/* if this returns BUSY or TIMED_OUT, the caller still owns a reservation, and must either retry the redemption, or abandon the reservation. */
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed(struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
+    wolfsentry_errcode_t ret;
+
+    if (lock->state != WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+
+    if (abs_timeout == NULL) {
+        ret = sem_trywait(&lock->sem);
+        if ((ret < 0) && (errno == EAGAIN))
+            WOLFSENTRY_ERROR_RETURN(BUSY);
+    } else {
+        ret = sem_timedwait(&lock->sem, abs_timeout);
+        if (ret < 0) {
+            if (errno == ETIMEDOUT)
+                WOLFSENTRY_ERROR_RETURN(TIMED_OUT);
+            else if (errno == EINTR)
+                WOLFSENTRY_ERROR_RETURN(INTERRUPTED);
+        }
+    }
+    if (ret < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    if (lock->state != WOLFSENTRY_LOCK_SHARED) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+
+    if (lock->shared_count < 2) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+
+    if (lock->shared_count == 2) {
+
+        lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
+        lock->shared_count = 0;
+        --lock->read2write_waiter_count;
+
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+        WOLFSENTRY_RETURN_OK;
+    }
+
+    if (abs_timeout == NULL) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(BUSY);
+    }
+
+    --lock->shared_count; /* reenable posts to sem_read2write_waiters by unlockers. */
+    ++lock->write_waiter_count; /* and force shared lockers to wait. */
+
+    if (sem_post(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    if (sem_timedwait(&lock->sem_read2write_waiters, abs_timeout) < 0) {
+        if (errno == ETIMEDOUT)
+            ret = WOLFSENTRY_ERROR_ENCODE(TIMED_OUT);
+        else if (errno == EINTR)
+            ret = WOLFSENTRY_ERROR_ENCODE(INTERRUPTED);
+        else
+            ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
+
+        /* note, recovery from timeout/interruption requires untimed and uninterruptible wait on lock->sem. */
+        for (;;) {
+            int ret2 = sem_wait(&lock->sem);
+            if (ret2 == 0)
+                break;
+            else {
+                if (errno != EINTR)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            }
+        }
+
+        /*
+         * now that we own lock->sem, we can retry lock->sem_read2write_waiters,
+         * in case an unlock (and associated post to
+         * lock->sem_read2write_waiters) occured after a sem_timedwait()
+         * timeout but before this thread retook lock->sem.
+         */
+        if (sem_trywait(&lock->sem_read2write_waiters) == 0) {
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            WOLFSENTRY_RETURN_OK;
+        }
+
+        ++lock->shared_count; /* restore disabling posts to sem_read2write_waiters by unlockers. */
+        --lock->write_waiter_count; /* and allow shared lockers again. */
+
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            return ret;
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_timed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait) {
+    wolfsentry_time_t now;
+    struct timespec abs_timeout;
+    wolfsentry_errcode_t ret;
+
+    if (lock->state != WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+
+    if (max_wait < 0)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    else if (max_wait > 0) {
+        if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
+            return ret;
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
+            return ret;
+        return wolfsentry_lock_shared2mutex_redeem_abstimed(lock, &abs_timeout);
+    } else
+        return wolfsentry_lock_shared2mutex_redeem_abstimed(lock, NULL);
 }
 
 /* note caller still holds its shared lock after return. */
@@ -656,8 +935,16 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct wolfsentry_rwlo
     if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
         WOLFSENTRY_ERROR_RETURN(ALREADY);
 
-    if (sem_wait(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
     if (lock->state != WOLFSENTRY_LOCK_SHARED) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -674,39 +961,46 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct wolfsentry_rwlo
     WOLFSENTRY_RETURN_OK;
 }
 
-
-wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
+wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
     wolfsentry_errcode_t ret;
-
-    (void)wolfsentry;
 
     /* silently and cheaply tolerate repeat calls to _shared2mutex*(). */
     if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE)
         WOLFSENTRY_RETURN_OK;
 
-  again:
     if (abs_timeout == NULL) {
         ret = sem_trywait(&lock->sem);
         if ((ret < 0) && (errno == EAGAIN))
             WOLFSENTRY_ERROR_RETURN(BUSY);
-    } else
-        ret = sem_wait(&lock->sem);
+    } else {
+        ret = sem_timedwait(&lock->sem, abs_timeout);
+        if (ret < 0) {
+            if (errno == ETIMEDOUT)
+                WOLFSENTRY_ERROR_RETURN(TIMED_OUT);
+            else if (errno == EINTR)
+                WOLFSENTRY_ERROR_RETURN(INTERRUPTED);
+        }
+    }
     if (ret < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
     if (lock->state != WOLFSENTRY_LOCK_SHARED) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
+
     if (lock->read2write_waiter_count > 0) {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
             WOLFSENTRY_ERROR_RETURN(BUSY);
     }
+
     if (lock->shared_count == 1) {
         lock->shared_count = 0;
         lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
@@ -721,42 +1015,51 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_con
     }
 
     ++lock->read2write_waiter_count;
+    ++lock->write_waiter_count;
+
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
     if (sem_timedwait(&lock->sem_read2write_waiters, abs_timeout) < 0) {
-        wolfsentry_errcode_t ret2;
         if (errno == ETIMEDOUT)
             ret = WOLFSENTRY_ERROR_ENCODE(TIMED_OUT);
+        else if (errno == EINTR)
+            ret = WOLFSENTRY_ERROR_ENCODE(INTERRUPTED);
         else
             ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
-        /* trap and retry for EINTR to avoid unnecessary failures. */
-        do {
-            ret2 = sem_wait(&lock->sem);
-        } while ((ret2 < 0) && (errno == EINTR));
-        if (ret2 < 0)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+        for (;;) {
+            int ret2 = sem_wait(&lock->sem);
+            if (ret2 == 0)
+                break;
+            else {
+                if (errno != EINTR)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            }
+        }
 
         /*
          * now that we own lock->sem, we can retry lock->sem_read2write_waiters,
          * in case an unlock (and associated post to
          * lock->sem_read2write_waiters) occured after a sem_timedwait()
-         * timeout.
+         * timeout but before this thread retook lock->sem.
          */
         if (sem_trywait(&lock->sem_read2write_waiters) == 0) {
             if (sem_post(&lock->sem) < 0)
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-            goto again;
+            WOLFSENTRY_RETURN_OK;
         }
 
         --lock->read2write_waiter_count;
+        --lock->write_waiter_count;
+
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
             WOLFSENTRY_RETURN_OK;
     }
-    goto again;
 
-    /* not reached */
+    WOLFSENTRY_RETURN_OK;
 }
 
 wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait) {
@@ -775,9 +1078,9 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_contex
             return ret;
         if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
-        return wolfsentry_lock_shared2mutex_abstimed(wolfsentry, lock, &abs_timeout);
+        return wolfsentry_lock_shared2mutex_abstimed(lock, &abs_timeout);
     } else
-        return wolfsentry_lock_shared2mutex_abstimed(wolfsentry, lock, NULL);
+        return wolfsentry_lock_shared2mutex_abstimed(lock, NULL);
 }
 
 wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock) {
@@ -809,8 +1112,11 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock) {
     if (lock->state == WOLFSENTRY_LOCK_SHARED) {
         if (--lock->shared_count == 0)
             lock->state = WOLFSENTRY_LOCK_UNLOCKED;
-        else if ((lock->read2write_waiter_count > 0) && (lock->shared_count == 1)) {
+        else if ((lock->shared_count == 1) && (lock->read2write_waiter_count > 0)) {
+            lock->shared_count = 0;
             --lock->read2write_waiter_count;
+            --lock->write_waiter_count;
+            lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
             if (sem_post(&lock->sem_read2write_waiters) < 0)
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
             else
@@ -827,6 +1133,7 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock) {
     if (lock->write_waiter_count > 0)  {
         if (lock->state == WOLFSENTRY_LOCK_UNLOCKED) {
             --lock->write_waiter_count;
+            lock->state = WOLFSENTRY_LOCK_EXCLUSIVE;
             if (sem_post(&lock->sem_write_waiters) < 0) {
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
                 goto out;
@@ -834,13 +1141,15 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock) {
         }
     } else if (lock->read_waiter_count > 0) {
         int i;
-        for (i = 0; i < lock->read_waiter_count; ++i) {
+        lock->shared_count = lock->read_waiter_count;
+        lock->read_waiter_count = 0;
+        lock->state = WOLFSENTRY_LOCK_SHARED;
+        for (i = 0; i < lock->shared_count; ++i) {
             if (sem_post(&lock->sem_read_waiters) < 0) {
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
                 goto out;
             }
         }
-        lock->read_waiter_count = 0;
     }
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
@@ -860,7 +1169,7 @@ wolfsentry_errcode_t wolfsentry_context_lock_shared(
 wolfsentry_errcode_t wolfsentry_context_lock_shared_abstimed(
     struct wolfsentry_context *wolfsentry,
     struct timespec *abs_timeout) {
-    return wolfsentry_lock_shared_abstimed(wolfsentry, &wolfsentry->lock, abs_timeout);
+    return wolfsentry_lock_shared_abstimed(&wolfsentry->lock, abs_timeout);
 }
 
 wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
@@ -877,13 +1186,40 @@ wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex(
 wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex_abstimed(
     struct wolfsentry_context *wolfsentry,
     struct timespec *abs_timeout) {
-    return wolfsentry_lock_shared2mutex_abstimed(wolfsentry, &wolfsentry->lock, abs_timeout);
+    return wolfsentry_lock_shared2mutex_abstimed(&wolfsentry->lock, abs_timeout);
 }
 
 wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex_timed(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_time_t max_wait) {
     return wolfsentry_lock_shared2mutex_timed(wolfsentry, &wolfsentry->lock, max_wait);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex_reserve(
+    struct wolfsentry_context *wolfsentry) {
+    return wolfsentry_lock_shared2mutex_reserve(&wolfsentry->lock);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex_redeem(
+    struct wolfsentry_context *wolfsentry) {
+    return wolfsentry_lock_shared2mutex_redeem(&wolfsentry->lock);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex_redeem_abstimed(
+    struct wolfsentry_context *wolfsentry,
+    struct timespec *abs_timeout) {
+    return wolfsentry_lock_shared2mutex_redeem_abstimed(&wolfsentry->lock, abs_timeout);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex_redeem_timed(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_time_t max_wait) {
+    return wolfsentry_lock_shared2mutex_redeem_timed(wolfsentry, &wolfsentry->lock, max_wait);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex_abandon(
+    struct wolfsentry_context *wolfsentry) {
+    return wolfsentry_lock_shared2mutex_abandon(&wolfsentry->lock);
 }
 
 wolfsentry_errcode_t wolfsentry_context_lock_mutex(
@@ -894,7 +1230,7 @@ wolfsentry_errcode_t wolfsentry_context_lock_mutex(
 wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed(
     struct wolfsentry_context *wolfsentry,
     struct timespec *abs_timeout) {
-    return wolfsentry_lock_mutex_abstimed(wolfsentry, &wolfsentry->lock, abs_timeout);
+    return wolfsentry_lock_mutex_abstimed(&wolfsentry->lock, abs_timeout);
 }
 
 wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed(
@@ -1191,11 +1527,16 @@ wolfsentry_errcode_t wolfsentry_init(
 
     memset(*wolfsentry, 0, sizeof **wolfsentry);
 
+    if ((ret = wolfsentry_lock_init(&(*wolfsentry)->lock, 0 /* pshared */)) < 0)
+        goto out;
+
     (*wolfsentry)->allocator = *allocator;
     (*wolfsentry)->timecbs = *timecbs;
 
     if ((ret = wolfsentry_eventconfig_load(config, &(*wolfsentry)->config)) < 0)
         goto out;
+
+    (*wolfsentry)->config_at_creation = (*wolfsentry)->config;
 
     (*wolfsentry)->events.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_event_key_cmp;
     (*wolfsentry)->events.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_event_drop_reference;
@@ -1228,7 +1569,7 @@ wolfsentry_errcode_t wolfsentry_init(
     return ret;
 }
 
-wolfsentry_errcode_t wolfsentry_shutdown(struct wolfsentry_context **wolfsentry) {
+wolfsentry_errcode_t wolfsentry_context_free(struct wolfsentry_context **wolfsentry) {
     wolfsentry_free_cb_t free_cb = (*wolfsentry)->allocator.free;
 
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_static.header));
@@ -1236,7 +1577,59 @@ wolfsentry_errcode_t wolfsentry_shutdown(struct wolfsentry_context **wolfsentry)
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->actions.header));
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->events.header));
 
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_lock_destroy(&(*wolfsentry)->lock));
+
     free_cb((*wolfsentry)->allocator.context, *wolfsentry);
     *wolfsentry = NULL;
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_shutdown(struct wolfsentry_context **wolfsentry) {
+    return wolfsentry_context_free(wolfsentry);
+}
+
+/* caller must have read lock and read2write reservation on context, and hold
+ * onto it until either redeeming the reservation and exchanging in the cloned
+ * context, or abandoning the reservation and the clone.
+ */
+wolfsentry_errcode_t wolfsentry_context_clone(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_context **clone,
+    wolfsentry_context_clone_flags_t flags)
+{
+    wolfsentry_errcode_t ret;
+
+    WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING); // WIP
+
+    if ((*clone = WOLFSENTRY_MALLOC(sizeof **clone)) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    memset(*clone, 0, sizeof **clone);
+
+    **clone = *wolfsentry;
+
+    if ((ret = wolfsentry_lock_init(&wolfsentry->lock, 0 /* pshared */)) < 0)
+        goto out;
+
+
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CONTEXT_CLONE_FLAG_AS_AT_CREATION))
+        (*clone)->config = (*clone)->config_at_creation = wolfsentry->config_at_creation;
+    else {
+        (*clone)->config = wolfsentry->config;
+        (*clone)->config_at_creation = wolfsentry->config_at_creation;
+    }
+
+    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+  out:
+
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolfsentry1, struct wolfsentry_context *wolfsentry2) {
+    WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING); // WIP
+
+    if (memcmp(&wolfsentry1->allocator, &wolfsentry2->allocator, sizeof wolfsentry1->allocator))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     WOLFSENTRY_RETURN_OK;
 }

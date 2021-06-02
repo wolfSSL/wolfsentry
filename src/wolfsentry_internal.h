@@ -23,6 +23,8 @@
 #ifndef WOLFSENTRY_INTERNAL_H
 #define WOLFSENTRY_INTERNAL_H
 
+#define BUILDING_LIBWOLFSENTRY
+
 #include "wolfsentry/wolfsentry.h"
 #include "wolfsentry/wolfsentry_util.h"
 
@@ -115,7 +117,7 @@ struct wolfsentry_action {
     struct wolfsentry_table_ent_header header;
     wolfsentry_action_callback_t handler;
     void *handler_arg;
-    wolfsentry_action_flags_t flags;
+    wolfsentry_action_flags_t flags, flags_at_creation;
     byte label_len;
     char label[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE];
 };
@@ -217,7 +219,7 @@ struct wolfsentry_context {
         void *mk_id_cb_arg;
         wolfsentry_ent_id_t id_counter;
     } mk_id_cb_state;
-    struct wolfsentry_eventconfig_internal config;
+    struct wolfsentry_eventconfig_internal config, config_at_creation;
     struct wolfsentry_event_table events;
     struct wolfsentry_action_table actions;
     struct wolfsentry_route_table routes_static;

@@ -20,6 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#define BUILDING_LIBWOLFSENTRY
+
 #include "wolfsentry/wolfsentry_json.h"
 #include "wolfsentry/wolfsentry_util.h"
 
@@ -142,7 +144,7 @@ struct json_process_state {
     wolfsentry_action_res_t default_policy_dynamic;
 
     JSON_PARSER parser;
-    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_context *wolfsentry_actual, *wolfsentry;
 
     union {
         struct {
@@ -925,7 +927,7 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
     wolfsentry_config_load_flags_t load_flags,
     struct json_process_state **jps)
 {
-    int ret;
+    wolfsentry_errcode_t ret;
     static const JSON_CALLBACKS json_callbacks = {
         .process = (int (*)(JSON_TYPE,  const char *, size_t,  void *))json_process
     };
@@ -941,29 +943,48 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
         .wolfsentry_context = wolfsentry
     };
 
-    (void)load_flags;
-
     if (wolfsentry == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if ((*jps = (struct json_process_state *)wolfsentry_malloc(wolfsentry, sizeof **jps)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memset(*jps, 0, sizeof **jps);
-    (*jps)->wolfsentry = wolfsentry;
+    (*jps)->wolfsentry_actual = wolfsentry;
+    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT))
+        (*jps)->wolfsentry = wolfsentry;
+    else {
+        ret = wolfsentry_context_clone(
+            wolfsentry,
+            &(*jps)->wolfsentry,
+            WOLFSENTRY_CHECK_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH)
+            ? WOLFSENTRY_CONTEXT_CLONE_FLAG_NONE
+            : WOLFSENTRY_CONTEXT_CLONE_FLAG_AS_AT_CREATION);
+        if (ret < 0)
+            goto out;
+    }
 
     ret = json_init(&(*jps)->parser,
                     &json_callbacks,
                     &json_config,
                     *jps);
     if (ret != JSON_ERR_SUCCESS) {
-        wolfsentry_free(wolfsentry, *jps);
-        *jps = NULL;
         if (ret == JSON_ERR_OUTOFMEMORY)
-            WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+            ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
         else
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
+        goto out;
     }
 
-    WOLFSENTRY_RETURN_OK;
+  out:
+
+    if (ret < 0) {
+        if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT) &&
+            ((*jps)->wolfsentry != NULL))
+            (void)wolfsentry_context_free(&(*jps)->wolfsentry);
+        wolfsentry_free(wolfsentry, *jps);
+        *jps = NULL;
+        return ret;
+    } else
+        WOLFSENTRY_RETURN_OK;
 }
 
 /* use this to initialize configuration with nonzero route_private_data_size and
@@ -1020,17 +1041,40 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
     char *err_buf,
     size_t err_buf_size)
 {
+    wolfsentry_errcode_t ret;
     JSON_INPUT_POS json_pos;
-    int ret = json_fini(&jps->parser, &json_pos);
-    wolfsentry_free(jps->wolfsentry, jps);
+    ret = json_fini(&jps->parser, &json_pos);
     if (ret != JSON_ERR_SUCCESS) {
         if (err_buf != NULL)
             snprintf(err_buf, err_buf_size, "json_fini failed at offset %zu, L%u, col %u, with code %d: %s.",
                      json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_error_str(ret));
-        WOLFSENTRY_ERROR_RETURN(CONFIG_PARSER);
+        ret = WOLFSENTRY_ERROR_ENCODE(CONFIG_PARSER);
+        goto out;
     }
 
-    WOLFSENTRY_RETURN_OK;
+    if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN)) {
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        goto out;
+    }
+
+    if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
+        ret = wolfsentry_context_exchange(jps->wolfsentry_actual, jps->wolfsentry);
+        if (ret < 0)
+            goto out;
+        (void)wolfsentry_context_free(&jps->wolfsentry);
+    }
+
+  out:
+
+    if (jps->wolfsentry && (jps->wolfsentry != jps->wolfsentry_actual))
+        (void)wolfsentry_context_free(&jps->wolfsentry);
+
+    wolfsentry_free(jps->wolfsentry_actual, jps);
+
+    if (ret < 0)
+        return ret;
+    else
+        WOLFSENTRY_RETURN_OK;
 }
 
 wolfsentry_errcode_t wolfsentry_config_json_oneshot(

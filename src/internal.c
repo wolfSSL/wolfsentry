@@ -217,6 +217,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete(struct wolfsentry_context *wolf
             }
             WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
         }
+        i = i->next;
     }
     WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
 }

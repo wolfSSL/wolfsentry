@@ -36,37 +36,38 @@
 
 typedef enumint_t wolfsentry_config_load_flags_t;
 enum {
-    WOLFSENTRY_CONFIG_LOAD_FLAG_NONE = 0,
-    WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH = 1 << 0,
-    WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN = 1 << 1
+    WOLFSENTRY_CONFIG_LOAD_FLAG_NONE             = 0U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH         = 1U << 0U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN          = 1U << 1U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT = 1U << 2U
 };
 
 struct json_process_state;
 
-wolfsentry_errcode_t wolfsentry_config_json_init(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_config_load_flags_t load_flags,
     struct json_process_state **jps);
 
-wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
     struct json_process_state *jps,
     struct wolfsentry_eventconfig *config);
 
-wolfsentry_errcode_t wolfsentry_config_json_feed(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
     struct json_process_state *jps,
     const char *json_in,
     size_t json_in_len,
     char *err_buf,
     size_t err_buf_size);
 
-wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct json_process_state *jps, int *json_errcode, const char **json_errmsg);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct json_process_state *jps, int *json_errcode, const char **json_errmsg);
 
-wolfsentry_errcode_t wolfsentry_config_json_fini(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
     struct json_process_state *jps,
     char *err_buf,
     size_t err_buf_size);
 
-wolfsentry_errcode_t wolfsentry_config_json_oneshot(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     struct wolfsentry_context *wolfsentry,
     const char *json_in,
     size_t json_in_len,

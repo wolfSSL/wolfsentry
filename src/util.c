@@ -339,7 +339,7 @@ wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_rwlock *lock, int ps
     if (sem_init(&lock->sem, pshared, 0 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if (sem_post(&lock->sem) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
     if (sem_init(&lock->sem_read_waiters, pshared, 0 /* value */) < 0) {
         ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
         goto free_sem;

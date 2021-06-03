@@ -246,11 +246,24 @@ wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
  */
 static int darwin_sem_init(sem_t *sem, int pshared, unsigned int value)
 {
-    dispatch_semaphore_t new_sem = dispatch_semaphore_create(value);
-    (void)pshared;
+    dispatch_semaphore_t new_sem;
+    if (pshared) {
+        errno = ENOSYS;
+        return -1;
+    }
+    if (value != 0) {
+        /* note, dispatch_release() fails hard, with Trace/BPT trap signal, if
+         * the sem's internal count is less than the value passed in with
+         * dispatch_semaphore_create().  force init with zero count to prevent
+         * this from happening.
+         */
+        errno = EINVAL;
+        return -1;
+    }
+    new_sem = dispatch_semaphore_create(value);
     if (new_sem == NULL) {
         errno = ENOMEM;
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+        return -1;
     }
     *sem = new_sem;
     return 0;
@@ -260,8 +273,8 @@ static int darwin_sem_init(sem_t *sem, int pshared, unsigned int value)
 static int darwin_sem_post(sem_t *sem)
 {
     if (dispatch_semaphore_signal(*sem) < 0) {
-        errno = EFAULT; /* need to set something. */
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        errno = EINVAL;
+        return -1;
     } else
         return 0;
 }
@@ -272,7 +285,7 @@ static int darwin_sem_wait(sem_t *sem)
     if (dispatch_semaphore_wait(*sem, DISPATCH_TIME_FOREVER) == 0)
         return 0;
     else {
-        errno = EFAULT;
+        errno = EINVAL;
         return -1;
     }
 }
@@ -304,7 +317,13 @@ static int darwin_sem_destroy(sem_t *sem)
         errno = EINVAL;
         return -1;
     }
-    dispatch_release(*sem); /* note this fails hard, with Trace/BPT trap signal, if the sem isn't waitable. */
+
+    /* note, dispatch_release() fails hard, with Trace/BPT trap signal, if the
+     * sem's internal count is less than the value passed in with
+     * dispatch_semaphore_create().  but this can't happen if the sem is inited
+     * with value 0, hence forcing that value in darwin_sem_init() above.
+     */
+    dispatch_release(*sem);
     *sem = NULL;
     return 0;
 }
@@ -317,7 +336,9 @@ wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_rwlock *lock, int ps
 
     memset(lock,0,sizeof *lock);
 
-    if (sem_init(&lock->sem, pshared, 1 /* value */) < 0)
+    if (sem_init(&lock->sem, pshared, 0 /* value */) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if (sem_init(&lock->sem_read_waiters, pshared, 0 /* value */) < 0) {
         ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
@@ -384,8 +405,6 @@ wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock) {
         else
             WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
-
-    (void)sem_post(&lock->sem);
 
     if (sem_destroy(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);

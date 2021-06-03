@@ -56,13 +56,13 @@ ifndef OPTIM
     OPTIM := -O3
 endif
 
-CC_V := $(shell $(CC) -v 2>&1 | (read -d '' CC_V; echo "$${CC_V@Q}"))
+CC_V := $(shell $(CC) -v 2>&1 | sed "s/'/'\\\\''/g")
 
-CC_IS_GCC := $(shell if echo $(CC_V) | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
+CC_IS_GCC := $(shell if echo '$(CC_V)' | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
 
-AR_VERSION := $(shell $(AR) --version 2>&1 | (read -d '' AR_VERSION; echo "$${AR_VERSION@Q}"))
+AR_VERSION := $(shell $(AR) --version 2>&1 | sed "s/'/'\\\\''/g")
 
-AR_IS_GNU_AR := $(shell if echo $(AR_VERSION) | grep -q 'GNU'; then echo 1; else echo 0; fi)
+AR_IS_GNU_AR := $(shell if echo '$(AR_VERSION)' | grep -q 'GNU'; then echo 1; else echo 0; fi)
 
 ifndef C_WARNFLAGS
     C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast -Wno-type-limits
@@ -129,7 +129,7 @@ all: $(BUILD_TOP)/$(DYNLIB_NAME)
 endif
 
 #https://stackoverflow.com/questions/3236145/force-gnu-make-to-rebuild-objects-affected-by-compiler-definition/3237349#3237349
-BUILD_PARAMS := (echo 'CC_V:'; echo $(CC_V); echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS) $(VISIBILITY_CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo $(AR_VERSION); echo 'ARFLAGS: $(AR_FLAGS)')
+BUILD_PARAMS := (echo 'CC_V:'; echo '$(CC_V)'; echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS) $(VISIBILITY_CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo '$(AR_VERSION)'; echo 'ARFLAGS: $(AR_FLAGS)')
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force

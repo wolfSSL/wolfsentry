@@ -302,7 +302,7 @@ clean:
 ifdef VERY_QUIET
 	@rm $(CLEAN_RM_ARGS)
 else
-	rm $(CLEAN_RM_ARGS)
+	@rm $(CLEAN_RM_ARGS) && echo 'cleaned all targets and ephemera in $(BUILD_TOP).'
 endif
 	@[ "$(BUILD_TOP)" != "." ] && find $(BUILD_TOP) -depth -type d 2>/dev/null | xargs rmdir 2>/dev/null || exit 0
 

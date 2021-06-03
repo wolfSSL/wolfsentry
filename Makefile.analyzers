@@ -80,16 +80,16 @@ else
 	@echo "sanitize address, leak, undefined, float-cast-overflow, and float-divide-by-zero"
 	@echo "================================================================================"
 endif
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
 	@echo
 	@echo "sanitize thread"
 	@echo "==============="
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
 	@echo
 	@echo "sanitizers found no defects."
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean
 
 
 .PHONY: valgrind-all-gcc

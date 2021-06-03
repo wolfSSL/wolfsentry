@@ -222,8 +222,6 @@ wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
 
 #ifdef WOLFSENTRY_THREADSAFE
 
-#include <errno.h>
-
 /* this lock facility depends on POSIX-compliant (counting, async-signal-safe)
  * implementations of sem_{init,post,wait,timedwait,trywait,destroy}(),
  * which can be native, or shims to native facilities.
@@ -237,7 +235,16 @@ wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
  * FreeRTOS).
  */
 
+#ifdef WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
+#include <errno.h>
+#endif
+
+#ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+
 #ifdef __MACH__
+
+#include <errno.h>
+
 /* Apple style dispatch semaphores -- this uses the only unnamed semaphore
  * facility available in Darwin since POSIX sem_* deprecation.  see
  * https://stackoverflow.com/questions/27736618/why-are-sem-init-sem-getvalue-sem-destroy-deprecated-on-mac-os-x-and-w
@@ -329,7 +336,13 @@ static int darwin_sem_destroy(sem_t *sem)
 }
 #define sem_destroy darwin_sem_destroy
 
+#else
+
+#error semaphore shim set missing for target
+
 #endif
+
+#endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
 wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_rwlock *lock, int pshared) {
     wolfsentry_errcode_t ret;
@@ -1715,7 +1728,6 @@ wolfsentry_errcode_t wolfsentry_context_clone(
     if ((ret = wolfsentry_lock_init(&wolfsentry->lock, 0 /* pshared */)) < 0)
         goto out;
 
-
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CONTEXT_CLONE_FLAG_AS_AT_CREATION))
         (*clone)->config = (*clone)->config_at_creation = wolfsentry->config_at_creation;
     else {
@@ -1726,6 +1738,10 @@ wolfsentry_errcode_t wolfsentry_context_clone(
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
   out:
+
+    if ((ret < 0) && (*clone != NULL)) {
+        WOLFSENTRY_FREE(*clone);
+    }
 
     return ret;
 }

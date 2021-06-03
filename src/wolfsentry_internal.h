@@ -38,8 +38,6 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #ifdef WOLFSENTRY_THREADSAFE
 
-#ifdef WOLFSENTRY_HAVE_POSIX_SEMAPHORES
-
 #ifdef WOLFSENTRY_LOCK_DEBUGGING
 struct wolfsentry_thread_list_ent {
     struct wolfsentry_list_ent_header header;
@@ -54,10 +52,20 @@ struct wolfsentry_thread_list {
 
 #endif
 
+#ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+
 #ifdef __MACH__
+
 #include <dispatch/dispatch.h>
 #define sem_t dispatch_semaphore_t
+
+#else
+
+#error semaphore shim set missing for target
+
 #endif
+
+#endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
 struct wolfsentry_rwlock {
     sem_t sem;
@@ -77,8 +85,6 @@ struct wolfsentry_rwlock {
     struct wolfsentry_thread_list lock_holders;
 #endif
 };
-
-#endif
 
 #endif /* WOLFSENTRY_THREADSAFE */
 

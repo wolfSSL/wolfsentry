@@ -54,6 +54,11 @@ struct wolfsentry_thread_list {
 
 #endif
 
+#ifdef __MACH__
+#include <dispatch/dispatch.h>
+#define sem_t dispatch_semaphore_t
+#endif
+
 struct wolfsentry_rwlock {
     sem_t sem;
     sem_t sem_read_waiters;

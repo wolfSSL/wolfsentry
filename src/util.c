@@ -225,7 +225,7 @@ wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
 #include <errno.h>
 
 /* this lock facility depends on POSIX-compliant (counting, async-signal-safe)
- * implementations of sem_{init,post,wait,timedwait,trywait,getvalue,destroy}(),
+ * implementations of sem_{init,post,wait,timedwait,trywait,destroy}(),
  * which can be native, or shims to native facilities.
  */
 
@@ -237,17 +237,117 @@ wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
  * FreeRTOS).
  */
 
+#ifdef __MACH__
+/* Apple style dispatch semaphores -- this uses the only unnamed semaphore
+ * facility available in Darwin since POSIX sem_* deprecation.  see
+ * https://stackoverflow.com/questions/27736618/why-are-sem-init-sem-getvalue-sem-destroy-deprecated-on-mac-os-x-and-w
+ *
+ * note, experimentally, dispatch_semaphore_wait() is not interrupted by handled signals.
+ */
+static int darwin_sem_init(sem_t *sem, int pshared, unsigned int value)
+{
+    dispatch_semaphore_t new_sem = dispatch_semaphore_create(value);
+    (void)pshared;
+    if (new_sem == NULL) {
+        errno = ENOMEM;
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    }
+    *sem = new_sem;
+    return 0;
+}
+#define sem_init darwin_sem_init
+
+static int darwin_sem_post(sem_t *sem)
+{
+    if (dispatch_semaphore_signal(*sem) < 0) {
+        errno = EFAULT; /* need to set something. */
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    } else
+        return 0;
+}
+#define sem_post darwin_sem_post
+
+static int darwin_sem_wait(sem_t *sem)
+{
+    if (dispatch_semaphore_wait(*sem, DISPATCH_TIME_FOREVER) == 0)
+        return 0;
+    else {
+        errno = EFAULT;
+        return -1;
+    }
+}
+#define sem_wait darwin_sem_wait
+
+static int darwin_sem_timedwait(sem_t *sem, struct timespec *abs_timeout) {
+    if (dispatch_semaphore_wait(*sem, dispatch_walltime(abs_timeout, 0)) == 0)
+        return 0;
+    else {
+        errno = ETIMEDOUT;
+        return -1;
+    }
+}
+#define sem_timedwait darwin_sem_timedwait
+
+static int darwin_sem_trywait(sem_t *sem) {
+    if (dispatch_semaphore_wait(*sem, DISPATCH_TIME_NOW) == 0)
+        return 0;
+    else {
+        errno = EAGAIN;
+        return -1;
+    }
+}
+#define sem_trywait darwin_sem_trywait
+
+static int darwin_sem_destroy(sem_t *sem)
+{
+    if (*sem == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    dispatch_release(*sem); /* note this fails hard, with Trace/BPT trap signal, if the sem isn't waitable. */
+    *sem = NULL;
+    return 0;
+}
+#define sem_destroy darwin_sem_destroy
+
+#endif
+
 wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_rwlock *lock, int pshared) {
+    wolfsentry_errcode_t ret;
+
     memset(lock,0,sizeof *lock);
+
     if (sem_init(&lock->sem, pshared, 1 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
-    if (sem_init(&lock->sem_read_waiters, pshared, 0 /* value */) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    if (sem_init(&lock->sem_read_waiters, pshared, 0 /* value */) < 0) {
+        ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
+        goto free_sem;
+    }
+    if (sem_init(&lock->sem_write_waiters, pshared, 0 /* value */) < 0) {
+        ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
+        goto free_read_waiters;
+    }
+    if (sem_init(&lock->sem_read2write_waiters, pshared, 0 /* value */) < 0) {
+        ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
+        goto free_write_waiters;
+    }
+
+    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    goto out;
+
+  free_write_waiters:
     if (sem_init(&lock->sem_write_waiters, pshared, 0 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
-    if (sem_init(&lock->sem_read2write_waiters, pshared, 0 /* value */) < 0)
+  free_read_waiters:
+    if (sem_init(&lock->sem_read_waiters, pshared, 0 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
-    WOLFSENTRY_RETURN_OK;
+  free_sem:
+    if (sem_init(&lock->sem, pshared, 1 /* value */) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+
+  out:
+
+    return ret;
 }
 
 wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock **lock, int pshared) {
@@ -263,7 +363,7 @@ wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_context *wolfsentry
 }
 
 wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock) {
-    int ret, val;
+    int ret;
     do {
         ret = sem_trywait(&lock->sem);
     } while ((ret < 0) && (errno == EINTR));
@@ -285,32 +385,15 @@ wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock) {
             WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
 
-    if (sem_getvalue(&lock->sem_read_waiters, &val) < 0)
+    (void)sem_post(&lock->sem);
+
+    if (sem_destroy(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if (val > 0)
-        WOLFSENTRY_WARN("lock->sem_read_waiters = %d\n",ret);
     if (sem_destroy(&lock->sem_read_waiters) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-
-    if (sem_getvalue(&lock->sem_write_waiters, &val) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if (val > 0)
-        WOLFSENTRY_WARN("lock->sem_write_waiters = %d\n",ret);
     if (sem_destroy(&lock->sem_write_waiters) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-
-    if (sem_getvalue(&lock->sem_read2write_waiters, &val) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if (val > 0)
-        WOLFSENTRY_WARN("lock->sem_read2write_waiters = %d\n",ret);
     if (sem_destroy(&lock->sem_read2write_waiters) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-
-    if (sem_getvalue(&lock->sem, &val) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if (val > 0)
-        WOLFSENTRY_WARN("lock->sem = %d\n",ret);
-    if (sem_destroy(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
 
     WOLFSENTRY_RETURN_OK;
@@ -332,7 +415,10 @@ wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwlock *lock) {
             break;
         else {
             if (errno != EINTR)
+{
+fprintf(stderr,"sem_wait failed with %s\n",strerror(errno));
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+}
         }
     }
 

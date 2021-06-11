@@ -50,6 +50,10 @@
 
 #define WOLFSENTRY_BITS_TO_BYTES(x) (((x) + 7) >> 3)
 
+/* helpers for stringifying the expanded value of a macro argument rather than its literal text: */
+#define _qq(x) #x
+#define _q(x) _qq(x)
+
 #ifdef WOLFSENTRY_THREADSAFE
 
 #ifdef WOLFSENTRY_HAVE_GNU_ATOMICS

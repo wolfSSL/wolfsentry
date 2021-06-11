@@ -371,7 +371,7 @@ static wolfsentry_errcode_t wolfsentry_route_new(
     /* extra_ports storage will go here. */
 
     if (config->config.route_private_data_alignment == 0)
-        *new = WOLFSENTRY_MALLOC(new_size);
+        *new = (struct wolfsentry_route *)WOLFSENTRY_MALLOC(new_size);
     else
         *new = WOLFSENTRY_MEMALIGN(config->config.route_private_data_alignment, new_size);
     if (*new == NULL)
@@ -379,6 +379,47 @@ static wolfsentry_errcode_t wolfsentry_route_new(
     return wolfsentry_route_init(parent_event, remote, local, flags, (int)config->config.route_private_data_size, (int)(new_size - offsetof(struct wolfsentry_route, data)), *new);
 
     return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_route_clone(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header * const src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header ** const new_ent,
+    wolfsentry_clone_flags_t flags)
+{
+    struct wolfsentry_route * const src_route = (struct wolfsentry_route * const)src_ent;
+    struct wolfsentry_route ** const new_route = (struct wolfsentry_route ** const)new_ent;
+    struct wolfsentry_eventconfig_internal *config = (src_route->parent_event && src_route->parent_event->config) ? src_route->parent_event->config : &src_context->config;
+    size_t new_size;
+
+    (void)flags;
+
+    new_size = WOLFSENTRY_BITS_TO_BYTES((size_t)src_route->remote.addr_len) + WOLFSENTRY_BITS_TO_BYTES((size_t)src_route->local.addr_len);
+    if (new_size > (size_t)(uint16_t)~0UL)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+    new_size += offsetof(struct wolfsentry_route, data);
+    new_size += config->config.route_private_data_size;
+    if (new_size & 1)
+        ++new_size;
+    /* extra_ports storage will go here. */
+
+    if ((*new_route = dest_context->allocator.malloc(dest_context->allocator.context, new_size)) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    memcpy(*new_route, src_route, new_size);
+    WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
+
+    if (src_route->parent_event) {
+        wolfsentry_errcode_t ret;
+        (*new_route)->parent_event = src_route->parent_event;
+        if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&(*new_route)->parent_event)) < 0) {
+            dest_context->allocator.free(dest_context->allocator.context, *new_route);
+            return ret;
+        }
+        WOLFSENTRY_REFCOUNT_INCREMENT((*new_route)->parent_event->header.refcount);
+    }
+
+    WOLFSENTRY_RETURN_OK;
 }
 
 static wolfsentry_errcode_t wolfsentry_route_insert_1(
@@ -432,7 +473,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
         ret = wolfsentry_action_list_dispatch(
             wolfsentry,
             caller_arg,
-            &route->parent_event->insert_event->action_list,
+            route->parent_event->insert_event,
             trigger_event,
             WOLFSENTRY_ACTION_TYPE_INSERT,
             route_table,
@@ -696,7 +737,7 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
         ret = wolfsentry_action_list_dispatch(
             wolfsentry,
             caller_arg,
-            &route->parent_event->delete_event->action_list,
+            route->parent_event->delete_event,
             trigger_event,
             WOLFSENTRY_ACTION_TYPE_DELETE,
             route_table,
@@ -883,7 +924,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
                                        wolfsentry,
                                        caller_arg,
-                                       &trigger_event->action_list,
+                                       trigger_event,
                                        trigger_event,
                                        WOLFSENTRY_ACTION_TYPE_POST,
                                        route_table,
@@ -897,7 +938,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
                                        wolfsentry,
                                        caller_arg,
-                                       &route->parent_event->match_event->action_list,
+                                       route->parent_event->match_event,
                                        trigger_event,
                                        WOLFSENTRY_ACTION_TYPE_MATCH,
                                        route_table,
@@ -1017,7 +1058,7 @@ wolfsentry_errcode_t wolfsentry_route_event_dispatch(
             ret = wolfsentry_action_list_dispatch(
                 wolfsentry,
                 caller_arg,
-                &parent_event->action_list,
+                parent_event,
                 parent_event,
                 WOLFSENTRY_ACTION_TYPE_POST,
                 route_table,
@@ -1122,6 +1163,21 @@ static wolfsentry_errcode_t check_if_route_expired(struct check_if_route_expired
         return 0;
 }
 
+static wolfsentry_errcode_t wolfsentry_route_delete_for_filter(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    wolfsentry_action_res_t *action_results)
+{
+    return wolfsentry_route_delete_0(
+        wolfsentry,
+        NULL /* caller_arg */,
+        (struct wolfsentry_route_table *)route->header.parent_table,
+        NULL /* trigger_event */,
+        route,
+        action_results
+        );
+}
+
 wolfsentry_errcode_t wolfsentry_route_stale_purge(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route_table *table)
@@ -1137,7 +1193,61 @@ wolfsentry_errcode_t wolfsentry_route_stale_purge(
         &table->header,
         (wolfsentry_filter_function_t)check_if_route_expired,
         &check_if_route_expired_args,
-        (wolfsentry_dropper_function_t)wolfsentry_route_drop_reference_1,
+        (wolfsentry_dropper_function_t)wolfsentry_route_delete_for_filter,
+        wolfsentry);
+}
+
+wolfsentry_errcode_t wolfsentry_route_flush_table(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *table)
+{
+    return wolfsentry_table_map(
+        wolfsentry,
+        &table->header,
+        (wolfsentry_map_function_t)wolfsentry_route_delete_for_filter,
+        wolfsentry);
+}
+
+static wolfsentry_errcode_t wolfsentry_route_call_insert_action(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    wolfsentry_action_res_t *action_results)
+{
+    if (route->parent_event && route->parent_event->insert_event) {
+        wolfsentry_errcode_t ret = wolfsentry_action_list_dispatch(
+            wolfsentry,
+            NULL /* caller_arg */,
+            route->parent_event->insert_event,
+            NULL /* trigger_event */,
+            WOLFSENTRY_ACTION_TYPE_INSERT,
+            (struct wolfsentry_route_table *)route->header.parent_table,
+            route,
+            action_results);
+        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
+            return ret;
+        else if (WOLFSENTRY_ERROR_CODE_IS(ret, ALREADY))
+            WOLFSENTRY_RETURN_OK;
+        else
+            return ret;
+    } else
+        WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_bulk_insert_actions(
+    struct wolfsentry_context *wolfsentry)
+{
+    wolfsentry_errcode_t ret;
+    ret = wolfsentry_table_map(
+        wolfsentry,
+        &wolfsentry->routes_dynamic.header,
+        (wolfsentry_map_function_t)wolfsentry_route_call_insert_action,
+        wolfsentry);
+    if (ret < 0)
+        return ret;
+    return wolfsentry_table_map(
+        wolfsentry,
+        &wolfsentry->routes_dynamic.header,
+        (wolfsentry_map_function_t)wolfsentry_route_call_insert_action,
         wolfsentry);
 }
 
@@ -1302,7 +1412,7 @@ wolfsentry_errcode_t wolfsentry_route_table_iterate_start(
     struct wolfsentry_cursor **cursor)
 {
     int ret;
-    if ((*cursor = WOLFSENTRY_MALLOC(sizeof **cursor)) == NULL)
+    if ((*cursor = (struct wolfsentry_cursor *)WOLFSENTRY_MALLOC(sizeof **cursor)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if ((ret = wolfsentry_table_cursor_init(wolfsentry, *cursor)) < 0)
         goto out;

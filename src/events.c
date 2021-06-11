@@ -114,6 +114,89 @@ static wolfsentry_errcode_t wolfsentry_event_new_1(struct wolfsentry_context *wo
     return ret;
 }
 
+wolfsentry_errcode_t wolfsentry_event_clone_bare(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_ent_header * const src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header ** const new_ent,
+    wolfsentry_clone_flags_t flags)
+{
+    struct wolfsentry_event * const src_event = (struct wolfsentry_event * const)src_ent;
+    struct wolfsentry_event ** const new_event = (struct wolfsentry_event ** const)new_ent;
+    size_t new_size = sizeof *src_event + (size_t)(src_event->label_len) + 1;
+
+    (void)wolfsentry;
+    (void)flags;
+
+    if ((*new_event = dest_context->allocator.malloc(dest_context->allocator.context, new_size)) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    memcpy(*new_event, src_event, new_size);
+    WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
+
+    (*new_event)->insert_event = NULL;
+    (*new_event)->match_event = NULL;
+    (*new_event)->delete_event = NULL;
+    WOLFSENTRY_LIST_HEADER_RESET((*new_event)->action_list.header);
+
+    if (src_event->config) {
+        if (((*new_event)->config = dest_context->allocator.malloc(dest_context->allocator.context, sizeof *(*new_event)->config)) == NULL) {
+            dest_context->allocator.free(dest_context->allocator.context, *new_event);
+            WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+        }
+        memcpy((*new_event)->config, src_event->config, sizeof *(*new_event)->config);
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_event_clone_resolve(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header *src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header *new_ent,
+    wolfsentry_clone_flags_t flags)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_event * const src_event = (struct wolfsentry_event * const)src_ent;
+    struct wolfsentry_event * const new_event = (struct wolfsentry_event * const)new_ent;
+
+    if ((ret = wolfsentry_action_list_clone(
+             src_context,
+             &src_event->action_list,
+             dest_context,
+             &new_event->action_list,
+             flags)) < 0)
+        return ret;
+
+    if (src_event->insert_event) {
+        new_event->insert_event = src_event->insert_event;
+        if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&new_event->insert_event)) < 0) {
+            new_event->insert_event = NULL;
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        }
+        WOLFSENTRY_REFCOUNT_INCREMENT(new_event->insert_event->header.refcount);
+    }
+
+    if (src_event->match_event) {
+        new_event->match_event = src_event->match_event;
+        if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&new_event->match_event)) < 0) {
+            new_event->match_event = NULL;
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        }
+        WOLFSENTRY_REFCOUNT_INCREMENT(new_event->match_event->header.refcount);
+    }
+
+    if (src_event->delete_event) {
+        new_event->delete_event = src_event->delete_event;
+        if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&new_event->delete_event)) < 0) {
+            new_event->delete_event = NULL;
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        }
+        WOLFSENTRY_REFCOUNT_INCREMENT(new_event->delete_event->header.refcount);
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
 
 wolfsentry_errcode_t wolfsentry_event_insert(
     struct wolfsentry_context *wolfsentry,
@@ -214,7 +297,7 @@ wolfsentry_errcode_t wolfsentry_event_get_reference(struct wolfsentry_context *w
 
     if ((ret = wolfsentry_event_get_1(wolfsentry, label, label_len, event)) < 0)
         return ret;
-    WOLFSENTRY_ATOMIC_INCREMENT((*event)->header.refcount, 1);
+    WOLFSENTRY_REFCOUNT_INCREMENT((*event)->header.refcount);
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -270,6 +353,10 @@ wolfsentry_errcode_t wolfsentry_event_delete(
     }
 
     return wolfsentry_event_drop_reference(wolfsentry, old, action_results);
+}
+
+wolfsentry_errcode_t wolfsentry_event_flush_all(struct wolfsentry_context *wolfsentry) {
+    return wolfsentry_table_free_ents(wolfsentry, &wolfsentry->events.header);
 }
 
 typedef enum { W_E_A_A_PREPEND, W_E_A_A_APPEND, W_E_A_A_INSERT, W_E_A_A_DELETE } w_e_a_a_what_t;

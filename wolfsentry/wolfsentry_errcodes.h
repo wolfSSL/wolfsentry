@@ -30,27 +30,40 @@ typedef int32_t wolfsentry_errcode_t;
 #define WOLFSENTRY_ERRCODE_FMT "%d"
 #endif
 
-#define WOLFSENTRY_ERROR_ENCODE_0(x) (((x) == 0) ?                                \
-        (((__LINE__ & 0xffff) << 8) | ((WOLFSENTRY_SOURCE_ID & 0x7f) << 24))      \
-    :                                                                             \
-        (-(((x) & 0xff) | ((__LINE__ & 0xffff) << 8) | ((WOLFSENTRY_SOURCE_ID & 0x7f) << 24))))
+/* these must be all-1s */
+#define WOLFSENTRY_SOURCE_ID_MAX 127
+#define WOLFSENTRY_ERROR_ID_MAX 255
+#define WOLFSENTRY_LINE_NUMBER_MAX 65535
+
+#define WOLFSENTRY_ERROR_ENCODE_0(x) (((x) == 0) ?                           \
+        (((__LINE__ & WOLFSENTRY_LINE_NUMBER_MAX) << 8)                      \
+           | ((WOLFSENTRY_SOURCE_ID & WOLFSENTRY_SOURCE_ID_MAX) << 24))      \
+    :                                                                        \
+        (-(((x) & WOLFSENTRY_ERROR_ID_MAX)                                   \
+           | ((__LINE__ & WOLFSENTRY_LINE_NUMBER_MAX) << 8)                  \
+           | ((WOLFSENTRY_SOURCE_ID & WOLFSENTRY_SOURCE_ID_MAX) << 24))))
 
 #if defined(__GNUC__) && defined(static_assert)
-#define WOLFSENTRY_ERROR_ENCODE_1(x) ({                                           \
-    static_assert(((x) >= 0) && ((x) <= 0xff), "error code must be 0-255");       \
-    static_assert(__LINE__ <= 0xffff, "line number must be 1-65535");             \
-    static_assert((WOLFSENTRY_SOURCE_ID >= 0) && (WOLFSENTRY_SOURCE_ID <= 0x7f), "source file ID must be 0-127"); \
-    WOLFSENTRY_ERROR_ENCODE_0(x);                                                 \
+#define WOLFSENTRY_ERROR_ENCODE_1(x) ({                                      \
+    static_assert(((x) >= 0) && ((x) <= WOLFSENTRY_ERROR_ID_MAX),            \
+                  "error code must be 0-" _q(WOLFSENTRY_ERROR_ID_MAX) );     \
+    static_assert(__LINE__ <= WOLFSENTRY_LINE_NUMBER_MAX,                    \
+                  "line number must be 1-" _q(WOLFSENTRY_LINE_NUMBER_MAX) ); \
+    static_assert((WOLFSENTRY_SOURCE_ID >= 0)                                \
+                  && (WOLFSENTRY_SOURCE_ID <= 0x7f),                         \
+                  "source file ID must be 0-" _q(WOLFSENTRY_SOURCE_ID_MAX) );\
+    WOLFSENTRY_ERROR_ENCODE_0(x);                                            \
 })
 #else
 #define WOLFSENTRY_ERROR_ENCODE_1(x) WOLFSENTRY_ERROR_ENCODE_0(x)
 #endif
 
 #define WOLFSENTRY_ERROR_RERETURN(x) return WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x))
-#define WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) (((x) < 0) ? (-(x) & 0xff) : ((x) & 0xff))
+#define WOLFSENTRY_ERROR_RECODE(x) WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x))
+#define WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) (((x) < 0) ? (-(x) & WOLFSENTRY_ERROR_ID_MAX) : ((x) & WOLFSENTRY_ERROR_ID_MAX))
 #define WOLFSENTRY_ERROR_CODE_IS(x, y) (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) == WOLFSENTRY_ERROR_ID_ ## y)
 #define WOLFSENTRY_ERROR_DECODE_SOURCE_ID(x) (((x) < 0) ? ((-(x)) >> 24) : ((x) >> 24))
-#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) (((x) < 0) ? (((-(x)) >> 8) & 0xffff) : (((x) >> 8) & 0xffff))
+#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) (((x) < 0) ? (((-(x)) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX) : (((x) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX))
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
 #define WOLFSENTRY_ERROR_FMT "code " WOLFSENTRY_ERRCODE_FMT " (%s), src " WOLFSENTRY_ERRCODE_FMT " (%s), line " WOLFSENTRY_ERRCODE_FMT
@@ -98,8 +111,14 @@ enum wolfsentry_source_id {
     WOLFSENTRY_SOURCE_ID_ROUTES_C   =  4,
     WOLFSENTRY_SOURCE_ID_UTIL_C     =  5,
     WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C =  6,
+
     WOLFSENTRY_SOURCE_ID_USER_BASE  =  112
 };
+
+#ifdef WOLFSENTRY_ERROR_STRINGS
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_source_string_set(enumint_t wolfsentry_source_id, const char *source_string);
+#define WOLFSENTRY_REGISTER_SOURCE() wolfsentry_user_source_string_set(WOLFSENTRY_SOURCE_ID,__FILE__)
+#endif
 
 enum wolfsentry_error_id {
     WOLFSENTRY_ERROR_ID_OK                     =   0,
@@ -135,5 +154,10 @@ enum wolfsentry_error_id {
 
     WOLFSENTRY_ERROR_ID_USER_BASE              = 224
 };
+
+#ifdef WOLFSENTRY_ERROR_STRINGS
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id, const char *error_string);
+#define WOLFSENTRY_REGISTER_ERROR(err, msg) wolfsentry_user_error_string_set(WOLFSENTRY_ERROR_ID_ ## err, msg)
+#endif
 
 #endif /* WOLFSENTRY_ERRCODES_H */

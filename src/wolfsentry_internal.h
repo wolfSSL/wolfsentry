@@ -103,6 +103,12 @@ struct wolfsentry_table_ent_header {
     wolfsentry_refcount_t refcount;
 };
 
+#define WOLFSENTRY_TABLE_ENT_HEADER_RESET(ent) do {                           \
+        (ent).parent_table = NULL;                                            \
+        (ent).prev = (ent).next = (ent).prev_by_id = (ent).next_by_id = NULL; \
+        (ent).refcount = 1; }                                                 \
+    while (0)
+
 struct wolfsentry_context;
 
 typedef int (*wolfsentry_ent_cmp_fn_t)(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right);
@@ -110,6 +116,21 @@ typedef wolfsentry_errcode_t (*wolfsentry_ent_free_fn_t)(struct wolfsentry_conte
 
 typedef wolfsentry_errcode_t (*wolfsentry_filter_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
 typedef wolfsentry_errcode_t (*wolfsentry_dropper_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
+typedef wolfsentry_errcode_t (*wolfsentry_map_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
+
+typedef wolfsentry_errcode_t (*wolfsentry_table_ent_clone_fn_t)(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header *src_ent,
+    struct wolfsentry_context *new_context,
+    struct wolfsentry_table_ent_header **new_ent,
+    wolfsentry_clone_flags_t flags);
+
+typedef wolfsentry_errcode_t (*wolfsentry_table_ent_clone_map_fn_t)(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header *src_ent,
+    struct wolfsentry_context *new_context,
+    struct wolfsentry_table_ent_header *new_ent,
+    wolfsentry_clone_flags_t flags);
 
 struct wolfsentry_table_header {
     struct wolfsentry_table_ent_header *head, *tail; /* these will be replaced by red-black table elements later. */
@@ -119,6 +140,11 @@ struct wolfsentry_table_header {
     wolfsentry_hitcount_t n_ents;
     wolfsentry_object_type_t ent_type;
 };
+
+#define WOLFSENTRY_TABLE_HEADER_RESET(table) do { \
+        (table).head = (table).tail = NULL;       \
+        (table).n_ents = 0;                       \
+    } while (0)
 
 struct wolfsentry_cursor {
     struct wolfsentry_table_ent_header *point;
@@ -268,6 +294,50 @@ wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(struct wolfsentry_context *w
 void wolfsentry_table_ent_delete_by_id_1(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent);
 wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(struct wolfsentry_context *wolfsentry, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
 
+wolfsentry_errcode_t wolfsentry_table_clone(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *src_table,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_header *dest_table,
+    wolfsentry_table_ent_clone_fn_t clone_fn,
+    wolfsentry_clone_flags_t flags);
+
+wolfsentry_errcode_t wolfsentry_table_clone_map(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *src_table,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_header *dest_table,
+    wolfsentry_table_ent_clone_map_fn_t clone_map_fn,
+    wolfsentry_clone_flags_t flags);
+
+wolfsentry_errcode_t wolfsentry_action_clone(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header *src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header **new_ent,
+    wolfsentry_clone_flags_t flags);
+
+wolfsentry_errcode_t wolfsentry_event_clone_bare(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header *src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header **new_ent,
+    wolfsentry_clone_flags_t flags);
+
+wolfsentry_errcode_t wolfsentry_event_clone_resolve(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header *src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header *new_ent,
+    wolfsentry_clone_flags_t flags);
+
+wolfsentry_errcode_t wolfsentry_route_clone(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header *src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header **new_ent,
+    wolfsentry_clone_flags_t flags);
+
 wolfsentry_errcode_t wolfsentry_table_free_ents(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_header *table);
 
 wolfsentry_errcode_t wolfsentry_table_cursor_init(struct wolfsentry_context *wolfsentry, struct wolfsentry_cursor *cursor);
@@ -285,6 +355,12 @@ wolfsentry_errcode_t wolfsentry_table_filter(
     void *filter_arg,
     wolfsentry_dropper_function_t dropper,
     void *dropper_arg);
+
+wolfsentry_errcode_t wolfsentry_table_map(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *table,
+    wolfsentry_map_function_t fn,
+    void *map_context);
 
 wolfsentry_errcode_t wolfsentry_action_list_append(
     struct wolfsentry_context *wolfsentry,
@@ -306,6 +382,13 @@ wolfsentry_errcode_t wolfsentry_action_list_insert_after(
     const char *point_label,
     int point_label_len);
 
+wolfsentry_errcode_t wolfsentry_action_list_clone(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_action_list *src_action_list,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_action_list *dest_action_list,
+    wolfsentry_clone_flags_t flags);
+
 wolfsentry_errcode_t wolfsentry_action_list_delete(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_action_list *action_list,
@@ -319,7 +402,7 @@ wolfsentry_errcode_t wolfsentry_action_list_delete_all(
 wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg,
-    struct wolfsentry_action_list *action_list,
+    struct wolfsentry_event *action_event,
     struct wolfsentry_event *trigger_event,
     wolfsentry_action_type_t action_type,
     struct wolfsentry_route_table *route_table,

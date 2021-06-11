@@ -42,28 +42,28 @@ enum {
     WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT = 1U << 2U
 };
 
-struct json_process_state;
+struct wolfsentry_json_process_state;
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_config_load_flags_t load_flags,
-    struct json_process_state **jps);
+    struct wolfsentry_json_process_state **jps);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
-    struct json_process_state *jps,
+    struct wolfsentry_json_process_state *jps,
     struct wolfsentry_eventconfig *config);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
-    struct json_process_state *jps,
+    struct wolfsentry_json_process_state *jps,
     const char *json_in,
     size_t json_in_len,
     char *err_buf,
     size_t err_buf_size);
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct json_process_state *jps, int *json_errcode, const char **json_errmsg);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct wolfsentry_json_process_state *jps, int *json_errcode, const char **json_errmsg);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
-    struct json_process_state *jps,
+    struct wolfsentry_json_process_state *jps,
     char *err_buf,
     size_t err_buf_size);
 

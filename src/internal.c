@@ -68,6 +68,77 @@ wolfsentry_errcode_t wolfsentry_table_ent_insert(struct wolfsentry_context *wolf
     WOLFSENTRY_RETURN_OK;
 }
 
+wolfsentry_errcode_t wolfsentry_table_clone(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *src_table,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_header *dest_table,
+    wolfsentry_table_ent_clone_fn_t clone_fn,
+    wolfsentry_clone_flags_t flags)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_table_ent_header *prev = NULL, *new = NULL, *i;
+
+    if ((wolfsentry == dest_context) || (src_table == dest_table))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (src_table->ent_type != dest_table->ent_type)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    for (i = src_table->head;
+         i;
+         i = i->next) {
+        if ((ret = clone_fn(wolfsentry, i, dest_context, &new, flags)) < 0)
+            goto out;
+        new->parent_table = dest_table;
+        if (prev)
+            prev->next = new;
+        else
+            dest_table->head = new;
+        prev = new;
+        if ((ret = wolfsentry_table_ent_insert_by_id(dest_context, new)) < 0)
+            goto out;
+    }
+    dest_table->tail = new;
+
+    dest_table->n_ents = src_table->n_ents;
+
+    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+  out:
+
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_table_clone_map(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *src_table,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_header *dest_table,
+    wolfsentry_table_ent_clone_map_fn_t clone_map_fn,
+    wolfsentry_clone_flags_t flags)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_table_ent_header *i, *i_new;
+
+    if ((wolfsentry == dest_context) || (src_table == dest_table))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (src_table->ent_type != dest_table->ent_type)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (src_table->n_ents != dest_table->n_ents)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    for (i = src_table->head, i_new = dest_table->head;
+         i && i_new;
+         i = i->next, i_new = i_new->next) {
+        if ((ret = clone_map_fn(wolfsentry, i, dest_context, i_new, flags)) < 0)
+            return ret;
+    }
+    if (i || i_new)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static inline int wolfsentry_ent_id_cmp(struct wolfsentry_table_ent_header *left, wolfsentry_ent_id_t right_id) {
     if (left->id < right_id)
         return -1;
@@ -238,13 +309,11 @@ wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(struct wolfsentry_conte
 wolfsentry_errcode_t wolfsentry_table_free_ents(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_header *table) {
     struct wolfsentry_table_ent_header *i = table->head, *next;
     wolfsentry_errcode_t ret;
-    table->head = NULL;
-    table->tail = NULL;
+    WOLFSENTRY_TABLE_HEADER_RESET(*table);
     while (i) {
         next = i->next;
         if ((ret = table->free_fn(wolfsentry, i, NULL /* action_results */)) < 0)
             return ret;
-        --table->n_ents;
         i = next;
     }
     WOLFSENTRY_RETURN_OK;
@@ -328,6 +397,28 @@ wolfsentry_errcode_t wolfsentry_table_filter(
         if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, i)) < 0)
             break;
         if ((ret = dropper(dropper_context, i, NULL /* action_results */)) < 0)
+            break;
+    }
+
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_table_map(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *table,
+    wolfsentry_map_function_t fn,
+    void *map_context)
+{
+    /* with linked lists, this is easy, but it will be a lot trickier with red-black trees. */
+    wolfsentry_errcode_t ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    struct wolfsentry_table_ent_header *i, *i_next;
+
+    (void)wolfsentry;
+
+    for (i = table->head; i; i = i_next) {
+        i_next = i->next;
+
+        if ((ret = fn(map_context, i, NULL /* action_results */)) < 0)
             break;
     }
 

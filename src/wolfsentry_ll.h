@@ -32,6 +32,8 @@ struct wolfsentry_list_header {
     /* note no cmp_fn slot */
 };
 
+#define WOLFSENTRY_LIST_HEADER_RESET(list) (list).head = (list).tail = NULL
+
 static inline void wolfsentry_list_ent_prepend(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
     ent->prev = NULL;
     if (list->head) {

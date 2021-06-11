@@ -26,6 +26,19 @@
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
 
+static const char *user_defined_sources[WOLFSENTRY_SOURCE_ID_MAX - WOLFSENTRY_SOURCE_ID_USER_BASE + 1] = {0};
+
+wolfsentry_errcode_t wolfsentry_user_source_string_set(enum wolfsentry_source_id wolfsentry_source_id, const char *source_string) {
+    if ((wolfsentry_source_id < WOLFSENTRY_SOURCE_ID_USER_BASE) || (wolfsentry_source_id > WOLFSENTRY_SOURCE_ID_MAX))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    else if (user_defined_sources[wolfsentry_source_id - WOLFSENTRY_SOURCE_ID_USER_BASE] != NULL)
+        WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
+    else {
+        user_defined_sources[wolfsentry_source_id - WOLFSENTRY_SOURCE_ID_USER_BASE] = source_string;
+        WOLFSENTRY_RETURN_OK;
+    }
+}
+
 const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
 {
     enum wolfsentry_source_id i = (enum wolfsentry_source_id)WOLFSENTRY_ERROR_DECODE_SOURCE_ID(e);
@@ -47,10 +60,26 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
         break;
     }
-    if (i >= WOLFSENTRY_SOURCE_ID_USER_BASE)
-        return "user defined source";
-    else
+    if (i >= WOLFSENTRY_SOURCE_ID_USER_BASE) {
+        if (user_defined_sources[i - WOLFSENTRY_SOURCE_ID_USER_BASE])
+            return user_defined_sources[i - WOLFSENTRY_SOURCE_ID_USER_BASE];
+        else
+            return "user defined source";
+    } else
         return "unknown source";
+}
+
+static const char *user_defined_errors[WOLFSENTRY_ERROR_ID_MAX - WOLFSENTRY_ERROR_ID_USER_BASE + 1] = {0};
+
+wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *error_string) {
+    if ((wolfsentry_error_id < WOLFSENTRY_ERROR_ID_USER_BASE) || (wolfsentry_error_id > WOLFSENTRY_ERROR_ID_MAX))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    else if (user_defined_errors[wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE] != NULL)
+        WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
+    else {
+        user_defined_errors[wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE] = error_string;
+        WOLFSENTRY_RETURN_OK;
+    }
 }
 
 const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
@@ -120,9 +149,12 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
     }
-    if (i >= WOLFSENTRY_ERROR_ID_USER_BASE)
-        return "user defined error code";
-    else
+    if (i >= WOLFSENTRY_ERROR_ID_USER_BASE) {
+        if (user_defined_errors[i - WOLFSENTRY_ERROR_ID_USER_BASE])
+            return user_defined_errors[i - WOLFSENTRY_ERROR_ID_USER_BASE];
+        else
+            return "user defined error code";
+    } else
         return "unknown error code";
 }
 
@@ -386,7 +418,7 @@ wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_rwlock *lock, int ps
 
 wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock **lock, int pshared) {
     wolfsentry_errcode_t ret;
-    if ((*lock = WOLFSENTRY_MALLOC(sizeof **lock)) == NULL)
+    if ((*lock = (struct wolfsentry_rwlock *)WOLFSENTRY_MALLOC(sizeof **lock)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if ((ret = wolfsentry_lock_init(*lock, pshared)) < 0) {
         WOLFSENTRY_FREE(*lock);
@@ -447,10 +479,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwlock *lock) {
             break;
         else {
             if (errno != EINTR)
-{
-fprintf(stderr,"sem_wait failed with %s\n",strerror(errno));
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-}
         }
     }
 
@@ -588,6 +617,194 @@ wolfsentry_errcode_t wolfsentry_lock_shared_timed(struct wolfsentry_context *wol
         return wolfsentry_lock_shared_abstimed(lock, &abs_timeout);
     } else
         return wolfsentry_lock_shared_abstimed(lock, NULL);
+}
+
+wolfsentry_errcode_t wolfsentry_lock_shared_and_reserve_shared2mutex(struct wolfsentry_rwlock *lock) {
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
+    if (lock->read2write_waiter_count > 0) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_ERROR_RETURN(BUSY);
+    }
+
+    ++lock->read2write_waiter_count;
+
+    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0)) {
+
+        lock->read_waiter_count += 2; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+        for (;;) {
+            int ret = sem_wait(&lock->sem_read_waiters);
+            if (ret == 0)
+                break;
+            else {
+                if (errno != EINTR)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            }
+        }
+        /* again, for the second count, now reflected in lock->shared_count. */
+        for (;;) {
+            int ret = sem_wait(&lock->sem_read_waiters);
+            if (ret == 0)
+                break;
+            else {
+                if (errno != EINTR)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            }
+        }
+
+        WOLFSENTRY_RETURN_OK;
+    }
+
+    if (lock->state == WOLFSENTRY_LOCK_UNLOCKED)
+        lock->state = WOLFSENTRY_LOCK_SHARED;
+    else if (lock->state != WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+
+    lock->shared_count += 2; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+
+    if (sem_post(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    else
+        WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_lock_shared_abstimed_and_reserve_shared2mutex(struct wolfsentry_rwlock *lock, struct timespec *abs_timeout) {
+    int ret;
+
+    if (abs_timeout == NULL) {
+        ret = sem_trywait(&lock->sem);
+        if ((ret < 0) && (errno == EAGAIN))
+            WOLFSENTRY_ERROR_RETURN(BUSY);
+    } else {
+        ret = sem_timedwait(&lock->sem, abs_timeout);
+        if (ret < 0) {
+            if (errno == ETIMEDOUT)
+                WOLFSENTRY_ERROR_RETURN(TIMED_OUT);
+            else if (errno == EINTR)
+                WOLFSENTRY_ERROR_RETURN(INTERRUPTED);
+        }
+    }
+    if (ret < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    if (lock->read2write_waiter_count > 0) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_ERROR_RETURN(BUSY);
+    }
+
+    ++lock->read2write_waiter_count;
+
+    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0)) {
+
+        if (abs_timeout == NULL) {
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            else
+                WOLFSENTRY_ERROR_RETURN(BUSY);
+        }
+
+        lock->read_waiter_count += 2; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+        if (sem_timedwait(&lock->sem_read_waiters, abs_timeout) < 0) {
+            if (errno == ETIMEDOUT)
+                ret = WOLFSENTRY_ERROR_ENCODE(TIMED_OUT);
+            else if (errno == EINTR)
+                ret = WOLFSENTRY_ERROR_ENCODE(INTERRUPTED);
+            else
+                ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
+
+            /* note, recovery from timeout/interruption requires untimed and uninterruptible wait on lock->sem. */
+            for (;;) {
+                int ret2 = sem_wait(&lock->sem);
+                if (ret2 == 0)
+                    break;
+                else {
+                    if (errno != EINTR)
+                        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+                }
+            }
+
+            /*
+             * now that we own lock->sem, we can retry lock->sem_read_waiters,
+             * in case an unlock (and associated post to lock->sem_read_waiters)
+             * occured after a sem_timedwait() timeout.
+             */
+            if (sem_trywait(&lock->sem_read_waiters) == 0) {
+                if (sem_post(&lock->sem) < 0)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+                goto get_second_count;
+            }
+
+            lock->read_waiter_count -= 2;
+            --lock->read2write_waiter_count;
+
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+            return ret;
+        }
+
+      get_second_count:
+
+        /* again, untimed, for the second count, now reflected in lock->shared_count. */
+        for (;;) {
+            ret = sem_wait(&lock->sem_read_waiters);
+            if (ret == 0)
+                break;
+            else {
+                if (errno != EINTR)
+                    WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            }
+        }
+
+        WOLFSENTRY_RETURN_OK;
+    }
+
+    if (lock->state == WOLFSENTRY_LOCK_UNLOCKED)
+        lock->state = WOLFSENTRY_LOCK_SHARED;
+    else if (lock->state != WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+
+    lock->shared_count += 2; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+
+    if (sem_post(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    else
+        WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_lock_shared_timed_and_reserve_shared2mutex(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait) {
+    wolfsentry_time_t now;
+    struct timespec abs_timeout;
+    wolfsentry_errcode_t ret;
+
+    if (max_wait < 0)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    else if (max_wait > 0) {
+        if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
+            return ret;
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
+            return ret;
+        return wolfsentry_lock_shared_abstimed_and_reserve_shared2mutex(lock, &abs_timeout);
+    } else
+        return wolfsentry_lock_shared_abstimed_and_reserve_shared2mutex(lock, NULL);
 }
 
 wolfsentry_errcode_t wolfsentry_lock_mutex(struct wolfsentry_rwlock *lock) {
@@ -749,6 +966,57 @@ wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock
 
     lock->state = WOLFSENTRY_LOCK_SHARED;
     lock->shared_count = 1;
+
+    if ((lock->write_waiter_count == 0) &&
+        (lock->read_waiter_count > 0)) {
+        int read_waiter_count = lock->read_waiter_count;
+        lock->shared_count += lock->read_waiter_count;
+        lock->read_waiter_count = 0;
+        for (; read_waiter_count > 0; --read_waiter_count) {
+            if (sem_post(&lock->sem_read_waiters) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
+    if (sem_post(&lock->sem) < 0)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_lock_mutex2shared_and_reserve_shared2mutex(struct wolfsentry_rwlock *lock) {
+    if (lock->state == WOLFSENTRY_LOCK_SHARED)
+        WOLFSENTRY_ERROR_RETURN(ALREADY);
+
+    for (;;) {
+        int ret = sem_wait(&lock->sem);
+        if (ret == 0)
+            break;
+        else {
+            if (errno != EINTR)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        }
+    }
+
+    if (lock->state != WOLFSENTRY_LOCK_EXCLUSIVE) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+
+    /* wolfsentry_lock_shared_*and_reserve_shared2mutex() may have already
+     * reserved rd2wr, in which case the caller just keeps its write lock.
+     */
+    if (lock->read2write_waiter_count > 0) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        WOLFSENTRY_ERROR_RETURN(BUSY);
+    }
+
+    lock->state = WOLFSENTRY_LOCK_SHARED;
+    lock->shared_count = 2; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+    ++lock->read2write_waiter_count;
+    /* note, not incrementing write_waiter_count, to allow shared lockers to get locks until the redemption phase. */
 
     if ((lock->write_waiter_count == 0) &&
         (lock->read_waiter_count > 0)) {
@@ -1296,6 +1564,23 @@ wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
     return wolfsentry_lock_shared_timed(wolfsentry, &wolfsentry->lock, max_wait);
 }
 
+wolfsentry_errcode_t wolfsentry_context_lock_shared_and_reserve_shared2mutex(
+    struct wolfsentry_context *wolfsentry) {
+    return wolfsentry_lock_shared_and_reserve_shared2mutex(&wolfsentry->lock);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_shared_abstimed_and_reserve_shared2mutex(
+    struct wolfsentry_context *wolfsentry,
+    struct timespec *abs_timeout) {
+    return wolfsentry_lock_shared_abstimed_and_reserve_shared2mutex(&wolfsentry->lock, abs_timeout);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_shared_timed_and_reserve_shared2mutex(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_time_t max_wait) {
+    return wolfsentry_lock_shared_timed_and_reserve_shared2mutex(wolfsentry, &wolfsentry->lock, max_wait);
+}
+
 wolfsentry_errcode_t wolfsentry_context_lock_shared2mutex(
     struct wolfsentry_context *wolfsentry) {
     return wolfsentry_lock_shared2mutex(&wolfsentry->lock);
@@ -1360,6 +1645,11 @@ wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed(
 wolfsentry_errcode_t wolfsentry_context_lock_mutex2shared(
     struct wolfsentry_context *wolfsentry) {
     return wolfsentry_lock_mutex2shared(&wolfsentry->lock);
+}
+
+wolfsentry_errcode_t wolfsentry_context_lock_mutex2shared_and_reserve_shared2mutex(
+    struct wolfsentry_context *wolfsentry) {
+    return wolfsentry_lock_mutex2shared_and_reserve_shared2mutex(&wolfsentry->lock);
 }
 
 wolfsentry_errcode_t wolfsentry_context_unlock(
@@ -1687,15 +1977,35 @@ wolfsentry_errcode_t wolfsentry_init(
     return ret;
 }
 
+wolfsentry_errcode_t wolfsentry_context_flush(struct wolfsentry_context *wolfsentry) {
+    wolfsentry_errcode_t ret;
+
+    if ((ret = wolfsentry_route_flush_table(wolfsentry, &wolfsentry->routes_static)) < 0)
+        return ret;
+
+    if ((ret = wolfsentry_route_flush_table(wolfsentry, &wolfsentry->routes_dynamic)) < 0)
+        return ret;
+
+    if ((ret = wolfsentry_table_free_ents(wolfsentry, &wolfsentry->events.header)) < 0)
+        return ret;
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 wolfsentry_errcode_t wolfsentry_context_free(struct wolfsentry_context **wolfsentry) {
     wolfsentry_free_cb_t free_cb = (*wolfsentry)->allocator.free;
+    wolfsentry_errcode_t ret;
+    if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_static.header)) < 0)
+        return ret;
+    if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_dynamic.header)) < 0)
+        return ret;
+    if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->actions.header)) < 0)
+        return ret;
+    if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->events.header)) < 0)
+        return ret;
 
-    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_static.header));
-    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_dynamic.header));
-    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->actions.header));
-    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->events.header));
-
-    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_lock_destroy(&(*wolfsentry)->lock));
+    if ((ret = wolfsentry_lock_destroy(&(*wolfsentry)->lock)) < 0)
+        return ret;
 
     free_cb((*wolfsentry)->allocator.context, *wolfsentry);
     *wolfsentry = NULL;
@@ -1706,6 +2016,28 @@ wolfsentry_errcode_t wolfsentry_shutdown(struct wolfsentry_context **wolfsentry)
     return wolfsentry_context_free(wolfsentry);
 }
 
+wolfsentry_errcode_t wolfsentry_context_inhibit_actions(struct wolfsentry_context *wolfsentry) {
+    wolfsentry_eventconfig_flags_t flags_before, flags_after;
+    WOLFSENTRY_ATOMIC_UPDATE(
+        wolfsentry->config.config.flags,
+        (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS,
+        (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
+        &flags_before,
+        &flags_after);
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_context_enable_actions(struct wolfsentry_context *wolfsentry) {
+    wolfsentry_eventconfig_flags_t flags_before, flags_after;
+    WOLFSENTRY_ATOMIC_UPDATE(
+        wolfsentry->config.config.flags,
+        (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
+        (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS,
+        &flags_before,
+        &flags_after);
+    WOLFSENTRY_RETURN_OK;
+}
+
 /* caller must have read lock and read2write reservation on context, and hold
  * onto it until either redeeming the reservation and exchanging in the cloned
  * context, or abandoning the reservation and the clone.
@@ -1713,13 +2045,11 @@ wolfsentry_errcode_t wolfsentry_shutdown(struct wolfsentry_context **wolfsentry)
 wolfsentry_errcode_t wolfsentry_context_clone(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_context **clone,
-    wolfsentry_context_clone_flags_t flags)
+    wolfsentry_clone_flags_t flags)
 {
     wolfsentry_errcode_t ret;
 
-    WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING); // WIP
-
-    if ((*clone = WOLFSENTRY_MALLOC(sizeof **clone)) == NULL)
+    if ((*clone = (struct wolfsentry_context *)WOLFSENTRY_MALLOC(sizeof **clone)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memset(*clone, 0, sizeof **clone);
 
@@ -1728,12 +2058,36 @@ wolfsentry_errcode_t wolfsentry_context_clone(
     if ((ret = wolfsentry_lock_init(&wolfsentry->lock, 0 /* pshared */)) < 0)
         goto out;
 
-    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CONTEXT_CLONE_FLAG_AS_AT_CREATION))
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION))
         (*clone)->config = (*clone)->config_at_creation = wolfsentry->config_at_creation;
     else {
         (*clone)->config = wolfsentry->config;
         (*clone)->config_at_creation = wolfsentry->config_at_creation;
     }
+
+    WOLFSENTRY_TABLE_HEADER_RESET((*clone)->events.header);
+    WOLFSENTRY_TABLE_HEADER_RESET((*clone)->routes_static.header); /* xxx default_event */
+    WOLFSENTRY_TABLE_HEADER_RESET((*clone)->routes_dynamic.header); /* xxx default_event */
+    WOLFSENTRY_TABLE_HEADER_RESET((*clone)->ents_by_id);
+
+    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->actions.header, *clone, &(*clone)->actions.header, wolfsentry_action_clone, flags)) < 0)
+        goto out;
+
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION)) {
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        goto out;
+    }
+
+    /* event cloning is tricky because events refer to other events by pointer, so a second pass through the table is needed. */
+    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->events.header, *clone, &(*clone)->events.header, wolfsentry_event_clone_bare, flags)) < 0)
+        goto out;
+    if ((ret = wolfsentry_table_clone_map(wolfsentry, &wolfsentry->events.header, *clone, &(*clone)->events.header, wolfsentry_event_clone_resolve, flags)) < 0)
+        goto out;
+
+    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->routes_static.header, *clone, &(*clone)->routes_static.header, wolfsentry_route_clone, flags)) < 0)
+        goto out;
+    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->routes_dynamic.header, *clone, &(*clone)->routes_dynamic.header, wolfsentry_route_clone, flags)) < 0)
+        goto out;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
@@ -1747,10 +2101,33 @@ wolfsentry_errcode_t wolfsentry_context_clone(
 }
 
 wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolfsentry1, struct wolfsentry_context *wolfsentry2) {
-    WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING); // WIP
+    struct wolfsentry_context scratch;
 
-    if (memcmp(&wolfsentry1->allocator, &wolfsentry2->allocator, sizeof wolfsentry1->allocator))
+    if ((memcmp(&wolfsentry1->allocator, &wolfsentry2->allocator, sizeof wolfsentry1->allocator)) ||
+        (wolfsentry1->mk_id_cb != wolfsentry2->mk_id_cb))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    scratch = *wolfsentry1;
+
+    wolfsentry1->timecbs = wolfsentry2->timecbs;
+    wolfsentry1->mk_id_cb_state = wolfsentry2->mk_id_cb_state;
+    wolfsentry1->config = wolfsentry2->config;
+    wolfsentry1->config_at_creation = wolfsentry2->config_at_creation;
+    wolfsentry1->events = wolfsentry2->events;
+    wolfsentry1->actions = wolfsentry2->actions;
+    wolfsentry1->routes_static = wolfsentry2->routes_static;
+    wolfsentry1->routes_dynamic = wolfsentry2->routes_dynamic;
+    wolfsentry1->ents_by_id = wolfsentry2->ents_by_id;
+
+    wolfsentry2->timecbs = scratch.timecbs;
+    wolfsentry2->mk_id_cb_state = scratch.mk_id_cb_state;
+    wolfsentry2->config = scratch.config;
+    wolfsentry2->config_at_creation = scratch.config_at_creation;
+    wolfsentry2->events = scratch.events;
+    wolfsentry2->actions = scratch.actions;
+    wolfsentry2->routes_static = scratch.routes_static;
+    wolfsentry2->routes_dynamic = scratch.routes_dynamic;
+    wolfsentry2->ents_by_id = scratch.ents_by_id;
 
     WOLFSENTRY_RETURN_OK;
 }

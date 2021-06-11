@@ -22,6 +22,9 @@
 
 #define _GNU_SOURCE
 
+#define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_USER_BASE
+#define WOLFSENTRY_ERROR_ID_UNIT_TEST_FAILURE WOLFSENTRY_ERROR_ID_USER_BASE
+
 #include "src/wolfsentry_internal.h"
 
 #include <stdlib.h>
@@ -429,6 +432,21 @@ static int test_rw_locks (void) {
         return 1;
     // GCOV_EXCL_STOP
     }
+
+
+    /* cursory exercise of compound reservation calls. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex2shared_and_reserve_shared2mutex(lock));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(lock));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared_and_reserve_shared2mutex(lock));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(lock));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared_timed_and_reserve_shared2mutex(wolfsentry, lock, 1000));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem_timed(wolfsentry, lock, 1000));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock));
 
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(wolfsentry, &lock));
@@ -1458,11 +1476,72 @@ static wolfsentry_errcode_t test_action(
     return 0;
 }
 
+static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry, const char *fname, wolfsentry_config_load_flags_t flags) {
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_json_process_state *jps;
+    FILE *f;
+    char buf[512], err_buf[512];
+
+    if (strcmp(fname,"-"))
+        f = fopen(fname, "r");
+    else
+        f = stdin; // GCOV_EXCL_LINE
+    if (! f) {
+    // GCOV_EXCL_START
+        fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    // GCOV_EXCL_STOP
+    }
+
+    ret = wolfsentry_config_json_init(
+        wolfsentry,
+        flags,
+        &jps);
+    if (ret < 0)
+        goto out;
+
+    for (;;) {
+        size_t n = fread(buf, 1, sizeof buf, f);
+        if ((n < sizeof buf) && ferror(f)) {
+        // GCOV_EXCL_START
+            fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
+            ret = WOLFSENTRY_ERROR_ENCODE(UNIT_TEST_FAILURE);
+            goto out;
+        // GCOV_EXCL_STOP
+        }
+
+        ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
+        if (ret < 0) {
+        // GCOV_EXCL_START
+            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            goto out;
+        // GCOV_EXCL_STOP
+        }
+        if ((n < sizeof buf) && feof(f))
+            break;
+    }
+    ret = wolfsentry_config_json_fini(jps, err_buf, sizeof err_buf);
+    if (ret < 0) {
+    // GCOV_EXCL_START
+        fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+        goto out;
+    // GCOV_EXCL_STOP
+    }
+
+    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+  out:
+
+    if (f != stdin)
+        fclose(f);
+
+    return ret;
+}
+
 
 static int test_json(const char *fname) {
     wolfsentry_errcode_t ret;
     struct wolfsentry_context *wolfsentry;
-    struct json_process_state *jps;
     wolfsentry_ent_id_t id;
 
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
@@ -1525,52 +1604,24 @@ static int test_json(const char *fname) {
                                    NULL,
                                    &id));
 
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_init(
-                                   wolfsentry,
-                                   WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
-                                   &jps));
+    WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(wolfsentry, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN));
 
-    FILE *f;
-    if (strcmp(fname,"-"))
-        f = fopen(fname, "r");
-    else
-        f = stdin; // GCOV_EXCL_LINE
-    if (! f) {
-    // GCOV_EXCL_START
-        fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
-        exit(1);
-    // GCOV_EXCL_STOP
+    WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(wolfsentry, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT));
+
+    WOLFSENTRY_EXIT_ON_SUCCESS(json_feed_file(wolfsentry, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(wolfsentry, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+
+    {
+        struct wolfsentry_context *clone;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(wolfsentry, &clone, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION));
+        WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(clone, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_exchange(wolfsentry, clone));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(&clone));
     }
 
-    char buf[512], err_buf[512];
-    for (;;) {
-        size_t n = fread(buf, 1, sizeof buf, f);
-        if ((n < sizeof buf) && ferror(f)) {
-        // GCOV_EXCL_START
-            fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
-            exit(1);
-        // GCOV_EXCL_STOP
-        }
-
-        ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
-        if (ret < 0) {
-        // GCOV_EXCL_START
-            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-            exit(1);
-        // GCOV_EXCL_STOP
-        }
-        if ((n < sizeof buf) && feof(f))
-            break;
-    }
-    if (f != stdin)
-        fclose(f);
-    ret = wolfsentry_config_json_fini(jps, err_buf, sizeof err_buf);
-    if (ret < 0) {
-    // GCOV_EXCL_START
-        fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-        exit(1);
-    // GCOV_EXCL_STOP
-    }
 
     {
         struct wolfsentry_cursor *cursor;
@@ -1631,6 +1682,11 @@ int main (int argc, char* argv[]) {
     int err = 0;
     (void)argc;
     (void)argv;
+
+#ifdef WOLFSENTRY_ERROR_STRINGS
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_REGISTER_SOURCE());
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_REGISTER_ERROR(UNIT_TEST_FAILURE, "failure within unit test"));
+#endif
 
 #ifdef TEST_INIT
     ret = test_init();

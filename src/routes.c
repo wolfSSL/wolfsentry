@@ -45,7 +45,7 @@ static inline int cmp_addrs(
         else if (match_subnets_p) {
             size_t min_bytes = WOLFSENTRY_BITS_TO_BYTES((size_t)min_addr_len);
             if ((min_addr_len & 0x7) == 0) {
-                if ((cmp = memcmp(left_addr, right_addr, min_bytes - 1)))
+                if ((cmp = memcmp(left_addr, right_addr, min_bytes)))
                     return cmp;
                 else
                     *inexact_p = 1;

@@ -274,9 +274,9 @@ typedef enum {
 typedef enum {
     WOLFSENTRY_ACTION_TYPE_NONE = 0,
     WOLFSENTRY_ACTION_TYPE_POST = 1, /* called when an event is posted. */
-    WOLFSENTRY_ACTION_TYPE_INSERT, /* called when a route is added to the route table for this event. */
-    WOLFSENTRY_ACTION_TYPE_MATCH, /* called by wolfsentry_route_dispatch() for a route match. */
-    WOLFSENTRY_ACTION_TYPE_DELETE /* called when a route associated with this event expires or is otherwise deleted. */
+    WOLFSENTRY_ACTION_TYPE_INSERT = 2, /* called when a route is added to the route table for this event. */
+    WOLFSENTRY_ACTION_TYPE_MATCH = 3, /* called by wolfsentry_route_dispatch() for a route match. */
+    WOLFSENTRY_ACTION_TYPE_DELETE = 4 /* called when a route associated with this event expires or is otherwise deleted. */
 } wolfsentry_action_type_t;
 
 #define WOLFSENTRY_ACTION_RES_USER_SHIFT 16U
@@ -300,6 +300,7 @@ typedef enum {
 
 #define WOLFSENTRY_ROUTE_DEFAULT_POLICY_MASK (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_STOP | WOLFSENTRY_ACTION_RES_ERROR)
 
+struct wolfsentry_table_header;
 struct wolfsentry_route;
 struct wolfsentry_route_table;
 struct wolfsentry_event;
@@ -767,6 +768,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_flush_table(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route_table *table);
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_bulk_clear_insert_action_status(
+    struct wolfsentry_context *wolfsentry);
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_bulk_insert_actions(
     struct wolfsentry_context *wolfsentry);
 
@@ -935,6 +939,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_action_list_next(
     struct wolfsentry_action_list_ent **cursor,
     const char **action_label,
     int *action_label_len);
+
+WOLFSENTRY_API wolfsentry_hitcount_t wolfsentry_table_n_inserts(struct wolfsentry_table_header *table);
+
+WOLFSENTRY_API wolfsentry_hitcount_t wolfsentry_table_n_deletes(struct wolfsentry_table_header *table);
 
 /* conditionally include wolfsentry_util.h last -- none of the above rely on it.
  */

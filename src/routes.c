@@ -1208,6 +1208,36 @@ wolfsentry_errcode_t wolfsentry_route_flush_table(
         wolfsentry);
 }
 
+static wolfsentry_errcode_t wolfsentry_route_clear_insert_action_status(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    wolfsentry_action_res_t *action_results)
+{
+    (void)wolfsentry;
+    (void)action_results;
+    if (WOLFSENTRY_CHECK_BITS(route->flags, WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED))
+        WOLFSENTRY_CLEAR_BITS(route->flags, WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED);
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_bulk_clear_insert_action_status(
+    struct wolfsentry_context *wolfsentry)
+{
+    wolfsentry_errcode_t ret;
+    ret = wolfsentry_table_map(
+        wolfsentry,
+        &wolfsentry->routes_dynamic.header,
+        (wolfsentry_map_function_t)wolfsentry_route_clear_insert_action_status,
+        wolfsentry);
+    if (ret < 0)
+        return ret;
+    return wolfsentry_table_map(
+        wolfsentry,
+        &wolfsentry->routes_dynamic.header,
+        (wolfsentry_map_function_t)wolfsentry_route_clear_insert_action_status,
+        wolfsentry);
+}
+
 static wolfsentry_errcode_t wolfsentry_route_call_insert_action(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route *route,

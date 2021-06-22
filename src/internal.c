@@ -63,6 +63,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_insert(struct wolfsentry_context *wolf
         ent->prev = ent->next = NULL;
     }
     ++table->n_ents;
+    ++table->n_inserts;
     ent->parent_table = table;
 
     WOLFSENTRY_RETURN_OK;
@@ -181,6 +182,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(struct wolfsentry_context
         ent->prev_by_id = ent->next_by_id = NULL;
     }
     ++wolfsentry->ents_by_id.n_ents;
+    ++wolfsentry->ents_by_id.n_inserts;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -214,6 +216,7 @@ void wolfsentry_table_ent_delete_by_id_1(struct wolfsentry_context *wolfsentry, 
         wolfsentry->ents_by_id.tail = ent->prev_by_id;
     ent->prev_by_id = ent->next_by_id = NULL;
     --wolfsentry->ents_by_id.n_ents;
+    ++wolfsentry->ents_by_id.n_deletes;
 }
 
 wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(struct wolfsentry_context *wolfsentry, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
@@ -261,6 +264,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_1(struct wolfsentry_context *wo
         ent->parent_table->tail = ent->prev;
     ent->prev = ent->next = NULL;
     --ent->parent_table->n_ents;
+    ++ent->parent_table->n_deletes;
     ent->parent_table = NULL;
 
     if (ent->id != WOLFSENTRY_ENT_ID_NONE)

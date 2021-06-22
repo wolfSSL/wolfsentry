@@ -1066,11 +1066,24 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
     }
 
     if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
+        int flush_routes_p = ! WOLFSENTRY_MASKIN_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH);
+        struct wolfsentry_route_table *old_static_route_table, *new_static_route_table;
+        if ((ret = wolfsentry_route_get_table_static(jps->wolfsentry_actual, &old_static_route_table)) < 0)
+            goto out;
+        if ((ret = wolfsentry_route_get_table_static(jps->wolfsentry, &new_static_route_table)) < 0)
+            goto out;
+        if (wolfsentry_table_n_deletes((struct wolfsentry_table_header *)new_static_route_table)
+            != wolfsentry_table_n_deletes((struct wolfsentry_table_header *)old_static_route_table)) {
+            if ((ret = wolfsentry_route_bulk_clear_insert_action_status(jps->wolfsentry)) < 0)
+                goto out;
+            flush_routes_p = 1;
+        }
+
         ret = wolfsentry_context_exchange(jps->wolfsentry_actual, jps->wolfsentry);
         if (ret < 0)
             goto out;
 
-        if (! WOLFSENTRY_MASKIN_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH)) {
+        if (flush_routes_p) {
             if ((ret = wolfsentry_context_flush(jps->wolfsentry)) < 0)
                 goto out;
         }

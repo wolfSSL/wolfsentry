@@ -138,6 +138,8 @@ struct wolfsentry_table_header {
     wolfsentry_ent_free_fn_t free_fn;
     wolfsentry_ent_id_t id;
     wolfsentry_hitcount_t n_ents;
+    wolfsentry_hitcount_t n_inserts;
+    wolfsentry_hitcount_t n_deletes;
     wolfsentry_object_type_t ent_type;
 };
 

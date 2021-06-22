@@ -2131,3 +2131,11 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
 
     WOLFSENTRY_RETURN_OK;
 }
+
+wolfsentry_hitcount_t wolfsentry_table_n_inserts(struct wolfsentry_table_header *table) {
+    return table->n_inserts;
+}
+
+wolfsentry_hitcount_t wolfsentry_table_n_deletes(struct wolfsentry_table_header *table) {
+    return table->n_deletes;
+}

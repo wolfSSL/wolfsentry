@@ -21,6 +21,14 @@ do
 	git checkout -q "$local_oid" || exit 1
 	echo "make --quiet -j check for ${local_ref} at ${local_oid} ..."
 	make --quiet -j check || exit 1
+	echo -n 'make dist && make test...'
+	make --quiet VERY_QUIET=1 dist || exit 1
+	mkdir dist-build || exit 1
+	cd dist-build || exit 1
+	tar -xf ../wolfsentry-*.tgz || exit 1
+	cd * || exit 1
+	make --quiet VERY_QUIET=1 -j test || exit 1
+	echo ' succeeded'
 done
 
 exit 0

@@ -41,9 +41,9 @@ ifneq "$(NO_JSON)" "1"
 endif
 
 ifndef SRC_TOP
-    SRC_TOP := $(shell realpath .)
+    SRC_TOP := $(shell pwd -P)
 else
-    SRC_TOP := $(shell realpath $(SRC_TOP))
+    SRC_TOP := $(shell cd $(SRC_TOP) && pwd -P)
 endif
 
 ifndef BUILD_TOP

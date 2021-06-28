@@ -7,7 +7,7 @@ is mainly used as a library, but can also be used as part of a kernel module.
 
 At a high level, wolfSentry is a dynamically configurable logic hub, arbitrarily associating user-defined events with user-defined actions, contextualized by connection attributes, tracking the evolution of the client-server relationship. At a low level, wolfSentry is an embedded firewall engine (both static and fully dynamic), with O(log n) lookup of known hosts/netblocks.
 
-wolfSentry will be fully integrated into the wolfSSL library, wolfMQTT, and wolfSSH, with optional in-tree call-ins and callbacks that give application developers turnkey IDPS across all network-facing wolfSSL products, with a viable zero-configuration option. These integrations will be available via simple --enable-wolfidps configure options in wolfSSL sibling products.
+wolfSentry will be fully integrated into the wolfSSL library, wolfMQTT, and wolfSSH, with optional in-tree call-ins and callbacks that give application developers turnkey IDPS across all network-facing wolfSSL products, with a viable zero-configuration option. These integrations will be available via simple `--enable-wolfidps` configure options in wolfSSL sibling products.
 
 The wolfSentry engine will be dynamically configurable programmatically through an API, or from a textual input file supplied to the engine. Callback and client-server implementations will also be supplied that deliver advanced capabilities including remote logging through MQTT or syslog, and remote configuration and status queries, all cryptographically secured.
 
@@ -78,9 +78,21 @@ Build and test with user settings:
 
 ## Examples
 
-See examples/server/server.c (sections gated on `WOLFSSL_WOLFSENTRY_HOOKS`) in
-[the master branch of wolfSSL](https://github.com/wolfSSL/wolfssl),
-introduced by [PR #3889](https://github.com/wolfSSL/wolfssl/pull/3889).  Use `configure
+In [the wolfSSL repository](https://github.com/wolfSSL/wolfssl), see code gated
+on `WOLFSSL_WOLFSENTRY_HOOKS`, including `wolfsentry_store_endpoints()`,
+`wolfSentry_NetworkFilterCallback()`, `wolfsentry_setup()`, and
+`tcp_connect_with_wolfSentry()`.  See also code in examples/server/server.c and
+examples/client/client.c gated on `WOLFSSL_WOLFSENTRY_HOOKS`.  Use `configure
 --enable-wolfsentry` to build with wolfSentry integration, and use
 `--with-wolfsentry=/the/install/path` if wolfSentry is installed in a
-nonstandard location.
+nonstandard location.  The wolfSSL test client/server can be loaded with
+user-supplied wolfSentry JSON configurations from the command line, using
+`--wolfsentry-config <file>`.
+
+More comprehensive examples of API usage are in the wolfSentry repo in
+tests/unittests.c, particularly `test_static_routes()`, `test_dynamic_rules()`,
+and `test_json()`.
+
+Example JSON configuration files are at `tests/test-config.json` and
+`tests/test-config-numeric.json`.  The latter differs only by the use of raw
+numbers rather than names for address families and protocols.

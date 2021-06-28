@@ -41,7 +41,9 @@ ifneq "$(NO_JSON)" "1"
 endif
 
 ifndef SRC_TOP
-    SRC_TOP := .
+    SRC_TOP := $(shell realpath .)
+else
+    SRC_TOP := $(shell realpath $(SRC_TOP))
 endif
 
 ifndef BUILD_TOP
@@ -293,7 +295,23 @@ endif
 
 .PHONY: dist
 dist:
-	cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.analyzers wolfsentry/ src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c tests/test-config.json tests/test-config-numeric.json
+ifdef VERY_QUIET
+	@cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.analyzers wolfsentry/*.h src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c tests/test-config.json tests/test-config-numeric.json
+else
+	cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md Makefile Makefile.analyzers wolfsentry/*.h src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c tests/test-config.json tests/test-config-numeric.json
+endif
+
+dist-test: dist
+	@[ -d $(BUILD_TOP)/dist-test ] || mkdir -p $(BUILD_TOP)/dist-test
+ifdef VERY_QUIET
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf $(SRC_TOP)/wolfsentry-$(VERSION).tgz && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
+else
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf $(SRC_TOP)/wolfsentry-$(VERSION).tgz && cd wolfsentry-$(VERSION) && $(MAKE) test
+endif
+
+dist-test-clean:
+	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $(SRC_TOP)/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $(SRC_TOP)/wolfsentry-$(VERSION).tgz | xargs $(RM) -f || exit 0
+	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test || exit 0
 
 CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
@@ -302,7 +320,7 @@ clean:
 ifdef VERY_QUIET
 	@rm $(CLEAN_RM_ARGS)
 else
-	@rm $(CLEAN_RM_ARGS) && echo 'cleaned all targets and ephemera in $(BUILD_TOP).'
+	@rm $(CLEAN_RM_ARGS) && echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
 endif
 	@[ "$(BUILD_TOP)" != "." ] && find $(BUILD_TOP) -depth -type d 2>/dev/null | xargs rmdir 2>/dev/null || exit 0
 

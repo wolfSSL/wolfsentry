@@ -78,16 +78,16 @@ Build and test with user settings:
 
 ## Examples
 
-In [the wolfSSL repository](https://github.com/wolfSSL/wolfssl), see code gated
-on `WOLFSSL_WOLFSENTRY_HOOKS`, including `wolfsentry_store_endpoints()`,
-`wolfSentry_NetworkFilterCallback()`, `wolfsentry_setup()`, and
-`tcp_connect_with_wolfSentry()`.  See also code in examples/server/server.c and
-examples/client/client.c gated on `WOLFSSL_WOLFSENTRY_HOOKS`.  Use `configure
---enable-wolfsentry` to build with wolfSentry integration, and use
-`--with-wolfsentry=/the/install/path` if wolfSentry is installed in a
-nonstandard location.  The wolfSSL test client/server can be loaded with
-user-supplied wolfSentry JSON configurations from the command line, using
-`--wolfsentry-config <file>`.
+In [the wolfSSL repository](https://github.com/wolfSSL/wolfssl), see code in
+`wolfsentry/test.h` gated on `WOLFSSL_WOLFSENTRY_HOOKS`, including
+`wolfsentry_store_endpoints()`, `wolfSentry_NetworkFilterCallback()`,
+`wolfsentry_setup()`, and `tcp_connect_with_wolfSentry()`.  See also code in
+`examples/server/server.c` and `examples/client/client.c` gated on
+`WOLFSSL_WOLFSENTRY_HOOKS`.  Use `configure --enable-wolfsentry` to build with
+wolfSentry integration, and use `--with-wolfsentry=/the/install/path` if
+wolfSentry is installed in a nonstandard location.  The wolfSSL test
+client/server can be loaded with user-supplied wolfSentry JSON configurations
+from the command line, using `--wolfsentry-config <file>`.
 
 More comprehensive examples of API usage are in the wolfSentry repo in
 tests/unittests.c, particularly `test_static_routes()`, `test_dynamic_rules()`,

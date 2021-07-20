@@ -23,6 +23,10 @@
 #ifndef WOLFSENTRY_H
 #define WOLFSENTRY_H
 
+#ifndef BUILDING_LIBWOLFSENTRY
+#include <wolfsentry/wolfsentry_options.h>
+#endif
+
 #ifdef WOLFSENTRY_USER_SETTINGS_FILE
 #include WOLFSENTRY_USER_SETTINGS_FILE
 #endif

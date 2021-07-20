@@ -23,8 +23,6 @@
 #ifndef WOLFSENTRY_INTERNAL_H
 #define WOLFSENTRY_INTERNAL_H
 
-#define BUILDING_LIBWOLFSENTRY
-
 #include "wolfsentry/wolfsentry.h"
 #include "wolfsentry/wolfsentry_util.h"
 

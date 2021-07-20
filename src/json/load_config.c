@@ -20,8 +20,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#define BUILDING_LIBWOLFSENTRY
-
 #include "wolfsentry/wolfsentry_json.h"
 #include "wolfsentry/wolfsentry_util.h"
 

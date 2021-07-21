@@ -968,7 +968,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(route->meta.commendable_count);
 
     if ((route->flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)) {
-        if (config->config.penaltybox_duration > 0) {
+        if ((config->config.penaltybox_duration > 0) && (route->meta.last_penaltybox_time != 0)) {
             wolfsentry_time_t now;
             wolfsentry_errcode_t ret = WOLFSENTRY_GET_TIME(&now);
             if (ret < 0)

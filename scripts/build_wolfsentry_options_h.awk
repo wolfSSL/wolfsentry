@@ -11,7 +11,8 @@ BEGIN {
             split(varassignment, varassignment_a, /[ =]+/);
             printf("#undef %s\n#define %s",varassignment_a[1],varassignment_a[1]);
             if (varassignment_a[2]) {
-                val = gensub(/\\"/, "\"", "g", varassignment_a[2]);
+                val = varassignment_a[2];
+                gsub(/\\"/, "\"", val);
                 printf(" %s", val);
             }
             print "";

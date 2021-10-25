@@ -39,7 +39,8 @@ enum {
     WOLFSENTRY_CONFIG_LOAD_FLAG_NONE             = 0U,
     WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH         = 1U << 0U,
     WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN          = 1U << 1U,
-    WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT = 1U << 2U
+    WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT = 1U << 2U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_FINI             = 1U << 30U
 };
 
 struct wolfsentry_json_process_state;
@@ -63,7 +64,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct wolfsentry_json_process_state *jps, int *json_errcode, const char **json_errmsg);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
-    struct wolfsentry_json_process_state *jps,
+    struct wolfsentry_json_process_state **jps,
     char *err_buf,
     size_t err_buf_size);
 

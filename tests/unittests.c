@@ -1520,7 +1520,7 @@ static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry
         if ((n < sizeof buf) && feof(f))
             break;
     }
-    ret = wolfsentry_config_json_fini(jps, err_buf, sizeof err_buf);
+    ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
     if (ret < 0) {
     // GCOV_EXCL_START
         fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);

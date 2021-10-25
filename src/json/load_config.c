@@ -135,6 +135,8 @@ struct wolfsentry_json_process_state {
     int cur_keydepth;
     JSON_INPUT_POS key_pos;
 
+    wolfsentry_errcode_t fini_ret;
+
     const struct wolfsentry_host_platform_interface *hpi;
 
     struct wolfsentry_eventconfig default_config;
@@ -943,6 +945,10 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
 
     if (wolfsentry == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if ((*jps = (struct wolfsentry_json_process_state *)wolfsentry_malloc(wolfsentry, sizeof **jps)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memset(*jps, 0, sizeof **jps);
@@ -1014,19 +1020,23 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
     size_t err_buf_size)
 {
     JSON_INPUT_POS json_pos;
+
+    if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     int ret = json_feed(&jps->parser, json_in, json_in_len);
     if (ret != JSON_ERR_SUCCESS) {
-        ret = json_fini(&jps->parser, &json_pos);
+        jps->fini_ret = json_fini(&jps->parser, &json_pos);
+        WOLFSENTRY_SET_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI);
         if (err_buf) {
-            if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with centijson code %d: %s", json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_error_str(ret));
+            if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with centijson code %d: %s", json_pos.offset,json_pos.line_number, json_pos.column_number, jps->fini_ret, json_error_str(jps->fini_ret));
             else
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with " WOLFSENTRY_ERROR_FMT, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with " WOLFSENTRY_ERROR_FMT, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
         }
-        if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
+        if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
             WOLFSENTRY_ERROR_RETURN(CONFIG_PARSER);
         else
-            return ret;
+            return jps->fini_ret;
     }
     WOLFSENTRY_RETURN_OK;
 }
@@ -1043,64 +1053,78 @@ wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct wolfsentry_json_
 }
 
 wolfsentry_errcode_t wolfsentry_config_json_fini(
-    struct wolfsentry_json_process_state *jps,
+    struct wolfsentry_json_process_state **jps,
     char *err_buf,
     size_t err_buf_size)
 {
     wolfsentry_errcode_t ret;
     JSON_INPUT_POS json_pos;
-    ret = json_fini(&jps->parser, &json_pos);
-    if (ret != JSON_ERR_SUCCESS) {
-        if (err_buf != NULL)
-            snprintf(err_buf, err_buf_size, "json_fini failed at offset %zu, L%u, col %u, with code %d: %s.",
-                     json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_error_str(ret));
-        ret = WOLFSENTRY_ERROR_ENCODE(CONFIG_PARSER);
-        goto out;
+
+    if ((jps == NULL) || (*jps == NULL))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    if (WOLFSENTRY_CHECK_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI)) {
+        if ((*jps)->fini_ret != JSON_ERR_SUCCESS) {
+            ret = WOLFSENTRY_ERROR_ENCODE(CONFIG_PARSER);
+            goto out;
+        }
+    } else {
+        (*jps)->fini_ret = json_fini(&(*jps)->parser, &json_pos);
+        if ((*jps)->fini_ret != JSON_ERR_SUCCESS) {
+            if (err_buf != NULL)
+                snprintf(err_buf, err_buf_size, "json_fini failed at offset %zu, L%u, col %u, with code %d: %s.",
+                         json_pos.offset,json_pos.line_number, json_pos.column_number, (*jps)->fini_ret, json_error_str((*jps)->fini_ret));
+            ret = WOLFSENTRY_ERROR_ENCODE(CONFIG_PARSER);
+            goto out;
+        }
     }
 
-    if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN)) {
+    if (WOLFSENTRY_CHECK_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN)) {
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
         goto out;
     }
 
-    if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
-        int flush_routes_p = ! WOLFSENTRY_MASKIN_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH);
+    if (WOLFSENTRY_CHECK_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
+        int flush_routes_p = ! WOLFSENTRY_MASKIN_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH);
         struct wolfsentry_route_table *old_static_route_table, *new_static_route_table;
-        if ((ret = wolfsentry_route_get_table_static(jps->wolfsentry_actual, &old_static_route_table)) < 0)
+        if ((ret = wolfsentry_route_get_table_static((*jps)->wolfsentry_actual, &old_static_route_table)) < 0)
             goto out;
-        if ((ret = wolfsentry_route_get_table_static(jps->wolfsentry, &new_static_route_table)) < 0)
+        if ((ret = wolfsentry_route_get_table_static((*jps)->wolfsentry, &new_static_route_table)) < 0)
             goto out;
         if (wolfsentry_table_n_deletes((struct wolfsentry_table_header *)new_static_route_table)
             != wolfsentry_table_n_deletes((struct wolfsentry_table_header *)old_static_route_table)) {
-            if ((ret = wolfsentry_route_bulk_clear_insert_action_status(jps->wolfsentry)) < 0)
+            if ((ret = wolfsentry_route_bulk_clear_insert_action_status((*jps)->wolfsentry)) < 0)
                 goto out;
             flush_routes_p = 1;
         }
 
-        ret = wolfsentry_context_exchange(jps->wolfsentry_actual, jps->wolfsentry);
+        ret = wolfsentry_context_exchange((*jps)->wolfsentry_actual, (*jps)->wolfsentry);
         if (ret < 0)
             goto out;
 
         if (flush_routes_p) {
-            if ((ret = wolfsentry_context_flush(jps->wolfsentry)) < 0)
+            if ((ret = wolfsentry_context_flush((*jps)->wolfsentry)) < 0)
                 goto out;
         }
 
-        if ((ret = wolfsentry_context_enable_actions(jps->wolfsentry_actual)) < 0)
+        if ((ret = wolfsentry_context_enable_actions((*jps)->wolfsentry_actual)) < 0)
             goto out;
 
-        if ((ret = wolfsentry_route_bulk_insert_actions(jps->wolfsentry_actual)) < 0)
+        if ((ret = wolfsentry_route_bulk_insert_actions((*jps)->wolfsentry_actual)) < 0)
             goto out;
 
-        (void)wolfsentry_context_free(&jps->wolfsentry);
-    }
+        (void)wolfsentry_context_free(&(*jps)->wolfsentry);
+    } else
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
   out:
 
-    if (jps->wolfsentry && (jps->wolfsentry != jps->wolfsentry_actual))
-        (void)wolfsentry_context_free(&jps->wolfsentry);
+    if ((*jps)->wolfsentry && ((*jps)->wolfsentry != (*jps)->wolfsentry_actual))
+        (void)wolfsentry_context_free(&(*jps)->wolfsentry);
 
-    wolfsentry_free(jps->wolfsentry_actual, jps);
+    wolfsentry_free((*jps)->wolfsentry_actual, *jps);
+
+    *jps = NULL;
 
     if (ret < 0)
         return ret;
@@ -1121,8 +1145,8 @@ wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     if ((ret = wolfsentry_config_json_init(wolfsentry, load_flags, &jps)) < 0)
         return ret;
     if ((ret = wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size)) < 0) {
-        (void)wolfsentry_config_json_fini(jps, NULL, 0);
+        (void)wolfsentry_config_json_fini(&jps, NULL, 0);
         return ret;
     }
-    return wolfsentry_config_json_fini(jps, err_buf, err_buf_size);
+    return wolfsentry_config_json_fini(&jps, err_buf, err_buf_size);
 }

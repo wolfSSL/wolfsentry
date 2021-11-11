@@ -1884,10 +1884,14 @@ const char *wolfsentry_family_ntop(wolfsentry_family_t family) {
 
 #ifndef WOLFSENTRY_NO_STDIO
 
+#ifndef WOLFSENTRY_LWIP
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-
+#else
+#include <lwip/inet.h>
+#include <lwip/sockets.h>
+#endif
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 #include <netdb.h>
 #endif

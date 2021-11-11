@@ -1,6 +1,6 @@
 FROM debian:10 AS builder
 
-RUN apt-get update && apt-get install -y unzip libpcap-dev build-essential git cmake libpcap0.8 gdb
+RUN apt-get update && apt-get install -y unzip libpcap-dev build-essential git cmake libpcap0.8
 
 WORKDIR /src
 

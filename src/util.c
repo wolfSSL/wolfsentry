@@ -185,7 +185,7 @@ static void *wolfsentry_builtin_memalign(void *context, size_t alignment, size_t
         return malloc(size);
 #ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
     else
-        return NULL;
+        return malloc(size);
 #else
     else {
         void *ret = 0;
@@ -1668,6 +1668,22 @@ wolfsentry_errcode_t wolfsentry_context_unlock(
 
 #ifdef WOLFSENTRY_CLOCK_BUILTINS
 
+#ifdef FREERTOS
+
+#include <FreeRTOS.h>
+#include <task.h>
+
+static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now) {
+    TimeOut_t xCurrentTime = { 0 };
+    uint64_t ullTickCount = 0;
+    vTaskSetTimeOutState(&xCurrentTime);
+    ullTickCount = (uint64_t)(xCurrentTime.xOverflowCount) << (sizeof(TickType_t) * 8);
+    ullTickCount += xCurrentTime.xTimeOnEntering;
+    *now = ullTickCount * (1000000000LL / configTICK_RATE_HZ);
+    WOLFSENTRY_RETURN_OK;
+}
+#else
+
 #include <time.h>
 
 static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now) {
@@ -1678,6 +1694,8 @@ static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentr
     *now = ((wolfsentry_time_t)ts.tv_sec * (wolfsentry_time_t)1000000) + ((wolfsentry_time_t)ts.tv_nsec / (wolfsentry_time_t)1000);
     WOLFSENTRY_RETURN_OK;
 }
+
+#endif /* FREERTOS */
 
 static wolfsentry_time_t wolfsentry_builtin_diff_time(wolfsentry_time_t later, wolfsentry_time_t earlier) {
     return later - earlier;

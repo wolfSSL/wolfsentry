@@ -119,6 +119,12 @@
 #include <strings.h>
 #endif
 
+#ifdef FREERTOS
+#define SSIZET_FMT "%ld"
+#else
+#define SSIZET_FMT "%zd"
+#endif
+
 typedef unsigned char byte;
 
 #include <wolfsentry/wolfsentry_af.h>

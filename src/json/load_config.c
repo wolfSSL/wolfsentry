@@ -1047,9 +1047,9 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
         WOLFSENTRY_SET_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI);
         if (err_buf) {
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with centijson code %d: %s", json_pos.offset,json_pos.line_number, json_pos.column_number, jps->fini_ret, json_error_str(jps->fini_ret));
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset " SSIZET_FMT ", L%u, col %u, with centijson code %d: %s", json_pos.offset,json_pos.line_number, json_pos.column_number, jps->fini_ret, json_error_str(jps->fini_ret));
             else
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %zu, L%u, col %u, with " WOLFSENTRY_ERROR_FMT, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset " SSIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
         }
         if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
             WOLFSENTRY_ERROR_RETURN(CONFIG_PARSER);
@@ -1090,7 +1090,7 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
         (*jps)->fini_ret = json_fini(&(*jps)->parser, &json_pos);
         if ((*jps)->fini_ret != JSON_ERR_SUCCESS) {
             if (err_buf != NULL)
-                snprintf(err_buf, err_buf_size, "json_fini failed at offset %zu, L%u, col %u, with code %d: %s.",
+                snprintf(err_buf, err_buf_size, "json_fini failed at offset " SSIZET_FMT ", L%u, col %u, with code %d: %s.",
                          json_pos.offset,json_pos.line_number, json_pos.column_number, (*jps)->fini_ret, json_error_str((*jps)->fini_ret));
             ret = WOLFSENTRY_ERROR_ENCODE(CONFIG_PARSER);
             goto out;

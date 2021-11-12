@@ -102,7 +102,7 @@
 #endif
 
 #ifdef WOLFSENTRY_THREADSAFE
-#ifndef WOLFSENTRY_NO_SEMAPHORE_H
+#if !defined(WOLFSENTRY_NO_SEMAPHORE_H) && !defined(FREERTOS)
 #include <semaphore.h>
 #endif
 #endif

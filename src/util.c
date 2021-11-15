@@ -196,19 +196,26 @@ static void *wolfsentry_builtin_memalign(void *context, size_t alignment, size_t
 #endif
 }
 
+static void wolfsentry_builtin_free_aligned(void *context, void *ptr) {
+    (void)context;
+    free(ptr);
+}
+
 static const struct wolfsentry_allocator default_allocator = {
 #ifdef __GNUC__
     .context = NULL,
     .malloc = wolfsentry_builtin_malloc,
     .free = wolfsentry_builtin_free,
     .realloc = wolfsentry_builtin_realloc,
-    .memalign = wolfsentry_builtin_memalign
+    .memalign = wolfsentry_builtin_memalign,
+    .free_aligned = wolfsentry_builtin_free_aligned
 #else
     NULL,
     wolfsentry_builtin_malloc,
     wolfsentry_builtin_free,
     wolfsentry_builtin_realloc,
-    wolfsentry_builtin_memalign
+    wolfsentry_builtin_memalign,
+    wolfsentry_builtin_free_aligned
 #endif
 };
 
@@ -1762,6 +1769,10 @@ void *wolfsentry_realloc(struct wolfsentry_context *wolfsentry, void *ptr, size_
 void *wolfsentry_memalign(struct wolfsentry_context *wolfsentry, size_t alignment, size_t size) {
     return wolfsentry->allocator.memalign ? wolfsentry->allocator.memalign(wolfsentry->allocator.context, alignment, size) : NULL;
 }
+void wolfsentry_free_aligned(struct wolfsentry_context *wolfsentry, void *ptr) {
+    if (ptr && wolfsentry->allocator.free_aligned)
+        wolfsentry->allocator.free_aligned(wolfsentry->allocator.context, ptr);
+}
 
 wolfsentry_errcode_t wolfsentry_get_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t *time_p) {
     return wolfsentry->timecbs.get_time(wolfsentry->timecbs.context, time_p);
@@ -1907,6 +1918,10 @@ wolfsentry_errcode_t wolfsentry_init(
     if ((allocator->malloc == NULL) ||
         (allocator->free == NULL) ||
         (allocator->realloc == NULL))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    if ((allocator->memalign == NULL) ^
+        (allocator->free_aligned == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((hpi == NULL) || (hpi->timecbs == NULL)) {

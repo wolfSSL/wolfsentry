@@ -268,6 +268,7 @@ struct wolfsentry_context {
 #define WOLFSENTRY_FREE(ptr) wolfsentry->allocator.free(wolfsentry->allocator.context, ptr)
 #define WOLFSENTRY_REALLOC(ptr, size) wolfsentry->allocator.realloc(wolfsentry->allocator.context, ptr, size)
 #define WOLFSENTRY_MEMALIGN(alignment, size) (wolfsentry->allocator.memalign ? wolfsentry->allocator.memalign(wolfsentry->allocator.context, alignment, size) : NULL)
+#define WOLFSENTRY_FREE_ALIGNED(ptr) (wolfsentry->allocator.memalign ? wolfsentry->allocator.free_aligned(wolfsentry->allocator.context, ptr) : (void)NULL)
 
 #define WOLFSENTRY_GET_TIME(time_p) wolfsentry->timecbs.get_time(wolfsentry->timecbs.context, time_p)
 #define WOLFSENTRY_DIFF_TIME(later, earlier) wolfsentry->timecbs.diff_time(later, earlier)

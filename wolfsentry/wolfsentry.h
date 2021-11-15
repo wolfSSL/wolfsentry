@@ -452,6 +452,7 @@ typedef void *(*wolfsentry_malloc_cb_t)(void *context, size_t size);
 typedef void (*wolfsentry_free_cb_t)(void *context, void *ptr);
 typedef void *(*wolfsentry_realloc_cb_t)(void *context, void *ptr, size_t size);
 typedef void *(*wolfsentry_memalign_cb_t)(void *context, size_t alignment, size_t size);
+typedef void (*wolfsentry_free_aligned_cb_t)(void *context, void *ptr);
 
 typedef wolfsentry_errcode_t (*wolfsentry_make_id_cb_t)(void *context, wolfsentry_object_type_t object_type, wolfsentry_ent_id_t *id);
 
@@ -461,6 +462,7 @@ struct wolfsentry_allocator {
     wolfsentry_free_cb_t free;
     wolfsentry_realloc_cb_t realloc;
     wolfsentry_memalign_cb_t memalign;
+    wolfsentry_free_aligned_cb_t free_aligned;
 };
 
 struct wolfsentry_timecbs {
@@ -478,6 +480,7 @@ WOLFSENTRY_API void *wolfsentry_malloc(struct wolfsentry_context *wolfsentry, si
 WOLFSENTRY_API void wolfsentry_free(struct wolfsentry_context *wolfsentry, void *ptr);
 WOLFSENTRY_API void *wolfsentry_realloc(struct wolfsentry_context *wolfsentry, void *ptr, size_t size);
 WOLFSENTRY_API void *wolfsentry_memalign(struct wolfsentry_context *wolfsentry, size_t alignment, size_t size);
+WOLFSENTRY_API void wolfsentry_free_aligned(struct wolfsentry_context *wolfsentry, void *ptr);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t *time_p);
 WOLFSENTRY_API wolfsentry_time_t wolfsentry_diff_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t later, wolfsentry_time_t earlier);

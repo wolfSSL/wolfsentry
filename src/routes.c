@@ -257,18 +257,30 @@ static void wolfsentry_route_update_flags_1(
     wolfsentry_route_flags_t *flags_before,
     wolfsentry_route_flags_t *flags_after);
 
+static void wolfsentry_route_free_1(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_eventconfig_internal *config,
+    struct wolfsentry_route *route)
+{
+    if (config->config.route_private_data_alignment == 0)
+        WOLFSENTRY_FREE(route);
+    else
+        WOLFSENTRY_FREE_ALIGNED(route);
+}
+
 static wolfsentry_errcode_t wolfsentry_route_drop_reference_1(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route *route,
     wolfsentry_action_res_t *action_results)
 {
+    struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
     if (route->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if (WOLFSENTRY_REFCOUNT_DECREMENT(route->header.refcount) > 0)
         WOLFSENTRY_RETURN_OK;
     if (route->parent_event)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(wolfsentry, route->parent_event, NULL /* action_results */));
-    WOLFSENTRY_FREE(route);
+    wolfsentry_route_free_1(wolfsentry, config, route);
     if (action_results)
         WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED);
     WOLFSENTRY_RETURN_OK;
@@ -413,7 +425,7 @@ wolfsentry_errcode_t wolfsentry_route_clone(
         wolfsentry_errcode_t ret;
         (*new_route)->parent_event = src_route->parent_event;
         if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&(*new_route)->parent_event)) < 0) {
-            dest_context->allocator.free(dest_context->allocator.context, *new_route);
+            wolfsentry_route_free_1(dest_context, config, *new_route);
             return ret;
         }
         WOLFSENTRY_REFCOUNT_INCREMENT((*new_route)->parent_event->header.refcount);
@@ -528,8 +540,10 @@ static wolfsentry_errcode_t wolfsentry_route_insert_2(
 
   out:
 
-    if (ret < 0)
-        WOLFSENTRY_FREE(new);
+    if (ret < 0) {
+        struct wolfsentry_eventconfig_internal *config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
+        wolfsentry_route_free_1(wolfsentry, config, new);
+    }
 
     return ret;
 }

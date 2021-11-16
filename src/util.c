@@ -382,8 +382,6 @@ static int freertos_sem_init( sem_t * sem,
               int pshared,
               unsigned value )
 {
-    int iStatus = 0;
-
     /* Silence warnings about unused parameters. */
     ( void ) pshared;
 
@@ -391,39 +389,25 @@ static int freertos_sem_init( sem_t * sem,
     if( value > SEM_VALUE_MAX )
     {
         errno = EINVAL;
-        iStatus = -1;
+        return -1;
     }
-
-    /* value is guaranteed to not exceed INT32_MAX, which is the default value of SEM_VALUE_MAX (0x7FFFU). */
-    sem->value = ( int ) value;
 
     /* Create the FreeRTOS semaphore.
      * This is only used to queue threads when no semaphore is available.
      * Initializing with semaphore initial count zero.
      * This call will not fail because the memory for the semaphore has already been allocated.
      */
-    if( iStatus == 0 )
-    {
-        ( void ) xSemaphoreCreateCountingStatic( SEM_VALUE_MAX, 0, &sem->sem );
-    }
+    ( void ) xSemaphoreCreateCountingStatic( SEM_VALUE_MAX, value, sem );
 
-    return iStatus;
+    return 0;
 }
 
 #define sem_init freertos_sem_init
 
 static int freertos_sem_post( sem_t * sem )
 {
-    int iPreviouValue = Atomic_Increment_u32( ( uint32_t * ) &sem->value );
-
-    /* If previous semaphore value is equal or larger than zero, there is no
-     * thread waiting for this semaphore. Otherwise (<0), call FreeRTOS interface
-     * to wake up a thread. */
-    if( iPreviouValue < 0 )
-    {
-        /* Give the semaphore using the FreeRTOS API. */
-        ( void ) xSemaphoreGive( ( SemaphoreHandle_t ) &sem->sem );
-    }
+    /* Give the semaphore using the FreeRTOS API. */
+    ( void ) xSemaphoreGive(sem);
 
     return 0;
 }
@@ -437,17 +421,17 @@ static void UTILS_NanosecondsToTimespec( int64_t llSource,
 	long lCarrySec = 0;
 
 	/* Convert to timespec. */
-	pxDestination->tv_sec = ( time_t ) ( llSource / NANOSECONDS_PER_SECOND );
-	pxDestination->tv_nsec = ( long ) ( llSource % NANOSECONDS_PER_SECOND );
+	pxDestination->tv_sec = ( time_t ) ( llSource / FREERTOS_SEM_NANOSECONDS_PER_SECOND );
+	pxDestination->tv_nsec = ( long ) ( llSource % FREERTOS_SEM_NANOSECONDS_PER_SECOND );
 
 	/* Subtract from tv_sec if tv_nsec < 0. */
 	if( pxDestination->tv_nsec < 0L )
 	{
 		/* Compute the number of seconds to carry. */
-		lCarrySec = ( pxDestination->tv_nsec / ( long ) NANOSECONDS_PER_SECOND ) + 1L;
+		lCarrySec = ( pxDestination->tv_nsec / ( long ) FREERTOS_SEM_NANOSECONDS_PER_SECOND ) + 1L;
 
 		pxDestination->tv_sec -= ( time_t ) ( lCarrySec );
-		pxDestination->tv_nsec += lCarrySec * ( long ) NANOSECONDS_PER_SECOND;
+		pxDestination->tv_nsec += lCarrySec * ( long ) FREERTOS_SEM_NANOSECONDS_PER_SECOND;
 	}
 }
 
@@ -538,7 +522,7 @@ static int UTILS_TimespecSubtract( const struct timespec * const x,
             {
                 /* Based on comparison, tv_sec > 0 */
                 pxResult->tv_sec--;
-                pxResult->tv_nsec += ( long ) NANOSECONDS_PER_SECOND;
+                pxResult->tv_nsec += ( long ) FREERTOS_SEM_NANOSECONDS_PER_SECOND;
             }
 
             /* if nano second is negative after borrow, it is an overflow error */
@@ -560,7 +544,7 @@ static int UTILS_ValidateTimespec( const struct timespec * const pxTimespec )
     {
         /* Verify 0 <= tv_nsec < 1000000000. */
         if( ( pxTimespec->tv_nsec >= 0 ) &&
-            ( pxTimespec->tv_nsec < NANOSECONDS_PER_SECOND ) )
+            ( pxTimespec->tv_nsec < FREERTOS_SEM_NANOSECONDS_PER_SECOND ) )
         {
             xReturn = 1;
         }
@@ -593,9 +577,9 @@ static int UTILS_TimespecToTicks( const struct timespec * const pxTimespec,
 
         /* Convert timespec.tv_nsec to ticks. This value does not have to be checked
          * for overflow because a valid timespec has 0 <= tv_nsec < 1000000000 and
-         * NANOSECONDS_PER_TICK > 1. */
-        lNanoseconds = pxTimespec->tv_nsec / ( long ) NANOSECONDS_PER_TICK +                  /* Whole nanoseconds. */
-                       ( long ) ( pxTimespec->tv_nsec % ( long ) NANOSECONDS_PER_TICK != 0 ); /* Add 1 to round up if needed. */
+         * FREERTOS_SEM_NANOSECONDS_PER_TICK > 1. */
+        lNanoseconds = pxTimespec->tv_nsec / ( long ) FREERTOS_SEM_NANOSECONDS_PER_TICK + /* Whole nanoseconds. */
+                       ( long ) ( pxTimespec->tv_nsec % ( long ) FREERTOS_SEM_NANOSECONDS_PER_TICK != 0 ); /* Add 1 to round up if needed. */
 
         /* Add the nanoseconds to the total ticks. */
         llTotalTicks += ( int64_t ) lNanoseconds;
@@ -694,7 +678,7 @@ static int freertos_clock_gettime( clockid_t clock_id,
     ullTickCount += xCurrentTime.xTimeOnEntering;
 
     /* Convert ullTickCount to timespec. */
-    UTILS_NanosecondsToTimespec( ( int64_t ) ullTickCount * NANOSECONDS_PER_TICK, tp );
+    UTILS_NanosecondsToTimespec( ( int64_t ) ullTickCount * FREERTOS_SEM_NANOSECONDS_PER_TICK, tp );
 
     return 0;
 }
@@ -706,7 +690,6 @@ static int freertos_sem_timedwait( sem_t * sem,
 {
     int iStatus = 0;
     TickType_t xDelay = portMAX_DELAY;
-    int iPreviousValue = Atomic_Decrement_u32( ( uint32_t * ) &sem->value );
 
     if( abstime != NULL )
     {
@@ -740,35 +723,24 @@ static int freertos_sem_timedwait( sem_t * sem,
         }
     }
 
-    /* If previous semaphore value is larger than zero, the thread entering this function call
-     * can take the semaphore without yielding. Else (<=0), calling into FreeRTOS API to yield.
-     */
-    if( iPreviousValue > 0 )
+    /* Take the semaphore using the FreeRTOS API. */
+    if( xSemaphoreTake( ( SemaphoreHandle_t ) sem,
+                        xDelay ) != pdTRUE )
     {
-        /* Under no circumstance shall the function fail with a timeout if the semaphore can be locked immediately. */
-        iStatus = 0;
-    }
-    else
-    {
-        /* Take the semaphore using the FreeRTOS API. */
-        if( xSemaphoreTake( ( SemaphoreHandle_t ) &sem->sem,
-                            xDelay ) != pdTRUE )
+        if( iStatus == 0 )
         {
-            if( iStatus == 0 )
-            {
-                errno = ETIMEDOUT;
-            }
-            else
-            {
-                errno = iStatus;
-            }
-
-            iStatus = -1;
+            errno = ETIMEDOUT;
         }
         else
         {
-            iStatus = 0;
+            errno = iStatus;
         }
+
+        iStatus = -1;
+    }
+    else
+    {
+        iStatus = 0;
     }
 
     return iStatus;
@@ -808,7 +780,7 @@ static int freertos_sem_trywait( sem_t * sem )
 static int freertos_sem_destroy( sem_t * sem )
 {
     /* Free the resources in use by the semaphore. */
-    vSemaphoreDelete( ( SemaphoreHandle_t ) &sem->sem );
+    vSemaphoreDelete( sem );
 
     return 0;
 }

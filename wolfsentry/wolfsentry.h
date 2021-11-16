@@ -120,9 +120,9 @@
 #endif
 
 #ifdef FREERTOS
-#define SSIZET_FMT "%ld"
+#define SIZET_FMT "%ld"
 #else
-#define SSIZET_FMT "%zd"
+#define SIZET_FMT "%zd"
 #endif
 
 typedef unsigned char byte;

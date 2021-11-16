@@ -30,6 +30,8 @@ static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p,
          * will accept or reject the ICMP message */
         if (sentry_action_ping(addr, iecho->type) != 0)
         {
+            /* RAW recv needs to free if not returning 0 */
+            pbuf_free(p);
             printf("Ping rejected\n");
             fflush(stdout);
             return 1;

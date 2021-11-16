@@ -62,16 +62,11 @@ struct wolfsentry_thread_list {
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include <atomic.h>
-#define NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
-#define NANOSECONDS_PER_TICK       ( NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
+#define FREERTOS_SEM_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
+#define FREERTOS_SEM_NANOSECONDS_PER_TICK       ( FREERTOS_SEM_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
 #define SEM_VALUE_MAX        0x7FFFU
 
-typedef struct
-{
-    StaticSemaphore_t sem;
-    int value;
-} sem_t;
-
+#define sem_t StaticSemaphore_t
 
 #else
 

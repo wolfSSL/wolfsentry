@@ -25,6 +25,7 @@ In STM32CubeIDE click on "Project" -> "Properties". From here go to "C/C++ Gener
 
 ```
 **/unittests.c
+**/Examples
 ```
 
 This is so that the unittests do not build as part of your application, causing a conflict for `main()`.

@@ -120,7 +120,8 @@
 #endif
 
 #ifdef FREERTOS
-#define SIZET_FMT "%ld"
+/* size_t is alias to "unsigned int" in STM32 FreeRTOS */
+#define SIZET_FMT "%d"
 #else
 #define SIZET_FMT "%zd"
 #endif

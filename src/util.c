@@ -181,12 +181,21 @@ static void *wolfsentry_builtin_realloc(void *context, void *ptr, size_t size) {
 
 static void *wolfsentry_builtin_memalign(void *context, size_t alignment, size_t size) {
     (void)context;
+#ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
+    void *ptr = NULL;
+    if (alignment && size) {
+        uint32_t hdr_size = sizeof(uint16_t) + (alignment - 1);
+        void *p = malloc(size + hdr_size);
+        if (p) {
+            /* Align to powers of two */
+            ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
+            *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+        }
+    }
+    return ptr;
+#else
     if (alignment <= sizeof(void *))
         return malloc(size);
-#ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
-    else
-        return malloc(size);
-#else
     else {
         void *ret = 0;
         if (posix_memalign(&ret, alignment, size) < 0)
@@ -198,7 +207,13 @@ static void *wolfsentry_builtin_memalign(void *context, size_t alignment, size_t
 
 static void wolfsentry_builtin_free_aligned(void *context, void *ptr) {
     (void)context;
+#ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
+    uint16_t offset = *((uint16_t *)ptr - 1);
+    void *p = (void *)((uint8_t *)ptr - offset);
+    free(p);
+#else
     free(ptr);
+#endif
 }
 
 static const struct wolfsentry_allocator default_allocator = {

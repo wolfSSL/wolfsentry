@@ -137,7 +137,7 @@ int sentry_init()
 
     if (ret < 0)
     {
-        printf("unable to initialize wolfSentry, code: %d\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
+        printf("unable to initialize wolfSentry, code: %ld\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
     }
 
     /* Insert the possible actions into wolfSentry */
@@ -287,7 +287,7 @@ int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
               NULL,
               &action_results);
 
-    printf("TCP Sentry return: %d\n", ret);
+    printf("TCP Sentry return: %ld\n", ret);
     fflush(stdout);
 
     /* Check the result, if it contains "reject" then notify the caller */
@@ -335,7 +335,7 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
               NULL,
               &action_results);
 
-    printf("PING Sentry action return: %d\n", ret);
+    printf("PING Sentry action return: %ld\n", ret);
     fflush(stdout);
 
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0)
@@ -380,7 +380,7 @@ int sentry_action_mac(struct eth_addr *addr)
               NULL,
               &action_results);
 
-    //printf("MAC Sentry action return: %d\n", ret);
+    //printf("MAC Sentry action return: %ld\n", ret);
 
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0)
     {

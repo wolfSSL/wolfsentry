@@ -75,6 +75,7 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
     {
         printf("Sentry rejected connection\n");
         fflush(stdout);
+        tcp_abort(pcb);
         return ERR_ABRT;
     }
 

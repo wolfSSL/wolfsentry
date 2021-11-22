@@ -225,7 +225,8 @@ int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
             NULL,
             &action_results);
 
-    printf("TCP Sentry return: %d\n", ret);
+    printf("TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
 
     /* Check the result, if it contains "reject" then notify the caller */
@@ -269,8 +270,8 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
             NULL,
             NULL,
             &action_results);
-
-    printf("PING Sentry action return: %d\n", ret);
+    printf("PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
@@ -311,7 +312,8 @@ int sentry_action_mac(struct eth_addr *addr)
             NULL,
             &action_results);
 
-    printf("MAC Sentry action return: %d\n", ret);
+    printf("MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {

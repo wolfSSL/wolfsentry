@@ -14,7 +14,7 @@ This test is designed to be run on Linux or macOS, but should work on Windows as
 The following command will build the test echo server and start this up along with three testing nodes:
 
 ```sh
-sudo docker-compose -f docker-compose.yml up
+sudo docker-compose -f docker-compose.yml up -d
 ```
 
 You can follow the logs for the echo server using:
@@ -29,10 +29,10 @@ It is recommended that you keep the logs following running whilst running the te
 
 ### Accessing nodes
 
-There are three user test nodes to play with. They are named `wolfsentry-test_tester?_1` where `?` is 1, 2 or 3. To log into tester2 as an example:
+There are three user test nodes to play with. They are named `linux-lwip_tester?_1` where `?` is 1, 2 or 3. To log into tester2 as an example:
 
 ```sh
-sudo docker exec -it wolfsentry-test_tester2_1 /bin/sh
+sudo docker exec -it linux-lwip_tester2_1 /bin/sh
 ```
 
 ### Node details
@@ -49,18 +49,18 @@ The echo test process runs from this node, it uses PCAP and lwIP to create a sta
 * IP address: 172.20.20.10
 * MAC address: de:c0:de:03:02:01
 
-The sentry test is configured to allow this node to ping the echoserver node, but not TCP connect.
+The sentry test is configured to allow this node to ping the echoserver node, but the TCP connection is not accepted during handshake.
 
 #### Tester 2
 
 * IP address: 172.20.20.20
 * MAC address: de:c0:de:03:02:02
 
-The sentry test is configured to block this node pinging the echoserver node, but allow TCP connect.
+The sentry test is configured to block this node pinging the echoserver node, but the TCP connection is not accepted during handshake.
 
 #### Tester 3
 
-* IP address: 172.20.20.20
+* IP address: 172.20.20.30
 * MAC address: de:c0:de:03:03:01
 
 The sentry test is configured to deny traffic from this MAC address.

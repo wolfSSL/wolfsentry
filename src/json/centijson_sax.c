@@ -1012,7 +1012,7 @@ intstrncmp(const char* str1, size_t size1, const char* str2, size_t size2)
     }
 }
 
-static inline int
+static int
 intstr_is_between(const char* val_str, size_t val_size,
                   const char* min_str, size_t min_size,
                   const char* max_str, size_t max_size)

@@ -342,7 +342,7 @@ static wolfsentry_errcode_t wolfsentry_route_init(
         if (left_over_bits) {
             byte *remote_lsb = WOLFSENTRY_ROUTE_REMOTE_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) - 1;
             if (*remote_lsb & (0xffu >> (BITS_PER_BYTE - left_over_bits)))
-                *remote_lsb &= (byte)(0xffu << left_over_bits);
+                *remote_lsb = (byte)(*remote_lsb & (0xffu << left_over_bits));
         }
     }
     {
@@ -350,7 +350,7 @@ static wolfsentry_errcode_t wolfsentry_route_init(
         if (left_over_bits) {
             byte *local_lsb = WOLFSENTRY_ROUTE_LOCAL_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len) - 1;
             if (*local_lsb & (0xffu >> (BITS_PER_BYTE - left_over_bits)))
-                *local_lsb &= (byte)(0xffu << left_over_bits);
+                *local_lsb = (byte)(*local_lsb & (0xffu << left_over_bits));
         }
     }
 

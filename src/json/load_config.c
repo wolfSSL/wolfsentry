@@ -345,51 +345,64 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
     WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 }
 
-static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
-    char d_buf[64];
+static inline int convert_hex_digit(char digit) {
+    if ((digit >= '0') && (digit <= '9'))
+        return digit - '0';
+    else if ((digit >= 'A') && (digit <= 'F'))
+        return digit - 'A' + 10;
+    else if ((digit >= 'a') && (digit <= 'f'))
+        return digit - 'a' + 10;
+    else
+        return -1;
+}
 
+static inline int convert_hex_byte(const char **in, size_t *in_len, byte *out) {
+    int d1, d2;
+    if (*in_len < 2)
+        return -1;
+    d1 = convert_hex_digit(*(*in)++);
+    if (d1 < 0)
+        return d1;
+    d2 = convert_hex_digit(*(*in)++);
+    if (d2 < 0)
+        return d2;
+    *out = (byte)((d1 << 4) | d2);
+    *in_len -= 2;
+    return 0;
+}
+
+static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     if (type != JSON_STRING)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-    if (data_size >= sizeof d_buf)
-        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-
-    memcpy(d_buf, data, data_size);
-    d_buf[data_size] = 0;
-
     if (sa->sa_family == WOLFSENTRY_AF_LINK) {
-        int n = 0;
-        if ((sscanf(d_buf,
-                    "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx%n",
-                    sa->addr + 0,
-                    sa->addr + 1,
-                    sa->addr + 2,
-                    sa->addr + 3,
-                    sa->addr + 4,
-                    sa->addr + 5,
-                    &n) >= 6) && ((size_t)n == data_size)) {
-            if (sa->addr_len == 0)
-                sa->addr_len = 48;
-            return 0;
+        int n;
+        for (n=0; ;) {
+            if (n == 8)
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+            if (convert_hex_byte(&data, &data_size, sa->addr + n) < 0)
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+            ++n;
+            if (data_size == 0) {
+                if ((n != 6) && (n != 8))
+                    WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+                if (sa->addr_len == 0)
+                    sa->addr_len = (wolfsentry_addr_bits_t)(n * 8);
+                return 0;
+            }
+            if (*data++ != ':')
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+            --data_size;
         }
-        if ((sscanf(d_buf,
-                    "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx%n",
-                    sa->addr + 0,
-                    sa->addr + 1,
-                    sa->addr + 2,
-                    sa->addr + 3,
-                    sa->addr + 4,
-                    sa->addr + 5,
-                    sa->addr + 6,
-                    sa->addr + 7,
-                    &n) >= 8) && ((size_t)n == data_size)) {
-            if (sa->addr_len == 0)
-                sa->addr_len = 64;
-            return 0;
-        }
+
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     }
     else if (sa->sa_family == WOLFSENTRY_AF_INET) {
+        char d_buf[16];
+        memcpy(d_buf, data, data_size);
+        d_buf[data_size] = 0;
+        if (data_size >= sizeof d_buf)
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
         switch (inet_pton(AF_INET, d_buf, sa->addr)) {
         case 1:
             if (sa->addr_len == 0)
@@ -403,6 +416,11 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
         }
     }
     else if (sa->sa_family == WOLFSENTRY_AF_INET6) {
+        char d_buf[64];
+        memcpy(d_buf, data, data_size);
+        d_buf[data_size] = 0;
+        if (data_size >= sizeof d_buf)
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
         switch (inet_pton(AF_INET6, d_buf, sa->addr)) {
         case 1:
             if (sa->addr_len == 0)

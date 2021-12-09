@@ -399,10 +399,10 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
     }
     else if (sa->sa_family == WOLFSENTRY_AF_INET) {
         char d_buf[16];
-        memcpy(d_buf, data, data_size);
-        d_buf[data_size] = 0;
         if (data_size >= sizeof d_buf)
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        memcpy(d_buf, data, data_size);
+        d_buf[data_size] = 0;
         switch (inet_pton(AF_INET, d_buf, sa->addr)) {
         case 1:
             if (sa->addr_len == 0)
@@ -417,10 +417,10 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
     }
     else if (sa->sa_family == WOLFSENTRY_AF_INET6) {
         char d_buf[64];
-        memcpy(d_buf, data, data_size);
-        d_buf[data_size] = 0;
         if (data_size >= sizeof d_buf)
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        memcpy(d_buf, data, data_size);
+        d_buf[data_size] = 0;
         switch (inet_pton(AF_INET6, d_buf, sa->addr)) {
         case 1:
             if (sa->addr_len == 0)

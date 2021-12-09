@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+  echoserver:
+    build: .
+    ports:
+      - "11111:11111"
+    mac_address: de:c0:de:01:02:03
+    networks:
+      echo:
+        ipv4_address: 172.20.20.3
+  tester1:
+    image: alpine
+    stdin_open: true
+    tty: true
+    mac_address: de:c0:de:03:02:01
+    networks:
+      echo:
+        ipv4_address: 172.20.20.10
+  tester2:
+    image: alpine
+    stdin_open: true
+    tty: true
+    mac_address: de:c0:de:03:02:02
+    networks:
+      echo:
+        ipv4_address: 172.20.20.20
+  tester3:
+    image: alpine
+    stdin_open: true
+    tty: true
+    mac_address: de:c0:de:03:03:01
+    networks:
+      echo:
+        ipv4_address: 172.20.20.30
+networks:
+  echo:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.20.0/24
+          gateway: 172.20.20.1
+

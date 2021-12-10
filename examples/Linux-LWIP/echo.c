@@ -43,7 +43,6 @@ static err_t echo_msgrecv(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
         for (q = p; q != NULL; q = q->next)
         {
             printf("Got: %.*s\n", q->len, q->payload);
-            fflush(stdout);
         }
     }
     else if (err == ERR_OK && p == NULL)
@@ -59,7 +58,6 @@ static void echo_msgerr(void *arg, err_t err)
 {
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_msgerr: %s (%i)\n", lwip_strerr(err), err));
     printf("Err: %s\n", lwip_strerr(err));
-    fflush(stdout);
 }
 
 /* TCP accept connection callback handler */
@@ -69,7 +67,6 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
     LWIP_PLATFORM_DIAG(("echo_msgaccept called\n"));
 
     printf("Connect from: %s port: %d\n", ipaddr_ntoa(&(pcb->remote_ip)), pcb->remote_port);
-    fflush(stdout);
 
     /* The below is an alternative hook to check for incoming connections. The
      * down side of this is that it will only trigger after the initial SYN/ACK
@@ -78,7 +75,6 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
     if (sentry_action(pcb, SENTRY_ACTION_CONNECT) != 0)
     {
         printf("Sentry rejected connection\n");
-        fflush(stdout);
         tcp_abort(pcb);
         return ERR_ABRT;
     }

@@ -93,28 +93,42 @@ static err_t filter_input(struct pbuf *p, struct netif *inp)
 {
     /* Start of payload will have an Ethernet header */
     struct eth_hdr *ethhdr = (struct eth_hdr *)p->payload;
+    struct eth_addr *ethaddr = &ethhdr->src;
 
     /* "src" contains the source hardware address from the packet */
     if (sentry_action_mac(&ethhdr->src) != 0)
     {
-        //printf("Sentry rejected MAC address\n");
+        //printf("Sentry rejected MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
+                ethaddr->addr[0], ethaddr->addr[1], ethaddr->addr[2],
+                ethaddr->addr[3], ethaddr->addr[4], ethaddr->addr[5]);
+
         /* Basically drop the packet */
         return ERR_ABRT;
     }
 
-    printf("Sentry accepted MAC address\n");
+    printf("Sentry accepted MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
+        ethaddr->addr[0], ethaddr->addr[1], ethaddr->addr[2],
+        ethaddr->addr[3], ethaddr->addr[4], ethaddr->addr[5]);
+
     /* We passed the MAC filter, so pass the packet to the regular internal
      * lwIP input callback */
     return netif_input(p, inp);
 ```
 
-Find the function `ethernet_init()` and below `#if LWIP_ARP` add:
+Find the function `ethernetif_init()` and below `#if LWIP_ARP` add:
 
 ```c
     netif->input = filter_input;
 ```
 
 Note that the last edit above will be erased if you regenerate the code using STM32CubeMX.
+
+Finally open `lwipopts.h` in the same directory and add the following inside the `USER CODE BEGIN 0` section:
+
+```c
+#include "echo.h"
+#define LWIP_HOOK_TCP_INPACKET_PCB sentry_tcp_inpkt
+```
 
 ## Using the Application
 

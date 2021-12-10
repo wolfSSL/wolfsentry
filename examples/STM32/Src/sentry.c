@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include <wolfsentry/wolfsentry.h>
 #include <wolfsentry/wolfsentry_util.h>
 #include <wolfsentry/wolfsentry_json.h>
@@ -92,7 +94,8 @@ static const char *wolfsentry_config_data = "{\n"
 "       \"prefix-bits\" : 40,\n"
 "       \"interface\" : 0\n"
 "       }\n"
-"   }\n""   ]\n"
+"   }\n"
+"   ]\n"
 "}\n";
 
 /* Callback that is fired when an action is taken, this can be used for
@@ -108,8 +111,7 @@ static wolfsentry_errcode_t test_action(
     const struct wolfsentry_route *route,
     wolfsentry_action_res_t *action_results)
 {
-    const struct wolfsentry_event *parent_event = wolfsentry_route_parent_event(
-                route);
+    const struct wolfsentry_event *parent_event = wolfsentry_route_parent_event(route);
     (void)wolfsentry;
     (void)handler_arg;
     (void)route_table;
@@ -225,33 +227,30 @@ int sentry_init()
     return 0;
 }
 
+
 /* Check a TCP connection with wolfSentry. This is called for connect and
  * disconnect so wolfSentry can count the simultaneous connections */
-int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
+int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_port, in_port_t remote_port, sentry_action_type action)
 {
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t action_results;
     /* Note that sa.addr is 0 bytes, addr_buf essentially enlarges this to the correct size */
-    struct
-    {
+    struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
     } remote, local;
-    u32_t remoteip = pcb->remote_ip.addr;
-    u32_t localip = pcb->local_ip.addr;
+    u32_t remoteip = remote_ip->addr;
+    u32_t localip = local_ip->addr;
 
     /* Connect will increment the connection count in wolfSentry, disconnect
      * will decrement it */
-    switch (action)
-    {
+    switch(action) {
         case SENTRY_ACTION_CONNECT:
             action_results = WOLFSENTRY_ACTION_RES_CONNECT;
             break;
-
         case SENTRY_ACTION_DISCONNECT:
             action_results = WOLFSENTRY_ACTION_RES_DISCONNECT;
             break;
-
         case SENTRY_ACTION_NONE:
         default:
             break;
@@ -260,7 +259,7 @@ int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
     /* Setup sockaddr information to send to wolfSentry */
     remote.sa.sa_family = WOLFSENTRY_AF_INET;
     remote.sa.sa_proto = IPPROTO_TCP;
-    remote.sa.sa_port = pcb->remote_port;
+    remote.sa.sa_port = remote_port;
     /* Essentially a prefix size, wolfSentry uses the lesser of this and the
      * rule in JSON as to how much of the IP address to compare */
     remote.sa.addr_len = 32; // prefix size
@@ -269,32 +268,31 @@ int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
 
     local.sa.sa_family = WOLFSENTRY_AF_INET;
     local.sa.sa_proto = IPPROTO_TCP;
-    local.sa.sa_port = pcb->local_port;
+    local.sa.sa_port = local_port;
     local.sa.addr_len = 32;
     local.sa.interface = 0;
     memcpy(local.sa.addr, &localip, 4);
 
     /* Send the details of this to wolfSentry and get the result */
     ret = wolfsentry_route_event_dispatch_with_inited_result(
-              wolfsentry,
-              &remote.sa,
-              &local.sa,
-              WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
-              "call-in-from-echo",
-              strlen("call-in-from-echo"),
-              NULL,
-              NULL,
-              NULL,
-              &action_results);
+            wolfsentry,
+            &remote.sa,
+            &local.sa,
+            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            "call-in-from-echo",
+            strlen("call-in-from-echo"),
+            NULL,
+            NULL,
+            NULL,
+            &action_results);
 
-    printf("TCP Sentry return: %ld\n", ret);
+    printf("TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
 
     /* Check the result, if it contains "reject" then notify the caller */
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0)
-    {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-        {
+    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
+        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;
         }
     }
@@ -308,8 +306,7 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t action_results;
     /* As above, pad the struct to make addr 4 bytes */
-    struct
-    {
+    struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
     } remote;
@@ -324,24 +321,21 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
     memcpy(remote.sa.addr, &addr->addr, 4);
 
     ret = wolfsentry_route_event_dispatch(
-              wolfsentry,
-              &remote.sa,
-              &remote.sa, // Reuse for now
-              WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
-              "call-in-from-echo",
-              strlen("call-in-from-echo"),
-              NULL,
-              NULL,
-              NULL,
-              &action_results);
-
-    printf("PING Sentry action return: %ld\n", ret);
+            wolfsentry,
+            &remote.sa,
+            &remote.sa, // Reuse for now
+            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            "call-in-from-echo",
+            strlen("call-in-from-echo"),
+            NULL,
+            NULL,
+            NULL,
+            &action_results);
+    printf("PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
-
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0)
-    {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-        {
+    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
+        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;
         }
     }
@@ -355,8 +349,7 @@ int sentry_action_mac(struct eth_addr *addr)
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t action_results;
     /* Pad addr to 6 bytes for the hardware address */
-    struct
-    {
+    struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[6];
     } remote;
@@ -369,23 +362,22 @@ int sentry_action_mac(struct eth_addr *addr)
     memcpy(remote.sa.addr, &addr->addr, 6);
 
     ret = wolfsentry_route_event_dispatch(
-              wolfsentry,
-              &remote.sa,
-              &remote.sa, // Reuse for now
-              WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
-              "call-in-from-echo",
-              strlen("call-in-from-echo"),
-              NULL,
-              NULL,
-              NULL,
-              &action_results);
+            wolfsentry,
+            &remote.sa,
+            &remote.sa, // Reuse for now
+            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            "call-in-from-echo",
+            strlen("call-in-from-echo"),
+            NULL,
+            NULL,
+            NULL,
+            &action_results);
 
-    //printf("MAC Sentry action return: %ld\n", ret);
-
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0)
-    {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-        {
+    printf("MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    fflush(stdout);
+    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
+        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;
         }
     }

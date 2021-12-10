@@ -7,8 +7,6 @@
 #include "lwip/raw.h"
 #include "lwip/icmp.h"
 
-static struct raw_pcb *ping_pcb;
-
 /* ICMP message received. Return 0 to let lwIP process it and 1 to eat the
  * packet */
 static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
@@ -27,13 +25,13 @@ static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_a
       {
           /* RAW recv needs to free if not returning 0 */
           pbuf_free(p);
-          printf("Ping rejected\n");
+          printf("Ping rejected from %s\n", ipaddr_ntoa(addr));
           fflush(stdout);
           return 1;
       }
   }
 
-  printf("Ping accepted\n");
+  printf("Ping accepted from %s\n", ipaddr_ntoa(addr));
   fflush(stdout);
   return 0;
 }
@@ -41,6 +39,7 @@ static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_a
 /* Initialise the ICMP hooks */
 int ping_init(void)
 {
+  struct raw_pcb *ping_pcb;
   /* Create a new listener instance for ICMP messages */
   ping_pcb = raw_new(IP_PROTO_ICMP);
   LWIP_ASSERT("ping_pcb != NULL", ping_pcb != NULL);

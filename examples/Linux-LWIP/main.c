@@ -44,15 +44,21 @@ static err_t filter_input(struct pbuf *p, struct netif *inp)
 {
     /* Start of payload will have an Ethernet header */
     struct eth_hdr *ethhdr = (struct eth_hdr *)p->payload;
+    struct eth_addr *ethaddr = &ethhdr->src;
+
     /* "src" contains the source hardware address from the packet */
-    if (sentry_action_mac(&ethhdr->src) != 0)
+    if (sentry_action_mac(ethaddr) != 0)
     {
-        printf("Sentry rejected MAC address\n");
+        printf("Sentry rejected MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
+                ethaddr->addr[0], ethaddr->addr[1], ethaddr->addr[2],
+                ethaddr->addr[3], ethaddr->addr[4], ethaddr->addr[5]);
         fflush(stdout);
         /* Basically drop the packet */
         return ERR_ABRT;
     }
-    printf("Sentry accepted MAC address\n");
+    printf("Sentry accepted MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
+            ethaddr->addr[0], ethaddr->addr[1], ethaddr->addr[2],
+            ethaddr->addr[3], ethaddr->addr[4], ethaddr->addr[5]);
     fflush(stdout);
     /* We passed the MAC filter, so pass the packet to the regular internal
      * lwIP input callback */

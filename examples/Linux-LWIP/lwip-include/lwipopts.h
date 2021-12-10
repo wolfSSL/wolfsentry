@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+/* Include echo.h to give us sentry_tcp_inpkt */
+#include "../echo.h"
+
 #define TCP_MSS                         1500
 #define TCP_WND                         65535
 #define NO_SYS                          0
@@ -33,3 +36,5 @@
 
 #define LWIP_CHECKSUM_CTRL_PER_NETIF    1
 
+/* Define a callback which will trigger on TCP packet input */
+#define LWIP_HOOK_TCP_INPACKET_PCB sentry_tcp_inpkt

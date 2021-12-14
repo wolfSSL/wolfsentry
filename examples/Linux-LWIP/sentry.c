@@ -169,7 +169,7 @@ int sentry_init()
 
 /* Check a TCP connection with wolfSentry. This is called for connect and
  * disconnect so wolfSentry can count the simultaneous connections */
-int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
+int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_port, in_port_t remote_port, sentry_action_type action)
 {
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t action_results;
@@ -178,8 +178,8 @@ int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
     } remote, local;
-    u32_t remoteip = pcb->remote_ip.addr;
-    u32_t localip = pcb->local_ip.addr;
+    u32_t remoteip = remote_ip->addr;
+    u32_t localip = local_ip->addr;
 
     /* Connect will increment the connection count in wolfSentry, disconnect
      * will decrement it */
@@ -198,7 +198,7 @@ int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
     /* Setup sockaddr information to send to wolfSentry */
     remote.sa.sa_family = WOLFSENTRY_AF_INET;
     remote.sa.sa_proto = IPPROTO_TCP;
-    remote.sa.sa_port = pcb->remote_port;
+    remote.sa.sa_port = remote_port;
     /* Essentially a prefix size, wolfSentry uses the lesser of this and the
      * rule in JSON as to how much of the IP address to compare */
     remote.sa.addr_len = 32; // prefix size
@@ -207,7 +207,7 @@ int sentry_action(struct tcp_pcb *pcb, sentry_action_type action)
 
     local.sa.sa_family = WOLFSENTRY_AF_INET;
     local.sa.sa_proto = IPPROTO_TCP;
-    local.sa.sa_port = pcb->local_port;
+    local.sa.sa_port = local_port;
     local.sa.addr_len = 32;
     local.sa.interface = 0;
     memcpy(local.sa.addr, &localip, 4);

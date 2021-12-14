@@ -14,7 +14,7 @@ This test is designed to be run on Linux or macOS, but should work on Windows as
 The following command will build the test echo server and start this up along with three testing nodes:
 
 ```sh
-sudo docker-compose -f docker-compose.yml up -d
+sudo docker-compose -f docker-compose.yml up --build -d
 ```
 
 You can follow the logs for the echo server using:
@@ -56,7 +56,7 @@ The sentry test is configured to allow this node to ping the echoserver node, bu
 * IP address: 172.20.20.20
 * MAC address: de:c0:de:03:02:02
 
-The sentry test is configured to block this node pinging the echoserver node, but the TCP connection is not accepted during handshake.
+The sentry test is configured to block this node pinging the echoserver node, but the TCP connection is accepted during handshake.
 
 #### Tester 3
 
@@ -87,18 +87,11 @@ Tested node 2 will work and whatever you enter into the netcat terminal will be 
 
 ## Shutting down
 
-You can stop the nodes by running the following:
+You can stop and clean up the nodes by running the following, this will also remove the virtual network:
 
 ```sh
-sudo docker-compose -f docker-compose.yml stop
+sudo docker-compose -f docker-compose.yml down
 ```
-
-Then remove them using:
-
-```sh
-sudo docker-compose -f docker-compose.yml rm -f
-```
-
 
 ## Notes
 

@@ -476,7 +476,9 @@ TEST_SKIP(test_rw_locks)
 #endif
 
 #define PRIVATE_DATA_SIZE 32
+#ifndef PRIVATE_DATA_ALIGNMENT
 #define PRIVATE_DATA_ALIGNMENT 16
+#endif
 
 static int test_static_routes (void) {
 
@@ -913,7 +915,7 @@ static int test_static_routes (void) {
     WOLFSENTRY_EXIT_ON_SUCCESS(wolfsentry_route_delete_static(wolfsentry, NULL /* caller_arg */, &remote_wildcard.sa, &local_wildcard.sa, flags_wildcard, 0 /* event_label_len */, 0 /* event_label */, &action_results, &n_deleted));
 
 
-#ifndef NO_STDIO
+#ifndef WOLFSENTRY_NO_STDIO
     {
         wolfsentry_errcode_t ret;
         struct wolfsentry_cursor *cursor;

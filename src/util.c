@@ -436,17 +436,17 @@ static void UTILS_NanosecondsToTimespec( int64_t llSource,
 	long lCarrySec = 0;
 
 	/* Convert to timespec. */
-	pxDestination->tv_sec = ( time_t ) ( llSource / FREERTOS_SEM_NANOSECONDS_PER_SECOND );
-	pxDestination->tv_nsec = ( long ) ( llSource % FREERTOS_SEM_NANOSECONDS_PER_SECOND );
+	pxDestination->tv_sec = ( time_t ) ( llSource / FREERTOS_NANOSECONDS_PER_SECOND );
+	pxDestination->tv_nsec = ( long ) ( llSource % FREERTOS_NANOSECONDS_PER_SECOND );
 
 	/* Subtract from tv_sec if tv_nsec < 0. */
 	if( pxDestination->tv_nsec < 0L )
 	{
 		/* Compute the number of seconds to carry. */
-		lCarrySec = ( pxDestination->tv_nsec / ( long ) FREERTOS_SEM_NANOSECONDS_PER_SECOND ) + 1L;
+		lCarrySec = ( pxDestination->tv_nsec / ( long ) FREERTOS_NANOSECONDS_PER_SECOND ) + 1L;
 
 		pxDestination->tv_sec -= ( time_t ) ( lCarrySec );
-		pxDestination->tv_nsec += lCarrySec * ( long ) FREERTOS_SEM_NANOSECONDS_PER_SECOND;
+		pxDestination->tv_nsec += lCarrySec * ( long ) FREERTOS_NANOSECONDS_PER_SECOND;
 	}
 }
 
@@ -537,7 +537,7 @@ static int UTILS_TimespecSubtract( const struct timespec * const x,
             {
                 /* Based on comparison, tv_sec > 0 */
                 pxResult->tv_sec--;
-                pxResult->tv_nsec += ( long ) FREERTOS_SEM_NANOSECONDS_PER_SECOND;
+                pxResult->tv_nsec += ( long ) FREERTOS_NANOSECONDS_PER_SECOND;
             }
 
             /* if nano second is negative after borrow, it is an overflow error */
@@ -559,7 +559,7 @@ static int UTILS_ValidateTimespec( const struct timespec * const pxTimespec )
     {
         /* Verify 0 <= tv_nsec < 1000000000. */
         if( ( pxTimespec->tv_nsec >= 0 ) &&
-            ( pxTimespec->tv_nsec < FREERTOS_SEM_NANOSECONDS_PER_SECOND ) )
+            ( pxTimespec->tv_nsec < FREERTOS_NANOSECONDS_PER_SECOND ) )
         {
             xReturn = 1;
         }
@@ -592,9 +592,9 @@ static int UTILS_TimespecToTicks( const struct timespec * const pxTimespec,
 
         /* Convert timespec.tv_nsec to ticks. This value does not have to be checked
          * for overflow because a valid timespec has 0 <= tv_nsec < 1000000000 and
-         * FREERTOS_SEM_NANOSECONDS_PER_TICK > 1. */
-        lNanoseconds = pxTimespec->tv_nsec / ( long ) FREERTOS_SEM_NANOSECONDS_PER_TICK + /* Whole nanoseconds. */
-                       ( long ) ( pxTimespec->tv_nsec % ( long ) FREERTOS_SEM_NANOSECONDS_PER_TICK != 0 ); /* Add 1 to round up if needed. */
+         * FREERTOS_NANOSECONDS_PER_TICK > 1. */
+        lNanoseconds = pxTimespec->tv_nsec / ( long ) FREERTOS_NANOSECONDS_PER_TICK + /* Whole nanoseconds. */
+                       ( long ) ( pxTimespec->tv_nsec % ( long ) FREERTOS_NANOSECONDS_PER_TICK != 0 ); /* Add 1 to round up if needed. */
 
         /* Add the nanoseconds to the total ticks. */
         llTotalTicks += ( int64_t ) lNanoseconds;
@@ -668,37 +668,9 @@ static int UTILS_AbsoluteTimespecToDeltaTicks( const struct timespec * const pxA
 }
 
 
-static int freertos_clock_gettime( clockid_t clock_id,
-                   struct timespec * tp )
-{
-    TimeOut_t xCurrentTime = { 0 };
+static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now);
 
-    /* Intermediate variable used to convert TimeOut_t to struct timespec.
-     * Also used to detect overflow issues. It must be unsigned because the
-     * behavior of signed integer overflow is undefined. */
-    uint64_t ullTickCount = 0ULL;
-
-    /* Silence warnings about unused parameters. */
-    ( void ) clock_id;
-
-    /* Get the current tick count and overflow count. vTaskSetTimeOutState()
-     * is used to get these values because they are both static in tasks.c. */
-    vTaskSetTimeOutState( &xCurrentTime );
-
-    /* Adjust the tick count for the number of times a TickType_t has overflowed.
-     * portMAX_DELAY should be the maximum value of a TickType_t. */
-    ullTickCount = ( uint64_t ) ( xCurrentTime.xOverflowCount ) << ( sizeof( TickType_t ) * 8 );
-
-    /* Add the current tick count. */
-    ullTickCount += xCurrentTime.xTimeOnEntering;
-
-    /* Convert ullTickCount to timespec. */
-    UTILS_NanosecondsToTimespec( ( int64_t ) ullTickCount * FREERTOS_SEM_NANOSECONDS_PER_TICK, tp );
-
-    return 0;
-}
-
-#define clock_gettime freertos_clock_gettime
+#define clock_gettime wolfsentry_builtin_get_time
 
 static int freertos_sem_timedwait( sem_t * sem,
                    const struct timespec * abstime )
@@ -2101,13 +2073,16 @@ wolfsentry_errcode_t wolfsentry_context_unlock(
 #include <FreeRTOS.h>
 #include <task.h>
 
+/* Note: NANOSECONDS_PER_SECOND % configTICK_RATE_HZ should equal 0 or this
+ * won't work well */
+
 static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now) {
     TimeOut_t xCurrentTime = { 0 };
     uint64_t ullTickCount = 0;
     vTaskSetTimeOutState(&xCurrentTime);
     ullTickCount = (uint64_t)(xCurrentTime.xOverflowCount) << (sizeof(TickType_t) * 8);
     ullTickCount += xCurrentTime.xTimeOnEntering;
-    *now = ullTickCount * (1000000000LL / configTICK_RATE_HZ);
+    *now = ullTickCount * FREERTOS_NANOSECONDS_PER_TICK;
     WOLFSENTRY_RETURN_OK;
 }
 #else

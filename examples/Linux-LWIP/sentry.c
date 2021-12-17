@@ -30,7 +30,7 @@ static wolfsentry_errcode_t test_action(
     (void)route_table;
     (void)action_results;
 
-    /*printf("action callback: a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
+    /*fprintf(stderr, "action callback: a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
            wolfsentry_action_get_label(action),
            wolfsentry_event_get_label(parent_event),
            wolfsentry_event_get_label(trigger_event),
@@ -52,8 +52,7 @@ int sentry_init()
     if (ret < 0) {
         fprintf(stderr, "wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        printf("unable to initialize wolfSentry");
-        fflush(stdout);
+        fprintf(stderr, "unable to initialize wolfSentry");
     }
 
     /* Insert the possible actions into wolfSentry */
@@ -119,8 +118,7 @@ int sentry_init()
 
     if (f == NULL) {
         fprintf(stderr, "fopen(%s): %s\n",wolfsentry_config_path,strerror(errno));
-        printf("unable to open wolfSentry config file");
-        fflush(stdout);
+        fprintf(stderr, "unable to open wolfSentry config file");
     }
 
     /* Initalize the wolfSentry JSON parser */
@@ -131,8 +129,7 @@ int sentry_init()
         fprintf(stderr, "wolfsentry_config_json_init() returned "
                 WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        printf("error while initializing wolfSentry config parser");
-        fflush(stdout);
+        fprintf(stderr, "error while initializing wolfSentry config parser");
     }
 
     /* wolfSentry uses a streaming reader/parser for the config file */
@@ -140,17 +137,15 @@ int sentry_init()
         /* Read some data from the config file */
         size_t n = fread(buf, 1, sizeof buf, f);
         if ((n < sizeof buf) && ferror(f)) {
-            fprintf(stderr,"fread(%s): %s\n",wolfsentry_config_path, strerror(errno));
-            printf("error while reading wolfSentry config file");
-            fflush(stdout);
+            fprintf(stderr, "fread(%s): %s\n",wolfsentry_config_path, strerror(errno));
+            fprintf(stderr, "error while reading wolfSentry config file");
         }
 
         /* Send the read data into the JSON parser */
         ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
         if (ret < 0) {
             fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-            printf("error while loading wolfSentry config file");
-            fflush(stdout);
+            fprintf(stderr, "error while loading wolfSentry config file");
         }
         if ((n < sizeof buf) && feof(f))
             break;
@@ -160,8 +155,7 @@ int sentry_init()
     /* Clean up the JSON parser */
     if ((ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf)) < 0) {
         fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-        printf("error while loading wolfSentry config file");
-        fflush(stdout);
+        fprintf(stderr, "error while loading wolfSentry config file");
     }
 
     return 0;
@@ -225,9 +219,8 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
             NULL,
             &action_results);
 
-    printf("TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+    fprintf(stderr, "TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
-    fflush(stdout);
 
     /* Check the result, if it contains "reject" then notify the caller */
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
@@ -270,9 +263,8 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
             NULL,
             NULL,
             &action_results);
-    printf("PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+    fprintf(stderr, "PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
-    fflush(stdout);
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;
@@ -312,9 +304,8 @@ int sentry_action_mac(struct eth_addr *addr)
             NULL,
             &action_results);
 
-    printf("MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+    fprintf(stderr, "MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
-    fflush(stdout);
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;

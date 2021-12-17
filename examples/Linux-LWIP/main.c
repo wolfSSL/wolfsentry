@@ -23,16 +23,15 @@
 static err_t pcap_output(struct netif *netif, struct pbuf *p)
 {
     pcap_t *pcap = netif->state;
-    //printf("Sending packet with length %d\n", p->tot_len);
+    //fprintf(stderr, "Sending packet with length %d\n", p->tot_len);
 
     /* Just fire the raw packet data down PCAP */
     int r = pcap_sendpacket(pcap, (uint8_t *)p->payload, p->tot_len);
 
     if (r != 0)
     {
-        printf("Error sending packet\n");
-        printf("Error: %s\n", pcap_geterr(pcap));
-        fflush(stdout);
+        fprintf(stderr, "Error sending packet\n");
+        fprintf(stderr, "Error: %s\n", pcap_geterr(pcap));
         return ERR_IF;
     }
 
@@ -49,17 +48,15 @@ static err_t filter_input(struct pbuf *p, struct netif *inp)
     /* "src" contains the source hardware address from the packet */
     if (sentry_action_mac(ethaddr) != 0)
     {
-        printf("Sentry rejected MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
+        fprintf(stderr, "Sentry rejected MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
                 ethaddr->addr[0], ethaddr->addr[1], ethaddr->addr[2],
                 ethaddr->addr[3], ethaddr->addr[4], ethaddr->addr[5]);
-        fflush(stdout);
         /* Basically drop the packet */
         return ERR_ABRT;
     }
-    printf("Sentry accepted MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
+    fprintf(stderr, "Sentry accepted MAC address %02X:%02X:%02X:%02X:%02X:%02X\n",
             ethaddr->addr[0], ethaddr->addr[1], ethaddr->addr[2],
             ethaddr->addr[3], ethaddr->addr[4], ethaddr->addr[5]);
-    fflush(stdout);
     /* We passed the MAC filter, so pass the packet to the regular internal
      * lwIP input callback */
     return netif_input(p, inp);
@@ -113,24 +110,21 @@ int main(size_t argc, char **argv)
     /* Initialize wolfSentry */
     if (sentry_init() != 0)
     {
-        printf("Sentry init failure\n");
-        fflush(stdout);
+        fprintf(stderr, "Sentry init failure\n");
         return -1;
     }
 
     /* Initialize TCP listener */
     if (echo_init() != 0)
     {
-        printf("TCP init failure\n");
-        fflush(stdout);
+        fprintf(stderr, "TCP init failure\n");
         return -1;
     }
 
     /* Initialize ICMP listener */
     if (ping_init() != 0)
     {
-        printf("ICMP init failure\n");
-        fflush(stdout);
+        fprintf(stderr, "ICMP init failure\n");
         return -1;
     }
 
@@ -149,22 +143,20 @@ int main(size_t argc, char **argv)
                 continue;
 
             case -1:
-                printf("Error: %s\n", pcap_geterr(pcap));
-                fflush(stdout);
+                fprintf(stderr, "Error: %s\n", pcap_geterr(pcap));
                 continue;
 
             case 1:
                 break;
 
             default:
-                printf("Unknown result: %d\n", r);
-                fflush(stdout);
+                fprintf(stderr, "Unknown result: %d\n", r);
                 continue;
         }
 
         /* Copy the packet to lwIP's packet buffer and trigger a lwIP packet
          * input */
-        //printf("Packet length: %d / %d\n", hdr->len, hdr->caplen);
+        //fprintf(stderr, "Packet length: %d / %d\n", hdr->len, hdr->caplen);
         struct pbuf *pbuf = pbuf_alloc(PBUF_RAW, hdr->len, PBUF_RAM);
         memcpy(pbuf->payload, data, hdr->len);
         netif.input(pbuf, &netif);

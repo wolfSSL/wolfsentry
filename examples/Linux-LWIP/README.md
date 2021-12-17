@@ -96,4 +96,3 @@ sudo docker-compose -f docker-compose.yml down
 ## Notes
 
 * The `lwip-include/arch` directory is a copy of the lwIP directory from `contrib/ports/unix/port/include/arch`.
-* `fflush()` is used after `printf()` because docker-compose buffers `stdout`.

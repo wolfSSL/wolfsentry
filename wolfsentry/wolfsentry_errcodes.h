@@ -116,7 +116,7 @@ enum wolfsentry_source_id {
 };
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_source_string_set(enumint_t wolfsentry_source_id, const char *source_string);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_source_string_set(enum wolfsentry_source_id wolfsentry_source_id, const char *source_string);
 #define WOLFSENTRY_REGISTER_SOURCE() wolfsentry_user_source_string_set(WOLFSENTRY_SOURCE_ID,__FILE__)
 #endif
 

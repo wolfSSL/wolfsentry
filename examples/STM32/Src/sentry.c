@@ -8,8 +8,95 @@
 #include "lwip/tcp.h"
 #include "sentry.h"
 
-static const char *wolfsentry_config_path = "echo-config.json";
 static struct wolfsentry_context *wolfsentry = NULL;
+
+static const char *wolfsentry_config_data = "{\n"
+"    \"wolfsentry-config-version\" : 1,\n"
+"    \"config-update\" : {\n"
+" 	 \"max-connection-count\" : 5,\n"
+"    \"penalty-box-duration\" : \"1h\",\n"
+"    \"default-policy-static\" : \"reject\"\n"
+"    },\n"
+"    \"events-insert\" : [\n"
+"        {\n"
+"    \"label\" : \"event-on-insert\",\n"
+"    \"actions\" : [ \"handle-insert\" ]\n"
+"    },\n"
+"    {\n"
+"        \"label\" : \"event-on-delete\",\n"
+"        \"actions\" : [ \"handle-delete\" ]\n"
+"   },\n"
+"   {\n"
+"       \"label\" : \"event-on-match\",\n"
+"       \"actions\" : [ \"handle-match\", \"notify-on-match\" ]\n"
+"    },\n"
+"    {\n"
+"       \"label\" : \"static-route-parent\",\n"
+"       \"priority\" : 1,\n"
+"       \"config\" : {\n"
+"       \"max-connection-count\" : 10,\n"
+"       \"penalty-box-duration\" : \"1m\"\n"
+"       },\n"
+"       \"actions\" : [ \"handle-connect\", \"handle-connect2\" ],\n"
+"       \"insert-event\" : \"event-on-insert\",\n"
+"       \"match-event\" : \"event-on-match\",\n"
+"       \"delete-event\" : \"event-on-delete\"\n"
+"   },\n"
+"   {\n"
+"       \"label\" : \"call-in-from-echo\"\n"
+"   }\n"
+"   ],\n"
+"    \"static-routes-insert\" : [\n"
+"{\n"
+"       \"parent-event\" : \"static-route-parent\",\n"
+"       \"direction-in\" : true,\n"
+"       \"direction-out\" : true,\n"
+"       \"penalty-boxed\" : false,\n"
+"       \"green-listed\" : true,\n"
+"       \"dont-count-hits\" : false,\n"
+"       \"dont-count-current-connections\" : false,\n"
+"       \"family\" : 2,\n"
+"       \"protocol\" : 6,\n"
+"       \"remote\" : {\n"
+"       \"address\" : \"192.168.103.2\",\n"
+"       \"prefix-bits\" : 32,\n"
+"       \"interface\" : 0\n"
+"       }\n"
+"   },\n"
+"   {\n"
+"       \"parent-event\" : \"static-route-parent\",\n"
+"       \"direction-in\" : true,\n"
+"       \"direction-out\" : true,\n"
+"       \"penalty-boxed\" : false,\n"
+"       \"green-listed\" : true,\n"
+"       \"dont-count-hits\" : false,\n"
+"       \"dont-count-current-connections\" : false,\n"
+"       \"family\" : 2,\n"
+"       \"protocol\" : 1,\n"
+"       \"remote\" : {\n"
+"       \"port\" : 8,\n"
+"       \"address\" : \"192.168.103.2\",\n"
+"       \"prefix-bits\" : 32,\n"
+"       \"interface\" : 0\n"
+"       }\n"
+"   },\n"
+"   {\n"
+"       \"parent-event\" : \"static-route-parent\",\n"
+"       \"direction-in\" : true,\n"
+"       \"direction-out\" : true,\n"
+"       \"penalty-boxed\" : false,\n"
+"       \"green-listed\" : true,\n"
+"       \"dont-count-hits\" : false,\n"
+"       \"dont-count-current-connections\" : false,\n"
+"       \"family\" : 118,\n"
+"       \"remote\" : {\n"
+"       \"address\" : \"de:c0:de:03:02:00\",\n"
+"       \"prefix-bits\" : 40,\n"
+"       \"interface\" : 0\n"
+"       }\n"
+"   }\n"
+"   ]\n"
+"}\n";
 
 /* Callback that is fired when an action is taken, this can be used for
  * debugging for now */
@@ -30,7 +117,7 @@ static wolfsentry_errcode_t test_action(
     (void)route_table;
     (void)action_results;
 
-    /*fprintf(stderr, "action callback: a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
+    /*printf("action callback: a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
            wolfsentry_action_get_label(action),
            wolfsentry_event_get_label(parent_event),
            wolfsentry_event_get_label(trigger_event),
@@ -49,10 +136,10 @@ int sentry_init()
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .route_private_data_alignment = 16 };
     ret =  wolfsentry_init(NULL /* hpi */, &config,
                            &wolfsentry);
-    if (ret < 0) {
-        fprintf(stderr, "wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
-                WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        fprintf(stderr, "unable to initialize wolfSentry");
+
+    if (ret < 0)
+    {
+        printf("unable to initialize wolfSentry, code: %ld\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
     }
 
     /* Insert the possible actions into wolfSentry */
@@ -65,101 +152,81 @@ int sentry_init()
                                    &id);
 
     wolfsentry_action_insert(
-                                   wolfsentry,
-                                   "handle-delete",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
+        wolfsentry,
+        "handle-delete",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        WOLFSENTRY_ACTION_FLAG_NONE,
+        test_action,
+        NULL,
+        &id);
 
     wolfsentry_action_insert(
-                                   wolfsentry,
-                                   "handle-match",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
+        wolfsentry,
+        "handle-match",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        WOLFSENTRY_ACTION_FLAG_NONE,
+        test_action,
+        NULL,
+        &id);
 
     wolfsentry_action_insert(
-                                   wolfsentry,
-                                   "notify-on-match",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
+        wolfsentry,
+        "notify-on-match",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        WOLFSENTRY_ACTION_FLAG_NONE,
+        test_action,
+        NULL,
+        &id);
 
     wolfsentry_action_insert(
-                                   wolfsentry,
-                                   "handle-connect",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
+        wolfsentry,
+        "handle-connect",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        WOLFSENTRY_ACTION_FLAG_NONE,
+        test_action,
+        NULL,
+        &id);
 
     wolfsentry_action_insert(
-                                   wolfsentry,
-                                   "handle-connect2",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
+        wolfsentry,
+        "handle-connect2",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        WOLFSENTRY_ACTION_FLAG_NONE,
+        test_action,
+        NULL,
+        &id);
 
 
-    char buf[512], err_buf[512];
+    char err_buf[512];
     struct wolfsentry_json_process_state *jps;
-
-    /* Open the config file */
-    FILE *f = fopen(wolfsentry_config_path, "r");
-
-    if (f == NULL) {
-        fprintf(stderr, "fopen(%s): %s\n",wolfsentry_config_path,strerror(errno));
-        fprintf(stderr, "unable to open wolfSentry config file");
-    }
 
     /* Initalize the wolfSentry JSON parser */
     if ((ret = wolfsentry_config_json_init(
-             wolfsentry,
-             WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
-             &jps)) < 0) {
-        fprintf(stderr, "wolfsentry_config_json_init() returned "
-                WOLFSENTRY_ERROR_FMT "\n",
-                WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        fprintf(stderr, "error while initializing wolfSentry config parser");
+                   wolfsentry,
+                   WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+                   &jps)) < 0)
+    {
+        printf("error while initializing wolfSentry config parser, code: %ld\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
     }
 
     /* wolfSentry uses a streaming reader/parser for the config file */
-    for (;;) {
-        /* Read some data from the config file */
-        size_t n = fread(buf, 1, sizeof buf, f);
-        if ((n < sizeof buf) && ferror(f)) {
-            fprintf(stderr, "fread(%s): %s\n",wolfsentry_config_path, strerror(errno));
-            fprintf(stderr, "error while reading wolfSentry config file");
-        }
+    /* Send the read data into the JSON parser */
+	ret = wolfsentry_config_json_feed(jps, wolfsentry_config_data, strlen(wolfsentry_config_data), err_buf, sizeof err_buf);
 
-        /* Send the read data into the JSON parser */
-        ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
-        if (ret < 0) {
-            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-            fprintf(stderr, "error while loading wolfSentry config file");
-        }
-        if ((n < sizeof buf) && feof(f))
-            break;
-    }
-    fclose(f);
+	if (ret < 0)
+	{
+		printf("error while loading wolfSentry config data, code: %ld, msg: %s\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret), err_buf);
+	}
 
     /* Clean up the JSON parser */
-    if ((ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf)) < 0) {
-        fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-        fprintf(stderr, "error while loading wolfSentry config file");
+    if ((ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf)) < 0)
+    {
+        printf("error while loading wolfSentry config data, code: %ld, msg: %s\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret), err_buf);
     }
 
     return 0;
 }
+
 
 /* Check a TCP connection with wolfSentry. This is called for connect and
  * disconnect so wolfSentry can count the simultaneous connections */
@@ -219,8 +286,9 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
             NULL,
             &action_results);
 
-    fprintf(stderr, "TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+    printf("TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    fflush(stdout);
 
     /* Check the result, if it contains "reject" then notify the caller */
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
@@ -263,8 +331,9 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
             NULL,
             NULL,
             &action_results);
-    fprintf(stderr, "PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+    printf("PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    fflush(stdout);
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;
@@ -304,8 +373,9 @@ int sentry_action_mac(struct eth_addr *addr)
             NULL,
             &action_results);
 
-    fprintf(stderr, "MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+    printf("MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    fflush(stdout);
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;

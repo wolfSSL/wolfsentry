@@ -18,7 +18,7 @@
 /* Called by echo_msgrecv() when it effectively gets an EOF */
 static void echo_msgclose(struct tcp_pcb *pcb)
 {
-    fprintf(stderr, "Closing connection from: %s\n", ipaddr_ntoa(&(pcb->remote_ip)));
+    printf("Closing connection from: %s\n", ipaddr_ntoa(&(pcb->remote_ip)));
     /* Tell sentry_action() that this is a disconnect event which decrements
      * the connection count */
     sentry_action(&pcb->local_ip, &pcb->remote_ip, pcb->local_port, pcb->remote_port, SENTRY_ACTION_DISCONNECT);
@@ -41,7 +41,7 @@ static err_t echo_msgrecv(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
 
         for (q = p; q != NULL; q = q->next)
         {
-            fprintf(stderr, "Got: %.*s\n", q->len, q->payload);
+            printf("Got: %.*s\n", q->len, q->payload);
         }
     }
     else if (err == ERR_OK && p == NULL)
@@ -56,7 +56,7 @@ static err_t echo_msgrecv(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
 static void echo_msgerr(void *arg, err_t err)
 {
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_msgerr: %s (%i)\n", lwip_strerr(err), err));
-    fprintf(stderr, "Err: %s\n", lwip_strerr(err));
+    printf("Err: %s\n", lwip_strerr(err));
 }
 
 /* TCP accept connection callback handler */
@@ -65,7 +65,7 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
     /* Accepted new connection */
     LWIP_PLATFORM_DIAG(("echo_msgaccept called\n"));
 
-    fprintf(stderr, "Connect from: %s port: %d\n", ipaddr_ntoa(&(pcb->remote_ip)), pcb->remote_port);
+    printf("Connect from: %s port: %d\n", ipaddr_ntoa(&(pcb->remote_ip)), pcb->remote_port);
 
     /* The below is an alternative hook to check for incoming connections. The
      * down side of this is that it will only trigger after the initial SYN/ACK
@@ -73,7 +73,7 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
     /*
     if (sentry_action(pcb, SENTRY_ACTION_CONNECT) != 0)
     {
-        fprintf(stderr, "Sentry rejected connection\n");
+        printf("Sentry rejected connection\n");
         tcp_abort(pcb);
         return ERR_ABRT;
     }
@@ -124,12 +124,12 @@ int sentry_tcp_inpkt(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint16_t optlen,
          * yet, that happens immediately after this callback, so we get these
          * details from other sources. The same sources that are about to fill
          * in the details into the sruct */
-        fprintf(stderr, "Incomming connection from: %s\n",
+        printf("Incomming connection from: %s\n",
                 ipaddr_ntoa(ip_current_src_addr()));
         if (sentry_action(ip_current_dest_addr(), ip_current_src_addr(),
                     pcb->local_port, hdr->src , SENTRY_ACTION_CONNECT) != 0)
         {
-            fprintf(stderr, "Sentry rejected connection from: %s\n",
+            printf("Sentry rejected connection from: %s\n",
                     ipaddr_ntoa(ip_current_src_addr()));
             return ERR_ABRT;
         }

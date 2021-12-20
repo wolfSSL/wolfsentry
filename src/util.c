@@ -181,12 +181,21 @@ static void *wolfsentry_builtin_realloc(void *context, void *ptr, size_t size) {
 
 static void *wolfsentry_builtin_memalign(void *context, size_t alignment, size_t size) {
     (void)context;
+#ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
+    void *ptr = NULL;
+    if (alignment && size) {
+        uint32_t hdr_size = sizeof(uint16_t) + (alignment - 1);
+        void *p = malloc(size + hdr_size);
+        if (p) {
+            /* Align to powers of two */
+            ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
+            *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+        }
+    }
+    return ptr;
+#else
     if (alignment <= sizeof(void *))
         return malloc(size);
-#ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
-    else
-        return NULL;
-#else
     else {
         void *ret = 0;
         if (posix_memalign(&ret, alignment, size) < 0)
@@ -198,7 +207,13 @@ static void *wolfsentry_builtin_memalign(void *context, size_t alignment, size_t
 
 static void wolfsentry_builtin_free_aligned(void *context, void *ptr) {
     (void)context;
+#ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
+    uint16_t offset = *((uint16_t *)ptr - 1);
+    void *p = (void *)((uint8_t *)ptr - offset);
+    free(p);
+#else
     free(ptr);
+#endif
 }
 
 static const struct wolfsentry_allocator default_allocator = {
@@ -374,6 +389,391 @@ static int darwin_sem_destroy(sem_t *sem)
     return 0;
 }
 #define sem_destroy darwin_sem_destroy
+
+#elif defined FREERTOS
+/* Based on FreeRTOS-POSIX */
+
+static int freertos_sem_init( sem_t * sem,
+              int pshared,
+              unsigned value )
+{
+    /* Silence warnings about unused parameters. */
+    ( void ) pshared;
+
+    /* Check value parameter. */
+    if( value > SEM_VALUE_MAX )
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    /* Create the FreeRTOS semaphore.
+     * This is only used to queue threads when no semaphore is available.
+     * Initializing with semaphore initial count zero.
+     * This call will not fail because the memory for the semaphore has already been allocated.
+     */
+    ( void ) xSemaphoreCreateCountingStatic( SEM_VALUE_MAX, value, sem );
+
+    return 0;
+}
+
+#define sem_init freertos_sem_init
+
+static int freertos_sem_post( sem_t * sem )
+{
+    /* Give the semaphore using the FreeRTOS API. */
+    ( void ) xSemaphoreGive(sem);
+
+    return 0;
+}
+
+#define sem_post freertos_sem_post
+
+
+static void UTILS_NanosecondsToTimespec( int64_t llSource,
+        struct timespec * const pxDestination )
+{
+	long lCarrySec = 0;
+
+	/* Convert to timespec. */
+	pxDestination->tv_sec = ( time_t ) ( llSource / FREERTOS_NANOSECONDS_PER_SECOND );
+	pxDestination->tv_nsec = ( long ) ( llSource % FREERTOS_NANOSECONDS_PER_SECOND );
+
+	/* Subtract from tv_sec if tv_nsec < 0. */
+	if( pxDestination->tv_nsec < 0L )
+	{
+		/* Compute the number of seconds to carry. */
+		lCarrySec = ( pxDestination->tv_nsec / ( long ) FREERTOS_NANOSECONDS_PER_SECOND ) + 1L;
+
+		pxDestination->tv_sec -= ( time_t ) ( lCarrySec );
+		pxDestination->tv_nsec += lCarrySec * ( long ) FREERTOS_NANOSECONDS_PER_SECOND;
+	}
+}
+
+static int UTILS_TimespecCompare( const struct timespec * const x,
+                           const struct timespec * const y )
+{
+    int iStatus = 0;
+
+    /* Check parameters */
+    if( ( x == NULL ) && ( y == NULL ) )
+    {
+        iStatus = 0;
+    }
+    else if( y == NULL )
+    {
+        iStatus = 1;
+    }
+    else if( x == NULL )
+    {
+        iStatus = -1;
+    }
+    else if( x->tv_sec > y->tv_sec )
+    {
+        iStatus = 1;
+    }
+    else if( x->tv_sec < y->tv_sec )
+    {
+        iStatus = -1;
+    }
+    else
+    {
+        /* seconds are equal compare nano seconds */
+        if( x->tv_nsec > y->tv_nsec )
+        {
+            iStatus = 1;
+        }
+        else if( x->tv_nsec < y->tv_nsec )
+        {
+            iStatus = -1;
+        }
+        else
+        {
+            iStatus = 0;
+        }
+    }
+
+    return iStatus;
+}
+
+
+
+static int UTILS_TimespecSubtract( const struct timespec * const x,
+                            const struct timespec * const y,
+                            struct timespec * const pxResult )
+{
+    int iCompareResult = 0;
+    int iStatus = 0;
+
+    /* Check parameters. */
+    if( ( pxResult == NULL ) || ( x == NULL ) || ( y == NULL ) )
+    {
+        iStatus = -1;
+    }
+
+    if( iStatus == 0 )
+    {
+        iCompareResult = UTILS_TimespecCompare( x, y );
+
+        /* if x < y then result would be negative, return 1 */
+        if( iCompareResult == -1 )
+        {
+            iStatus = 1;
+        }
+        else if( iCompareResult == 0 )
+        {
+            /* if times are the same return zero */
+            pxResult->tv_sec = 0;
+            pxResult->tv_nsec = 0;
+        }
+        else
+        {
+            /* If x > y Perform subtraction. */
+            pxResult->tv_sec = x->tv_sec - y->tv_sec;
+            pxResult->tv_nsec = x->tv_nsec - y->tv_nsec;
+
+            /* check if nano seconds value needs to borrow */
+            if( pxResult->tv_nsec < 0 )
+            {
+                /* Based on comparison, tv_sec > 0 */
+                pxResult->tv_sec--;
+                pxResult->tv_nsec += ( long ) FREERTOS_NANOSECONDS_PER_SECOND;
+            }
+
+            /* if nano second is negative after borrow, it is an overflow error */
+            if( pxResult->tv_nsec < 0 )
+            {
+                iStatus = -1;
+            }
+        }
+    }
+
+    return iStatus;
+}
+
+static int UTILS_ValidateTimespec( const struct timespec * const pxTimespec )
+{
+    int xReturn = 0;
+
+    if( pxTimespec != NULL )
+    {
+        /* Verify 0 <= tv_nsec < 1000000000. */
+        if( ( pxTimespec->tv_nsec >= 0 ) &&
+            ( pxTimespec->tv_nsec < FREERTOS_NANOSECONDS_PER_SECOND ) )
+        {
+            xReturn = 1;
+        }
+    }
+
+    return xReturn;
+}
+
+static int UTILS_TimespecToTicks( const struct timespec * const pxTimespec,
+                           TickType_t * const pxResult )
+{
+    int iStatus = 0;
+    int64_t llTotalTicks = 0;
+    long lNanoseconds = 0;
+
+    /* Check parameters. */
+    if( ( pxTimespec == NULL ) || ( pxResult == NULL ) )
+    {
+        iStatus = EINVAL;
+    }
+    else if( ( iStatus == 0 ) && ( UTILS_ValidateTimespec( pxTimespec ) == 0 ) )
+    {
+        iStatus = EINVAL;
+    }
+
+    if( iStatus == 0 )
+    {
+        /* Convert timespec.tv_sec to ticks. */
+        llTotalTicks = ( int64_t ) configTICK_RATE_HZ * ( pxTimespec->tv_sec );
+
+        /* Convert timespec.tv_nsec to ticks. This value does not have to be checked
+         * for overflow because a valid timespec has 0 <= tv_nsec < 1000000000 and
+         * FREERTOS_NANOSECONDS_PER_TICK > 1. */
+        lNanoseconds = pxTimespec->tv_nsec / ( long ) FREERTOS_NANOSECONDS_PER_TICK + /* Whole nanoseconds. */
+                       ( long ) ( pxTimespec->tv_nsec % ( long ) FREERTOS_NANOSECONDS_PER_TICK != 0 ); /* Add 1 to round up if needed. */
+
+        /* Add the nanoseconds to the total ticks. */
+        llTotalTicks += ( int64_t ) lNanoseconds;
+
+        /* Check for overflow */
+        if( llTotalTicks < 0 )
+        {
+            iStatus = EINVAL;
+        }
+        else
+        {
+            /* check if TickType_t is 32 bit or 64 bit */
+            uint32_t ulTickTypeSize = sizeof( TickType_t );
+
+            /* check for downcast overflow */
+            if( ulTickTypeSize == sizeof( uint32_t ) )
+            {
+                if( llTotalTicks > UINT_MAX )
+                {
+                    iStatus = EINVAL;
+                }
+            }
+        }
+
+        /* Write result. */
+        *pxResult = ( TickType_t ) llTotalTicks;
+    }
+
+    return iStatus;
+}
+
+
+
+static int UTILS_AbsoluteTimespecToDeltaTicks( const struct timespec * const pxAbsoluteTime,
+                                        const struct timespec * const pxCurrentTime,
+                                        TickType_t * const pxResult )
+{
+    int iStatus = 0;
+    struct timespec xDifference = { 0 };
+
+    /* Check parameters. */
+    if( ( pxAbsoluteTime == NULL ) || ( pxCurrentTime == NULL ) || ( pxResult == NULL ) )
+    {
+        iStatus = EINVAL;
+    }
+
+    /* Calculate the difference between the current time and absolute time. */
+    if( iStatus == 0 )
+    {
+        iStatus = UTILS_TimespecSubtract( pxAbsoluteTime, pxCurrentTime, &xDifference );
+
+        if( iStatus == 1 )
+        {
+            /* pxAbsoluteTime was in the past. */
+            iStatus = ETIMEDOUT;
+        }
+        else if( iStatus == -1 )
+        {
+            /* error */
+            iStatus = EINVAL;
+        }
+    }
+
+    /* Convert the time difference to ticks. */
+    if( iStatus == 0 )
+    {
+        iStatus = UTILS_TimespecToTicks( &xDifference, pxResult );
+    }
+
+    return iStatus;
+}
+
+
+static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now);
+
+#define clock_gettime wolfsentry_builtin_get_time
+
+static int freertos_sem_timedwait( sem_t * sem,
+                   const struct timespec * abstime )
+{
+    int iStatus = 0;
+    TickType_t xDelay = portMAX_DELAY;
+
+    if( abstime != NULL )
+    {
+        /* If the provided timespec is invalid, still attempt to take the
+         * semaphore without blocking, per POSIX spec. */
+        if( UTILS_ValidateTimespec( abstime ) == 0 )
+        {
+            xDelay = 0;
+            iStatus = EINVAL;
+        }
+        else
+        {
+            struct timespec xCurrentTime = { 0 };
+
+            /* Get current time */
+            if( clock_gettime( CLOCK_REALTIME, &xCurrentTime ) != 0 )
+            {
+                iStatus = EINVAL;
+            }
+            else
+            {
+                iStatus = UTILS_AbsoluteTimespecToDeltaTicks( abstime, &xCurrentTime, &xDelay );
+            }
+
+            /* If abstime was in the past, still attempt to take the semaphore without
+             * blocking, per POSIX spec. */
+            if( iStatus == ETIMEDOUT )
+            {
+                xDelay = 0;
+            }
+        }
+    }
+
+    /* Take the semaphore using the FreeRTOS API. */
+    if( xSemaphoreTake( ( SemaphoreHandle_t ) sem,
+                        xDelay ) != pdTRUE )
+    {
+        if( iStatus == 0 )
+        {
+            errno = ETIMEDOUT;
+        }
+        else
+        {
+            errno = iStatus;
+        }
+
+        iStatus = -1;
+    }
+    else
+    {
+        iStatus = 0;
+    }
+
+    return iStatus;
+}
+
+#define sem_timedwait freertos_sem_timedwait
+
+static int freertos_sem_wait( sem_t * sem )
+{
+    return freertos_sem_timedwait( sem, NULL );
+}
+
+#define sem_wait freertos_sem_wait
+
+static int freertos_sem_trywait( sem_t * sem )
+{
+    int iStatus = 0;
+
+    /* Setting an absolute timeout of 0 (i.e. in the past) will cause sem_timedwait
+     * to not block. */
+    struct timespec xTimeout = { 0 };
+
+    iStatus = freertos_sem_timedwait( sem, &xTimeout );
+
+    /* POSIX specifies that this function should set errno to EAGAIN and not
+     * ETIMEDOUT. */
+    if( ( iStatus == -1 ) && ( errno == ETIMEDOUT ) )
+    {
+        errno = EAGAIN;
+    }
+
+    return iStatus;
+}
+
+#define sem_trywait freertos_sem_trywait
+
+static int freertos_sem_destroy( sem_t * sem )
+{
+    /* Free the resources in use by the semaphore. */
+    vSemaphoreDelete( sem );
+
+    return 0;
+}
+
+#define sem_destroy freertos_sem_destroy
+
 
 #else
 
@@ -1668,6 +2068,25 @@ wolfsentry_errcode_t wolfsentry_context_unlock(
 
 #ifdef WOLFSENTRY_CLOCK_BUILTINS
 
+#ifdef FREERTOS
+
+#include <FreeRTOS.h>
+#include <task.h>
+
+/* Note: NANOSECONDS_PER_SECOND % configTICK_RATE_HZ should equal 0 or this
+ * won't work well */
+
+static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now) {
+    TimeOut_t xCurrentTime = { 0 };
+    uint64_t ullTickCount = 0;
+    vTaskSetTimeOutState(&xCurrentTime);
+    ullTickCount = (uint64_t)(xCurrentTime.xOverflowCount) << (sizeof(TickType_t) * 8);
+    ullTickCount += xCurrentTime.xTimeOnEntering;
+    *now = ullTickCount * FREERTOS_NANOSECONDS_PER_TICK;
+    WOLFSENTRY_RETURN_OK;
+}
+#else
+
 #include <time.h>
 
 static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now) {
@@ -1678,6 +2097,8 @@ static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentr
     *now = ((wolfsentry_time_t)ts.tv_sec * (wolfsentry_time_t)1000000) + ((wolfsentry_time_t)ts.tv_nsec / (wolfsentry_time_t)1000);
     WOLFSENTRY_RETURN_OK;
 }
+
+#endif /* FREERTOS */
 
 static wolfsentry_time_t wolfsentry_builtin_diff_time(wolfsentry_time_t later, wolfsentry_time_t earlier) {
     return later - earlier;

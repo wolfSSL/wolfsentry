@@ -50,12 +50,27 @@ struct wolfsentry_thread_list {
 
 #endif
 
+#ifdef FREERTOS
+#include <FreeRTOS.h>
+#define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
+#define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
+#endif
+
 #ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
 
 #ifdef __MACH__
 
 #include <dispatch/dispatch.h>
 #define sem_t dispatch_semaphore_t
+
+#elif defined FREERTOS
+
+#include <semphr.h>
+#include <atomic.h>
+
+#define SEM_VALUE_MAX        0x7FFFU
+
+#define sem_t StaticSemaphore_t
 
 #else
 

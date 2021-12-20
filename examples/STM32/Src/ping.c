@@ -25,12 +25,12 @@ static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_a
       {
           /* RAW recv needs to free if not returning 0 */
           pbuf_free(p);
-          fprintf(stderr, "Ping rejected from %s\n", ipaddr_ntoa(addr));
+          printf("Ping rejected from %s\n", ipaddr_ntoa(addr));
           return 1;
       }
   }
 
-  fprintf(stderr, "Ping accepted from %s\n", ipaddr_ntoa(addr));
+  printf("Ping accepted from %s\n", ipaddr_ntoa(addr));
   return 0;
 }
 

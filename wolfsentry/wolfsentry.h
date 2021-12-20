@@ -102,7 +102,7 @@
 #endif
 
 #ifdef WOLFSENTRY_THREADSAFE
-#ifndef WOLFSENTRY_NO_SEMAPHORE_H
+#if !defined(WOLFSENTRY_NO_SEMAPHORE_H) && !defined(FREERTOS)
 #include <semaphore.h>
 #endif
 #endif
@@ -117,6 +117,13 @@
 
 #ifndef WOLFSENTRY_NO_STRINGS_H
 #include <strings.h>
+#endif
+
+#ifdef FREERTOS
+/* size_t is alias to "unsigned int" in STM32 FreeRTOS */
+#define SIZET_FMT "%d"
+#else
+#define SIZET_FMT "%zd"
 #endif
 
 typedef unsigned char byte;

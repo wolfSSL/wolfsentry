@@ -297,14 +297,16 @@ ifndef VERSION
     VERSION := $(VERSION)$(shell git diff --quiet 2>/dev/null || [ $$? -ne 1 ] || echo "-dirty")
 endif
 
-EXAMPLE_FILES=$(shell find examples/Linux-LWIP/ examples/STM32/ -type f -a \( -name '*.[ch]' -o -name '*.md' -o -name CMakeLists.txt -o -name Dockerfile -o -name '*.yml' -o -name '*.json' \) -print)
+EXAMPLE_FILES := $(shell find examples/Linux-LWIP/ examples/STM32/ -type f -a \( -name '*.[ch]' -o -name '*.md' -o -name CMakeLists.txt -o -name Dockerfile -o -name '*.yml' -o -name '*.json' \) -print)
+
+DIST_FILES := LICENSING README.md ChangeLog.md Makefile scripts/build_wolfsentry_options_h.awk Makefile.analyzers wolfsentry/*.h src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c tests/test-config.json tests/test-config-numeric.json $(EXAMPLE_FILES)
 
 .PHONY: dist
 dist:
 ifdef VERY_QUIET
-	@cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md ChangeLog.md Makefile scripts/build_wolfsentry_options_h.awk Makefile.analyzers wolfsentry/*.h src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c tests/test-config.json tests/test-config-numeric.json $(EXAMPLE_FILES)
+	@cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz $(DIST_FILES)
 else
-	cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz README.md ChangeLog.md Makefile scripts/build_wolfsentry_options_h.awk Makefile.analyzers wolfsentry/*.h src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c tests/test-config.json tests/test-config-numeric.json $(EXAMPLE_FILES)
+	cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz $(DIST_FILES)
 endif
 
 dist-test: dist

@@ -24,6 +24,17 @@ else
      QUIET_FLAG:=--quiet
 endif
 
+# lock in the expected major version of LLVM/clang/compiler-rt-sanitizers:
+ifndef CLANG_PATH
+	CLANG_PATH:=/usr/lib/llvm/13/bin:/usr/lib/llvm-13
+endif
+
+PATH:=$(CLANG_PATH):$(PATH)
+
+.PHONY: clang-version-test
+clang-version-test:
+	@PATH=$(CLANG_PATH) clang --version >/dev/null || { echo 'CLANG_PATH $(CLANG_PATH) is invalid.' >&2; exit 1; }
+
 .PHONY: valgrind
 valgrind: VALGRIND=valgrind --tool=memcheck --leak-check=full --error-exitcode=10 $(VALGRIND_ARGS)
 valgrind: test
@@ -63,12 +74,13 @@ sanitize: CFLAGS+=-fsanitize=bounds-strict
 sanitize: LDFLAGS+=-fsanitize=bounds-strict
 endif
 
-sanitize: TEST_ENV+=ASAN_OPTIONS=detect_invalid_pointer_pairs=2
+sanitize: TEST_ENV+=ASAN_OPTIONS='detect_invalid_pointer_pairs=2:halt_on_error=1' UBSAN_OPTIONS='halt_on_error=1' LSAN_OPTIONS='halt_on_error=1:exitcode=23'
 sanitize: test
 
 .PHONY: sanitize-thread
 sanitize-thread: CFLAGS+=-fsanitize=thread
 sanitize-thread: LDFLAGS+=-fsanitize=thread
+sanitize-thread: TEST_ENV+=ASAN_OPTIONS='halt_on_error=1'
 sanitize-thread: test
 
 .PHONY: sanitize-all
@@ -105,7 +117,7 @@ valgrind-all-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds clean
 
 .PHONY: valgrind-all-clang
-valgrind-all-clang:
+valgrind-all-clang: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds CC=clang VALGRIND_ARGS=-q valgrind
 	@echo "no defects from clang valgrind memcheck"
@@ -128,7 +140,7 @@ sanitize-all-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc clean
 
 .PHONY: sanitize-all-clang
-sanitize-all-clang:
+sanitize-all-clang: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=clang EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
 	@echo "no defects from clang sanitize address, leak, undefined, float-cast-overflow, and float-divide-by-zero"
@@ -143,7 +155,7 @@ analyze-all: valgrind-all-gcc valgrind-all-clang sanitize-all-gcc sanitize-all-c
 	@echo "analyzers found no defects."
 
 .PHONY: c99-test
-c99-test:
+c99-test: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds EXTRA_CFLAGS+='-std=c99 -pedantic'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean

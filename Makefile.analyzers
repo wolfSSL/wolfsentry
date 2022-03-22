@@ -36,14 +36,20 @@ clang-version-test:
 	@PATH=$(CLANG_PATH) clang --version >/dev/null || { echo 'CLANG_PATH $(CLANG_PATH) is invalid.' >&2; exit 1; }
 
 .PHONY: valgrind
+valgrind: CFLAGS+=-fno-omit-frame-pointer
+valgrind: LDFLAGS+=-fno-omit-frame-pointer
 valgrind: VALGRIND=valgrind --tool=memcheck --leak-check=full --error-exitcode=10 $(VALGRIND_ARGS)
 valgrind: test
 
 .PHONY: valgrind-drd
+valgrind-drd: CFLAGS+=-fno-omit-frame-pointer
+valgrind-drd: LDFLAGS+=-fno-omit-frame-pointer
 valgrind-drd: VALGRIND=valgrind --tool=drd --error-exitcode=10 $(VALGRIND_ARGS)
 valgrind-drd: test
 
 .PHONY: valgrind-helgrind
+valgrind-helgrind: CFLAGS+=-fno-omit-frame-pointer
+valgrind-helgrind: LDFLAGS+=-fno-omit-frame-pointer
 valgrind-helgrind: VALGRIND=valgrind --tool=helgrind --error-exitcode=10 $(VALGRIND_ARGS)
 valgrind-helgrind: test
 
@@ -66,15 +72,15 @@ valgrind-all:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=valgrind-builds clean
 
 .PHONY: sanitize
-sanitize: CFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
-sanitize: LDFLAGS+=-fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
+sanitize: CFLAGS+=-fno-omit-frame-pointer -fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
+sanitize: LDFLAGS+=-fno-omit-frame-pointer -fsanitize=address -fsanitize=pointer-subtract -fsanitize=leak -fsanitize=undefined -fsanitize=float-cast-overflow -fsanitize=float-divide-by-zero
 
 ifeq "$(CC_IS_GCC)" "1"
 sanitize: CFLAGS+=-fsanitize=bounds-strict
 sanitize: LDFLAGS+=-fsanitize=bounds-strict
 endif
 
-sanitize: TEST_ENV+=ASAN_OPTIONS='detect_invalid_pointer_pairs=2:halt_on_error=1' UBSAN_OPTIONS='halt_on_error=1' LSAN_OPTIONS='halt_on_error=1:exitcode=23'
+sanitize: TEST_ENV+=ASAN_OPTIONS='detect_invalid_pointer_pairs=2:halt_on_error=1:detect_stack_use_after_return=1' UBSAN_OPTIONS='halt_on_error=1' LSAN_OPTIONS='halt_on_error=1:exitcode=23'
 sanitize: test
 
 .PHONY: sanitize-thread

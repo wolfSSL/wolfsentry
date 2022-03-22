@@ -274,7 +274,8 @@ typedef enum {
     WOLFSENTRY_OBJECT_TYPE_TABLE,
     WOLFSENTRY_OBJECT_TYPE_ACTION,
     WOLFSENTRY_OBJECT_TYPE_EVENT,
-    WOLFSENTRY_OBJECT_TYPE_ROUTE
+    WOLFSENTRY_OBJECT_TYPE_ROUTE,
+    WOLFSENTRY_OBJECT_TYPE_KV
 } wolfsentry_object_type_t;
 
 typedef enum {
@@ -978,6 +979,225 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_action_list_next(
 WOLFSENTRY_API wolfsentry_hitcount_t wolfsentry_table_n_inserts(struct wolfsentry_table_header *table);
 
 WOLFSENTRY_API wolfsentry_hitcount_t wolfsentry_table_n_deletes(struct wolfsentry_table_header *table);
+
+typedef enum {
+    WOLFSENTRY_KV_NONE = 0,
+    WOLFSENTRY_KV_NULL,
+    WOLFSENTRY_KV_TRUE,
+    WOLFSENTRY_KV_FALSE,
+    WOLFSENTRY_KV_UINT,
+    WOLFSENTRY_KV_SINT,
+    WOLFSENTRY_KV_FLOAT,
+    WOLFSENTRY_KV_STRING,
+    WOLFSENTRY_KV_BYTES
+} wolfsentry_kv_type_t;
+
+struct wolfsentry_kv_pair {
+    int key_len;
+    wolfsentry_kv_type_t v_type;
+    union {
+        uint64_t v_uint;
+        int64_t v_sint;
+        double v_float;
+        size_t string_len;
+        size_t bytes_len;
+    } a;
+    byte b[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE]; /* the key, and for strings and bytes, the data. */
+};
+
+#ifndef WOLFSENTRY_KV_MAX_VALUE_BYTES
+#define WOLFSENTRY_KV_MAX_VALUE_BYTES 256
+#endif
+
+#define WOLFSENTRY_KV_KEY_LEN(kv) ((kv)->key_len)
+#define WOLFSENTRY_KV_KEY(kv) ((char *)((kv)->b))
+#define WOLFSENTRY_KV_TYPE(kv) ((kv)->v_type)
+#define WOLFSENTRY_KV_V_UINT(kv) ((kv)->a.v_uint)
+#define WOLFSENTRY_KV_V_SINT(kv) ((kv)->a.v_sint)
+#define WOLFSENTRY_KV_V_FLOAT(kv) ((kv)->a.v_float)
+#define WOLFSENTRY_KV_V_STRING_LEN(kv) ((kv)->a.string_len)
+#define WOLFSENTRY_KV_V_STRING(kv) ((char *)((kv)->b + (kv)->key_len + 1))
+#define WOLFSENTRY_KV_V_BYTES_LEN(kv) ((kv)->a.bytes_len)
+#define WOLFSENTRY_KV_V_BYTES(kv) ((kv)->b + (kv)->key_len + 1)
+
+typedef wolfsentry_errcode_t (*wolfsentry_kv_validator_t)(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_pair *kv);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_set_validator(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_kv_validator_t validator);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_type(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    wolfsentry_kv_type_t *type);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_delete(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_null(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_bool(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    wolfsentry_kv_type_t value,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_bool(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    wolfsentry_kv_type_t *value);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_uint(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    uint64_t value,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_uint(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    uint64_t *value);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_sint(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    int64_t value,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_sint(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    int64_t *value);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_double(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    double value,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_float(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    double *value);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_string(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    const char *value,
+    int value_len,
+    int overwrite_p);
+
+struct wolfsentry_kv_pair_internal;
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_string(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    const char **value,
+    int *value_len,
+    struct wolfsentry_kv_pair_internal **user_value_record);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_bytes(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    const byte *value,
+    int value_len,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_bytes_base64(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    const char *value,
+    int value_len,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_bytes(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    const byte **value,
+    int *value_len,
+    struct wolfsentry_kv_pair_internal **user_value_record);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_release_record(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_pair_internal **user_value_record);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_pair_export(
+    const struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_pair_internal *kv,
+    const struct wolfsentry_kv_pair **kv_exports);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_type_to_string(
+    wolfsentry_kv_type_t type,
+    const char **out);
+
+#ifndef WOLFSENTRY_NO_STDIO
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
+    const struct wolfsentry_kv_pair *kv,
+    char *out,
+    int *out_len);
+#endif
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_start(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_cursor **cursor);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_seek_to_head(
+    const struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_cursor *cursor);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_seek_to_tail(
+    const struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_cursor *cursor);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_current(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_kv_pair_internal **kv);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_prev(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_kv_pair_internal **kv);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_next(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_kv_pair_internal **kv);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_end(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_cursor **cursor);
+
+#define WOLFSENTRY_BASE64_DECODED_BUFSPC(x) ((((x)+3)/4)*3)
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(
+    const char *src,
+    size_t src_len,
+    byte *dest,
+    size_t *dest_spc,
+    int ignore_junk_p);
 
 /* conditionally include wolfsentry_util.h last -- none of the above rely on it.
  */

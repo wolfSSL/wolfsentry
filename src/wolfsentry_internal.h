@@ -260,6 +260,16 @@ struct wolfsentry_route_table {
     wolfsentry_action_res_t default_policy;
 };
 
+struct wolfsentry_kv_pair_internal {
+    struct wolfsentry_table_ent_header header;
+    struct wolfsentry_kv_pair kv;
+};
+
+struct wolfsentry_kv_table {
+    struct wolfsentry_table_header header;
+    wolfsentry_kv_validator_t validator;
+};
+
 struct wolfsentry_context {
 #ifdef WOLFSENTRY_THREADSAFE
     struct wolfsentry_rwlock lock;
@@ -276,6 +286,7 @@ struct wolfsentry_context {
     struct wolfsentry_action_table actions;
     struct wolfsentry_route_table routes_static;
     struct wolfsentry_route_table routes_dynamic;
+    struct wolfsentry_kv_table user_values;
     struct wolfsentry_table_header ents_by_id;
 };
 
@@ -436,5 +447,100 @@ wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
 wolfsentry_errcode_t wolfsentry_eventconfig_update_1(
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal);
+
+int wolfsentry_kv_key_cmp(struct wolfsentry_kv_pair_internal *left, struct wolfsentry_kv_pair_internal *right);
+
+wolfsentry_errcode_t wolfsentry_kv_new(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    int data_len, /* length with terminating null if WOLFSENTRY_KV_STRING, base64 length with null if WOLFSENTRY_KV_BYTES, 0 otherwise */
+    struct wolfsentry_kv_pair_internal **kv);
+
+wolfsentry_errcode_t wolfsentry_kv_drop_reference(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_pair_internal *kv,
+    wolfsentry_action_res_t *action_results);
+
+wolfsentry_errcode_t wolfsentry_kv_insert(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    struct wolfsentry_kv_pair_internal *kv);
+
+wolfsentry_errcode_t wolfsentry_kv_set(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    struct wolfsentry_kv_pair_internal *kv);
+
+wolfsentry_errcode_t wolfsentry_kv_get_reference(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    const char *key,
+    int key_len,
+    wolfsentry_kv_type_t type,
+    struct wolfsentry_kv_pair_internal **kv);
+
+wolfsentry_errcode_t wolfsentry_kv_get_type(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    const char *key,
+    int key_len,
+    wolfsentry_kv_type_t *type);
+
+wolfsentry_errcode_t wolfsentry_kv_clone(
+    struct wolfsentry_context *src_context,
+    struct wolfsentry_table_ent_header * const src_ent,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_ent_header ** const new_ent,
+    wolfsentry_clone_flags_t flags);
+
+wolfsentry_errcode_t wolfsentry_kv_delete(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    const char *key,
+    int key_len);
+
+wolfsentry_errcode_t wolfsentry_kv_set_validator(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    wolfsentry_kv_validator_t validator);
+
+wolfsentry_errcode_t wolfsentry_kv_table_iterate_start(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_kv_table *table,
+    struct wolfsentry_cursor **cursor);
+
+wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_head(
+    const struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_kv_table *table,
+    struct wolfsentry_cursor *cursor);
+
+wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_tail(
+    const struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_kv_table *table,
+    struct wolfsentry_cursor *cursor);
+
+wolfsentry_errcode_t wolfsentry_kv_table_iterate_current(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_kv_table *table,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_kv_pair_internal **kv);
+
+wolfsentry_errcode_t wolfsentry_kv_table_iterate_prev(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_kv_table *table,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_kv_pair_internal **kv);
+
+wolfsentry_errcode_t wolfsentry_kv_table_iterate_next(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_kv_table *table,
+    struct wolfsentry_cursor *cursor,
+    struct wolfsentry_kv_pair_internal **kv);
+
+wolfsentry_errcode_t wolfsentry_kv_table_iterate_end(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_kv_table *table,
+    struct wolfsentry_cursor **cursor);
 
 #endif /* WOLFSENTRY_INTERNAL_H */

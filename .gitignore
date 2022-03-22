@@ -18,3 +18,4 @@ configure
 tests/test_*
 .build_params
 .tested
+wolfsentry_options.h

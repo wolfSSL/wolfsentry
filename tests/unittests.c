@@ -1799,6 +1799,7 @@ static int test_user_values (void) {
             const char *q;
             const char *a;
         } base64_qna[] = {
+            { "", "" },
             { "TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu", "Many hands make light work." },
             { "bGlnaHQgd29yay4=", "light work." },
             { "bGlnaHQgd29yay4", "light work." },

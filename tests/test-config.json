@@ -129,5 +129,21 @@
 	    }
 	}
 
-    ]
+    ],
+    "user-values" : {
+	"user-null" : null,
+	"user-bool" : true,
+	"user-bool2" : false,
+	"user-uint" : 1,
+	"user-sint" : -1,
+	"user-float" : 1.0,
+	"user-string" : "hello",
+
+	"user-uint2" : { "uint" : 1 },
+	"user-sint2" : { "sint" : -1 },
+	"user-float2" : { "float" : 1.0 },
+	"user-string2" : { "string" : "hello" },
+	"user-base64" : { "base64" : "aGVsbG8=" }
+    }
+
 }

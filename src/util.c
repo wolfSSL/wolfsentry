@@ -55,6 +55,8 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
         return "routes.c";
     case WOLFSENTRY_SOURCE_ID_UTIL_C:
         return "util.c";
+    case WOLFSENTRY_SOURCE_ID_KV_C:
+        return "kv.c";
     case WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C:
         return "json/load_config.c";
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
@@ -146,6 +148,10 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Configuration parsing failed";
     case WOLFSENTRY_ERROR_ID_OP_NOT_SUPP_FOR_PROTO:
         return "Operation not supported for protocol";
+    case WOLFSENTRY_ERROR_ID_WRONG_TYPE:
+        return "Item type does not match request";
+    case WOLFSENTRY_ERROR_ID_BAD_VALUE:
+        return "Bad value";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
     }
@@ -2402,6 +2408,11 @@ wolfsentry_errcode_t wolfsentry_init(
         goto out;
     if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->routes_dynamic.header.id)) < 0)
         goto out;
+    (*wolfsentry)->user_values.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_kv_key_cmp;
+    (*wolfsentry)->user_values.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_kv_drop_reference;
+    (*wolfsentry)->user_values.header.ent_type = WOLFSENTRY_OBJECT_TYPE_KV;
+    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->user_values.header.id)) < 0)
+        goto out;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
@@ -2425,6 +2436,9 @@ wolfsentry_errcode_t wolfsentry_context_flush(struct wolfsentry_context *wolfsen
     if ((ret = wolfsentry_table_free_ents(wolfsentry, &wolfsentry->events.header)) < 0)
         return ret;
 
+    if ((ret = wolfsentry_table_free_ents(wolfsentry, &wolfsentry->user_values.header)) < 0)
+        return ret;
+
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -2438,6 +2452,8 @@ wolfsentry_errcode_t wolfsentry_context_free(struct wolfsentry_context **wolfsen
     if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->actions.header)) < 0)
         return ret;
     if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->events.header)) < 0)
+        return ret;
+    if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->user_values.header)) < 0)
         return ret;
 
     if ((ret = wolfsentry_lock_destroy(&(*wolfsentry)->lock)) < 0)
@@ -2504,6 +2520,7 @@ wolfsentry_errcode_t wolfsentry_context_clone(
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->events.header);
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->routes_static.header); /* xxx default_event */
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->routes_dynamic.header); /* xxx default_event */
+    WOLFSENTRY_TABLE_HEADER_RESET((*clone)->user_values.header);
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->ents_by_id);
 
     if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->actions.header, *clone, &(*clone)->actions.header, wolfsentry_action_clone, flags)) < 0)
@@ -2523,6 +2540,9 @@ wolfsentry_errcode_t wolfsentry_context_clone(
     if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->routes_static.header, *clone, &(*clone)->routes_static.header, wolfsentry_route_clone, flags)) < 0)
         goto out;
     if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->routes_dynamic.header, *clone, &(*clone)->routes_dynamic.header, wolfsentry_route_clone, flags)) < 0)
+        goto out;
+
+    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->user_values.header, *clone, &(*clone)->user_values.header, wolfsentry_kv_clone, flags)) < 0)
         goto out;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
@@ -2553,6 +2573,7 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
     wolfsentry1->actions = wolfsentry2->actions;
     wolfsentry1->routes_static = wolfsentry2->routes_static;
     wolfsentry1->routes_dynamic = wolfsentry2->routes_dynamic;
+    wolfsentry1->user_values = wolfsentry2->user_values;
     wolfsentry1->ents_by_id = wolfsentry2->ents_by_id;
 
     wolfsentry2->timecbs = scratch.timecbs;
@@ -2563,6 +2584,7 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
     wolfsentry2->actions = scratch.actions;
     wolfsentry2->routes_static = scratch.routes_static;
     wolfsentry2->routes_dynamic = scratch.routes_dynamic;
+    wolfsentry2->user_values = scratch.user_values;
     wolfsentry2->ents_by_id = scratch.ents_by_id;
 
     WOLFSENTRY_RETURN_OK;
@@ -2574,4 +2596,93 @@ wolfsentry_hitcount_t wolfsentry_table_n_inserts(struct wolfsentry_table_header 
 
 wolfsentry_hitcount_t wolfsentry_table_n_deletes(struct wolfsentry_table_header *table) {
     return table->n_deletes;
+}
+
+static const char base64_inv_lut[0x100] =
+    /* ^@-\x1f */ "||||||||||||||||||||||||||||||||"
+    /* \ -* */ "|||||||||||"
+    /* + */ "\x3e"
+    /* ,-. */ "|||"
+    /* / */ "\x3f"
+    /* 0-9 */ "\x34\x35\x36\x37\x38\x39\x3a\x3b\x3c\x3d"
+    /* :-< */ "|||"
+    /* = */ "@"
+    /* >-@ */ "|||"
+    /* A-P */ "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f"
+    /* Q-Z */ "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19"
+    /* [-` */ "||||||"
+    /* a-p */ "\x1a\x1b\x1c\x1d\x1e\x1f\x20\x21\x22\x23\x24\x25\x26\x27\x28\x29"
+    /* q-z */ "\x2a\x2b\x2c\x2d\x2e\x2f\x30\x31\x32\x33"
+    /* {-DEL */ "|||||"
+    /* 0x80- */
+    "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
+    "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||";
+
+wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, size_t src_len, byte *dest, size_t *dest_spc, int ignore_junk_p) {
+    uint32_t decoded = 0;
+    uint32_t decoded_bits = 0;
+    uint32_t pad_chars = 0;
+    const char *src_end = src + src_len;
+    size_t dest_len = 0;
+
+    if (*dest_spc < ((src_len + 3U) / 4U) * 3U)
+        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+
+    for (; src < src_end; ++src) {
+        uint32_t this_char = (uint32_t)base64_inv_lut[*(unsigned char *)src];
+        if (this_char == (uint32_t)'|') {
+            if (ignore_junk_p)
+                continue;
+            else
+                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        } else if (this_char == (uint32_t)'@') {
+            if ((src + 1 < src_end) && (base64_inv_lut[*((unsigned char *)src + 1)] != '@'))
+                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+            ++pad_chars;
+            decoded <<= 6U;
+            continue;
+        }
+
+        decoded <<= 6U;
+        decoded |= this_char;
+        decoded_bits += 6U;
+
+        if (decoded_bits == 24U) {
+            *dest++ = (byte)(decoded >> 16U);
+            *dest++ = (byte)(decoded >> 8U);
+            *dest++ = (byte)(decoded);
+            decoded = 0;
+            decoded_bits = 0;
+            dest_len += 3U;
+        }
+    }
+
+    if (decoded_bits && (pad_chars == 0)) {
+        if (decoded_bits < 8U)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        pad_chars = (28U - decoded_bits) >> 3U;
+        decoded <<= 24U - decoded_bits;
+        decoded_bits = 24U;
+    }
+
+    switch (pad_chars) {
+    case 0:
+        break;
+    case 1:
+        *dest++ = (byte)(decoded >> 16U);
+        *dest++ = (byte)(decoded >> 8U);
+        dest_len += 2;
+        break;
+        /* fall through */
+    case 2:
+        *dest++ = (byte)(decoded >> 16U);
+        ++dest_len;
+        break;
+    default:
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+
+    *dest_spc = dest_len;
+
+    WOLFSENTRY_RETURN_OK;
 }

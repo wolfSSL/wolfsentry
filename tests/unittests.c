@@ -1438,6 +1438,405 @@ int wolfsentry_event_set_subevent(
 
 #endif /* TEST_DYNAMIC_RULES */
 
+#ifdef TEST_USER_VALUES
+
+#include <math.h>
+
+static wolfsentry_errcode_t test_kv_validator(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_pair *kv)
+{
+    (void)wolfsentry;
+    switch (WOLFSENTRY_KV_TYPE(kv)) {
+    case WOLFSENTRY_KV_NONE:
+    case WOLFSENTRY_KV_NULL:
+    case WOLFSENTRY_KV_TRUE:
+    case WOLFSENTRY_KV_FALSE:
+        WOLFSENTRY_RETURN_OK;
+    case WOLFSENTRY_KV_UINT:
+        if (WOLFSENTRY_KV_V_UINT(kv) == 12345678UL)
+            WOLFSENTRY_ERROR_RETURN(BAD_VALUE);
+        else
+            WOLFSENTRY_RETURN_OK;
+    case WOLFSENTRY_KV_SINT:
+        if (WOLFSENTRY_KV_V_SINT(kv) == -12345678L)
+            WOLFSENTRY_ERROR_RETURN(BAD_VALUE);
+        else
+            WOLFSENTRY_RETURN_OK;
+    case WOLFSENTRY_KV_FLOAT:
+        if (WOLFSENTRY_KV_V_FLOAT(kv) > 100.0)
+            WOLFSENTRY_ERROR_RETURN(BAD_VALUE);
+        else
+            WOLFSENTRY_RETURN_OK;
+    case WOLFSENTRY_KV_STRING:
+        if (WOLFSENTRY_KV_V_STRING_LEN(kv) != 8)
+            WOLFSENTRY_RETURN_OK;
+        if (strncmp(WOLFSENTRY_KV_V_STRING(kv), "deadbeef", WOLFSENTRY_KV_V_STRING_LEN(kv)) == 0)
+            WOLFSENTRY_ERROR_RETURN(BAD_VALUE);
+        else
+            WOLFSENTRY_RETURN_OK;
+    case WOLFSENTRY_KV_BYTES:
+        if (WOLFSENTRY_KV_V_BYTES_LEN(kv) != 10)
+            WOLFSENTRY_RETURN_OK;
+        if (memcmp(WOLFSENTRY_KV_V_STRING(kv), "abcdefghij", WOLFSENTRY_KV_V_BYTES_LEN(kv)) == 0)
+            WOLFSENTRY_ERROR_RETURN(BAD_VALUE);
+        else
+            WOLFSENTRY_RETURN_OK;
+    }
+    WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
+}
+
+static int test_user_values (void) {
+
+    struct wolfsentry_context *wolfsentry;
+
+    wolfsentry_kv_type_t kv_type;
+    struct wolfsentry_kv_pair_internal *kv_ref;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init(
+            WOLFSENTRY_TEST_HPI,
+            NULL /* config */,
+            &wolfsentry));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_set_validator(wolfsentry, test_kv_validator));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_null(
+            wolfsentry,
+            "test_null",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_bool(
+            wolfsentry,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_KV_TRUE,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_bool(
+            wolfsentry,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &kv_type));
+
+    WOLFSENTRY_EXIT_ON_FALSE(kv_type == WOLFSENTRY_KV_TRUE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_bool(
+            wolfsentry,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_KV_FALSE,
+            1));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_bool(
+            wolfsentry,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &kv_type));
+
+    WOLFSENTRY_EXIT_ON_FALSE(kv_type == WOLFSENTRY_KV_FALSE);
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_user_value_store_bool(
+                wolfsentry,
+                "test_bool",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                WOLFSENTRY_KV_NONE,
+                1),
+            WRONG_TYPE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_type(
+            wolfsentry,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &kv_type));
+
+    WOLFSENTRY_EXIT_ON_FALSE(kv_type == WOLFSENTRY_KV_FALSE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_type(
+            wolfsentry,
+            "test_bool",
+            strlen("test_bool"),
+            &kv_type));
+
+    WOLFSENTRY_EXIT_ON_FALSE(kv_type == WOLFSENTRY_KV_FALSE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            wolfsentry,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_user_value_get_type(
+                wolfsentry,
+                "test_bool",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &kv_type),
+            ITEM_NOT_FOUND));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_uint(
+            wolfsentry,
+            "test_uint",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            123UL,
+            0));
+
+    {
+        uint64_t value = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_uint(
+                wolfsentry,
+                "test_uint",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value));
+
+        WOLFSENTRY_EXIT_ON_FALSE(value == 123UL);
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_user_value_store_uint(
+                wolfsentry,
+                "bad_uint",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                12345678UL,
+                0),
+            BAD_VALUE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_sint(
+            wolfsentry,
+            "test_sint",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            -123L,
+            0));
+
+    {
+        int64_t value = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_sint(
+                wolfsentry,
+                "test_sint",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value));
+
+        WOLFSENTRY_EXIT_ON_FALSE(value == -123L);
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_user_value_store_sint(
+                wolfsentry,
+                "bad_sint",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                -12345678L,
+                0),
+            BAD_VALUE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            wolfsentry,
+            "test_float",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            1.234,
+            0));
+
+    {
+        double value = 0.0;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_float(
+                wolfsentry,
+                "test_float",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value));
+
+        WOLFSENTRY_EXIT_ON_FALSE(fabs(value - 1.234) < 0.000001);
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_user_value_store_double(
+                wolfsentry,
+                "bad_float",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                123.45678,
+                0),
+            BAD_VALUE));
+
+    {
+        static const char test_string[] = "abc123";
+        const char *value = NULL;
+        int value_len = -1;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_store_string(
+                wolfsentry,
+                "test_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                test_string,
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                0));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_string(
+                wolfsentry,
+                "test_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value,
+                &value_len,
+                &kv_ref));
+
+        WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)strlen(test_string));
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(value, test_string) == 0);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_release_record(
+                wolfsentry,
+                &kv_ref));
+
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_user_value_store_string(
+                wolfsentry,
+                "bad_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                "deadbeef",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                0),
+            BAD_VALUE));
+
+    {
+        static const byte test_bytes[] = { 0, 1, 2, 3, 4 };
+        const byte *value = NULL;
+        int value_len = -1;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_store_bytes(
+                wolfsentry,
+                "test_bytes",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                test_bytes,
+                sizeof test_bytes,
+                0));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_bytes(
+                wolfsentry,
+                "test_bytes",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value,
+                &value_len,
+                &kv_ref));
+
+        WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)sizeof test_bytes);
+        WOLFSENTRY_EXIT_ON_FALSE(memcmp(value, test_bytes, (size_t)value_len) == 0);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_release_record(
+                wolfsentry,
+                &kv_ref));
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_user_value_store_bytes(
+                wolfsentry,
+                "bad_bytes",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (const byte *)"abcdefghij",
+                10,
+                0),
+            BAD_VALUE));
+
+#ifndef WOLFSENTRY_NO_STDIO
+    {
+        wolfsentry_errcode_t ret;
+        struct wolfsentry_cursor *cursor;
+        const struct wolfsentry_kv_pair *kv_exports;
+        const char *val_type;
+        char val_buf[256];
+        int val_buf_space;
+        wolfsentry_hitcount_t n_seen = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(wolfsentry, &cursor));
+        for (ret = wolfsentry_user_values_iterate_current(wolfsentry, cursor, &kv_ref);
+             ret >= 0;
+             ret = wolfsentry_user_values_iterate_next(wolfsentry, cursor, &kv_ref)) {
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_pair_export(wolfsentry, kv_ref, &kv_exports));
+            val_buf_space = sizeof val_buf;
+            if (wolfsentry_kv_type_to_string(WOLFSENTRY_KV_TYPE(kv_exports), &val_type) < 0)
+                val_type = "?";
+            if (wolfsentry_kv_render_value(kv_exports, val_buf, &val_buf_space) < 0)
+                strcpy(val_buf,"?");
+            printf("{ \"%.*s\" : { \"type\" : \"%s\", \"value\" : %s } }\n",
+                   (int)WOLFSENTRY_KV_KEY_LEN(kv_exports),
+                   WOLFSENTRY_KV_KEY(kv_exports),
+                   val_type,
+                   val_buf);
+            ++n_seen;
+        }
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(wolfsentry, &cursor));
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values.header.n_ents);
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == 6);
+    }
+#endif
+
+    {
+        static const struct {
+            const char *q;
+            const char *a;
+        } base64_qna[] = {
+            { "", "" },
+            { "TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu", "Many hands make light work." },
+            { "bGlnaHQgd29yay4=", "light work." },
+            { "bGlnaHQgd29yay4", "light work." },
+            { "bGlnaHQgd29yaw==", "light work" },
+            { "bGlnaHQgd29yaw", "light work" },
+            { "bGlnaHQgd29y", "light wor" },
+            { "bGlnaHQgd28=", "light wo" },
+            { "bGlnaHQgdw==", "light w" },
+            { "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTVFVWV"
+                "1hZWjAxMjM0NTY3ODkhQCMkJV4mKigpXy0rPXxcYH5bXXt9OzonIiw8Lj4vPw==",
+              "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+                                          "!@#$%^&*()_-+=|\\`~[]{};:'\",<.>/?" },
+            { "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/+",
+              "\x69\xb7\x1d\x79\xf8\x21\x8a\x39\x25\x9a\x7a\x29\xaa\xbb\x2d\xba"
+              "\xfc\x31\xcb\x30\x01\x08\x31\x05\x18\x72\x09\x28\xb3\x0d\x38\xf4"
+              "\x11\x49\x35\x15\x59\x76\x19\xd3\x5d\xb7\xe3\x9e\xbb\xf3\xdf\xfe"
+            }
+        };
+
+        int i;
+        byte outbuf[256];
+        size_t outbuf_spc;
+
+        for (i=0; i < (int)(sizeof base64_qna / sizeof base64_qna[0]); ++i) {
+            outbuf_spc = sizeof outbuf;
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_base64_decode(base64_qna[i].q, strlen(base64_qna[i].q), outbuf, &outbuf_spc, 0 /* ignore_junk_p */));
+            WOLFSENTRY_EXIT_ON_FALSE((outbuf_spc == strlen(base64_qna[i].a)) && (memcmp(outbuf, base64_qna[i].a, outbuf_spc) == 0));
+        }
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
+
+    return 0;
+}
+
+#endif /* TEST_USER_VALUES */
+
 #ifdef TEST_JSON
 
 #include "wolfsentry/wolfsentry_json.h"
@@ -1483,6 +1882,7 @@ static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry
     struct wolfsentry_json_process_state *jps;
     FILE *f;
     char buf[512], err_buf[512];
+    int json_inited = 0;
 
     if (strcmp(fname,"-"))
         f = fopen(fname, "r");
@@ -1501,6 +1901,7 @@ static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry
         &jps);
     if (ret < 0)
         goto out;
+    json_inited = 1;
 
     for (;;) {
         size_t n = fread(buf, 1, sizeof buf, f);
@@ -1522,17 +1923,21 @@ static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry
         if ((n < sizeof buf) && feof(f))
             break;
     }
-    ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
-    if (ret < 0) {
-    // GCOV_EXCL_START
-        fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-        goto out;
-    // GCOV_EXCL_STOP
-    }
-
-    ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
   out:
+
+    if (json_inited) {
+        int fini_ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
+        if (fini_ret < 0) {
+            // GCOV_EXCL_START
+            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            // GCOV_EXCL_STOP
+        }
+        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
+            ret = fini_ret;
+        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
+            ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    }
 
     if (f != stdin)
         fclose(f);
@@ -1641,6 +2046,41 @@ static int test_json(const char *fname) {
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(wolfsentry, static_routes, &cursor));
     }
 
+#ifndef WOLFSENTRY_NO_STDIO
+    {
+        struct wolfsentry_kv_pair_internal *kv_ref;
+        struct wolfsentry_cursor *cursor;
+        const struct wolfsentry_kv_pair *kv_exports;
+        const char *val_type;
+        char val_buf[256];
+        int val_buf_space;
+        wolfsentry_hitcount_t n_seen = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(wolfsentry, &cursor));
+        for (ret = wolfsentry_user_values_iterate_current(wolfsentry, cursor, &kv_ref);
+             ret >= 0;
+             ret = wolfsentry_user_values_iterate_next(wolfsentry, cursor, &kv_ref)) {
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_pair_export(wolfsentry, kv_ref, &kv_exports));
+            val_buf_space = sizeof val_buf;
+            if (wolfsentry_kv_type_to_string(WOLFSENTRY_KV_TYPE(kv_exports), &val_type) < 0)
+                val_type = "?";
+            if (wolfsentry_kv_render_value(kv_exports, val_buf, &val_buf_space) < 0) {
+                if (WOLFSENTRY_KV_TYPE(kv_exports) == WOLFSENTRY_KV_BYTES)
+                    snprintf(val_buf, sizeof val_buf, "\"%.*s\"", (int)WOLFSENTRY_KV_V_BYTES_LEN(kv_exports), WOLFSENTRY_KV_V_BYTES(kv_exports));
+                else
+                    strcpy(val_buf,"?");
+            }
+            printf("{ \"%.*s\" : { \"type\" : \"%s\", \"value\" : %s } }\n",
+                   (int)WOLFSENTRY_KV_KEY_LEN(kv_exports),
+                   WOLFSENTRY_KV_KEY(kv_exports),
+                   val_type,
+                   val_buf);
+            ++n_seen;
+        }
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(wolfsentry, &cursor));
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values.header.n_ents);
+    }
+#endif
+
     {
         struct {
             struct wolfsentry_sockaddr sa;
@@ -1677,7 +2117,6 @@ static int test_json(const char *fname) {
 }
 
 #endif /* TEST_JSON */
-
 
 int main (int argc, char* argv[]) {
     wolfsentry_errcode_t ret = 0;
@@ -1725,6 +2164,16 @@ int main (int argc, char* argv[]) {
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
     // GCOV_EXCL_START
         printf("test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    // GCOV_EXCL_STOP
+    }
+#endif
+
+#ifdef TEST_USER_VALUES
+    ret = test_user_values();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
+        printf("test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     // GCOV_EXCL_STOP
     }

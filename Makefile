@@ -30,7 +30,7 @@ ifdef USER_MAKE_CONF
     include $(USER_MAKE_CONF)
 endif
 
-SRCS := util.c internal.c routes.c events.c actions.c
+SRCS := util.c internal.c routes.c events.c actions.c kv.c
 
 ifndef SRC_TOP
     SRC_TOP := $(shell pwd -P)
@@ -194,7 +194,7 @@ else
 endif
 
 
-UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules
+UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules test_user_values
 
 ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json

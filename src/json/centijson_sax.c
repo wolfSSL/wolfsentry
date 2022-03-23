@@ -156,7 +156,7 @@ static void
 json_raise_(JSON_PARSER* parser, int errcode, JSON_INPUT_POS* pos)
 {
     /* Keep the primary error. */
-    if(parser->errcode == 0) {
+    if(parser->errcode >= 0) {
         parser->errcode = errcode;
         memcpy(&parser->err_pos, pos, sizeof(JSON_INPUT_POS));
     }
@@ -208,7 +208,7 @@ json_switch_automaton(JSON_PARSER* parser, unsigned automaton)
 static inline void
 json_process(JSON_PARSER* parser, JSON_TYPE type, const char* data, size_t size)
 {
-    if(parser->errcode != 0)
+    if(parser->errcode < 0)
         return;
 
     if(type != JSON_ARRAY_END  &&  type != JSON_OBJECT_END) {
@@ -243,7 +243,7 @@ json_process(JSON_PARSER* parser, JSON_TYPE type, const char* data, size_t size)
                     break;
             }
 
-            if(parser->errcode != 0)
+            if(parser->errcode < 0)
                 return;
         }
 
@@ -432,7 +432,7 @@ json_number_automaton(JSON_PARSER* parser, const char* input, size_t size)
             if(parser->buf_used == 0) {
                 json_process(parser, JSON_NUMBER, input, off);
             } else {
-                if(json_buf_append(parser, input, off) != 0)
+                if(json_buf_append(parser, input, off) < 0)
                     return 0;
                 json_process(parser, JSON_NUMBER, parser->buf, parser->buf_used);
             }
@@ -451,13 +451,13 @@ json_number_automaton(JSON_PARSER* parser, const char* input, size_t size)
         json_raise_for_value(parser, JSON_ERR_MAXNUMBERLEN);
 
     if(input == NULL) {       /* EOF */
-        if(parser->errcode == 0  &&  (parser->substate & can_see_end))
+        if(parser->errcode >= 0  &&  (parser->substate & can_see_end))
             json_process(parser, JSON_NUMBER, parser->buf, parser->buf_used);
         else
             json_raise_for_value(parser, JSON_ERR_SYNTAX);
     } else {
-        if(parser->errcode == 0) {
-            if(json_buf_append(parser, input, off) != 0)
+        if(parser->errcode >= 0) {
+            if(json_buf_append(parser, input, off) < 0)
                 return 0;
         }
     }
@@ -569,7 +569,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                     break;
                 }
 
-                if(json_buf_append(parser, input + off, off2 - off) != 0)
+                if(json_buf_append(parser, input + off, off2 - off) < 0)
                     break;
                 parser->pos.offset += off2 - off;
                 parser->pos.column_number += off2 - off;
@@ -614,7 +614,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                 } else if((unsigned char) ch == 0xf4) {
                     parser->substate = 7;
                 } else if(fix_ill_utf8) {
-                    if(json_buf_append(parser, fffd, fffd_size) != 0)
+                    if(json_buf_append(parser, fffd, fffd_size) < 0)
                         break;
                 } else {
                     json_raise(parser, JSON_ERR_INVALIDUTF8);
@@ -622,7 +622,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                 }
 
                 if(parser->substate != 0) {
-                    if(json_buf_append(parser, &ch, 1) != 0)
+                    if(json_buf_append(parser, &ch, 1) < 0)
                         break;
                 }
             }
@@ -659,7 +659,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                 while(((unsigned char)(parser->buf[parser->buf_used-1]) & 0xc0) == 0x80)
                     parser->buf_used--; /* Cancel all the trailing bytes. */
                 parser->buf_used--;     /* Cancel the leading byte. */
-                if(json_buf_append(parser, fffd, fffd_size) != 0)
+                if(json_buf_append(parser, fffd, fffd_size) < 0)
                     break;
 
                 /* And now we have to replay the current byte in state == 0
@@ -672,7 +672,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                 break;
             }
 
-            if(json_buf_append(parser, &ch, 1) != 0)
+            if(json_buf_append(parser, &ch, 1) < 0)
                 break;
         } else if(parser->substate == '\\') {
             /* Handle 2nd character of an escape sequence. */
@@ -692,7 +692,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                     default:    json_raise(parser, JSON_ERR_INVALIDESCAPE); return off;
                 }
 
-                if(json_buf_append(parser, &ch, 1) != 0)
+                if(json_buf_append(parser, &ch, 1) < 0)
                     break;
                 parser->substate = 0;
             }
@@ -719,7 +719,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                 /* We have completed the long escape. */
                 if(parser->codepoint[0] != 0  &&  !IS_LO_SURROGATE(parser->codepoint[1])) {
                     /* parser->codepoint[0] is unexpected high surrogate. */
-                    if(json_handle_ill_surrogate(parser, parser->codepoint[0], ignore_ill_utf8, fix_ill_utf8) != 0)
+                    if(json_handle_ill_surrogate(parser, parser->codepoint[0], ignore_ill_utf8, fix_ill_utf8) < 0)
                         break;
 
                     /* Propagate below to handle parser->codepoint[1] as if no
@@ -729,7 +729,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
 
                 if(parser->codepoint[0] == 0  &&  IS_LO_SURROGATE(parser->codepoint[1])) {
                     /* parser->codepoint[1] is unexpected low surrogate. */
-                    if(json_handle_ill_surrogate(parser, parser->codepoint[1], ignore_ill_utf8, fix_ill_utf8) != 0)
+                    if(json_handle_ill_surrogate(parser, parser->codepoint[1], ignore_ill_utf8, fix_ill_utf8) < 0)
                         break;
                     parser->substate = 0;
                 } else if(parser->codepoint[0] != 0  &&  IS_LO_SURROGATE(parser->codepoint[1])) {
@@ -737,7 +737,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                     uint32_t hi = parser->codepoint[0];
                     uint32_t lo = parser->codepoint[1];
                     uint32_t codepoint = 0x10000 + (hi - 0xd800) * 0x400 + (lo - 0xdc00);
-                    if(json_buf_append_codepoint(parser, codepoint) != 0)
+                    if(json_buf_append_codepoint(parser, codepoint) < 0)
                         break;
                     parser->substate = 0;
                 } else if(IS_HI_SURROGATE(parser->codepoint[1])) {
@@ -747,7 +747,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                     parser->substate = 0xabcd - 2;
                 } else {
                     /* parser->codepoint[1] is non-surrogate codepoint. */
-                    if(json_buf_append_codepoint(parser, parser->codepoint[1]) != 0)
+                    if(json_buf_append_codepoint(parser, parser->codepoint[1]) < 0)
                         break;
                     parser->substate = 0;
                 }
@@ -762,7 +762,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
             } else if(parser->substate == 0xabcd - 1  &&  ch == 'u') {
                 parser->substate = 0xabcd + 4;
             } else {
-                if(json_handle_ill_surrogate(parser, parser->codepoint[0], ignore_ill_utf8, fix_ill_utf8) != 0)
+                if(json_handle_ill_surrogate(parser, parser->codepoint[0], ignore_ill_utf8, fix_ill_utf8) < 0)
                     break;
 
                 /* Replay the current byte as if no high surrogate precedes. */
@@ -840,14 +840,14 @@ json_feed(JSON_PARSER* parser, const char* input, size_t size)
         json_raise(parser, JSON_ERR_MAXTOTALLEN);
     }
 
-    while(off < size  &&  parser->errcode == 0) {
+    while(off < size  &&  parser->errcode >= 0) {
         ch = input[off];
 
         /* If we have active any sub-automaton, let it process the character. */
         if(parser->automaton != AUTOMATON_MAIN) {
             size_t n = json_dispatch(parser, input+off, size-off);
 
-            if(parser->errcode != 0)
+            if(parser->errcode < 0)
                 return parser->errcode;
 
             off += n;
@@ -930,7 +930,7 @@ int
 json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
 {
     /* Some automaton may need some flushing. */
-    if(parser->errcode == 0) {
+    if(parser->errcode >= 0) {
         if(parser->automaton != AUTOMATON_MAIN) {
             parser->pos.offset += json_dispatch(parser, NULL, 0);
 
@@ -943,7 +943,7 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
     }
 
     if(p_pos != NULL) {
-        memcpy(p_pos, (parser->errcode == 0) ? &parser->pos : &parser->err_pos,
+        memcpy(p_pos, (parser->errcode >= 0) ? &parser->pos : &parser->err_pos,
                 sizeof(JSON_INPUT_POS));
     }
 
@@ -961,7 +961,7 @@ json_parse(const char* input, size_t size,
     int ret;
 
     ret = json_init(&parser, callbacks, config, user_data);
-    if(ret != 0)
+    if(ret < 0)
         return ret;
 
     /* We rely on propagation of any error code into json_fini(). */
@@ -1381,7 +1381,7 @@ json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, vo
     int ret;
 
     ret = write_func("\"", 1, user_data);
-    if(ret != 0)
+    if(ret < 0)
         return ret;
 
     while(off < size) {
@@ -1409,7 +1409,7 @@ json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, vo
             }
 
             ret = write_func(esc, esc_size, user_data);
-            if(ret != 0)
+            if(ret < 0)
                 return ret;
 
             off++;
@@ -1421,7 +1421,7 @@ json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, vo
                 off2++;
 
             ret = write_func(str + off, off2 - off, user_data);
-            if(ret != 0)
+            if(ret < 0)
                 return ret;
 
             off = off2;
@@ -1429,7 +1429,7 @@ json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, vo
     }
 
     ret = write_func("\"", 1, user_data);
-    if(ret != 0)
+    if(ret < 0)
         return ret;
 
     return 0;

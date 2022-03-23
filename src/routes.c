@@ -1534,7 +1534,7 @@ wolfsentry_errcode_t wolfsentry_route_table_iterate_start(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if ((ret = wolfsentry_table_cursor_init(wolfsentry, *cursor)) < 0)
         goto out;
-    if ((ret = wolfsentry_table_cursor_seek_to_head((const struct wolfsentry_table_header *)table, *cursor)) < 0)
+    if ((ret = wolfsentry_table_cursor_seek_to_head(&table->header, *cursor)) < 0)
         goto out;
   out:
     if (ret < 0)
@@ -1548,7 +1548,7 @@ wolfsentry_errcode_t wolfsentry_route_table_iterate_seek_to_head(
     struct wolfsentry_cursor *cursor)
 {
     (void)wolfsentry;
-    return wolfsentry_table_cursor_seek_to_head((const struct wolfsentry_table_header *)table, cursor);
+    return wolfsentry_table_cursor_seek_to_head(&table->header, cursor);
 }
 
 wolfsentry_errcode_t wolfsentry_route_table_iterate_seek_to_tail(
@@ -1557,7 +1557,7 @@ wolfsentry_errcode_t wolfsentry_route_table_iterate_seek_to_tail(
     struct wolfsentry_cursor *cursor)
 {
     (void)wolfsentry;
-    return wolfsentry_table_cursor_seek_to_tail((const struct wolfsentry_table_header *)table, cursor);
+    return wolfsentry_table_cursor_seek_to_tail(&table->header, cursor);
 }
 
 wolfsentry_errcode_t wolfsentry_route_table_iterate_current(

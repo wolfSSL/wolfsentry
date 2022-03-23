@@ -84,13 +84,10 @@ static wolfsentry_errcode_t wolfsentry_event_new_1(struct wolfsentry_context *wo
     if ((label_len == 0) || (label == NULL) || (event == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    if (label_len < 0)
+        label_len = (int)strlen(label);
     if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-    else if (label_len < 0) {
-        label_len = (int)strlen(label);
-        if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
-            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-    }
 
     new_size = sizeof **event + (size_t)label_len + 1;
 
@@ -243,7 +240,7 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wo
         struct wolfsentry_event event;
         byte buf[WOLFSENTRY_MAX_LABEL_BYTES];
     } target;
-    *event = &target.event;
+    struct wolfsentry_event *event_1 = &target.event;
 
     if (label_len == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -255,8 +252,10 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wo
     if ((ret = wolfsentry_event_init_1(label, label_len, 0, NULL, &target.event, sizeof target)) < 0)
         return ret;
 
-    if ((ret = wolfsentry_table_ent_get(&wolfsentry->events.header, (struct wolfsentry_table_ent_header **)event)) < 0)
+    if ((ret = wolfsentry_table_ent_get(&wolfsentry->events.header, (struct wolfsentry_table_ent_header **)&event_1)) < 0)
         return ret;
+
+    *event = event_1;
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -351,6 +350,9 @@ wolfsentry_errcode_t wolfsentry_event_delete(
             return ret;
         old->delete_event = NULL;
     }
+
+    if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, &old->header)) < 0)
+        return ret;
 
     return wolfsentry_event_drop_reference(wolfsentry, old, action_results);
 }

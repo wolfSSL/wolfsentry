@@ -25,7 +25,7 @@ In STM32CubeIDE click on "Project" -> "Properties". From here go to "C/C++ Gener
 
 ```
 **/unittests.c
-**/Examples
+**/examples
 ```
 
 This is so that the unittests do not build as part of your application, causing a conflict for `main()`.
@@ -113,6 +113,7 @@ static err_t filter_input(struct pbuf *p, struct netif *inp)
     /* We passed the MAC filter, so pass the packet to the regular internal
      * lwIP input callback */
     return netif_input(p, inp);
+}
 ```
 
 Find the function `ethernetif_init()` and below `#if LWIP_ARP` add:

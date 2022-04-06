@@ -139,7 +139,7 @@ int sentry_init()
 
     if (ret < 0)
     {
-        printf("unable to initialize wolfSentry, code: %ld\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
+        printf("unable to initialize wolfSentry, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
     /* Insert the possible actions into wolfSentry */
@@ -206,7 +206,7 @@ int sentry_init()
                    WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
                    &jps)) < 0)
     {
-        printf("error while initializing wolfSentry config parser, code: %ld\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
+        printf("error while initializing wolfSentry config parser, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
     /* wolfSentry uses a streaming reader/parser for the config file */
@@ -215,13 +215,13 @@ int sentry_init()
 
 	if (ret < 0)
 	{
-		printf("error while loading wolfSentry config data, code: %ld, msg: %s\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret), err_buf);
+		printf("error while loading wolfSentry config data, " WOLFSENTRY_ERROR_FMT ", msg: %s\n", WOLFSENTRY_ERROR_FMT_ARGS(ret), err_buf);
 	}
 
     /* Clean up the JSON parser */
     if ((ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf)) < 0)
     {
-        printf("error while loading wolfSentry config data, code: %ld, msg: %s\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret), err_buf);
+        printf("error while loading wolfSentry config data, " WOLFSENTRY_ERROR_FMT ", msg: %s\n", WOLFSENTRY_ERROR_FMT_ARGS(ret), err_buf);
     }
 
     return 0;

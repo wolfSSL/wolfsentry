@@ -26,7 +26,7 @@ endif
 
 # lock in the expected major version of LLVM/clang/compiler-rt-sanitizers:
 ifndef CLANG_PATH
-	CLANG_PATH:=/usr/lib/llvm/13/bin:/usr/lib/llvm-13
+	CLANG_PATH:=/usr/lib/llvm/13/bin:/usr/lib/llvm-13:/usr/bin
 endif
 
 PATH:=$(CLANG_PATH):$(PATH)

@@ -40,7 +40,7 @@ static inline int wolfsentry_action_key_cmp_1(const char *left_label, unsigned c
     return ret;
 }
 
-int wolfsentry_action_key_cmp(struct wolfsentry_action *left, struct wolfsentry_action *right) {
+static int wolfsentry_action_key_cmp(struct wolfsentry_action *left, struct wolfsentry_action *right) {
     return wolfsentry_action_key_cmp_1(left->label, left->label_len, right->label, right->label_len);
 }
 
@@ -103,6 +103,7 @@ wolfsentry_errcode_t wolfsentry_action_clone(
     struct wolfsentry_action * const src_action = (struct wolfsentry_action * const)src_ent;
     struct wolfsentry_action ** const new_action = (struct wolfsentry_action ** const)new_ent;
     size_t new_size = sizeof *src_action + (size_t)(src_action->label_len) + 1;
+    wolfsentry_errcode_t ret;
 
     (void)wolfsentry;
 
@@ -112,6 +113,10 @@ wolfsentry_errcode_t wolfsentry_action_clone(
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION))
         (*new_action)->flags = (*new_action)->flags_at_creation;
+    if ((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_ACTION, &(*new_action)->header.id)) < 0) {
+        dest_context->allocator.free(dest_context->allocator.context, *new_action); // GCOV_EXCL_LINE
+        return ret; // GCOV_EXCL_LINE
+    }
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -501,4 +506,15 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
             WOLFSENTRY_RETURN_OK;
     }
     WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_action_table_init(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_action_table *action_table)
+{
+    WOLFSENTRY_TABLE_HEADER_RESET(action_table->header);
+    action_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_action_key_cmp;
+    action_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_action_drop_reference;
+    action_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ACTION;
+    return wolfsentry_id_generate(wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &action_table->header.id);
 }

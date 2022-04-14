@@ -128,6 +128,7 @@
 
 typedef unsigned char byte;
 
+typedef uint16_t wolfsentry_addr_family_t;
 #include <wolfsentry/wolfsentry_af.h>
 
 typedef uint16_t wolfsentry_proto_t;
@@ -275,7 +276,9 @@ typedef enum {
     WOLFSENTRY_OBJECT_TYPE_ACTION,
     WOLFSENTRY_OBJECT_TYPE_EVENT,
     WOLFSENTRY_OBJECT_TYPE_ROUTE,
-    WOLFSENTRY_OBJECT_TYPE_KV
+    WOLFSENTRY_OBJECT_TYPE_KV,
+    WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER,
+    WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME
 } wolfsentry_object_type_t;
 
 typedef enum {
@@ -391,7 +394,7 @@ struct wolfsentry_route_exports {
     const char *parent_event_label;
     size_t parent_event_label_len;
     wolfsentry_route_flags_t flags;
-    wolfsentry_family_t sa_family;
+    wolfsentry_addr_family_t sa_family;
     wolfsentry_proto_t sa_proto;
     struct wolfsentry_route_endpoint remote, local;
     const byte *remote_address, *local_address;
@@ -428,8 +431,16 @@ struct wolfsentry_eventconfig {
 #error WOLFSENTRY_MAX_ADDR_BYTES * 8 must fit in a uint16_t.
 #endif
 
+#ifndef WOLFSENTRY_MAX_ADDR_BITS
+#define WOLFSENTRY_MAX_ADDR_BITS (WOLFSENTRY_MAX_ADDR_BYTES*8)
+#else
+#if WOLFSENTRY_MAX_ADDR_BITS > (WOLFSENTRY_MAX_ADDR_BYTES*8)
+#error WOLFSENTRY_MAX_ADDR_BITS is too large for given/default WOLFSENTRY_MAX_ADDR_BYTES
+#endif
+#endif
+
 #define WOLFSENTRY_SOCKADDR_MEMBERS(n) {        \
-    wolfsentry_family_t sa_family;              \
+    wolfsentry_addr_family_t sa_family;         \
     wolfsentry_proto_t sa_proto;                \
     wolfsentry_port_t sa_port;                  \
     wolfsentry_addr_bits_t addr_len;            \
@@ -502,6 +513,78 @@ struct wolfsentry_host_platform_interface {
     struct wolfsentry_allocator *allocator;
     struct wolfsentry_timecbs *timecbs;
 };
+
+/* must return _BUFFER_TOO_SMALL and set *addr_internal_bits to an
+ * accurate value when supplied with a NULL output buf ptr.
+ * whenever _BUFFER_TOO_SMALL is returned, *addr_*_bits must be set to an
+ * accurate value.
+ */
+typedef wolfsentry_errcode_t (*wolfsentry_addr_family_parser_t)(
+    struct wolfsentry_context *wolfsentry,
+    const char *addr_text,
+    int addr_text_len,
+    byte *addr_internal,
+    wolfsentry_addr_bits_t *addr_internal_bits);
+
+typedef wolfsentry_errcode_t (*wolfsentry_addr_family_formatter_t)(
+    struct wolfsentry_context *wolfsentry,
+    const byte *addr_internal,
+    int addr_internal_bits,
+    char *addr_text,
+    int *addr_text_len);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_install(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_addr_family_t family_bynumber,
+    const char *family_byname, /* if defined(WOLFSENTRY_PROTOCOL_NAMES), must not NULL, else ignored. */
+    int family_byname_len,
+    wolfsentry_addr_family_parser_t parser,
+    wolfsentry_addr_family_formatter_t formatter,
+    int max_addr_bits);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_get_parser(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_addr_family_t family,
+    wolfsentry_addr_family_parser_t *parser);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_get_formatter(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_addr_family_t family,
+    wolfsentry_addr_family_formatter_t *formatter);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_addr_family_t family_bynumber,
+    wolfsentry_action_res_t *action_results);
+
+struct wolfsentry_addr_family_bynumber;
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_drop_reference(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_addr_family_bynumber *family_bynumber,
+    wolfsentry_action_res_t *action_results);
+
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname(
+    struct wolfsentry_context *wolfsentry,
+    const char *family_byname,
+    int family_byname_len,
+    wolfsentry_action_res_t *action_results);
+
+WOLFSENTRY_API wolfsentry_addr_family_t wolfsentry_addr_family_pton(
+    struct wolfsentry_context *wolfsentry,
+    const char *family_name,
+    int family_name_len,
+    wolfsentry_errcode_t *errcode);
+
+WOLFSENTRY_API const char *wolfsentry_addr_family_ntop(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_addr_family_t family,
+    struct wolfsentry_addr_family_bynumber **addr_family,
+    wolfsentry_errcode_t *errcode);
+
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_init(
     struct wolfsentry_context *wolfsentry,
@@ -837,8 +920,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_set_wildcard(
     wolfsentry_route_flags_t wildcards_to_set);
 
 #ifndef WOLFSENTRY_NO_STDIO
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(const struct wolfsentry_route *r, FILE *f);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(const struct wolfsentry_route_exports *r, FILE *f);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(struct wolfsentry_context *wolfsentry, const struct wolfsentry_route *r, FILE *f);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(struct wolfsentry_context *wolfsentry, const struct wolfsentry_route_exports *r, FILE *f);
 #endif
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_insert(

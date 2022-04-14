@@ -927,7 +927,7 @@ static int test_static_routes (void) {
              ret >= 0;
              ret = wolfsentry_route_table_iterate_next(wolfsentry, static_routes, cursor, &route)) {
             WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(wolfsentry, route, &route_exports));
-            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_exports_render(&route_exports, stdout));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_exports_render(wolfsentry, &route_exports, stdout));
             ++n_seen;
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(wolfsentry, static_routes, &cursor));
@@ -1837,6 +1837,289 @@ static int test_user_values (void) {
 
 #endif /* TEST_USER_VALUES */
 
+#if defined(TEST_USER_ADDR_FAMILIES) || defined(TEST_JSON)
+
+static wolfsentry_errcode_t my_addr_family_parser(
+    struct wolfsentry_context *wolfsentry,
+    const char *addr_text,
+    const int addr_text_len,
+    byte *addr_internal,
+    wolfsentry_addr_bits_t *addr_internal_len)
+{
+    uint32_t a[3];
+    char abuf[32];
+    int n_octets, parsed_len = 0, i;
+
+    (void)wolfsentry;
+
+    if (snprintf(abuf,sizeof abuf,"%.*s",addr_text_len,addr_text) >= (int)sizeof abuf)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+    if ((n_octets = sscanf(abuf,"%o/%o/%o%n",&a[0],&a[1],&a[2],&parsed_len)) < 1)
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    if (parsed_len != addr_text_len) {
+        if ((n_octets = sscanf(abuf,"%o/%o/%n",&a[0],&a[1],&parsed_len)) < 1)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    }
+    if (parsed_len != addr_text_len) {
+        if ((n_octets = sscanf(abuf,"%o/%n",&a[0],&parsed_len)) < 1)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    }
+    if (parsed_len != addr_text_len)
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    for (i = 0; i < n_octets; ++i) {
+        if (a[i] > MAX_UINT_OF(byte))
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        addr_internal[i] = (byte)a[i];
+    }
+    *addr_internal_len = (wolfsentry_addr_bits_t)(n_octets * 8);
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t my_addr_family_formatter(
+    struct wolfsentry_context *wolfsentry,
+    const byte *addr_internal,
+    const int addr_internal_len,
+    char *addr_text,
+    int *addr_text_len)
+{
+    int out_len;
+    int ret;
+
+    (void)wolfsentry;
+
+    if (addr_internal_len <= 8)
+        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%o/",(unsigned int)addr_internal[0]);
+    else if (addr_internal_len <= 16)
+        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%o/%o/",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1]);
+    else
+        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%o/%o/%o",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1],(unsigned int)addr_internal[2]);
+    if (out_len >= *addr_text_len)
+        ret = WOLFSENTRY_ERROR_ENCODE(BUFFER_TOO_SMALL);
+    else
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    *addr_text_len = out_len;
+    return ret;
+}
+
+#endif /* TEST_USER_ADDR_FAMILIES || TEST_JSON */
+
+#ifdef TEST_USER_ADDR_FAMILIES
+
+static int test_user_addr_families (void) {
+
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    wolfsentry_errcode_t ret;
+#endif
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init(
+            WOLFSENTRY_TEST_HPI,
+            NULL /* config */,
+            &wolfsentry));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_install(
+            wolfsentry,
+            WOLFSENTRY_AF_USER_OFFSET,
+            "my_AF",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            my_addr_family_parser,
+            my_addr_family_formatter,
+            24 /* max_addr_bits */));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_remove_bynumber(
+            wolfsentry,
+            WOLFSENTRY_AF_USER_OFFSET,
+            &action_results));
+
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_install(
+            wolfsentry,
+            WOLFSENTRY_AF_USER_OFFSET,
+            "my_AF",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            my_addr_family_parser,
+            my_addr_family_formatter,
+            24 /* max_addr_bits */));
+
+    action_results = 0;
+
+    /* exercise the plugins to disambiguate failures in the plugins from
+     * JSON-specific failures.
+     */
+    {
+        byte addr_internal[3];
+        wolfsentry_addr_bits_t addr_internal_len;
+        char addr_text[13];
+        int addr_text_len;
+
+        addr_internal_len = (wolfsentry_addr_bits_t)(sizeof addr_internal * 8);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            my_addr_family_parser(
+                wolfsentry,
+                "377/377/377",
+                strlen("377/377/377"),
+                addr_internal,
+                &addr_internal_len));
+        WOLFSENTRY_EXIT_ON_FALSE(addr_internal_len == (wolfsentry_addr_bits_t)(sizeof addr_internal * 8));
+        WOLFSENTRY_EXIT_ON_FALSE(memcmp(addr_internal, "\377\377\377", sizeof addr_internal) == 0);
+
+        addr_text_len = (int)sizeof addr_text;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            my_addr_family_formatter(
+                wolfsentry,
+                addr_internal,
+                (int)(sizeof addr_internal * 8),
+                addr_text,
+                &addr_text_len));
+        WOLFSENTRY_EXIT_ON_FALSE(addr_text_len == strlen("377/377/377"));
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(addr_text, "377/377/377") == 0);
+
+        addr_internal_len = (wolfsentry_addr_bits_t)(sizeof addr_internal * 8);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            my_addr_family_parser(
+                wolfsentry,
+                "0/0/0",
+                strlen("0/0/0"),
+                addr_internal,
+                &addr_internal_len));
+        WOLFSENTRY_EXIT_ON_FALSE(addr_internal_len == (wolfsentry_addr_bits_t)(sizeof addr_internal * 8));
+        WOLFSENTRY_EXIT_ON_FALSE(memcmp(addr_internal, "\0\0\0", sizeof addr_internal) == 0);
+
+        addr_internal_len = (wolfsentry_addr_bits_t)(sizeof addr_internal * 8);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            my_addr_family_parser(
+                wolfsentry,
+                "377/377/",
+                strlen("377/377/"),
+                addr_internal,
+                &addr_internal_len));
+        WOLFSENTRY_EXIT_ON_FALSE(addr_internal_len == 16);
+        WOLFSENTRY_EXIT_ON_FALSE(memcmp(addr_internal, "\377\377", 2) == 0);
+
+        addr_text_len = (int)sizeof addr_text;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            my_addr_family_formatter(
+                wolfsentry,
+                addr_internal,
+                16,
+                addr_text,
+                &addr_text_len));
+        WOLFSENTRY_EXIT_ON_FALSE(addr_text_len == strlen("377/377/"));
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(addr_text, "377/377/") == 0);
+
+        addr_internal_len = (wolfsentry_addr_bits_t)(sizeof addr_internal * 8);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            my_addr_family_parser(
+                wolfsentry,
+                "377/",
+                strlen("377/"),
+                addr_internal,
+                &addr_internal_len));
+        WOLFSENTRY_EXIT_ON_FALSE(addr_internal_len == 8);
+        WOLFSENTRY_EXIT_ON_FALSE(memcmp(addr_internal, "\377", 1) == 0);
+
+        addr_text_len = (int)sizeof addr_text;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            my_addr_family_formatter(
+                wolfsentry,
+                addr_internal,
+                8,
+                addr_text,
+                &addr_text_len));
+        WOLFSENTRY_EXIT_ON_FALSE(addr_text_len == strlen("377/"));
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(addr_text, "377/") == 0);
+    }
+
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_remove_byname(
+            wolfsentry,
+            "my_AF",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &action_results));
+
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_install(
+            wolfsentry,
+            WOLFSENTRY_AF_USER_OFFSET,
+            "my_AF",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            my_addr_family_parser,
+            my_addr_family_formatter,
+            24 /* max_addr_bits */));
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        (wolfsentry_addr_family_pton(
+            wolfsentry,
+            "my_AF",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &ret)
+         == WOLFSENTRY_AF_USER_OFFSET)
+        && WOLFSENTRY_ERROR_CODE_IS(ret, OK));
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        (wolfsentry_addr_family_pton(
+            wolfsentry,
+            "no_such_AF",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED, &ret)
+         == WOLFSENTRY_AF_UNSPEC)
+        && WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND));
+
+    {
+        struct wolfsentry_addr_family_bynumber *addr_family = NULL;
+        const char *family_name;
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            ((family_name = wolfsentry_addr_family_ntop(
+                  wolfsentry,
+                  WOLFSENTRY_AF_USER_OFFSET,
+                  &addr_family,
+                  &ret)) != NULL)
+            && WOLFSENTRY_ERROR_CODE_IS(ret, OK)
+            && (addr_family != NULL) &&
+            (! strcmp(family_name,"my_AF")));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_addr_family_drop_reference(wolfsentry, addr_family, &action_results));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED));
+    }
+
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
+
+    {
+        wolfsentry_addr_family_parser_t parser;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_get_parser(
+                wolfsentry,
+                WOLFSENTRY_AF_USER_OFFSET,
+                &parser));
+        WOLFSENTRY_EXIT_ON_FALSE(parser == my_addr_family_parser);
+    }
+    {
+        wolfsentry_addr_family_formatter_t formatter;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_get_formatter(
+                wolfsentry,
+                WOLFSENTRY_AF_USER_OFFSET,
+                &formatter));
+        WOLFSENTRY_EXIT_ON_FALSE(formatter == my_addr_family_formatter);
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
+
+    return 0;
+}
+
+#endif /* TEST_USER_ADDR_FAMILIES */
+
 #ifdef TEST_JSON
 
 #include "wolfsentry/wolfsentry_json.h"
@@ -1957,6 +2240,16 @@ static int test_json(const char *fname) {
                                                &config,
                                                &wolfsentry));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_install(
+            wolfsentry,
+            WOLFSENTRY_AF_USER_OFFSET,
+            "my_AF",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            my_addr_family_parser,
+            my_addr_family_formatter,
+            24 /* max_addr_bits */));
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
                                    wolfsentry,
                                    "handle-insert",
@@ -2041,7 +2334,7 @@ static int test_json(const char *fname) {
              ret >= 0;
              ret = wolfsentry_route_table_iterate_next(wolfsentry, static_routes, cursor, &route)) {
             WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(wolfsentry, route, &route_exports));
-            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_exports_render(&route_exports, stdout));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_exports_render(wolfsentry, &route_exports, stdout));
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(wolfsentry, static_routes, &cursor));
     }
@@ -2174,6 +2467,16 @@ int main (int argc, char* argv[]) {
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
     // GCOV_EXCL_START
         printf("test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    // GCOV_EXCL_STOP
+    }
+#endif
+
+#ifdef TEST_USER_ADDR_FAMILIES
+    ret = test_user_addr_families();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
+        printf("test_addr_families failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     // GCOV_EXCL_STOP
     }

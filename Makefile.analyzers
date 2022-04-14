@@ -113,11 +113,11 @@ endif
 .PHONY: valgrind-all-gcc
 valgrind-all-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds CC=gcc VALGRIND_ARGS=-q valgrind
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds CC=$(GCC) VALGRIND_ARGS=-q valgrind
 	@echo "no defects from gcc valgrind memcheck"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds CC=gcc VALGRIND_ARGS=-q valgrind-drd
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds CC=$(GCC) VALGRIND_ARGS=-q valgrind-drd
 	@echo "no defects from gcc valgrind drd"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds CC=gcc VALGRIND_ARGS=-q valgrind-helgrind
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds CC=$(GCC) VALGRIND_ARGS=-q valgrind-helgrind
 	@echo "no defects from gcc valgrind helgrind"
 	@echo "gcc valgrind found no defects."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds clean
@@ -125,11 +125,11 @@ valgrind-all-gcc:
 .PHONY: valgrind-all-clang
 valgrind-all-clang: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds CC=clang VALGRIND_ARGS=-q valgrind
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds CC=$(CLANG) VALGRIND_ARGS=-q valgrind
 	@echo "no defects from clang valgrind memcheck"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds CC=clang VALGRIND_ARGS=-q valgrind-drd
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds CC=$(CLANG) VALGRIND_ARGS=-q valgrind-drd
 	@echo "no defects from clang valgrind drd"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds CC=clang VALGRIND_ARGS=-q valgrind-helgrind
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds CC=$(CLANG) VALGRIND_ARGS=-q valgrind-helgrind
 	@echo "no defects from clang valgrind helgrind"
 	@echo "clang valgrind found no defects."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds clean
@@ -137,10 +137,10 @@ valgrind-all-clang: clang-version-test
 .PHONY: sanitize-all-gcc
 sanitize-all-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc CC=gcc EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc CC=$(GCC) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
 	@echo "no defects from gcc sanitize address, leak, undefined, float-cast-overflow, float-divide-by-zero, and bounds-strict"
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc CC=gcc EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc CC=$(GCC) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
 	@echo "no defects from gcc sanitize thread"
 	@echo "gcc sanitizers found no defects."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc clean
@@ -148,10 +148,10 @@ sanitize-all-gcc:
 .PHONY: sanitize-all-clang
 sanitize-all-clang: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=clang EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=$(CLANG) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
 	@echo "no defects from clang sanitize address, leak, undefined, float-cast-overflow, and float-divide-by-zero"
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=clang EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=$(CLANG) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
 	@echo "no defects from clang sanitize thread"
 	@echo "clang sanitizers found no defects."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean
@@ -167,9 +167,9 @@ c99-test: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds CC=clang EXTRA_CFLAGS+='-std=c99 -pedantic'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds CC=$(CLANG) EXTRA_CFLAGS+='-std=c99 -pedantic'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds CC=clang EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds CC=$(CLANG) EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
 	@echo "std=c99 library build tests passed."
 

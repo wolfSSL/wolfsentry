@@ -57,6 +57,8 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
         return "util.c";
     case WOLFSENTRY_SOURCE_ID_KV_C:
         return "kv.c";
+    case WOLFSENTRY_SOURCE_ID_ADDR_FAMILIES_C:
+        return "addr_families.c";
     case WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C:
         return "json/load_config.c";
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
@@ -146,6 +148,8 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Configuration has unexpected or invalid structure";
     case WOLFSENTRY_ERROR_ID_CONFIG_PARSER:
         return "Configuration parsing failed";
+    case WOLFSENTRY_ERROR_ID_CONFIG_MISSING_HANDLER:
+        return "Configuration processing failed due to missing handler";
     case WOLFSENTRY_ERROR_ID_OP_NOT_SUPP_FOR_PROTO:
         return "Operation not supported for protocol";
     case WOLFSENTRY_ERROR_ID_WRONG_TYPE:
@@ -2388,31 +2392,24 @@ wolfsentry_errcode_t wolfsentry_init(
 
     (*wolfsentry)->config_at_creation = (*wolfsentry)->config;
 
-    (*wolfsentry)->events.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_event_key_cmp;
-    (*wolfsentry)->events.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_event_drop_reference;
-    (*wolfsentry)->events.header.ent_type = WOLFSENTRY_OBJECT_TYPE_EVENT;
-    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->events.header.id)) < 0)
+    if ((ret = wolfsentry_event_table_init(*wolfsentry, &(*wolfsentry)->events)) < 0)
         goto out;
-    (*wolfsentry)->actions.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_action_key_cmp;
-    (*wolfsentry)->actions.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_action_drop_reference;
-    (*wolfsentry)->actions.header.ent_type = WOLFSENTRY_OBJECT_TYPE_ACTION;
-    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->actions.header.id)) < 0)
+    if ((ret = wolfsentry_action_table_init(*wolfsentry, &(*wolfsentry)->actions)) < 0)
         goto out;
-    (*wolfsentry)->routes_static.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_route_key_cmp;
-    (*wolfsentry)->routes_dynamic.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_route_key_cmp;
-    (*wolfsentry)->routes_static.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_route_drop_reference;
-    (*wolfsentry)->routes_dynamic.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_route_drop_reference;
-    (*wolfsentry)->routes_static.header.ent_type = WOLFSENTRY_OBJECT_TYPE_ROUTE;
-    (*wolfsentry)->routes_dynamic.header.ent_type = WOLFSENTRY_OBJECT_TYPE_ROUTE;
-    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->routes_static.header.id)) < 0)
+    if ((ret = wolfsentry_route_table_init(*wolfsentry, &(*wolfsentry)->routes_static)) < 0)
         goto out;
-    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->routes_dynamic.header.id)) < 0)
+    if ((ret = wolfsentry_route_table_init(*wolfsentry, &(*wolfsentry)->routes_dynamic)) < 0)
         goto out;
-    (*wolfsentry)->user_values.header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_kv_key_cmp;
-    (*wolfsentry)->user_values.header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_kv_drop_reference;
-    (*wolfsentry)->user_values.header.ent_type = WOLFSENTRY_OBJECT_TYPE_KV;
-    if ((ret = wolfsentry_id_generate(*wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &(*wolfsentry)->user_values.header.id)) < 0)
+    if ((ret = wolfsentry_kv_table_init(*wolfsentry, &(*wolfsentry)->user_values)) < 0)
         goto out;
+    if ((ret = wolfsentry_addr_family_bynumber_table_init(*wolfsentry, &(*wolfsentry)->addr_families_bynumber)) < 0)
+        goto out;
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    if ((ret = wolfsentry_addr_family_byname_table_init(*wolfsentry, &(*wolfsentry)->addr_families_byname)) < 0)
+        goto out;
+    if ((ret = wolfsentry_addr_family_table_pair(*wolfsentry, &(*wolfsentry)->addr_families_bynumber, &(*wolfsentry)->addr_families_byname)) < 0)
+        goto out;
+#endif
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
@@ -2455,6 +2452,11 @@ wolfsentry_errcode_t wolfsentry_context_free(struct wolfsentry_context **wolfsen
         return ret;
     if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->user_values.header)) < 0)
         return ret;
+    if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->addr_families_bynumber.header)) < 0)
+        return ret;
+    /* freeing ents in addr_families_byname is implicit to freeing the
+     * corresponding ents in addr_families_bynumber.
+     */
 
     if ((ret = wolfsentry_lock_destroy(&(*wolfsentry)->lock)) < 0)
         return ret;
@@ -2507,7 +2509,7 @@ wolfsentry_errcode_t wolfsentry_context_clone(
 
     **clone = *wolfsentry;
 
-    if ((ret = wolfsentry_lock_init(&wolfsentry->lock, 0 /* pshared */)) < 0)
+    if ((ret = wolfsentry_lock_init(&(*clone)->lock, 0 /* pshared */)) < 0)
         goto out;
 
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION))
@@ -2521,10 +2523,30 @@ wolfsentry_errcode_t wolfsentry_context_clone(
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->routes_static.header); /* xxx default_event */
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->routes_dynamic.header); /* xxx default_event */
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->user_values.header);
+    WOLFSENTRY_TABLE_HEADER_RESET((*clone)->addr_families_bynumber.header);
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    WOLFSENTRY_TABLE_HEADER_RESET((*clone)->addr_families_byname.header);
+    if ((ret = wolfsentry_addr_family_table_pair(*clone, &(*clone)->addr_families_bynumber, &(*clone)->addr_families_byname)) < 0)
+        goto out;
+#endif
     WOLFSENTRY_TABLE_HEADER_RESET((*clone)->ents_by_id);
 
     if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->actions.header, *clone, &(*clone)->actions.header, wolfsentry_action_clone, flags)) < 0)
         goto out;
+
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    if ((ret = wolfsentry_coupled_table_clone(
+             wolfsentry,
+             &wolfsentry->addr_families_bynumber.header,
+             *clone,
+             &(*clone)->addr_families_bynumber.header,
+             &(*clone)->addr_families_byname.header,
+             wolfsentry_addr_family_clone, flags)) < 0)
+        goto out;
+#else
+    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->addr_families_bynumber.header, *clone, &(*clone)->addr_families_bynumber.header, wolfsentry_addr_family_bynumber_clone, flags)) < 0)
+        goto out;
+#endif
 
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION)) {
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
@@ -2549,9 +2571,8 @@ wolfsentry_errcode_t wolfsentry_context_clone(
 
   out:
 
-    if ((ret < 0) && (*clone != NULL)) {
+    if ((ret < 0) && (*clone != NULL))
         WOLFSENTRY_FREE(*clone);
-    }
 
     return ret;
 }
@@ -2574,6 +2595,10 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
     wolfsentry1->routes_static = wolfsentry2->routes_static;
     wolfsentry1->routes_dynamic = wolfsentry2->routes_dynamic;
     wolfsentry1->user_values = wolfsentry2->user_values;
+    wolfsentry1->addr_families_bynumber = wolfsentry2->addr_families_bynumber;
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    wolfsentry1->addr_families_byname = wolfsentry2->addr_families_byname;
+#endif
     wolfsentry1->ents_by_id = wolfsentry2->ents_by_id;
 
     wolfsentry2->timecbs = scratch.timecbs;
@@ -2585,6 +2610,11 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
     wolfsentry2->routes_static = scratch.routes_static;
     wolfsentry2->routes_dynamic = scratch.routes_dynamic;
     wolfsentry2->user_values = scratch.user_values;
+    wolfsentry2->addr_families_bynumber = scratch.addr_families_bynumber;
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    wolfsentry2->addr_families_byname = scratch.addr_families_byname;
+#endif
+
     wolfsentry2->ents_by_id = scratch.ents_by_id;
 
     WOLFSENTRY_RETURN_OK;
@@ -2625,7 +2655,7 @@ wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, size_t src_len, b
     const char *src_end = src + src_len;
     size_t dest_len = 0;
 
-    if (*dest_spc < ((src_len + 3U) / 4U) * 3U)
+    if (*dest_spc < ((src_len + 3) / 4) * 3)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     for (; src < src_end; ++src) {
@@ -2653,7 +2683,7 @@ wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, size_t src_len, b
             *dest++ = (byte)(decoded);
             decoded = 0;
             decoded_bits = 0;
-            dest_len += 3U;
+            dest_len += 3;
         }
     }
 

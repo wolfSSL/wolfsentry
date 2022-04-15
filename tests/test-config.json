@@ -161,5 +161,4 @@
 	"user-string2" : { "string" : "hello" },
 	"user-base64" : { "base64" : "aGVsbG8=" }
     }
-
 }

@@ -127,7 +127,39 @@
 	    "local" : {
 		"address" : "54:32:10:fe:dc:ba"
 	    }
+	},
+	{
+	    "parent-event" : "static-route-parent",
+	    "direction-in" : true,
+	    "direction-out" : true,
+	    "penalty-boxed" : false,
+	    "green-listed" : true,
+	    "dont-count-hits" : false,
+	    "dont-count-current-connections" : false,
+	    "family" : 256,
+	    "remote" : {
+		"address" : "077/"
+	    },
+	    "local" : {
+		"address" : "001/002/003"
+	    }
 	}
 
-    ]
+
+    ],
+    "user-values" : {
+	"user-null" : null,
+	"user-bool" : true,
+	"user-bool2" : false,
+	"user-uint" : 1,
+	"user-sint" : -1,
+	"user-float" : 1.0,
+	"user-string" : "hello",
+
+	"user-uint2" : { "uint" : 1 },
+	"user-sint2" : { "sint" : -1 },
+	"user-float2" : { "float" : 1.0 },
+	"user-string2" : { "string" : "hello" },
+	"user-base64" : { "base64" : "aGVsbG8=" }
+    }
 }

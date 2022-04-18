@@ -276,6 +276,9 @@ static wolfsentry_errcode_t wolfsentry_route_drop_reference_1(
     struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
     if (route->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+    if ((route->header.parent_table != NULL) &&
+        (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE))
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
     if (WOLFSENTRY_REFCOUNT_DECREMENT(route->header.refcount) > 0)
         WOLFSENTRY_RETURN_OK;
     if (route->parent_event)
@@ -421,11 +424,6 @@ wolfsentry_errcode_t wolfsentry_route_clone(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memcpy(*new_route, src_route, new_size);
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
-
-    if ((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_EVENT, &(*new_route)->header.id)) < 0) {
-        dest_context->allocator.free(dest_context->allocator.context, *new_route); // GCOV_EXCL_LINE
-        return ret; // GCOV_EXCL_LINE
-    }
 
     if (src_route->parent_event) {
         (*new_route)->parent_event = src_route->parent_event;

@@ -87,6 +87,9 @@ wolfsentry_errcode_t wolfsentry_kv_drop_reference(
     (void)action_results;
     if (kv->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+    if ((kv->header.parent_table != NULL) &&
+        (kv->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_KV))
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
     if (WOLFSENTRY_REFCOUNT_DECREMENT(kv->header.refcount) > 0)
         WOLFSENTRY_RETURN_OK;
     WOLFSENTRY_FREE(kv);
@@ -366,7 +369,6 @@ wolfsentry_errcode_t wolfsentry_kv_clone(
     struct wolfsentry_kv_pair_internal * const src_kv_pair = (struct wolfsentry_kv_pair_internal * const)src_ent;
     struct wolfsentry_kv_pair_internal ** const new_kv_pair = (struct wolfsentry_kv_pair_internal ** const)new_ent;
     size_t new_size = sizeof *src_kv_pair + (size_t)src_kv_pair->kv.key_len + 1;
-    wolfsentry_errcode_t ret;
 
     if (src_kv_pair->kv.v_type == WOLFSENTRY_KV_STRING)
         new_size += src_kv_pair->kv.a.string_len + 1;
@@ -380,11 +382,6 @@ wolfsentry_errcode_t wolfsentry_kv_clone(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memcpy(*new_kv_pair, src_kv_pair, new_size);
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
-
-    if ((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_EVENT, &(*new_kv_pair)->header.id)) < 0) {
-        dest_context->allocator.free(dest_context->allocator.context, *new_kv_pair); // GCOV_EXCL_LINE
-        return ret; // GCOV_EXCL_LINE
-    }
 
     WOLFSENTRY_RETURN_OK;
 }

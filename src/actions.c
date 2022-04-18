@@ -103,7 +103,6 @@ wolfsentry_errcode_t wolfsentry_action_clone(
     struct wolfsentry_action * const src_action = (struct wolfsentry_action * const)src_ent;
     struct wolfsentry_action ** const new_action = (struct wolfsentry_action ** const)new_ent;
     size_t new_size = sizeof *src_action + (size_t)(src_action->label_len) + 1;
-    wolfsentry_errcode_t ret;
 
     (void)wolfsentry;
 
@@ -113,10 +112,6 @@ wolfsentry_errcode_t wolfsentry_action_clone(
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION))
         (*new_action)->flags = (*new_action)->flags_at_creation;
-    if ((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_ACTION, &(*new_action)->header.id)) < 0) {
-        dest_context->allocator.free(dest_context->allocator.context, *new_action); // GCOV_EXCL_LINE
-        return ret; // GCOV_EXCL_LINE
-    }
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -201,6 +196,9 @@ wolfsentry_errcode_t wolfsentry_action_get_reference(struct wolfsentry_context *
 }
 
 wolfsentry_errcode_t wolfsentry_action_drop_reference(struct wolfsentry_context *wolfsentry, const struct wolfsentry_action *action, wolfsentry_action_res_t *action_results) {
+    if ((action->header.parent_table != NULL) &&
+        (action->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ACTION))
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
     return wolfsentry_table_ent_drop_reference(wolfsentry, (struct wolfsentry_table_ent_header *)action, action_results);
 }
 

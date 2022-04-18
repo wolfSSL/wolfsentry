@@ -121,7 +121,6 @@ wolfsentry_errcode_t wolfsentry_event_clone_bare(
     struct wolfsentry_event * const src_event = (struct wolfsentry_event * const)src_ent;
     struct wolfsentry_event ** const new_event = (struct wolfsentry_event ** const)new_ent;
     size_t new_size = sizeof *src_event + (size_t)(src_event->label_len) + 1;
-    wolfsentry_errcode_t ret;
 
     (void)wolfsentry;
     (void)flags;
@@ -135,11 +134,6 @@ wolfsentry_errcode_t wolfsentry_event_clone_bare(
     (*new_event)->match_event = NULL;
     (*new_event)->delete_event = NULL;
     WOLFSENTRY_LIST_HEADER_RESET((*new_event)->action_list.header);
-
-    if ((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_EVENT, &(*new_event)->header.id)) < 0) {
-        dest_context->allocator.free(dest_context->allocator.context, *new_event); // GCOV_EXCL_LINE
-        return ret; // GCOV_EXCL_LINE
-    }
 
     if (src_event->config) {
         if (((*new_event)->config = dest_context->allocator.malloc(dest_context->allocator.context, sizeof *(*new_event)->config)) == NULL) {
@@ -310,6 +304,9 @@ wolfsentry_errcode_t wolfsentry_event_get_reference(struct wolfsentry_context *w
 wolfsentry_errcode_t wolfsentry_event_drop_reference(struct wolfsentry_context *wolfsentry, struct wolfsentry_event *event, wolfsentry_action_res_t *action_results) {
     if (event->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+    if ((event->header.parent_table != NULL) &&
+        (event->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_EVENT))
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
     if (action_results)
         WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     if (WOLFSENTRY_REFCOUNT_DECREMENT(event->header.refcount) > 0)

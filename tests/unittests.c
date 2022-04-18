@@ -2313,15 +2313,14 @@ static int test_json(const char *fname) {
     WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(wolfsentry, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
 
     {
-        struct wolfsentry_context *clone;
+        struct wolfsentry_context *ctx_clone;
 
-        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(wolfsentry, &clone, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION));
-        WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(clone, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
-        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_exchange(wolfsentry, clone));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(wolfsentry, &ctx_clone, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION));
+        WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(ctx_clone, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_exchange(wolfsentry, ctx_clone));
 
-        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(&clone));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(&ctx_clone));
     }
-
 
     {
         struct wolfsentry_cursor *cursor;

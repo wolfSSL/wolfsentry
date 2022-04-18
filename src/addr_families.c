@@ -85,9 +85,21 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
     (void)family_byname_len;
 #endif
 
+    if (bynumber_table == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (family_bynumber == WOLFSENTRY_AF_UNSPEC)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if ((parser == NULL) || (formatter == NULL))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if ((max_addr_bits <= 0) || (max_addr_bits > WOLFSENTRY_MAX_ADDR_BITS))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
+    if (family_byname == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (family_byname_len < 0)
         family_byname_len = (int)strlen(family_byname);
+    if (family_byname_len == 0)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (family_byname_len > WOLFSENTRY_MAX_LABEL_BYTES) {
         ret = WOLFSENTRY_ERROR_ENCODE(STRING_ARG_TOO_LONG);
         goto out;
@@ -165,6 +177,13 @@ static wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber_1(
     struct wolfsentry_addr_family_bynumber target;
     struct wolfsentry_addr_family_bynumber *addr_family_1 = &target;
 
+    if (bynumber_table == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (bynumber_table->header.ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (addr_family == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     target.number = family_bynumber;
 
     if ((ret = wolfsentry_table_ent_get(&bynumber_table->header, (struct wolfsentry_table_ent_header **)&addr_family_1)) < 0)
@@ -183,6 +202,10 @@ wolfsentry_errcode_t wolfsentry_addr_family_get_parser(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_addr_family_bynumber *addr_family;
+
+    if (parser == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if ((ret = wolfsentry_addr_family_get_bynumber_1(
              &wolfsentry->addr_families_bynumber,
              family,
@@ -199,6 +222,10 @@ wolfsentry_errcode_t wolfsentry_addr_family_get_formatter(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_addr_family_bynumber *addr_family;
+
+    if (formatter == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if ((ret = wolfsentry_addr_family_get_bynumber_1(
              &wolfsentry->addr_families_bynumber,
              family,
@@ -223,14 +250,21 @@ static wolfsentry_errcode_t wolfsentry_addr_family_get_byname_1(
 
     struct wolfsentry_addr_family_byname *addr_family_1 = &target.target;
 
+    if (byname_table == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (byname_table->header.ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (addr_family == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     *addr_family = NULL;
 
     if (family_byname == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (family_byname_len == 0)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (family_byname_len < 0)
         family_byname_len = (int)strlen(family_byname);
+    if (family_byname_len == 0)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (family_byname_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
 
@@ -300,7 +334,6 @@ wolfsentry_errcode_t wolfsentry_addr_family_bynumber_clone(
 {
     struct wolfsentry_addr_family_bynumber * const src_bynumber = (struct wolfsentry_addr_family_bynumber * const)src_ent;
     struct wolfsentry_addr_family_bynumber ** const new_bynumber = (struct wolfsentry_addr_family_bynumber ** const)new_ent;
-    wolfsentry_errcode_t ret;
 
     (void)wolfsentry;
     (void)flags;
@@ -309,11 +342,6 @@ wolfsentry_errcode_t wolfsentry_addr_family_bynumber_clone(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memcpy(*new_bynumber, src_bynumber, sizeof **new_bynumber);
     WOLFSENTRY_TABLE_ENT_HEADER_RESET((*new_bynumber)->header);
-
-    if ((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_EVENT, &(*new_bynumber)->header.id)) < 0) {
-        dest_context->allocator.free(dest_context->allocator.context, *new_bynumber); // GCOV_EXCL_LINE
-        return ret; // GCOV_EXCL_LINE
-    }
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -327,7 +355,10 @@ wolfsentry_errcode_t wolfsentry_addr_family_drop_reference(
 {
     if (family_bynumber->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
-    if (action_results)
+    if ((family_bynumber->header.parent_table != NULL) &&
+        (family_bynumber->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER))
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
+    if (action_results != NULL)
         WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     if (WOLFSENTRY_REFCOUNT_DECREMENT(family_bynumber->header.refcount) > 0)
         WOLFSENTRY_RETURN_OK;
@@ -350,9 +381,6 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_bynumber(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_addr_family_bynumber *old;
-
-    if (bynumber_table->header.ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((ret = wolfsentry_addr_family_get_bynumber_1(bynumber_table, family_bynumber, &old)) < 0)
         return ret;
@@ -377,9 +405,6 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_byname(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_addr_family_bynumber *old;
-
-    if (byname_table->header.ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((ret = wolfsentry_addr_family_get_byname_1(byname_table, family_byname, family_byname_len, &old)) < 0)
         return ret;
@@ -407,7 +432,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_install(
     return wolfsentry_addr_family_insert(wolfsentry, &wolfsentry->addr_families_bynumber, family_bynumber, family_byname, family_byname_len, parser, formatter, max_addr_bits);
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
+wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_addr_family_t family_bynumber,
     wolfsentry_action_res_t *action_results)
@@ -416,7 +441,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumb
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname(
+wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname(
     struct wolfsentry_context *wolfsentry,
     const char *family_byname,
     int family_byname_len,
@@ -436,6 +461,12 @@ wolfsentry_addr_family_t wolfsentry_addr_family_pton(
 {
     wolfsentry_errcode_t ret;
 
+    if (family_name == NULL) {
+        if (errcode != NULL)
+            *errcode = WOLFSENTRY_ERROR_ENCODE(INVALID_ARG);
+        return WOLFSENTRY_AF_UNSPEC;
+    }
+
     if (family_name_len < 0)
         family_name_len = (int)strlen(family_name);
 
@@ -451,7 +482,7 @@ wolfsentry_addr_family_t wolfsentry_addr_family_pton(
                 *errcode = ret;
             return addr_family->number;
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND)) {
-            if (errcode)
+            if (errcode != NULL)
                 *errcode = ret;
             return WOLFSENTRY_AF_UNSPEC;
         }
@@ -596,7 +627,7 @@ wolfsentry_addr_family_t wolfsentry_addr_family_pton(
     if (strcaseeq(family_name, "HYPERV", (size_t)family_name_len))
         return WOLFSENTRY_AF_HYPERV;
 
-    if (errcode)
+    if (errcode != NULL)
         *errcode = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
     return WOLFSENTRY_AF_UNSPEC;
 }
@@ -605,7 +636,7 @@ static const char *wolfsentry_addr_family_ntop_1(
     wolfsentry_addr_family_t family,
     wolfsentry_errcode_t *errcode)
 {
-    if (errcode)
+    if (errcode != NULL)
         *errcode = WOLFSENTRY_ERROR_ENCODE(OK);
     switch(family) {
     case WOLFSENTRY_AF_UNSPEC:
@@ -741,7 +772,7 @@ static const char *wolfsentry_addr_family_ntop_1(
     case WOLFSENTRY_AF_HYPERV:
         return "HYPERV";
     default:
-        if (errcode)
+        if (errcode != NULL)
             *errcode = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
         return NULL;
     }
@@ -755,7 +786,7 @@ const char *wolfsentry_addr_family_ntop(
 {
     wolfsentry_errcode_t ret;
 
-    if (addr_family) {
+    if (addr_family != NULL) {
         *addr_family = NULL;
         ret = wolfsentry_addr_family_get_bynumber_1(
             &wolfsentry->addr_families_bynumber,
@@ -763,11 +794,11 @@ const char *wolfsentry_addr_family_ntop(
             addr_family);
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
             WOLFSENTRY_REFCOUNT_INCREMENT((*addr_family)->header.refcount);
-            if (errcode)
+            if (errcode != NULL)
                 *errcode = ret;
             return (*addr_family)->byname_ent->name;
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND)) {
-            if (errcode)
+            if (errcode != NULL)
                 *errcode = ret;
             return NULL;
         }

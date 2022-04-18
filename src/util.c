@@ -2442,6 +2442,7 @@ wolfsentry_errcode_t wolfsentry_context_flush(struct wolfsentry_context *wolfsen
 wolfsentry_errcode_t wolfsentry_context_free(struct wolfsentry_context **wolfsentry) {
     wolfsentry_free_cb_t free_cb = (*wolfsentry)->allocator.free;
     wolfsentry_errcode_t ret;
+
     if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_static.header)) < 0)
         return ret;
     if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_dynamic.header)) < 0)
@@ -2577,6 +2578,16 @@ wolfsentry_errcode_t wolfsentry_context_clone(
     return ret;
 }
 
+static wolfsentry_errcode_t update_parent_table(
+    void *map_context,
+    struct wolfsentry_table_ent_header *ent,
+    wolfsentry_action_res_t *action_results)
+{
+    (void)action_results;
+    ent->parent_table = (struct wolfsentry_table_header *)map_context;
+    WOLFSENTRY_RETURN_OK;
+}
+
 wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolfsentry1, struct wolfsentry_context *wolfsentry2) {
     struct wolfsentry_context scratch;
 
@@ -2586,18 +2597,23 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
 
     scratch = *wolfsentry1;
 
+#define REPARENT_ENTS(context, table) (void)wolfsentry_table_map(context, &(context)->table.header, update_parent_table, &(context)->table.header)
+#define COPY_TABLE(to_context, from_context, table) \
+    (to_context)->table = (from_context)->table; \
+    REPARENT_ENTS(to_context, table)
+
     wolfsentry1->timecbs = wolfsentry2->timecbs;
     wolfsentry1->mk_id_cb_state = wolfsentry2->mk_id_cb_state;
     wolfsentry1->config = wolfsentry2->config;
     wolfsentry1->config_at_creation = wolfsentry2->config_at_creation;
-    wolfsentry1->events = wolfsentry2->events;
-    wolfsentry1->actions = wolfsentry2->actions;
-    wolfsentry1->routes_static = wolfsentry2->routes_static;
-    wolfsentry1->routes_dynamic = wolfsentry2->routes_dynamic;
-    wolfsentry1->user_values = wolfsentry2->user_values;
-    wolfsentry1->addr_families_bynumber = wolfsentry2->addr_families_bynumber;
+    COPY_TABLE(wolfsentry1, wolfsentry2, events);
+    COPY_TABLE(wolfsentry1, wolfsentry2, actions);
+    COPY_TABLE(wolfsentry1, wolfsentry2, routes_static);
+    COPY_TABLE(wolfsentry1, wolfsentry2, routes_dynamic);
+    COPY_TABLE(wolfsentry1, wolfsentry2, user_values);
+    COPY_TABLE(wolfsentry1, wolfsentry2, addr_families_bynumber);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-    wolfsentry1->addr_families_byname = wolfsentry2->addr_families_byname;
+    COPY_TABLE(wolfsentry1, wolfsentry2, addr_families_byname);
 #endif
     wolfsentry1->ents_by_id = wolfsentry2->ents_by_id;
 
@@ -2605,17 +2621,22 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
     wolfsentry2->mk_id_cb_state = scratch.mk_id_cb_state;
     wolfsentry2->config = scratch.config;
     wolfsentry2->config_at_creation = scratch.config_at_creation;
-    wolfsentry2->events = scratch.events;
-    wolfsentry2->actions = scratch.actions;
-    wolfsentry2->routes_static = scratch.routes_static;
-    wolfsentry2->routes_dynamic = scratch.routes_dynamic;
-    wolfsentry2->user_values = scratch.user_values;
-    wolfsentry2->addr_families_bynumber = scratch.addr_families_bynumber;
+    COPY_TABLE(wolfsentry2, &scratch, events);
+    COPY_TABLE(wolfsentry2, &scratch, actions);
+    COPY_TABLE(wolfsentry2, &scratch, routes_static);
+    COPY_TABLE(wolfsentry2, &scratch, routes_dynamic);
+    COPY_TABLE(wolfsentry2, &scratch, user_values);
+    COPY_TABLE(wolfsentry2, &scratch, addr_families_bynumber);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-    wolfsentry2->addr_families_byname = scratch.addr_families_byname;
+    COPY_TABLE(wolfsentry2, &scratch, addr_families_byname);
 #endif
 
     wolfsentry2->ents_by_id = scratch.ents_by_id;
+
+    (void)wolfsentry_table_map(wolfsentry1, &wolfsentry1->addr_families_bynumber.header, update_parent_table, &wolfsentry1->addr_families_bynumber.header);
+
+#undef COPY_TABLE
+#undef REPARENT_ENTS
 
     WOLFSENTRY_RETURN_OK;
 }

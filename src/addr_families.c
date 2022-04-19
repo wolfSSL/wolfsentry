@@ -207,7 +207,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_get_parser(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((ret = wolfsentry_addr_family_get_bynumber_1(
-             &wolfsentry->addr_families_bynumber,
+             wolfsentry->addr_families_bynumber,
              family,
              &addr_family)) < 0)
         return ret;
@@ -227,7 +227,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_get_formatter(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((ret = wolfsentry_addr_family_get_bynumber_1(
-             &wolfsentry->addr_families_bynumber,
+             wolfsentry->addr_families_bynumber,
              family,
              &addr_family)) < 0)
         return ret;
@@ -429,7 +429,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_install(
     wolfsentry_addr_family_formatter_t formatter,
     int max_addr_bits)
 {
-    return wolfsentry_addr_family_insert(wolfsentry, &wolfsentry->addr_families_bynumber, family_bynumber, family_byname, family_byname_len, parser, formatter, max_addr_bits);
+    return wolfsentry_addr_family_insert(wolfsentry, wolfsentry->addr_families_bynumber, family_bynumber, family_byname, family_byname_len, parser, formatter, max_addr_bits);
 }
 
 wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
@@ -437,7 +437,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
     wolfsentry_addr_family_t family_bynumber,
     wolfsentry_action_res_t *action_results)
 {
-    return wolfsentry_addr_family_handler_delete_bynumber(wolfsentry, &wolfsentry->addr_families_bynumber, family_bynumber, action_results);
+    return wolfsentry_addr_family_handler_delete_bynumber(wolfsentry, wolfsentry->addr_families_bynumber, family_bynumber, action_results);
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -447,7 +447,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname(
     int family_byname_len,
     wolfsentry_action_res_t *action_results)
 {
-    return wolfsentry_addr_family_handler_delete_byname(wolfsentry, &wolfsentry->addr_families_byname, family_byname, family_byname_len, action_results);
+    return wolfsentry_addr_family_handler_delete_byname(wolfsentry, wolfsentry->addr_families_byname, family_byname, family_byname_len, action_results);
 }
 #endif
 
@@ -473,7 +473,7 @@ wolfsentry_addr_family_t wolfsentry_addr_family_pton(
     {
         struct wolfsentry_addr_family_bynumber *addr_family;
         ret = wolfsentry_addr_family_get_byname_1(
-            &wolfsentry->addr_families_byname,
+            wolfsentry->addr_families_byname,
             family_name,
             (int)family_name_len,
             &addr_family);
@@ -789,7 +789,7 @@ const char *wolfsentry_addr_family_ntop(
     if (addr_family != NULL) {
         *addr_family = NULL;
         ret = wolfsentry_addr_family_get_bynumber_1(
-            &wolfsentry->addr_families_bynumber,
+            wolfsentry->addr_families_bynumber,
             family,
             addr_family);
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
@@ -810,25 +810,23 @@ const char *wolfsentry_addr_family_ntop(
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 
 wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_addr_family_bynumber_table *addr_family_bynumber_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(addr_family_bynumber_table->header);
     addr_family_bynumber_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_addr_family_bynumber_key_cmp;
     addr_family_bynumber_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_addr_family_drop_reference;
     addr_family_bynumber_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER;
-    return wolfsentry_id_generate(wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &addr_family_bynumber_table->header.id);
+    WOLFSENTRY_RETURN_OK;
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 wolfsentry_errcode_t wolfsentry_addr_family_byname_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_addr_family_byname_table *addr_family_byname_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(addr_family_byname_table->header);
     addr_family_byname_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_addr_family_byname_key_cmp;
     addr_family_byname_table->header.free_fn = NULL;
     addr_family_byname_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME;
-    return wolfsentry_id_generate(wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &addr_family_byname_table->header.id);
+    WOLFSENTRY_RETURN_OK;
 }
 #endif

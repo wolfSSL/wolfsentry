@@ -90,7 +90,8 @@ struct wolfsentry_rwlock {
     volatile int write_waiter_count;
     volatile int read2write_waiter_count;
     volatile enum {
-        WOLFSENTRY_LOCK_UNLOCKED = 0,
+        WOLFSENTRY_LOCK_UNINITED = 0,
+        WOLFSENTRY_LOCK_UNLOCKED,
         WOLFSENTRY_LOCK_SHARED,
         WOLFSENTRY_LOCK_EXCLUSIVE
     } state;
@@ -157,7 +158,6 @@ struct wolfsentry_table_header {
     struct wolfsentry_table_ent_header *head, *tail; /* these will be replaced by red-black table elements later. */
     wolfsentry_ent_cmp_fn_t cmp_fn;
     wolfsentry_ent_free_fn_t free_fn;
-    wolfsentry_ent_id_t id;
     wolfsentry_hitcount_t n_ents;
     wolfsentry_hitcount_t n_inserts;
     wolfsentry_hitcount_t n_deletes;
@@ -322,14 +322,14 @@ struct wolfsentry_context {
         wolfsentry_ent_id_t id_counter;
     } mk_id_cb_state;
     struct wolfsentry_eventconfig_internal config, config_at_creation;
-    struct wolfsentry_event_table events;
-    struct wolfsentry_action_table actions;
-    struct wolfsentry_route_table routes_static;
-    struct wolfsentry_route_table routes_dynamic;
-    struct wolfsentry_kv_table user_values;
-    struct wolfsentry_addr_family_bynumber_table addr_families_bynumber;
+    struct wolfsentry_event_table *events;
+    struct wolfsentry_action_table *actions;
+    struct wolfsentry_route_table *routes_static;
+    struct wolfsentry_route_table *routes_dynamic;
+    struct wolfsentry_kv_table *user_values;
+    struct wolfsentry_addr_family_bynumber_table *addr_families_bynumber;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-    struct wolfsentry_addr_family_byname_table addr_families_byname;
+    struct wolfsentry_addr_family_byname_table *addr_families_byname;
 #endif
     struct wolfsentry_table_header ents_by_id;
 };
@@ -352,23 +352,17 @@ wolfsentry_errcode_t wolfsentry_id_generate(struct wolfsentry_context *wolfsentr
 
 int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_event *right);
 wolfsentry_errcode_t wolfsentry_event_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_event_table *event_table);
 wolfsentry_errcode_t wolfsentry_action_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_action_table *action_table);
 wolfsentry_errcode_t wolfsentry_route_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route_table *route_table);
 wolfsentry_errcode_t wolfsentry_kv_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_kv_table *kv_table);
 wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_addr_family_bynumber_table *addr_family_bynumber_table);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 wolfsentry_errcode_t wolfsentry_addr_family_byname_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_addr_family_byname_table *addr_family_byname_table);
 #endif
 
@@ -393,7 +387,8 @@ wolfsentry_errcode_t wolfsentry_table_clone(
 
 wolfsentry_errcode_t wolfsentry_coupled_table_clone(
     struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_table_header *src_table,
+    struct wolfsentry_table_header *src_table1,
+    struct wolfsentry_table_header *src_table2,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table1,
     struct wolfsentry_table_header *dest_table2,

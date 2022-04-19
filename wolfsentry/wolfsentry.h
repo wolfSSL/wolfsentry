@@ -272,6 +272,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_conte
 #endif /* WOLFSENTRY_THREADSAFE */
 
 typedef enum {
+    WOLFSENTRY_OBJECT_TYPE_UNINITED = 0,
     WOLFSENTRY_OBJECT_TYPE_TABLE,
     WOLFSENTRY_OBJECT_TYPE_ACTION,
     WOLFSENTRY_OBJECT_TYPE_EVENT,

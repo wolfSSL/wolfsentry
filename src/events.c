@@ -167,7 +167,7 @@ wolfsentry_errcode_t wolfsentry_event_clone_resolve(
 
     if (src_event->insert_event) {
         new_event->insert_event = src_event->insert_event;
-        if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&new_event->insert_event)) < 0) {
+        if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->insert_event)) < 0) {
             new_event->insert_event = NULL;
             WOLFSENTRY_ERROR_RERETURN(ret);
         }
@@ -176,7 +176,7 @@ wolfsentry_errcode_t wolfsentry_event_clone_resolve(
 
     if (src_event->match_event) {
         new_event->match_event = src_event->match_event;
-        if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&new_event->match_event)) < 0) {
+        if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->match_event)) < 0) {
             new_event->match_event = NULL;
             WOLFSENTRY_ERROR_RERETURN(ret);
         }
@@ -185,7 +185,7 @@ wolfsentry_errcode_t wolfsentry_event_clone_resolve(
 
     if (src_event->delete_event) {
         new_event->delete_event = src_event->delete_event;
-        if ((ret = wolfsentry_table_ent_get(&dest_context->events.header, (struct wolfsentry_table_ent_header **)&new_event->delete_event)) < 0) {
+        if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->delete_event)) < 0) {
             new_event->delete_event = NULL;
             WOLFSENTRY_ERROR_RERETURN(ret);
         }
@@ -217,7 +217,7 @@ wolfsentry_errcode_t wolfsentry_event_insert(
     }
     if (id)
         *id = new->header.id;
-    if ((ret = wolfsentry_table_ent_insert(wolfsentry, &new->header, &wolfsentry->events.header, 1 /* unique_p */)) < 0) {
+    if ((ret = wolfsentry_table_ent_insert(wolfsentry, &new->header, &wolfsentry->events->header, 1 /* unique_p */)) < 0) {
         wolfsentry_event_free(wolfsentry, new);
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
@@ -252,7 +252,7 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wo
     if ((ret = wolfsentry_event_init_1(label, label_len, 0, NULL, &target.event, sizeof target)) < 0)
         return ret;
 
-    if ((ret = wolfsentry_table_ent_get(&wolfsentry->events.header, (struct wolfsentry_table_ent_header **)&event_1)) < 0)
+    if ((ret = wolfsentry_table_ent_get(&wolfsentry->events->header, (struct wolfsentry_table_ent_header **)&event_1)) < 0)
         return ret;
 
     *event = event_1;
@@ -361,7 +361,7 @@ wolfsentry_errcode_t wolfsentry_event_delete(
 }
 
 wolfsentry_errcode_t wolfsentry_event_flush_all(struct wolfsentry_context *wolfsentry) {
-    return wolfsentry_table_free_ents(wolfsentry, &wolfsentry->events.header);
+    return wolfsentry_table_free_ents(wolfsentry, &wolfsentry->events->header);
 }
 
 typedef enum { W_E_A_A_PREPEND, W_E_A_A_APPEND, W_E_A_A_INSERT, W_E_A_A_DELETE } w_e_a_a_what_t;
@@ -584,12 +584,11 @@ wolfsentry_errcode_t wolfsentry_event_action_list_next(
 }
 
 wolfsentry_errcode_t wolfsentry_event_table_init(
-    struct wolfsentry_context *wolfsentry,
     struct wolfsentry_event_table *event_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(event_table->header);
     event_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_event_key_cmp;
     event_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_event_drop_reference;
     event_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_EVENT;
-    return wolfsentry_id_generate(wolfsentry, WOLFSENTRY_OBJECT_TYPE_TABLE, &event_table->header.id);
+    WOLFSENTRY_RETURN_OK;
 }

@@ -931,7 +931,7 @@ static int test_static_routes (void) {
             ++n_seen;
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(wolfsentry, static_routes, &cursor));
-        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes_static.header.n_ents);
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes_static->header.n_ents);
     }
 #endif
 
@@ -980,7 +980,7 @@ static int test_static_routes (void) {
     WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
     WOLFSENTRY_EXIT_ON_SUCCESS(wolfsentry_route_delete_static(wolfsentry, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &action_results, &n_deleted));
 
-    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes_static.header.n_ents == 0);
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes_static->header.n_ents == 0);
 
     printf("all subtests succeeded -- %d distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
 
@@ -1789,7 +1789,7 @@ static int test_user_values (void) {
             ++n_seen;
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(wolfsentry, &cursor));
-        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values.header.n_ents);
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values->header.n_ents);
         WOLFSENTRY_EXIT_ON_FALSE(n_seen == 6);
     }
 #endif
@@ -2369,7 +2369,7 @@ static int test_json(const char *fname) {
             ++n_seen;
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(wolfsentry, &cursor));
-        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values.header.n_ents);
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values->header.n_ents);
     }
 #endif
 

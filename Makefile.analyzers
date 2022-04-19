@@ -151,7 +151,7 @@ sanitize-all-clang: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=$(CLANG) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
 	@echo "no defects from clang sanitize address, leak, undefined, float-cast-overflow, and float-divide-by-zero"
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=$(CLANG) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang CC=$(CLANG) EXTRA_CFLAGS+="-fno-sanitize-recover=all -D__SANITIZE_THREAD__" sanitize-thread
 	@echo "no defects from clang sanitize thread"
 	@echo "clang sanitizers found no defects."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean

@@ -251,7 +251,7 @@ ANALYZER_BUILD_ARTIFACTS+=$(BUILD_TOP)/tests/coverage-unittest.o $(BUILD_TOP)/te
 .PHONY: coverage
 coverage: OPTIM=-O0
 coverage:
-	@mkdir -p coverage-build && cd coverage-build && $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f ../$(THIS_MAKEFILE) SRC_TOP=.. EXTRA_CFLAGS+=--coverage EXTRA_LDFLAGS+=--coverage ./tests/coverage-unittest
+	@mkdir -p coverage-build && cd coverage-build && $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f ../$(THIS_MAKEFILE) SRC_TOP=.. EXTRA_CFLAGS+='--coverage -DBUILDING_LIBWOLFSENTRY' EXTRA_LDFLAGS+=--coverage ./tests/coverage-unittest
 	@cd coverage-build && ./tests/coverage-unittest >/dev/null && echo 'omnibus unittest passed.'
 	@cd coverage-build && gcov --relative-only src/*.o src/json/*.o tests/coverage-unittest $(GCOV_EXTRA_ARGS)
 

@@ -30,7 +30,7 @@ ifdef USER_MAKE_CONF
     include $(USER_MAKE_CONF)
 endif
 
-SRCS := util.c internal.c routes.c events.c actions.c kv.c
+SRCS := util.c internal.c addr_families.c routes.c events.c actions.c kv.c
 
 ifndef SRC_TOP
     SRC_TOP := $(shell pwd -P)
@@ -53,6 +53,18 @@ endif
 CC_V := $(shell $(CC) -v 2>&1 | sed "s/'/'\\\\''/g")
 
 CC_IS_GCC := $(shell if echo '$(CC_V)' | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
+
+ifndef GCC
+    ifeq "$(CC_IS_GCC)" "1"
+        GCC := $(CC)
+    else
+        GCC := gcc
+    endif
+endif
+
+ifndef CLANG
+    CLANG := clang
+endif
 
 AR_VERSION := $(shell $(AR) --version 2>&1 | sed "s/'/'\\\\''/g")
 
@@ -194,7 +206,7 @@ else
 endif
 
 
-UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules test_user_values
+UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules test_user_values test_user_addr_families
 
 ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json

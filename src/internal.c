@@ -84,6 +84,8 @@ wolfsentry_errcode_t wolfsentry_table_clone(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (src_table->ent_type != dest_table->ent_type)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (dest_table->head != NULL)
+        WOLFSENTRY_ERROR_RETURN(BUSY);
 
     for (i = src_table->head;
          i;
@@ -102,6 +104,67 @@ wolfsentry_errcode_t wolfsentry_table_clone(
     dest_table->tail = new;
 
     dest_table->n_ents = src_table->n_ents;
+
+    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+  out:
+
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_coupled_table_clone(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *src_table1,
+    struct wolfsentry_table_header *src_table2,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_header *dest_table1,
+    struct wolfsentry_table_header *dest_table2,
+    wolfsentry_coupled_table_ent_clone_fn_t clone_fn,
+    wolfsentry_clone_flags_t flags)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_table_ent_header *prev = NULL, *new1 = NULL, *new2 = NULL, *i;
+
+    if ((wolfsentry == dest_context) ||
+        (src_table1 == src_table2) ||
+        (src_table1 == dest_table1) ||
+        (src_table1 == dest_table2) ||
+        (src_table2 == dest_table2) ||
+        (dest_table1 == dest_table2))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (src_table1->ent_type != dest_table1->ent_type)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (src_table2->ent_type != dest_table2->ent_type)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (dest_table1->head != NULL)
+        WOLFSENTRY_ERROR_RETURN(BUSY);
+    if (dest_table2->head != NULL)
+        WOLFSENTRY_ERROR_RETURN(BUSY);
+
+    for (i = src_table1->head;
+         i;
+         i = i->next) {
+        if ((ret = clone_fn(wolfsentry, i, dest_context, &new1, &new2, flags)) < 0)
+            goto out;
+        new1->parent_table = dest_table1;
+        new2->parent_table = dest_table2;
+        if (prev)
+            prev->next = new1;
+        else
+            dest_table1->head = new1;
+        prev = new1;
+        if ((ret = wolfsentry_table_ent_insert_by_id(dest_context, new1)) < 0)
+            goto out;
+        if ((ret = wolfsentry_table_ent_insert(dest_context, new2, dest_table2, 1 /* unique_p */)) < 0)
+            goto out;
+        /* note wolfsentry_table_ent_insert() takes care of the _insert_by_id(). */
+    }
+    dest_table1->tail = new1;
+
+    dest_table1->n_ents = src_table1->n_ents;
+
+    if (dest_table2->n_ents != src_table2->n_ents)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
@@ -314,6 +377,12 @@ wolfsentry_errcode_t wolfsentry_table_free_ents(struct wolfsentry_context *wolfs
     struct wolfsentry_table_ent_header *i = table->head, *next;
     wolfsentry_errcode_t ret;
     WOLFSENTRY_TABLE_HEADER_RESET(*table);
+    /* coupled objects are freed as a pair, e.g. ents in
+     * wolfsentry_addr_family_byname_table are freed when the corresponding
+     * wolfsentry_addr_family_bynumber_table ents are freed.
+     */
+    if (table->free_fn == NULL)
+        WOLFSENTRY_RETURN_OK;
     while (i) {
         next = i->next;
         if ((ret = table->free_fn(wolfsentry, i, NULL /* action_results */)) < 0)

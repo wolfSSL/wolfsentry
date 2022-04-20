@@ -31,11 +31,6 @@
 #define MAX_IPV4_ADDR_BITS (sizeof(struct in_addr) * BITS_PER_BYTE)
 #define MAX_IPV6_ADDR_BITS (sizeof(struct in6_addr) * BITS_PER_BYTE)
 #define MAX_MAC_ADDR_BITS 64
-#define MAX_ADDR_BITS (MAX_IPV6_ADDR_BITS > MAX_IPV4_ADDR_BITS ?   \
-                       ((MAX_MAC_ADDR_BITS > MAX_IPV6_ADDR_BITS) ? \
-                        MAX_MAC_ADDR_BITS : MAX_IPV6_ADDR_BITS) :  \
-                       ((MAX_MAC_ADDR_BITS > MAX_IPV4_ADDR_BITS) ? \
-                        MAX_MAC_ADDR_BITS : MAX_IPV4_ADDR_BITS))
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 #include <netdb.h>
@@ -166,8 +161,8 @@ struct wolfsentry_json_process_state {
             char event_label[WOLFSENTRY_MAX_LABEL_BYTES];
             int event_label_len;
             void *caller_arg; /* xxx */
-            WOLFSENTRY_SOCKADDR(MAX_ADDR_BITS) remote;
-            WOLFSENTRY_SOCKADDR(MAX_ADDR_BITS) local;
+            WOLFSENTRY_SOCKADDR(WOLFSENTRY_MAX_ADDR_BITS) remote;
+            WOLFSENTRY_SOCKADDR(WOLFSENTRY_MAX_ADDR_BITS) local;
             wolfsentry_route_flags_t flags;
         } route;
         struct {
@@ -484,7 +479,7 @@ static inline int convert_hex_byte(const char **in, size_t *in_len, byte *out) {
     return 0;
 }
 
-static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
+static wolfsentry_errcode_t convert_sockaddr_address(struct wolfsentry_json_process_state *jps, JSON_TYPE type, const char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     if (type != JSON_STRING)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -546,8 +541,14 @@ static wolfsentry_errcode_t convert_sockaddr_address(JSON_TYPE type, const char 
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         }
     }
-    else
-        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    else {
+        wolfsentry_errcode_t ret;
+        wolfsentry_addr_family_parser_t parser;
+        if ((ret = wolfsentry_addr_family_get_parser(jps->wolfsentry, sa->sa_family, &parser)) < 0)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_MISSING_HANDLER);
+        sa->addr_len = WOLFSENTRY_MAX_ADDR_BITS;
+        return parser(jps->wolfsentry, data, (int)data_size, sa->addr, &sa->addr_len);
+    }
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -601,7 +602,7 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
                               WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD :
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD);
-        return convert_sockaddr_address(type, data, data_size, sa);
+        return convert_sockaddr_address(jps, type, data, data_size, sa);
     } else if (! strcmp(jps->cur_keyname, "prefix-bits"))
         return convert_uint16(type, data, data_size, &sa->addr_len);
     else if (! strcmp(jps->cur_keyname, "interface")) {
@@ -637,11 +638,9 @@ static wolfsentry_errcode_t handle_route_family_clause(struct wolfsentry_json_pr
     }
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     else if (type == JSON_STRING) {
-        jps->o_u_c.route.remote.sa_family = jps->o_u_c.route.local.sa_family = wolfsentry_family_pton(data, data_size);
-        if (jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_UNSPEC)
-            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
-        else
-            WOLFSENTRY_RETURN_OK;
+        wolfsentry_errcode_t ret;
+        jps->o_u_c.route.remote.sa_family = jps->o_u_c.route.local.sa_family = wolfsentry_addr_family_pton(jps->wolfsentry, data, (int)data_size, &ret);
+        return ret;
     }
 #endif
     else

@@ -69,6 +69,7 @@
     "insert-event" : string,
     "match-event" : string,
     "delete-event" : string
+    "decision-event" : string
 
 }
 ],
@@ -863,6 +864,8 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
             subevent_type = WOLFSENTRY_ACTION_TYPE_MATCH;
         else if (! strcmp(jps->cur_keyname, "delete-event"))
             subevent_type = WOLFSENTRY_ACTION_TYPE_DELETE;
+        else if (! strcmp(jps->cur_keyname, "decision-event"))
+            subevent_type = WOLFSENTRY_ACTION_TYPE_DECISION;
 
         if (subevent_type != WOLFSENTRY_ACTION_TYPE_NONE) {
             if (data_size > WOLFSENTRY_MAX_LABEL_BYTES)

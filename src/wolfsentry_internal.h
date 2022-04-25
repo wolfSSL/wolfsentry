@@ -167,6 +167,8 @@ struct wolfsentry_table_header {
 #define WOLFSENTRY_TABLE_HEADER_RESET(table) do { \
         (table).head = (table).tail = NULL;       \
         (table).n_ents = 0;                       \
+        (table).n_inserts = 0;                    \
+        (table).n_deletes = 0;                    \
     } while (0)
 
 struct wolfsentry_cursor {
@@ -215,6 +217,7 @@ struct wolfsentry_event {
     struct wolfsentry_event *insert_event; /* child event with setup routines (if any) for routes inserted with this as parent_event. */
     struct wolfsentry_event *match_event; /* child event with state management for routes inserted with this as parent_event. */
     struct wolfsentry_event *delete_event; /* child event with cleanup routines (if any) for routes inserted with this as parent_event. */
+    struct wolfsentry_event *decision_event; /* child event with logic for notifications and logging around decisions for routes inserted with this as parent_event. */
 
     wolfsentry_priority_t priority;
 

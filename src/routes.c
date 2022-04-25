@@ -931,6 +931,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     )
 {
     struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
+    wolfsentry_errcode_t ret;
 
     if (! (route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS))
         WOLFSENTRY_ATOMIC_INCREMENT(route->header.hitcount, 1);
@@ -969,12 +970,14 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         if (*action_results & WOLFSENTRY_ACTION_RES_CONNECT) {
             if (route->meta.connection_count >= config->config.max_connection_count) {
                 *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-                WOLFSENTRY_RETURN_OK;
+                ret = WOLFSENTRY_ERROR_ENCODE(OK);
+                goto done;
             }
             if (WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(route->meta.connection_count) > config->config.max_connection_count) {
                 WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(route->meta.connection_count);
                 *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-                WOLFSENTRY_RETURN_OK;
+                ret = WOLFSENTRY_ERROR_ENCODE(OK);
+                goto done;
             }
         } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT)
             WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(route->meta.connection_count);
@@ -987,9 +990,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     if ((route->flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)) {
         if ((config->config.penaltybox_duration > 0) && (route->meta.last_penaltybox_time != 0)) {
             wolfsentry_time_t now;
-            wolfsentry_errcode_t ret = WOLFSENTRY_GET_TIME(&now);
-            if (ret < 0)
-                return ret;
+            ret = WOLFSENTRY_GET_TIME(&now);
+            if (ret < 0) {
+                *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
+                goto done;
+            }
             if (WOLFSENTRY_DIFF_TIME(now, route->meta.last_penaltybox_time) > config->config.penaltybox_duration) {
                 wolfsentry_route_flags_t flags_before, flags_after;
                 WOLFSENTRY_WARN_ON_FAILURE(
@@ -1004,10 +1009,12 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                 *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
         } else
             *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-        WOLFSENTRY_RETURN_OK;
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        goto done;
     } else if ((route->flags & WOLFSENTRY_ROUTE_FLAG_GREENLISTED)) {
         *action_results |= WOLFSENTRY_ACTION_RES_ACCEPT;
-        WOLFSENTRY_RETURN_OK;
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        goto done;
     }
 
     if (! WOLFSENTRY_MASKIN_BITS(*action_results, WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_REJECT))
@@ -1015,7 +1022,23 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     if (! WOLFSENTRY_MASKIN_BITS(*action_results, WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_REJECT))
         *action_results |= wolfsentry->routes_dynamic->default_policy;
 
-    WOLFSENTRY_RETURN_OK;
+    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+  done:
+
+    if (route->parent_event && route->parent_event->decision_event && route->parent_event->decision_event->action_list.header.head) {
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
+                                       wolfsentry,
+                                       caller_arg,
+                                       route->parent_event->decision_event,
+                                       trigger_event,
+                                       WOLFSENTRY_ACTION_TYPE_DECISION,
+                                       route_table,
+                                       route,
+                                       action_results));
+    }
+
+    return ret;
 }
 
 static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
@@ -1094,8 +1117,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
                 *inexact_matches = WOLFSENTRY_ROUTE_FLAG_NONE;
         } else {
             WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_drop_reference_1(wolfsentry, route, NULL /* action_results */));
-            if (ret >= 0)
-                ret = WOLFSENTRY_ERROR_ENCODE(NOT_INSERTED); /* not an error */
+            if (ret >= 0) {
+                /* inform caller that no entry was found or added. */
+                WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERT|WOLFSENTRY_ACTION_RES_DELETE);
+                ret = WOLFSENTRY_ERROR_ENCODE(OK);
+            }
             return ret;
         }
     } else {

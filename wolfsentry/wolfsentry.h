@@ -292,7 +292,8 @@ typedef enum {
     WOLFSENTRY_ACTION_TYPE_POST = 1, /* called when an event is posted. */
     WOLFSENTRY_ACTION_TYPE_INSERT = 2, /* called when a route is added to the route table for this event. */
     WOLFSENTRY_ACTION_TYPE_MATCH = 3, /* called by wolfsentry_route_dispatch() for a route match. */
-    WOLFSENTRY_ACTION_TYPE_DELETE = 4 /* called when a route associated with this event expires or is otherwise deleted. */
+    WOLFSENTRY_ACTION_TYPE_DELETE = 4, /* called when a route associated with this event expires or is otherwise deleted. */
+    WOLFSENTRY_ACTION_TYPE_DECISION = 5 /* called after final decision has been made by wolfsentry_route_event_dispatch*(). */
 } wolfsentry_action_type_t;
 
 #define WOLFSENTRY_ACTION_RES_USER_SHIFT 16U
@@ -509,6 +510,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_to_epoch_time(struct wolfsentry_c
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_from_epoch_time(struct wolfsentry_context *wolfsentry, long epoch_secs, long epoch_nsecs, wolfsentry_time_t *when);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_interval_to_seconds(struct wolfsentry_context *wolfsentry, wolfsentry_time_t howlong, long *howlong_secs, long *howlong_nsecs);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_interval_from_seconds(struct wolfsentry_context *wolfsentry, long howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong);
+
+#ifdef WOLFSENTRY_ERROR_STRINGS
+WOLFSENTRY_API const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned int bit);
+#endif
 
 struct wolfsentry_host_platform_interface {
     struct wolfsentry_allocator *allocator;

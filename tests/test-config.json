@@ -16,7 +16,11 @@
 	},
 	{
 	    "label" : "event-on-match",
-	    "actions" : [ "handle-match", "notify-on-match" ]
+	    "actions" : [ "handle-match" ]
+	},
+	{
+	    "label" : "event-on-decision",
+	    "actions" : [ "notify-on-decision" ]
 	},
 	{
 	    "label" : "static-route-parent",
@@ -28,7 +32,8 @@
 	    "actions" : [ "handle-connect", "handle-connect2" ],
 	    "insert-event" : "event-on-insert",
 	    "match-event" : "event-on-match",
-	    "delete-event" : "event-on-delete"
+	    "delete-event" : "event-on-delete",
+	    "decision-event" : "event-on-decision"
 	},
 	{
 	    "label" : "call-in-from-unit-test"

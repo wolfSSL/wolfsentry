@@ -2279,7 +2279,7 @@ static int test_json(const char *fname) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
                                    wolfsentry,
-                                   "notify-on-match",
+                                   "notify-on-decision",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
                                    test_action,

@@ -197,7 +197,12 @@ static wolfsentry_errcode_t wolfsentry_kv_get_1(
     struct wolfsentry_kv_pair_internal *ret_kv = (struct wolfsentry_kv_pair_internal *)kv_template;
     if ((ret = wolfsentry_table_ent_get(&kv_table->header, (struct wolfsentry_table_ent_header **)&ret_kv)) < 0)
         return ret;
-    if ((WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_NONE) &&
+    /* special-case request for uint with object sint that is >= 0. */
+    if ((WOLFSENTRY_KV_TYPE(&kv_template->kv) == WOLFSENTRY_KV_UINT) &&
+        (WOLFSENTRY_KV_TYPE(&ret_kv->kv) == WOLFSENTRY_KV_SINT) &&
+        (WOLFSENTRY_KV_V_SINT(&ret_kv->kv) >= 0))
+        ;
+    else if ((WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_NONE) &&
         (WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_TYPE(&ret_kv->kv)))
         WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
     *kv = ret_kv;

@@ -130,8 +130,6 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Operation attempted with object already marked as stopped";
     case WOLFSENTRY_ERROR_ID_WRONG_OBJECT:
         return "Operation attempted on wrong type of object";
-    case WOLFSENTRY_ERROR_ID_NOT_INSERTED:
-        return "Object was not inserted in table (informational, not an error)";
     case WOLFSENTRY_ERROR_ID_DATA_MISSING:
         return "Requested data or buffer is not present";
     case WOLFSENTRY_ERROR_ID_NOT_PERMITTED:
@@ -166,6 +164,44 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
             return "user defined error code";
     } else
         return "unknown error code";
+}
+
+const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned int bit) {
+    if (bit > 31)
+        return "<out-of-range>";
+    if (res & (1U << bit)) {
+        switch(1U << bit) {
+        case WOLFSENTRY_ACTION_RES_NONE: /* not reachable */
+            return "none";
+        case WOLFSENTRY_ACTION_RES_ACCEPT:
+            return "accept";
+        case WOLFSENTRY_ACTION_RES_REJECT:
+            return "reject";
+        case WOLFSENTRY_ACTION_RES_CONNECT:
+            return "connect";
+        case WOLFSENTRY_ACTION_RES_DISCONNECT:
+            return "disconnect";
+        case WOLFSENTRY_ACTION_RES_DEROGATORY:
+            return "derogatory";
+        case WOLFSENTRY_ACTION_RES_COMMENDABLE:
+            return "commendable";
+        case WOLFSENTRY_ACTION_RES_CONTINUE:
+            return "continue";
+        case WOLFSENTRY_ACTION_RES_STOP:
+            return "stop";
+        case WOLFSENTRY_ACTION_RES_INSERT:
+            return "insert";
+        case WOLFSENTRY_ACTION_RES_DELETE:
+            return "delete";
+        case WOLFSENTRY_ACTION_RES_DEALLOCATED:
+            return "deallocated";
+        case WOLFSENTRY_ACTION_RES_ERROR:
+            return "error";
+        default:
+            return "<user>";
+        }
+    } else
+        return NULL;
 }
 
 #endif /* WOLFSENTRY_ERROR_STRINGS */

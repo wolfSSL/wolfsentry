@@ -14,8 +14,7 @@ static const char *wolfsentry_config_data = "{\n"
 "    \"wolfsentry-config-version\" : 1,\n"
 "    \"config-update\" : {\n"
 " 	 \"max-connection-count\" : 5,\n"
-"    \"penalty-box-duration\" : \"1h\",\n"
-"    \"default-policy-static\" : \"reject\"\n"
+"    \"penalty-box-duration\" : \"1h\"\n"
 "    },\n"
 "    \"events-insert\" : [\n"
 "        {\n"
@@ -46,6 +45,10 @@ static const char *wolfsentry_config_data = "{\n"
 "       \"label\" : \"call-in-from-echo\"\n"
 "   }\n"
 "   ],\n"
+"   \"default-policies\" : {\n"
+"	\"default-policy-static\" : \"reject\",\n"
+"	\"default-event-static\" : \"static-route-parent\"\n"
+"   },\n"
 "    \"static-routes-insert\" : [\n"
 "{\n"
 "       \"parent-event\" : \"static-route-parent\",\n"
@@ -107,11 +110,12 @@ static wolfsentry_errcode_t test_action(
     void *caller_arg,
     const struct wolfsentry_event *trigger_event,
     wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
     struct wolfsentry_route_table *route_table,
-    const struct wolfsentry_route *route,
+    const struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
-    const struct wolfsentry_event *parent_event = wolfsentry_route_parent_event(route);
+    const struct wolfsentry_event *parent_event = wolfsentry_route_parent_event(rule_route);
     (void)wolfsentry;
     (void)handler_arg;
     (void)route_table;

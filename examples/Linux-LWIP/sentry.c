@@ -20,11 +20,12 @@ static wolfsentry_errcode_t test_action(
     void *caller_arg,
     const struct wolfsentry_event *trigger_event,
     wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
     struct wolfsentry_route_table *route_table,
-    const struct wolfsentry_route *route,
+    const struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
-    const struct wolfsentry_event *parent_event = wolfsentry_route_parent_event(route);
+    const struct wolfsentry_event *parent_event = wolfsentry_route_parent_event(rule_route);
     (void)wolfsentry;
     (void)handler_arg;
     (void)route_table;

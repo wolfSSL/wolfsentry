@@ -34,6 +34,12 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #include "wolfsentry_ll.h"
 
+#ifdef FREERTOS
+#include <FreeRTOS.h>
+#define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
+#define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
+#endif
+
 #ifdef WOLFSENTRY_THREADSAFE
 
 #ifdef WOLFSENTRY_LOCK_DEBUGGING
@@ -48,12 +54,6 @@ struct wolfsentry_thread_list {
 
 #define WOLFSENTRY_THREAD_ID_SENT ~0UL
 
-#endif
-
-#ifdef FREERTOS
-#include <FreeRTOS.h>
-#define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
-#define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
 #endif
 
 #ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES

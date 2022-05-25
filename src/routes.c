@@ -1650,7 +1650,7 @@ wolfsentry_errcode_t wolfsentry_route_table_get_default_event(
         WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
     if (table->default_event->label_len >= *event_label_len)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-    memcpy(event_label, table->default_event->label, table->default_event->label_len + 1);
+    memcpy(event_label, table->default_event->label, (size_t)(table->default_event->label_len + 1));
     WOLFSENTRY_RETURN_OK;
 }
 

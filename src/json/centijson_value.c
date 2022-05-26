@@ -25,10 +25,6 @@
 
 #include "wolfsentry/centijson_value.h"
 
-#include <malloc.h>
-#include <string.h>
-
-
 #define TYPE_MASK       0x0f
 #define IS_NEW          0x10    /* only for VALUE_NULL */
 #define HAS_REDCOLOR    0x10    /* only for VALUE_STRING (when used as RBTREE::key) */

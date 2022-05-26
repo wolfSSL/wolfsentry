@@ -25,8 +25,6 @@
 
 #include "wolfsentry/centijson_dom.h"
 
-#include <string.h>
-
 
 static int
 init_number(VALUE* v, const char* data, size_t data_size)

@@ -26,9 +26,6 @@
 #ifndef CENTIJSON_SAX_H
 #define CENTIJSON_SAX_H
 
-#include <stdlib.h>
-#include <stdint.h>
-
 #ifdef WOLFSENTRY
 #include "wolfsentry.h"
 #endif

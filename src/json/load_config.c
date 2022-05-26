@@ -25,6 +25,7 @@
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C
 
+#include <stdlib.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 

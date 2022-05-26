@@ -390,7 +390,6 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(struct wolfsentry_context
 
     WOLFSENTRY_RETURN_OK;
 }
-#include <stdlib.h>
 
 wolfsentry_errcode_t wolfsentry_table_ent_get(struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i = table->head;

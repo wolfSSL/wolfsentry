@@ -1,3 +1,34 @@
+# wolfSentry Release 0.4.0 (May 27, 2022)
+
+Preview Release 0.4.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:
+
+## New Features
+
+* User-defined key-value pairs in JSON configuration: allows user plugins to access custom config parameters in the wolfSentry config using the new wolfsentry_user_value_*() family of API functions.  Binary configuration data can be supplied in the configuration using base64 encoding, and are decoded at parse time and directly available to user plugins in the original raw binary form.  The key-value facility also supports a custom validator callback to enforce constraints on user-defined config params in the JSON.
+
+* User-defined address families: allows user plugins for custom address families and formats, using new wolfsentry_addr_family_*() API routines.  This allows idiomatic formats for non-Internet addresses in the JSON config, useful for various buses and device namespaces.
+
+* Formalization of the concepts of default events and fallthrough rules in the route tables.
+
+* A new subevent action list facility to support logging and notifications around the final decisions of the rule engine, alongside the existing subevents for rule insertions, matches, and deletions.
+
+* The main plugin interface (wolfsentry_action_callback_t) now passes two separate routes, a "trigger_route" with full attributes of the instant traffic, and a "rule_route" that matches that traffic.  In dynamic rule scenarios, plugins can manipulate the passed rule_route and set the WOLFSENTRY_ACTION_RES_INSERT bit in the to define a new rule that will match the traffic thereafter.  All actions in the chain retain readonly access to the unmodified trigger route for informational purposes.
+
+* The JSON DOM facility from CentiJSON is now included in the library by default (disabled by make NO_JSON_DOM=1), layered on the SAX facility used directly by the wolfSentry core to process the JSON config package.  The DOM facility can be used as a helper in user plugins and applications, for convenient JSON parsing, random access, and production.
+
+
+## Noteworthy Changes
+
+* In the JSON config, non-event-specific members of top level node "config-update" node have been moved to the new top level node "default-policies", which must appear after "event-insert".  "default-policies" members are "default-policy-static", "default-policy-dynamic", "default-event-static", and "default-event-dynamic".
+
+
+## Bug Fixes
+
+* In wolfsentry_config_json_init(), properly copy the load_flags from the caller into the _json_process_state.
+
+* The JSON SAX API routines (wolfsentry/centijson_sax.h) are now properly exported.
+
+
 # wolfSentry Release 0.3.0 (Dec 30, 2021)
 
 Preview Release 0.3.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:

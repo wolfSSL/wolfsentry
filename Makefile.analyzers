@@ -194,6 +194,13 @@ no-json-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON-builds clean
 	@echo "NO_JSON test passed."
 
+.PHONY: no-json-dom-test
+no-json-dom-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON_DOM-builds clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON_DOM-builds NO_JSON_DOM=1 test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON_DOM-builds clean
+	@echo "NO_JSON_DOM test passed."
+
 .PHONY: no-error-strings-test
 no-error-strings-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-error-strings-builds clean
@@ -238,7 +245,7 @@ dist-check:
 	@echo $@ 'passed.'
 
 .PHONY: check
-check: analyze-all dynamic-build-test c99-test m32-test singlethreaded-test no-json-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check
+check: analyze-all dynamic-build-test c99-test m32-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check
 	@echo "all checks passed."
 
 # recipe to run the pre-push hook on the commit head, without actually pushing:

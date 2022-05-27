@@ -32,6 +32,9 @@
 #ifdef WOLFSENTRY
 #include "wolfsentry.h"
 #endif
+#ifndef WOLFSENTRY_API
+#define WOLFSENTRY_API
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -192,7 +195,7 @@ typedef struct JSON_PARSER {
 
 /* Fill `config` with options used by default.
  */
-void json_default_config(JSON_CONFIG* config);
+WOLFSENTRY_API void json_default_config(JSON_CONFIG* config);
 
 
 /* Initialize the parser, associate it with the given callbacks and
@@ -200,7 +203,7 @@ void json_default_config(JSON_CONFIG* config);
  *
  * If `config` is NULL, default values are used.
  */
-int json_init(JSON_PARSER* parser,
+WOLFSENTRY_API int json_init(JSON_PARSER* parser,
               const JSON_CALLBACKS* callbacks,
               const JSON_CONFIG* config,
               void* user_data);
@@ -213,7 +216,7 @@ int json_init(JSON_PARSER* parser,
  * again shall just fail with the same error code. Note the application should
  * still  call json_fini() to release all resources allocated by the parser.
  */
-int json_feed(JSON_PARSER* parser, const char* input, size_t size);
+WOLFSENTRY_API int json_feed(JSON_PARSER* parser, const char* input, size_t size);
 
 /* Finish parsing of the document (note it can still call some callbacks); and
  * release any resources held by the parser.
@@ -230,22 +233,22 @@ int json_feed(JSON_PARSER* parser, const char* input, size_t size);
  * json_feed() succeeded. This typically happens when the parser was fed with
  * an incomplete JSON document.
  */
-int json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos);
+WOLFSENTRY_API int json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos);
 
 
 /* Simple wrapper function for json_init() + json_feed() + json_fini(), usable
  * when the provided input contains complete JSON document.
  */
-int json_parse(const char* input, size_t size,
+WOLFSENTRY_API int json_parse(const char* input, size_t size,
                const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,
                void* user_data, JSON_INPUT_POS* p_pos);
 
 
 /* Converts error code to human readable error message
  */
-const char* json_error_str(int err_code);
+WOLFSENTRY_API const char* json_error_str(int err_code);
 
-const char* json_type_str(JSON_TYPE type);
+WOLFSENTRY_API const char* json_type_str(JSON_TYPE type);
 
 
 /*****************
@@ -262,7 +265,7 @@ const char* json_type_str(JSON_TYPE type);
  * (Note it says "no" in cases the number string contains any fraction or
  * exponent part.)
  */
-void json_analyze_number(const char* num, size_t num_size,
+WOLFSENTRY_API void json_analyze_number(const char* num, size_t num_size,
                          int* p_is_int32_compatible,
                          int* p_is_uint32_compatible,
                          int* p_is_int64_compatible,
@@ -276,11 +279,11 @@ void json_analyze_number(const char* num, size_t num_size,
  * Also note that json_number_to_double() can fail with JSON_ERR_OUTOFMEMORY.
  * Hence its prototype differs.
  */
-int32_t json_number_to_int32(const char* num, size_t num_size);
-uint32_t json_number_to_uint32(const char* num, size_t num_size);
-int64_t json_number_to_int64(const char* num, size_t num_size);
-uint64_t json_number_to_uint64(const char* num, size_t num_size);
-int json_number_to_double(const char* num, size_t num_size, double* p_result);
+WOLFSENTRY_API int32_t json_number_to_int32(const char* num, size_t num_size);
+WOLFSENTRY_API uint32_t json_number_to_uint32(const char* num, size_t num_size);
+WOLFSENTRY_API int64_t json_number_to_int64(const char* num, size_t num_size);
+WOLFSENTRY_API uint64_t json_number_to_uint64(const char* num, size_t num_size);
+WOLFSENTRY_API int json_number_to_double(const char* num, size_t num_size, double* p_result);
 
 
 typedef int (*JSON_DUMP_CALLBACK)(const char* /*str*/, size_t /*size*/, void* /*user_data*/);
@@ -301,12 +304,12 @@ typedef int (*JSON_DUMP_CALLBACK)(const char* /*str*/, size_t /*size*/, void* /*
  * (Given that all the other JSON stuff is trivial to output, the application
  * is supposed to implement that manually.)
  */
-int json_dump_int32(int32_t i32, JSON_DUMP_CALLBACK write_func, void* user_data);
-int json_dump_uint32(uint32_t u32, JSON_DUMP_CALLBACK write_func, void* user_data);
-int json_dump_int64(int64_t i64, JSON_DUMP_CALLBACK write_func, void* user_data);
-int json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data);
-int json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data);
-int json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, void* user_data);
+WOLFSENTRY_API int json_dump_int32(int32_t i32, JSON_DUMP_CALLBACK write_func, void* user_data);
+WOLFSENTRY_API int json_dump_uint32(uint32_t u32, JSON_DUMP_CALLBACK write_func, void* user_data);
+WOLFSENTRY_API int json_dump_int64(int64_t i64, JSON_DUMP_CALLBACK write_func, void* user_data);
+WOLFSENTRY_API int json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data);
+WOLFSENTRY_API int json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data);
+WOLFSENTRY_API int json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, void* user_data);
 
 
 #ifdef __cplusplus

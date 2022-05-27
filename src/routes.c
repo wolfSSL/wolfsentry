@@ -306,8 +306,7 @@ static wolfsentry_errcode_t wolfsentry_route_init(
     wolfsentry_route_flags_t flags,
     int data_addr_offset,
     size_t data_addr_size,
-    struct wolfsentry_route *new
-    )
+    struct wolfsentry_route *new)
 {
     if (data_addr_size < WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len))
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
@@ -369,8 +368,7 @@ static wolfsentry_errcode_t wolfsentry_route_new(
     const struct wolfsentry_sockaddr *remote,
     const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
-    struct wolfsentry_route **new
-    )
+    struct wolfsentry_route **new)
 {
     size_t new_size;
     wolfsentry_errcode_t ret;

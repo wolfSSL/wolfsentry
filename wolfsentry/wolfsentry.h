@@ -559,7 +559,7 @@ typedef wolfsentry_errcode_t (*wolfsentry_addr_family_formatter_t)(
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_install(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_addr_family_t family_bynumber,
-    const char *family_byname, /* if defined(WOLFSENTRY_PROTOCOL_NAMES), must not NULL, else ignored. */
+    const char *family_byname, /* if defined(WOLFSENTRY_PROTOCOL_NAMES), must not be NULL, else ignored. */
     int family_byname_len,
     wolfsentry_addr_family_parser_t parser,
     wolfsentry_addr_family_formatter_t formatter,

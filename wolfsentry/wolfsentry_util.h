@@ -48,7 +48,7 @@
 #define BITS_PER_BYTE 8
 #endif
 
-#define WOLFSENTRY_BITS_TO_BYTES(x) (((x) + 7) >> 3)
+#define WOLFSENTRY_BITS_TO_BYTES(x) (((x) + 7U) >> 3U)
 
 /* helpers for stringifying the expanded value of a macro argument rather than its literal text: */
 #define _qq(x) #x

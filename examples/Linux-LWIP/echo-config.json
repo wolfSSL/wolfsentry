@@ -2,8 +2,7 @@
     "wolfsentry-config-version" : 1,
     "config-update" : {
 	"max-connection-count" : 5,
-	"penalty-box-duration" : "1h",
-	"default-policy-static" : "reject"
+	"penalty-box-duration" : "1h"
     },
     "events-insert" : [
         {
@@ -34,6 +33,10 @@
 	    "label" : "call-in-from-echo"
 	}
     ],
+    "default-policies" : {
+	"default-policy-static" : "reject",
+	"default-event-static" : "static-route-parent"
+    },
     "static-routes-insert" : [
 	{
 	    "parent-event" : "static-route-parent",

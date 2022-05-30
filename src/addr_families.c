@@ -136,10 +136,10 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
     byname->header.refcount = 1;
 #endif
 
-    if ((ret = wolfsentry_id_generate(wolfsentry, WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER, &bynumber->header.id)) < 0)
+    if ((ret = wolfsentry_id_allocate(wolfsentry, &bynumber->header)) < 0)
         goto out;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-    if ((ret = wolfsentry_id_generate(wolfsentry, WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME, &byname->header.id)) < 0)
+    if ((ret = wolfsentry_id_allocate(wolfsentry, &byname->header)) < 0)
         goto out;
 #endif
 
@@ -157,11 +157,17 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
   out:
 
     if (ret < 0) {
-        if (bynumber != NULL)
+        if (bynumber != NULL) {
+            if (bynumber->header.id != WOLFSENTRY_ENT_ID_NONE)
+                wolfsentry_table_ent_delete_by_id_1(wolfsentry, &bynumber->header);
             WOLFSENTRY_FREE(bynumber);
+        }
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-        if (byname != NULL)
+        if (byname != NULL) {
+            if (byname->header.id != WOLFSENTRY_ENT_ID_NONE)
+                wolfsentry_table_ent_delete_by_id_1(wolfsentry, &byname->header);
             WOLFSENTRY_FREE(byname);
+        }
 #endif
     }
 
@@ -295,7 +301,6 @@ wolfsentry_errcode_t wolfsentry_addr_family_clone(
     struct wolfsentry_addr_family_bynumber ** const new_bynumber = (struct wolfsentry_addr_family_bynumber ** const)new_ent1;
     struct wolfsentry_addr_family_byname ** const new_byname = (struct wolfsentry_addr_family_byname ** const)new_ent2;
     size_t byname_size = sizeof **new_byname + (size_t)src_bynumber->byname_ent->name_len + 1;
-    wolfsentry_errcode_t ret;
 
     (void)wolfsentry;
     (void)flags;
@@ -312,13 +317,6 @@ wolfsentry_errcode_t wolfsentry_addr_family_clone(
     memcpy(*new_byname, src_bynumber->byname_ent, byname_size);
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent2);
     (*new_byname)->bynumber_ent = *new_bynumber;
-
-    if (((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_EVENT, &(*new_bynumber)->header.id)) < 0) ||
-        ((ret = wolfsentry_id_generate(dest_context, WOLFSENTRY_OBJECT_TYPE_EVENT, &(*new_byname)->header.id)) < 0)) {
-        dest_context->allocator.free(dest_context->allocator.context, *new_bynumber); // GCOV_EXCL_LINE
-        dest_context->allocator.free(dest_context->allocator.context, *new_byname); // GCOV_EXCL_LINE
-        return ret; // GCOV_EXCL_LINE
-    }
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -819,6 +817,24 @@ wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init(
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifndef WOLFSENTRY_PROTOCOL_NAMES
+wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_clone_header(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *src_table,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_header *dest_table,
+    wolfsentry_clone_flags_t flags)
+{
+    (void)wolfsentry;
+    (void)src_table;
+    (void)dest_context;
+    (void)dest_table;
+    (void)flags;
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* !WOLFSENTRY_PROTOCOL_NAMES */
+
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 wolfsentry_errcode_t wolfsentry_addr_family_byname_table_init(
     struct wolfsentry_addr_family_byname_table *addr_family_byname_table)
@@ -829,4 +845,24 @@ wolfsentry_errcode_t wolfsentry_addr_family_byname_table_init(
     addr_family_byname_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME;
     WOLFSENTRY_RETURN_OK;
 }
-#endif
+
+wolfsentry_errcode_t wolfsentry_addr_family_table_clone_headers(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_table_header *src_table1,
+    struct wolfsentry_table_header *src_table2,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_table_header *dest_table1,
+    struct wolfsentry_table_header *dest_table2,
+    wolfsentry_clone_flags_t flags)
+{
+    (void)wolfsentry;
+    (void)src_table1;
+    (void)src_table2;
+    (void)dest_context;
+    (void)dest_table1;
+    (void)dest_table2;
+    (void)flags;
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */

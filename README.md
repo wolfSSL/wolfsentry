@@ -2,8 +2,7 @@
 
 ## Description
 
-wolfSentry is the wolfSSL IDPS (Intrusion Detection and Prevention System).  It
-is mainly used as a library, but can also be used as part of a kernel module.
+wolfSentry is the wolfSSL IDPS (Intrusion Detection and Prevention System).  It is mainly used as a library, but can also be used as part of a kernel module.
 
 At a high level, wolfSentry is a dynamically configurable logic hub, arbitrarily associating user-defined events with user-defined actions, contextualized by connection attributes, tracking the evolution of the client-server relationship. At a low level, wolfSentry is an embedded firewall engine (both static and fully dynamic), with O(log n) lookup of known hosts/netblocks.
 
@@ -57,8 +56,9 @@ Build and test libwolfsentry.a without support for multithreading:
 
 `make -j SINGLETHREADED=1 test`
 
-Other available make flags are `STATIC=1` and `STRIPPED=1`, and the defaults values
-for `DEBUG`, `OPTIM`, and `C_WARNFLAGS` can also be usefully overridden.
+Other available make flags are `STATIC=1`, `STRIPPED=1`, `NO_JSON=1`, and
+`NO_JSON_DOM=1`, and the defaults values for `DEBUG`, `OPTIM`, and `C_WARNFLAGS`
+can also be usefully overridden.
 
 Build with a user-supplied makefile preamble to override defaults:
 

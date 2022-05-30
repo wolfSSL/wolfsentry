@@ -84,8 +84,8 @@ VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
 DYNAMIC_CFLAGS := -fpic
 DYNAMIC_LDFLAGS := -shared
 
-$(BUILD_TOP)/src/json/centijson_sax.o: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
-$(BUILD_TOP)/src/json/centijson_sax.So: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
+$(BUILD_TOP)/src/json/centijson_%.o: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
+$(BUILD_TOP)/src/json/centijson_%.So: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
 
 ifeq "$(NO_STDIO)" "1"
     CFLAGS += -DWOLFSENTRY_NO_STDIO
@@ -96,6 +96,10 @@ ifeq "$(NO_JSON)" "1"
     CFLAGS += -DWOLFSENTRY_NO_JSON
 else
     SRCS += json/centijson_sax.c json/load_config.c
+    ifneq "$(NO_JSON_DOM)" "1"
+        CFLAGS += -DWOLFSENTRY_HAVE_JSON_DOM
+        SRCS += json/centijson_dom.c json/centijson_value.c
+    endif
 endif
 
 ifdef USER_SETTINGS_FILE
@@ -124,7 +128,7 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h $(BUILD_TOP)/wolfsentry_options.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry_options.h
 
 all: $(BUILD_TOP)/$(LIB_NAME)
 

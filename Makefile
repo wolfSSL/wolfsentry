@@ -313,31 +313,43 @@ ifndef VERSION
     VERSION := $(VERSION)$(shell git diff --quiet 2>/dev/null || [ $$? -ne 1 ] || echo "-dirty")
 endif
 
-EXAMPLE_FILES := $(shell find examples/Linux-LWIP/ examples/STM32-LWIP/ examples/STM32-LWIP-WOLFSSL/ -type f -a \( -name '*.[ch]' -o -name '*.md' -o -name CMakeLists.txt -o -name Dockerfile -o -name '*.yml' -o -name '*.json' \) -print)
-
-DIST_FILES := LICENSING README.md ChangeLog.md Makefile scripts/build_wolfsentry_options_h.awk Makefile.analyzers wolfsentry/*.h src/wolfsentry_internal.h src/wolfsentry_ll.h $(addprefix src/,$(SRCS)) tests/unittests.c tests/test-config.json tests/test-config-numeric.json $(EXAMPLE_FILES)
+ifndef RELEASE
+	RELEASE := $(shell git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1)")
+endif
 
 .PHONY: dist
 dist:
-ifdef VERY_QUIET
-	@cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz $(DIST_FILES)
-else
-	cd $(SRC_TOP) && $(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf wolfsentry-$(VERSION).tgz $(DIST_FILES)
+ifndef VERY_QUIET
+	@echo "generating wolfsentry-$(VERSION).tgz"
 endif
+	@cd $(SRC_TOP); \
+	if [[ "$(VERSION)" =~ -dirty$$ ]]; then \
+		$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf "wolfsentry-$(VERSION).tgz" $$(git ls-files); \
+	else \
+		git archive --format=tar --prefix="wolfsentry-$(VERSION)/" --worktree-attributes --output="wolfsentry-$(VERSION).tgz" "$(VERSION)"; \
+	fi
 
 dist-test: dist
 	@[ -d $(BUILD_TOP)/dist-test ] || mkdir -p $(BUILD_TOP)/dist-test
 ifdef VERY_QUIET
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf $(SRC_TOP)/wolfsentry-$(VERSION).tgz && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
 else
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf $(SRC_TOP)/wolfsentry-$(VERSION).tgz && cd wolfsentry-$(VERSION) && $(MAKE) test
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) test
 endif
 
 dist-test-clean:
-	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $(SRC_TOP)/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $(SRC_TOP)/wolfsentry-$(VERSION).tgz | xargs $(RM) -f
+	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $(SRC_TOP)/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $(SRC_TOP)/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
 	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
 
 CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
+
+.PHONY: release
+release:
+ifndef VERY_QUIET
+	@echo "generating wolfsentry-$(RELEASE).zip"
+endif
+	@cd $(SRC_TOP) || exit $$?; \
+	git archive --format=zip --prefix="wolfsentry-$(RELEASE)/" --worktree-attributes --output="wolfsentry-$(RELEASE).zip" "$(RELEASE)"
 
 .PHONY: clean
 clean:

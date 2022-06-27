@@ -60,13 +60,17 @@ static inline void wolfsentry_list_ent_append(struct wolfsentry_list_header *lis
 
 static inline void wolfsentry_list_ent_insert_after(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *point_ent, struct wolfsentry_list_ent_header *new_ent) {
     if (point_ent == NULL) {
-        wolfsentry_list_ent_prepend(list, new_ent);
+        /* in principle, we should _prepend() here, but in practice, iteration
+         * code patterns make it far more convenient to append.
+         */
+        wolfsentry_list_ent_append(list, new_ent);
         return;
     }
     new_ent->prev = point_ent;
-    if (point_ent->next)
+    if (point_ent->next) {
         new_ent->next = point_ent->next;
-    else
+        new_ent->next->prev = new_ent;
+    } else
         list->tail = new_ent;
     point_ent->next = new_ent;
 }

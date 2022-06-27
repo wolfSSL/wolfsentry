@@ -178,6 +178,31 @@ typedef uint16_t wolfsentry_priority_t;
 
 typedef uint32_t enumint_t;
 
+#if defined(WOLFSENTRY_THREADSAFE) && defined(WOLFSENTRY_LOCK_ERROR_CHECKING)
+    #ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+        #include <pthread.h>
+    #elif defined(WOLFSENTRY_THREAD_INCLUDE)
+        #include WOLFSENTRY_THREAD_INCLUDE
+    #else
+        #error Must supply WOLFSENTRY_THREAD_INCLUDE for _LOCK_ERROR_CHECKING on non-POSIX targets.
+    #endif
+    #if !defined(WOLFSENTRY_THREAD_ID_T) && !defined(WOLFSENTRY_USE_NONPOSIX_SEMAPHORES)
+        #define WOLFSENTRY_THREAD_ID_T pthread_t
+    #endif
+    #ifdef WOLFSENTRY_THREAD_ID_T
+        typedef WOLFSENTRY_THREAD_ID_T wolfsentry_thread_id_t;
+    #else
+        #error Must supply WOLFSENTRY_THREAD_ID_T for _LOCK_ERROR_CHECKING on non-POSIX targets.
+    #endif
+    #if !defined(WOLFSENTRY_THREAD_GET_ID)
+        #if !defined(WOLFSENTRY_USE_NONPOSIX_SEMAPHORES)
+            #define WOLFSENTRY_THREAD_GET_ID pthread_self()
+        #else
+            #error Must supply WOLFSENTRY_THREAD_GET_ID for _LOCK_ERROR_CHECKING on non-POSIX targets.
+        #endif
+    #endif
+#endif
+
 #ifdef BUILDING_LIBWOLFSENTRY
     #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || \
         defined(_WIN32_WCE)
@@ -216,12 +241,23 @@ typedef uint32_t enumint_t;
 
 struct wolfsentry_context;
 
+typedef enum {
+    WOLFSENTRY_INIT_FLAG_NONE = 0,
+    WOLFSENTRY_INIT_FLAG_LOCK_ERROR_CHECKING = 1<<0
+} wolfsentry_init_flags_t;
+
+typedef enum {
+    WOLFSENTRY_LOCK_FLAG_NONE = 0,
+    WOLFSENTRY_LOCK_FLAG_PSHARED = 1<<0,
+    WOLFSENTRY_LOCK_FLAG_ERROR_CHECKING = 1<<1
+} wolfsentry_lock_flags_t;
+
 #ifdef WOLFSENTRY_THREADSAFE
 
 struct wolfsentry_rwlock;
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_rwlock *lock, int pshared);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock **lock, int pshared);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock **lock, wolfsentry_lock_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwlock *lock);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, struct timespec *abs_timeout);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_timed(struct wolfsentry_context *wolfsentry, struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait);
@@ -256,7 +292,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_conte
 
 #else /* !WOLFSENTRY_THREADSAFE */
 
-#define wolfsentry_lock_init(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_init(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_alloc(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_shared(x) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_shared_abstimed(y, z) WOLFSENTRY_ERROR_ENCODE(OK)
@@ -614,6 +650,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_init(
     struct wolfsentry_eventconfig *config);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
     const struct wolfsentry_eventconfig *config);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
+    const struct wolfsentry_host_platform_interface *hpi,
+    const struct wolfsentry_eventconfig *config,
+    struct wolfsentry_context **wolfsentry,
+    wolfsentry_init_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init(
     const struct wolfsentry_host_platform_interface *hpi,
     const struct wolfsentry_eventconfig *config,

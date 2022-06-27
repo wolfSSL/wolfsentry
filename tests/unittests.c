@@ -198,10 +198,22 @@ static int test_rw_locks (void) {
 
     (void)alarm(1);
 
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init(WOLFSENTRY_TEST_HPI,
-                                               &config,
-                                               &wolfsentry));
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_alloc(wolfsentry, &lock, 0 /* pshared */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(WOLFSENTRY_TEST_HPI,
+                                                  &config,
+                                                  &wolfsentry,
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+                                                  WOLFSENTRY_INIT_FLAG_LOCK_ERROR_CHECKING
+#else
+                                                  WOLFSENTRY_INIT_FLAG_NONE
+#endif
+                                   ));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_alloc(wolfsentry, &lock,
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+                                                     WOLFSENTRY_LOCK_FLAG_ERROR_CHECKING
+#else
+                                                     WOLFSENTRY_LOCK_FLAG_NONE
+#endif
+                                   ));
 
     volatile int measured_sequence[8], measured_sequence_i = 0;
 
@@ -315,9 +327,18 @@ static int test_rw_locks (void) {
 
     /* take the opportunity to test expected failures of the _timed() variants. */
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,0), BUSY));
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,1000), INCOMPATIBLE_STATE));
+#else
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,1000), TIMED_OUT));
+#endif
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,0), BUSY));
+
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,1000), ALREADY));
+#else
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,1000), TIMED_OUT));
+#endif
 
     /* this unlock allows thread2 to finally get its mutex. */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock));
@@ -398,9 +419,18 @@ static int test_rw_locks (void) {
 
     /* take the opportunity to test expected failures of the _timed() variants. */
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,0), BUSY));
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,1000), INCOMPATIBLE_STATE));
+#else
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(wolfsentry,lock,1000), TIMED_OUT));
+#endif
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,0), BUSY));
+
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,1000), ALREADY));
+#else
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(wolfsentry,lock,1000), TIMED_OUT));
+#endif
 
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_shared(lock), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_mutex(lock), NOT_OK));

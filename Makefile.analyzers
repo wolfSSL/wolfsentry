@@ -84,7 +84,7 @@ sanitize: TEST_ENV+=ASAN_OPTIONS='detect_invalid_pointer_pairs=2:halt_on_error=1
 sanitize: test
 
 .PHONY: sanitize-thread
-sanitize-thread: CFLAGS+=-fsanitize=thread
+sanitize-thread: CFLAGS+=-fsanitize=thread -DWOLFSENTRY_LOCK_ERROR_CHECKING -DWOLFSENTRY_LOCK_DEBUGGING
 sanitize-thread: LDFLAGS+=-fsanitize=thread
 sanitize-thread: TEST_ENV+=ASAN_OPTIONS='halt_on_error=1'
 sanitize-thread: test
@@ -237,6 +237,13 @@ dynamic-build-test:
 	@echo '$(UNITTEST_LIST_SHARED) passed.'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=dynamic-build-test clean
 
+.PHONY: lock-error-checking-test
+lock-error-checking-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=lock-error-checking-builds clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=lock-error-checking-builds EXTRA_CFLAGS+='-DWOLFSENTRY_LOCK_ERROR_CHECKING' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=lock-error-checking-builds clean
+	@echo "lock-error-checking test passed."
+
 
 .PHONY: dist-check
 dist-check:
@@ -245,7 +252,7 @@ dist-check:
 	@echo $@ 'passed.'
 
 .PHONY: check
-check: analyze-all dynamic-build-test c99-test m32-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check
+check: analyze-all dynamic-build-test c99-test m32-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check lock-error-checking-test
 	@echo "all checks passed."
 
 # recipe to run the pre-push hook on the commit head, without actually pushing:

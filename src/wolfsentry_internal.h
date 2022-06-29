@@ -42,20 +42,6 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #ifdef WOLFSENTRY_THREADSAFE
 
-#ifdef WOLFSENTRY_LOCK_DEBUGGING
-struct wolfsentry_thread_list_ent {
-    struct wolfsentry_list_ent_header header;
-    wolfsentry_thread_id_t thread;
-};
-
-struct wolfsentry_thread_list {
-    struct wolfsentry_list_header header;
-};
-
-#define WOLFSENTRY_THREAD_ID_SENT ~0UL
-
-#endif
-
 #ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
 
 #ifdef __MACH__
@@ -80,6 +66,32 @@ struct wolfsentry_thread_list {
 
 #endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+
+struct wolfsentry_locker_list_ent {
+    struct wolfsentry_list_ent_header header;
+    wolfsentry_thread_id_t thread;
+    enum { WOLFSENTRY_LOCK_HAVE_NONE = (1 << 0),
+           WOLFSENTRY_LOCK_HAVE_READ = (1 << 1),
+           WOLFSENTRY_LOCK_HAVE_WRITE = (1 << 2),
+           WOLFSENTRY_LOCK_HAVE_READ2WRITE_RESERVED = (1 << 3),
+           WOLFSENTRY_LOCK_WAIT_READ = (1 << 4),
+           WOLFSENTRY_LOCK_WAIT_WRITE = (1 << 5),
+           WOLFSENTRY_LOCK_WAIT_READ2WRITE = (1 << 6)
+    } thread_state;
+};
+
+struct wolfsentry_locker_list {
+    struct wolfsentry_list_header header;
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    int incoherency_expected;
+#endif
+};
+
+#define WOLFSENTRY_THREAD_ID_SENT ~0UL /* lock handoff not yet implemented. */
+
+#endif
+
 struct wolfsentry_rwlock {
     sem_t sem;
     sem_t sem_read_waiters;
@@ -95,8 +107,10 @@ struct wolfsentry_rwlock {
         WOLFSENTRY_LOCK_SHARED,
         WOLFSENTRY_LOCK_EXCLUSIVE
     } state;
-#ifdef WOLFSENTRY_LOCK_DEBUGGING
-    struct wolfsentry_thread_list lock_holders;
+    wolfsentry_lock_flags_t flags;
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+    struct wolfsentry_allocator *allocator;
+    struct wolfsentry_locker_list locker_list;
 #endif
 };
 

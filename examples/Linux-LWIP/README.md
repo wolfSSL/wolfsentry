@@ -29,17 +29,17 @@ It is recommended that you keep the logs following running whilst running the te
 
 ### Accessing nodes
 
-There are three user test nodes to play with. They are named `linux-lwip_tester?_1` where `?` is 1, 2 or 3. To log into tester2 as an example:
+There are three user test nodes to play with. They are named `linux-lwip-tester?-1` where `?` is 1, 2 or 3. To log into tester2 as an example:
 
 ```sh
-sudo docker exec -it linux-lwip_tester2_1 /bin/sh
+sudo docker exec -it linux-lwip-tester2-1 /bin/sh
 ```
 
 ### Node details
 
 #### Echoserver
 
-* IP address: 172.20.20.3 (node) 127.20.20.5 (echo process)
+* IP address: 172.20.20.3 (node) 172.20.20.5 (echo process)
 * MAC address: de:c0:de:01:02:03
 
 The echo test process runs from this node, it uses PCAP and lwIP to create a static IP of 127.20.20.5 for the actually test.
@@ -70,7 +70,7 @@ The sentry test is configured to deny traffic from this MAC address.
 You can ping from any of the nodes using:
 
 ```sh
-ping 127.20.20.5
+ping 172.20.20.5
 ```
 
 Tester node 1 will work, tester 2 will be rejected for ICMP ping and tester 3 will be rejected for MAC address. This will be reflected in the logging output.

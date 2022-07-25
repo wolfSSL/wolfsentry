@@ -329,8 +329,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_conte
 
    \param wolfsentry a pointer to the wolfsentry context
    \param action a pointer to action details
-   \param handler_arg
-   \param caller_arg
+   \param handler_arg an arbitrary poiunter for the handler callback
+   \param caller_arg an arbitrary pointer to be passed to callbacks
    \param trigger_event the event which triggered the action
    \param action_type the action type
    \param route_table a pointer to the route table
@@ -913,7 +913,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_everywhere(
     int *n_deleted);
 
 /*!
-   \brief Delete a route using an ID
+   \brief Delete a route using an ID from the static routes table
 
    \param wolfsentry the wolfsentry context
    \param caller_arg an arbitrary pointer to be passed to callbacks
@@ -1149,7 +1149,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_export(
 /*!
    \brief Get a parent event from a given route. Typically used in the wolfsentry_action_callback_t callback. Note: returned wolfsentry_event remains valid only as long as the wolfsentry lock is held (shared or exclusive).
 
-   \param a pointer to the route
+   \param route a pointer to the route
 
    \return a pointer to the parent event
 */
@@ -1368,7 +1368,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(const struct
    \param label_len the length of the label, use WOLFSENTRY_LENGTH_NULL_TERMINATED for a NUL terminated string
    \param flags set flags for the action
    \param handler a callback handler when the action commences
-   \param void an arbitrary pointer for the handler callback
+   \param handler_arg an arbitrary pointer for the handler callback
    \param id the returned ID for the inserted action
 
    \returns When decoded using WOLFSENTRY_ERROR_DECODE_ERROR_CODE(), WOLFSENTRY_ERROR_ID_OK on success

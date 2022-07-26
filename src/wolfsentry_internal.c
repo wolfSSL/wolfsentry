@@ -283,27 +283,42 @@ static inline int wolfsentry_ent_id_cmp(struct wolfsentry_table_ent_header *left
 
 wolfsentry_errcode_t wolfsentry_id_allocate(
     struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_table_ent_header *ent)
+    struct wolfsentry_table_ent_header *ent
+    )
 {
     wolfsentry_errcode_t ret;
+
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    ret = wolfsentry_lock_have_mutex(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
+
     for (;;) {
         if (wolfsentry->mk_id_cb) {
             ret = wolfsentry->mk_id_cb(wolfsentry->mk_id_cb_state.mk_id_cb_arg, &ent->id);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+            if (ret < 0)
+                break;
         } else {
             ent->id = ++wolfsentry->mk_id_cb_state.id_counter;
         }
 
         ret = wolfsentry_table_ent_insert_by_id(wolfsentry, ent);
         if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_ALREADY_PRESENT))
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            break;
     }
-    /* not reached */
+
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent) {
     struct wolfsentry_table_ent_header *i = wolfsentry->ents_by_id.head;
     int cmpret;
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    wolfsentry_errcode_t ret = wolfsentry_lock_have_mutex(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
 
     if (ent->id == WOLFSENTRY_ENT_ID_NONE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -340,6 +355,11 @@ wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(struct wolfsentry_context
 
 wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(struct wolfsentry_context *wolfsentry, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i;
+#ifdef WOLFSENTRY_THREADSAFE
+    wolfsentry_errcode_t ret = wolfsentry_lock_have_either(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
 
     if (id == WOLFSENTRY_ENT_ID_NONE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -358,6 +378,12 @@ wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(struct wolfsentry_context *w
 }
 
 void wolfsentry_table_ent_delete_by_id_1(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent) {
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    wolfsentry_errcode_t ret = wolfsentry_lock_have_mutex(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
+
     if (ent->prev_by_id)
         ent->prev_by_id->next_by_id = ent->next_by_id;
     else
@@ -373,6 +399,12 @@ void wolfsentry_table_ent_delete_by_id_1(struct wolfsentry_context *wolfsentry, 
 
 wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(struct wolfsentry_context *wolfsentry, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
     wolfsentry_errcode_t ret;
+
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    ret = wolfsentry_lock_have_mutex(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
 
     if (id == WOLFSENTRY_ENT_ID_NONE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -403,6 +435,12 @@ wolfsentry_errcode_t wolfsentry_table_ent_get(struct wolfsentry_table_header *ta
 }
 
 wolfsentry_errcode_t wolfsentry_table_ent_delete_1(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent) {
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    wolfsentry_errcode_t ret = wolfsentry_lock_have_mutex(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
+
     if (ent->parent_table == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
@@ -427,6 +465,11 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_1(struct wolfsentry_context *wo
 
 wolfsentry_errcode_t wolfsentry_table_ent_delete(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i;
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    wolfsentry_errcode_t ret = wolfsentry_lock_have_mutex(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
 
     if ((*ent)->parent_table == NULL) {
         WOLFSENTRY_WARN("%s called with null parent table\n", "wolfsentry_table_ent_delete");
@@ -469,6 +512,13 @@ wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(struct wolfsentry_conte
 wolfsentry_errcode_t wolfsentry_table_free_ents(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_header *table) {
     struct wolfsentry_table_ent_header *i = table->head, *next;
     wolfsentry_errcode_t ret;
+
+#ifdef WOLFSENTRY_LOCK_DEBUGGING
+    ret = wolfsentry_lock_have_mutex(&wolfsentry->lock, WOLFSENTRY_LOCK_FLAG_NONE);
+    if (ret < 0)
+        return ret;
+#endif
+
     WOLFSENTRY_TABLE_HEADER_RESET(*table);
     /* coupled objects are freed as a pair, e.g. ents in
      * wolfsentry_addr_family_byname_table are freed when the corresponding

@@ -66,22 +66,30 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
-#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+struct wolfsentry_thread_context {
+    wolfsentry_thread_id_t id;
+    struct timespec deadline;
+    wolfsentry_lock_flags_t base_lock_flags;
+};
 
-struct wolfsentry_locker_list_ent {
+#define WOLFSENTRY_DEADLINE_NEVER (-1)
+#define WOLFSENTRY_DEADLINE_NOW (-2)
+
+#ifdef WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING
+
+struct wolfsentry_shared_locker_list_ent {
     struct wolfsentry_list_ent_header header;
     wolfsentry_thread_id_t thread;
     enum { WOLFSENTRY_LOCK_HAVE_NONE = (1 << 0),
            WOLFSENTRY_LOCK_HAVE_READ = (1 << 1),
-           WOLFSENTRY_LOCK_HAVE_WRITE = (1 << 2),
-           WOLFSENTRY_LOCK_HAVE_READ2WRITE_RESERVED = (1 << 3),
-           WOLFSENTRY_LOCK_WAIT_READ = (1 << 4),
-           WOLFSENTRY_LOCK_WAIT_WRITE = (1 << 5),
-           WOLFSENTRY_LOCK_WAIT_READ2WRITE = (1 << 6)
+           WOLFSENTRY_LOCK_WAIT_READ = (1 << 2),
+           WOLFSENTRY_LOCK_WAIT_WRITE = (1 << 3),
+           WOLFSENTRY_LOCK_WAIT_R2W_REDEMPTION = (1 << 4)
     } thread_state;
+    int held_lock_count; /* exceeds 1 only when !WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED. */
 };
 
-struct wolfsentry_locker_list {
+struct wolfsentry_shared_locker_list {
     struct wolfsentry_list_header header;
 #ifdef WOLFSENTRY_LOCK_DEBUGGING
     int incoherency_expected;
@@ -90,29 +98,78 @@ struct wolfsentry_locker_list {
 
 #define WOLFSENTRY_THREAD_ID_SENT ~0UL /* lock handoff not yet implemented. */
 
-#endif
+#endif /* WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING */
 
 struct wolfsentry_rwlock {
+    struct wolfsentry_host_platform_interface *hpi;
     sem_t sem;
     sem_t sem_read_waiters;
     sem_t sem_write_waiters;
     sem_t sem_read2write_waiters;
-    volatile int shared_count;
+    volatile wolfsentry_thread_id_t write_lock_holder;
+    volatile wolfsentry_thread_id_t read2write_reservation_holder;
+    union {
+        volatile int read;
+        volatile int write;
+    } holder_count;
     volatile int read_waiter_count;
     volatile int write_waiter_count;
-    volatile int read2write_waiter_count;
+    volatile int read2write_reserver_count;
     volatile enum {
         WOLFSENTRY_LOCK_UNINITED = 0,
         WOLFSENTRY_LOCK_UNLOCKED,
         WOLFSENTRY_LOCK_SHARED,
         WOLFSENTRY_LOCK_EXCLUSIVE
     } state;
+    volatile int promoted_at_count;
     wolfsentry_lock_flags_t flags;
-#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
-    struct wolfsentry_allocator *allocator;
-    struct wolfsentry_locker_list locker_list;
+#ifdef WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING
+    struct wolfsentry_shared_locker_list shared_locker_list;
+    struct wolfsentry_shared_locker_list_ent *shared_locker_list_ent;
 #endif
 };
+
+#define WOLFSENTRY_CONTEXT_DEADLINE ((thread && (thread->base_lock_flags & WOLFSENTRY_LOCK_FLAG_TIMED)) ? &thread->deadline : NULL)
+#define WOLFSENTRY_INTERNAL_LOCK_FLAGS (thread ? thread->base_lock_flags | WOLFSENTRY_LOCK_FLAG_RECURSIVE_MUTEX : WOLFSENTRY_LOCK_FLAG_RECURSIVE_MUTEX)
+
+/* prefabbed code patterns for simple locking scenarios: */
+
+#define WOLFSENTRY_MUTEX_OR_RETURN(lock) { do {                 \
+        wolfsentry_errcode_t _lock_ret;                         \
+        if ((_lock_ret = wolfsentry_lock_mutex_abstimed(        \
+                 lock,                                          \
+                 WOLFSENTRY_CONTEXT_DEADLINE,                   \
+                 WOLFSENTRY_INTERNAL_LOCK_FLAGS)) < 0) {        \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        }                                                       \
+    } while (0)
+
+#define WOLFSENTRY_SHARED_OR_RETURN(lock) { do {                \
+        wolfsentry_errcode_t _lock_ret;                         \
+        if ((_lock_ret = wolfsentry_lock_mutex_abstimed(        \
+                 lock,                                          \
+                 WOLFSENTRY_CONTEXT_DEADLINE,                   \
+                 WOLFSENTRY_INTERNAL_LOCK_FLAGS)) < 0) {        \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        }                                                       \
+    } while (0)
+
+#define WOLFSENTRY_UNLOCK_AND_RETURN(lock, ret) } do {          \
+        wolfsentry_errcode_t _lock_ret;                         \
+        if ((_lock_ret = wolfsentry_lock_unlock(                \
+                 lock,                                          \
+                 WOLFSENTRY_INTERNAL_LOCK_FLAGS)) < 0) {        \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        } else {                                                \
+            WOLFSENTRY_ERROR_RERETURN(ret);                     \
+        }                                                       \
+    } while (0)
+
+#else /* !WOLFSENTRY_THREADSAFE */
+
+#define WOLFSENTRY_MUTEX_OR_RETURN(lock) do {} while (0)
+#define WOLFSENTRY_SHARED_OR_RETURN(lock) do {} while (0)
+#define WOLFSENTRY_UNLOCK_AND_RETURN(lock, ret) WOLFSENTRY_ERROR_RERETURN(ret)
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
@@ -364,8 +421,7 @@ struct wolfsentry_context {
 #ifdef WOLFSENTRY_THREADSAFE
     struct wolfsentry_rwlock lock;
 #endif
-    struct wolfsentry_allocator allocator;
-    struct wolfsentry_timecbs timecbs;
+    struct wolfsentry_host_platform_interface hpi;
     wolfsentry_make_id_cb_t mk_id_cb;
     union {
         void *mk_id_cb_arg;
@@ -383,19 +439,33 @@ struct wolfsentry_context {
     struct wolfsentry_table_header ents_by_id;
 };
 
-#define WOLFSENTRY_MALLOC(size) wolfsentry->allocator.malloc(wolfsentry->allocator.context, size)
-#define WOLFSENTRY_FREE(ptr) wolfsentry->allocator.free(wolfsentry->allocator.context, ptr)
-#define WOLFSENTRY_REALLOC(ptr, size) wolfsentry->allocator.realloc(wolfsentry->allocator.context, ptr, size)
-#define WOLFSENTRY_MEMALIGN(alignment, size) (wolfsentry->allocator.memalign ? wolfsentry->allocator.memalign(wolfsentry->allocator.context, alignment, size) : NULL)
-#define WOLFSENTRY_FREE_ALIGNED(ptr) (wolfsentry->allocator.memalign ? wolfsentry->allocator.free_aligned(wolfsentry->allocator.context, ptr) : (void)NULL)
+#define WOLFSENTRY_MALLOC_1(allocator, size) ((allocator).malloc((allocator).context, size))
+#define WOLFSENTRY_FREE_1(allocator, ptr) (allocator).free((allocator).context, ptr)
+#define WOLFSENTRY_REALLOC_1(allocator, ptr, size) ((allocator).realloc(wolfsentry->hpi.allocator.context, ptr, size))
+#define WOLFSENTRY_MEMALIGN_1(allocator, alignment, size) ((allocator).memalign ? (allocator).memalign((allocator).context, alignment, size) : NULL)
+#define WOLFSENTRY_FREE_ALIGNED_1(allocator, ptr) ((allocator).memalign ? (allocator).free_aligned((allocator).context, ptr) : (void)NULL)
 
-#define WOLFSENTRY_GET_TIME(time_p) wolfsentry->timecbs.get_time(wolfsentry->timecbs.context, time_p)
-#define WOLFSENTRY_DIFF_TIME(later, earlier) wolfsentry->timecbs.diff_time(later, earlier)
-#define WOLFSENTRY_ADD_TIME(start_time, time_interval) wolfsentry->timecbs.add_time(start_time, time_interval)
-#define WOLFSENTRY_TO_EPOCH_TIME(when, epoch_secs, epoch_nsecs) wolfsentry->timecbs.to_epoch_time(when, epoch_secs, epoch_nsecs)
-#define WOLFSENTRY_FROM_EPOCH_TIME(epoch_secs, epoch_nsecs, when) wolfsentry->timecbs.from_epoch_time(epoch_secs, epoch_nsecs, when)
-#define WOLFSENTRY_INTERVAL_TO_SECONDS(howlong, howlong_secs, howlong_nsecs) wolfsentry->timecbs.interval_to_seconds(howlong, howlong_secs, howlong_nsecs)
-#define WOLFSENTRY_INTERVAL_FROM_SECONDS(howlong_secs, howlong_nsecs, howlong) wolfsentry->timecbs.interval_from_seconds(howlong_secs, howlong_nsecs, howlong)
+#define WOLFSENTRY_MALLOC(size) WOLFSENTRY_MALLOC_1(wolfsentry->hpi.allocator, size)
+#define WOLFSENTRY_FREE(ptr) WOLFSENTRY_FREE_1(wolfsentry->hpi.allocator, ptr)
+#define WOLFSENTRY_REALLOC(ptr, size) WOLFSENTRY_REALLOC_1(wolfsentry->hpi.allocator, ptr, size)
+#define WOLFSENTRY_MEMALIGN(alignment, size) WOLFSENTRY_MEMALIGN_1(wolfsentry->hpi.allocator, alignment, size)
+#define WOLFSENTRY_FREE_ALIGNED(ptr) WOLFSENTRY_FREE_ALIGNED_1(wolfsentry->hpi.allocator, ptr)
+
+#define WOLFSENTRY_GET_TIME_1(timecbs, time_p) ((timecbs).get_time((timecbs).context, time_p))
+#define WOLFSENTRY_DIFF_TIME_1(timecbs, later, earlier) ((timecbs).diff_time(later, earlier))
+#define WOLFSENTRY_ADD_TIME_1(timecbs, start_time, time_interval) ((timecbs).add_time(start_time, time_interval))
+#define WOLFSENTRY_TO_EPOCH_TIME_1(timecbs, when, epoch_secs, epoch_nsecs) ((timecbs).to_epoch_time(when, epoch_secs, epoch_nsecs))
+#define WOLFSENTRY_FROM_EPOCH_TIME_1(timecbs, epoch_secs, epoch_nsecs, when) ((timecbs).from_epoch_time(epoch_secs, epoch_nsecs, when))
+#define WOLFSENTRY_INTERVAL_TO_SECONDS_1(timecbs, howlong, howlong_secs, howlong_nsecs) ((timecbs).interval_to_seconds(howlong, howlong_secs, howlong_nsecs))
+#define WOLFSENTRY_INTERVAL_FROM_SECONDS_1(timecbs, howlong_secs, howlong_nsecs, howlong) ((timecbs).interval_from_seconds(howlong_secs, howlong_nsecs, howlong))
+
+#define WOLFSENTRY_GET_TIME(time_p) WOLFSENTRY_GET_TIME_1(wolfsentry->hpi.timecbs, time_p)
+#define WOLFSENTRY_DIFF_TIME(later, earlier) WOLFSENTRY_DIFF_TIME_1(wolfsentry->hpi.timecbs, later, earlier)
+#define WOLFSENTRY_ADD_TIME(start_time, time_interval) WOLFSENTRY_ADD_TIME_1(wolfsentry->hpi.timecbs, start_time, time_interval)
+#define WOLFSENTRY_TO_EPOCH_TIME(when, epoch_secs, epoch_nsecs) WOLFSENTRY_TO_EPOCH_TIME_1(wolfsentry->hpi.timecbs, when, epoch_secs, epoch_nsecs)
+#define WOLFSENTRY_FROM_EPOCH_TIME(epoch_secs, epoch_nsecs, when) WOLFSENTRY_FROM_EPOCH_TIME_1(wolfsentry->hpi.timecbs, epoch_secs, epoch_nsecs, when)
+#define WOLFSENTRY_INTERVAL_TO_SECONDS(howlong, howlong_secs, howlong_nsecs) WOLFSENTRY_INTERVAL_TO_SECONDS_1(wolfsentry->hpi.timecbs, howlong, howlong_secs, howlong_nsecs)
+#define WOLFSENTRY_INTERVAL_FROM_SECONDS(howlong_secs, howlong_nsecs, howlong) WOLFSENTRY_INTERVAL_FROM_SECONDS_1(wolfsentry->hpi.timecbs, howlong_secs, howlong_nsecs, howlong)
 
 wolfsentry_errcode_t wolfsentry_id_allocate(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent);
 
@@ -542,19 +612,19 @@ wolfsentry_errcode_t wolfsentry_table_map(
     wolfsentry_action_res_t *action_results);
 
 wolfsentry_errcode_t wolfsentry_action_list_append(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list,
     const char *label,
     int label_len);
 
 wolfsentry_errcode_t wolfsentry_action_list_prepend(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list,
     const char *label,
     int label_len);
 
 wolfsentry_errcode_t wolfsentry_action_list_insert_after(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list,
     const char *label,
     int label_len,
@@ -579,7 +649,7 @@ wolfsentry_errcode_t wolfsentry_action_list_delete_all(
     struct wolfsentry_action_list *action_list);
 
 wolfsentry_errcode_t wolfsentry_action_list_dispatch(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     void *caller_arg,
     struct wolfsentry_event *action_event,
     struct wolfsentry_event *trigger_event,
@@ -625,17 +695,17 @@ int wolfsentry_kv_get_mutability(
     const struct wolfsentry_kv_pair_internal *kv);
 
 wolfsentry_errcode_t wolfsentry_kv_insert(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     struct wolfsentry_kv_pair_internal *kv);
 
 wolfsentry_errcode_t wolfsentry_kv_set(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     struct wolfsentry_kv_pair_internal *kv);
 
 wolfsentry_errcode_t wolfsentry_kv_get_reference(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const char *key,
     int key_len,
@@ -643,7 +713,7 @@ wolfsentry_errcode_t wolfsentry_kv_get_reference(
     struct wolfsentry_kv_pair_internal **kv);
 
 wolfsentry_errcode_t wolfsentry_kv_get_type(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const char *key,
     int key_len,
@@ -657,19 +727,19 @@ wolfsentry_errcode_t wolfsentry_kv_clone(
     wolfsentry_clone_flags_t flags);
 
 wolfsentry_errcode_t wolfsentry_kv_delete(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const char *key,
     int key_len);
 
 wolfsentry_errcode_t wolfsentry_kv_set_validator(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     wolfsentry_kv_validator_t validator,
     wolfsentry_action_res_t *action_results);
 
 wolfsentry_errcode_t wolfsentry_kv_table_iterate_start(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor **cursor);
 
@@ -702,7 +772,7 @@ wolfsentry_errcode_t wolfsentry_kv_table_iterate_next(
     struct wolfsentry_kv_pair_internal **kv);
 
 wolfsentry_errcode_t wolfsentry_kv_table_iterate_end(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor **cursor);
 
@@ -714,7 +784,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_table_pair(
 #endif
 
 wolfsentry_errcode_t wolfsentry_addr_family_insert(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_addr_family_bynumber_table *bynumber_table,
     wolfsentry_addr_family_t family_bynumber,
     const char *family_byname,
@@ -724,12 +794,12 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
     int max_addr_bits);
 
 wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family_bynumber,
     const struct wolfsentry_addr_family_bynumber **addr_family);
 
 wolfsentry_errcode_t wolfsentry_addr_family_get_byname(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family_bynumber,
     const char *family_byname,
     int family_byname_len,

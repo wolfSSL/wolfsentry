@@ -66,7 +66,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_table_pair(
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 
 wolfsentry_errcode_t wolfsentry_addr_family_insert(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_addr_family_bynumber_table *bynumber_table,
     wolfsentry_addr_family_t family_bynumber,
     const char *family_byname,
@@ -202,7 +202,7 @@ static wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber_1(
 
 
 wolfsentry_errcode_t wolfsentry_addr_family_get_parser(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family,
     wolfsentry_addr_family_parser_t *parser)
 {
@@ -222,7 +222,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_get_parser(
 }
 
 wolfsentry_errcode_t wolfsentry_addr_family_get_formatter(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family,
     wolfsentry_addr_family_formatter_t *formatter)
 {
@@ -305,10 +305,10 @@ wolfsentry_errcode_t wolfsentry_addr_family_clone(
     (void)wolfsentry;
     (void)flags;
 
-    if ((*new_bynumber = dest_context->allocator.malloc(dest_context->allocator.context, sizeof **new_bynumber)) == NULL)
+    if ((*new_bynumber = (struct wolfsentry_addr_family_bynumber *)WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, sizeof **new_bynumber)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
-    if ((*new_byname = dest_context->allocator.malloc(dest_context->allocator.context, byname_size)) == NULL) {
-        (void)dest_context->allocator.free(dest_context->allocator.context, new_byname);
+    if ((*new_byname = (struct wolfsentry_addr_family_byname *)WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, byname_size)) == NULL) {
+        (void)WOLFSENTRY_FREE_1(dest_context->hpi.allocator, new_byname);
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     }
     memcpy(*new_bynumber, src_bynumber, sizeof **new_bynumber);
@@ -425,7 +425,7 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_byname(
 #endif
 
 wolfsentry_errcode_t wolfsentry_addr_family_handler_install(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family_bynumber,
     const char *family_byname, /* if defined(WOLFSENTRY_PROTOCOL_NAMES), must not NULL, else ignored. */
     int family_byname_len,
@@ -433,11 +433,11 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_install(
     wolfsentry_addr_family_formatter_t formatter,
     int max_addr_bits)
 {
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_addr_family_insert(wolfsentry, wolfsentry->addr_families_bynumber, family_bynumber, family_byname, family_byname_len, parser, formatter, max_addr_bits));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_addr_family_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->addr_families_bynumber, family_bynumber, family_byname, family_byname_len, parser, formatter, max_addr_bits));
 }
 
 wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family_bynumber,
     wolfsentry_action_res_t *action_results)
 {
@@ -446,7 +446,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *family_byname,
     int family_byname_len,
     wolfsentry_action_res_t *action_results)
@@ -458,7 +458,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname(
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
 
 wolfsentry_addr_family_t wolfsentry_addr_family_pton(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *family_name,
     int family_name_len,
     wolfsentry_errcode_t *errcode)
@@ -783,7 +783,7 @@ static const char *wolfsentry_addr_family_ntop_1(
 }
 
 const char *wolfsentry_addr_family_ntop(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family,
     struct wolfsentry_addr_family_bynumber **addr_family,
     wolfsentry_errcode_t *errcode)

@@ -1,0 +1,431 @@
+diff --git a/wolfssl/test.h b/wolfssl/test.h
+index 0e107a5ed..78fac140f 100644
+--- a/wolfssl/test.h
++++ b/wolfssl/test.h
+@@ -1587,6 +1587,345 @@ static int wolfSentry_NetworkFilterCallback(
+     return WOLFSSL_SUCCESS;
+ }
+ 
++#define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_USER_BASE
++
++static wolfsentry_errcode_t wolfsentry_test_action(
++    struct wolfsentry_context *ws_ctx,
++    const struct wolfsentry_action *action,
++    void *handler_arg,
++    void *caller_arg,
++    const struct wolfsentry_event *trigger_event,
++    wolfsentry_action_type_t action_type,
++    const struct wolfsentry_route *target_route,
++    struct wolfsentry_route_table *route_table,
++    const struct wolfsentry_route *rule_route,
++    wolfsentry_action_res_t *action_results)
++{
++    const struct wolfsentry_event *parent_event;
++    (void)ws_ctx;
++    (void)handler_arg;
++    (void)route_table;
++    (void)action_results;
++
++    if (rule_route == NULL) {
++        printf("null rule_route, target_route=%p\n",target_route);
++        return 0;
++    }
++
++    parent_event = wolfsentry_route_parent_event(rule_route);
++
++    printf("action callback: a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
++           wolfsentry_action_get_label(action),
++           wolfsentry_event_get_label(parent_event),
++           wolfsentry_event_get_label(trigger_event),
++           action_type,
++           wolfsentry_get_object_id(rule_route),
++           caller_arg);
++    return 0;
++}
++
++static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
++    struct wolfsentry_context *ws_ctx,
++    const struct wolfsentry_action *action,
++    void *handler_arg,
++    void *caller_arg,
++    const struct wolfsentry_event *trigger_event,
++    wolfsentry_action_type_t action_type,
++    const struct wolfsentry_route *trigger_route,
++    struct wolfsentry_route_table *route_table,
++    const struct wolfsentry_route *rule_route,
++    wolfsentry_action_res_t *action_results)
++{
++    unsigned int res_bit;
++    unsigned int n_res_bits = 0;
++    const char *res_string;
++    wolfsentry_errcode_t ret;
++    struct wolfsentry_route_exports trigger_route_exports, rule_route_exports;
++    const char *family_name;
++    struct wolfsentry_addr_family_bynumber *addr_family;
++    uint64_t notification_dest_port;
++    const char *notification_dest_addr;
++    int notification_dest_addr_len;
++    struct wolfsentry_kv_pair_internal *notification_dest_addr_record = NULL;
++    struct sockaddr_in sa;
++    int pton_ret;
++    int sockfd;
++    char msgbuf[1024], *msgbuf_ptr = msgbuf;
++    int msgbuf_space_left = (int)sizeof msgbuf;
++    int msgbuf_len;
++
++    (void)handler_arg;
++    (void)route_table;
++    (void)caller_arg;
++    (void)action_type;
++    (void)rule_route;
++
++    ret = wolfsentry_route_export(ws_ctx, trigger_route, &trigger_route_exports);
++    if (ret < 0)
++        return ret;
++
++    ret = wolfsentry_route_export(ws_ctx, rule_route, &rule_route_exports);
++    if (ret < 0)
++        return ret;
++
++    ret = wolfsentry_user_value_get_uint(
++        ws_ctx,
++        "notification-dest-port",
++        WOLFSENTRY_LENGTH_NULL_TERMINATED,
++        &notification_dest_port);
++
++    if (ret < 0)
++        return ret;
++
++    ret = wolfsentry_user_value_get_string(
++        ws_ctx,
++        "notification-dest-addr",
++        WOLFSENTRY_LENGTH_NULL_TERMINATED,
++        &notification_dest_addr,
++        &notification_dest_addr_len,
++        &notification_dest_addr_record);
++
++    if (ret < 0)
++        return ret;
++
++    sa.sin_family = AF_INET;
++
++    pton_ret = inet_pton(AF_INET, notification_dest_addr, &sa.sin_addr);
++
++    ret = wolfsentry_user_value_release_record(ws_ctx, &notification_dest_addr_record);
++    if (ret < 0) {
++        fprintf(stderr,
++                "wolfsentry_user_value_release_record: " WOLFSENTRY_ERROR_FMT,
++                WOLFSENTRY_ERROR_FMT_ARGS(ret));
++        return ret;
++    }
++
++    switch (pton_ret) {
++    case 1:
++        break;
++    case 0:
++        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
++    case -1:
++    default:
++        WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
++    }
++
++    sa.sin_port = htons(notification_dest_port);
++
++    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 17 /* UDP */)) < 0)
++        WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
++
++    addr_family = NULL;
++    family_name = wolfsentry_addr_family_ntop(wolfsentry, trigger_route_exports.sa_family, &addr_family, &ret);
++
++    /* note that strings, and ideally numbers, should use helpers in
++     * centijson_sax.h, mainly json_dump_uint64() and json_dump_string(), which
++     * furthermore take a JSON_DUMP_CALLBACK
++     */
++    msgbuf_len = snprintf(
++        msgbuf_ptr,
++        (size_t)msgbuf_space_left,
++        "{ \"action\" : \"%s\", \"trigger\" : \"%s\", \"parent\" : \"%s\", \"rule-id\" : " WOLFSENTRY_ENT_ID_FMT ", \"rule-hitcount\" : " WOLFSENTRY_HITCOUNT_FMT ", \"af\" : \"%s\", \"proto\" : %d, \"remote\" : { \"address\" : \"",
++        wolfsentry_action_get_label(action),
++        wolfsentry_event_get_label(trigger_event),
++        trigger_route_exports.parent_event_label,
++        wolfsentry_get_object_id(rule_route),
++        rule_route_exports.meta.hit_count,
++        family_name,
++        trigger_route_exports.sa_proto);
++
++    msgbuf_space_left -= msgbuf_len;
++    if (msgbuf_space_left < 0) {
++        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
++                __LINE__, msgbuf_len, msgbuf_space_left);
++        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++    }
++    msgbuf_ptr += msgbuf_len;
++
++    if (addr_family) {
++        if ((ret = wolfsentry_addr_family_drop_reference(wolfsentry, addr_family, NULL /* action_results */ )) < 0) {
++            fprintf(stderr, "wolfsentry_addr_family_drop_reference: " WOLFSENTRY_ERROR_FMT,
++                    WOLFSENTRY_ERROR_FMT_ARGS(ret));
++            return ret;
++        }
++    }
++
++    msgbuf_len = msgbuf_space_left;
++    ret = wolfsentry_route_format_address(
++        wolfsentry,
++        trigger_route_exports.sa_family,
++        trigger_route_exports.remote_address,
++        trigger_route_exports.remote.addr_len,
++        msgbuf_ptr,
++        &msgbuf_len);
++    if (ret < 0) {
++        fprintf(stderr, "wolfsentry_route_format_address: " WOLFSENTRY_ERROR_FMT,
++                WOLFSENTRY_ERROR_FMT_ARGS(ret));
++        return ret;
++    }
++
++    msgbuf_space_left -= msgbuf_len;
++    if (msgbuf_space_left < 0) {
++        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
++                __LINE__, msgbuf_len, msgbuf_space_left);
++        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++    }
++    msgbuf_ptr += msgbuf_len;
++
++    msgbuf_len = snprintf(
++        msgbuf_ptr,
++        (size_t)msgbuf_space_left,
++        "\", \"port\" : %u }, \"local\" : { \"address\" : \"",
++        trigger_route_exports.remote.sa_port);
++
++    msgbuf_space_left -= msgbuf_len;
++    if (msgbuf_space_left < 0) {
++        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
++                __LINE__, msgbuf_len, msgbuf_space_left);
++        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++    }
++    msgbuf_ptr += msgbuf_len;
++
++    msgbuf_len = (int)msgbuf_space_left;
++    ret = wolfsentry_route_format_address(
++        wolfsentry,
++        trigger_route_exports.sa_family,
++        trigger_route_exports.local_address,
++        trigger_route_exports.local.addr_len,
++        msgbuf_ptr,
++        &msgbuf_len);
++    if (ret < 0) {
++        fprintf(stderr, "wolfsentry_route_format_address: " WOLFSENTRY_ERROR_FMT,
++                WOLFSENTRY_ERROR_FMT_ARGS(ret));
++        return ret;
++    }
++
++    msgbuf_space_left -= msgbuf_len;
++    if (msgbuf_space_left < 0) {
++        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
++                __LINE__, msgbuf_len, msgbuf_space_left);
++        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++    }
++    msgbuf_ptr += msgbuf_len;
++
++    msgbuf_len = snprintf(
++        msgbuf_ptr,
++        (size_t)msgbuf_space_left,
++        "\", \"port\" : %u }, \"decision\" : [",
++        trigger_route_exports.local.sa_port);
++
++    msgbuf_space_left -= msgbuf_len;
++    if (msgbuf_space_left < 0) {
++        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
++                __LINE__, msgbuf_len, msgbuf_space_left);
++        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++    }
++    msgbuf_ptr += msgbuf_len;
++
++    for (res_bit = 0; res_bit < 32U; ++res_bit) {
++        if ((res_string = wolfsentry_action_res_decode(*action_results, res_bit)) != NULL) {
++            ++n_res_bits;
++            if (n_res_bits > 1) {
++                *msgbuf_ptr++ = ',';
++                --msgbuf_space_left;
++                if (msgbuf_space_left < 0)
++                    WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++            }
++            msgbuf_len = snprintf(msgbuf_ptr, (size_t)msgbuf_space_left, "\"%s\"", res_string);
++            msgbuf_space_left -= msgbuf_len;
++            if (msgbuf_space_left < 0)
++                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++            msgbuf_ptr += msgbuf_len;
++        }
++    }
++
++    msgbuf_len = snprintf(msgbuf_ptr, msgbuf_space_left, "]}");
++    msgbuf_space_left -= msgbuf_len;
++    if (msgbuf_space_left < 0) {
++        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
++                __LINE__, msgbuf_len, msgbuf_space_left);
++        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
++    }
++    msgbuf_ptr += msgbuf_len;
++
++    if (sendto(
++            sockfd,
++            msgbuf,
++            sizeof msgbuf - (size_t)msgbuf_space_left,
++            0 /* flags */,
++            (const struct sockaddr *)&sa, sizeof sa) < 0)
++        perror("sendto");
++
++    close(sockfd);
++
++    return 0;
++}
++
++static wolfsentry_errcode_t my_addr_family_parser(
++    struct wolfsentry_context *ws_ctx,
++    const char *addr_text,
++    const int addr_text_len,
++    byte *addr_internal,
++    wolfsentry_addr_bits_t *addr_internal_len)
++{
++    uint32_t a[3];
++    char abuf[32];
++    int n_octets, parsed_len = 0, i;
++
++    (void)ws_ctx;
++
++    if (snprintf(abuf,sizeof abuf,"%.*s",addr_text_len,addr_text) >= (int)sizeof abuf)
++        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
++    if ((n_octets = sscanf(abuf,"%o/%o/%o%n",&a[0],&a[1],&a[2],&parsed_len)) < 1)
++        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
++    if (parsed_len != addr_text_len) {
++        if ((n_octets = sscanf(abuf,"%o/%o/%n",&a[0],&a[1],&parsed_len)) < 1)
++            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
++    }
++    if (parsed_len != addr_text_len) {
++        if ((n_octets = sscanf(abuf,"%o/%n",&a[0],&parsed_len)) < 1)
++            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
++    }
++    if (parsed_len != addr_text_len)
++        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
++    for (i = 0; i < n_octets; ++i) {
++        if (a[i] > MAX_UINT_OF(byte))
++            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
++        addr_internal[i] = (byte)a[i];
++    }
++    *addr_internal_len = (wolfsentry_addr_bits_t)(n_octets * 8);
++    WOLFSENTRY_RETURN_OK;
++}
++
++static wolfsentry_errcode_t my_addr_family_formatter(
++    struct wolfsentry_context *ws_ctx,
++    const byte *addr_internal,
++    const unsigned int addr_internal_len,
++    char *addr_text,
++    int *addr_text_len)
++{
++    int out_len;
++    int ret;
++
++    (void)ws_ctx;
++
++    if (addr_internal_len <= 8)
++        out_len = snprintf(addr_text, (size_t)*addr_text_len,
++                           "%o/",(unsigned int)addr_internal[0]);
++    else if (addr_internal_len <= 16)
++        out_len = snprintf(addr_text, (size_t)*addr_text_len,
++                           "%o/%o/",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1]);
++    else
++        out_len = snprintf(addr_text, (size_t)*addr_text_len,
++                           "%o/%o/%o",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1],(unsigned int)addr_internal[2]);
++    if (out_len >= *addr_text_len)
++        ret = WOLFSENTRY_ERROR_ENCODE(BUFFER_TOO_SMALL);
++    else
++        ret = WOLFSENTRY_ERROR_ENCODE(OK);
++    *addr_text_len = out_len;
++    return ret;
++}
++
+ static int wolfsentry_setup(
+     struct wolfsentry_context **_wolfsentry,
+     const char *_wolfsentry_config_path,
+@@ -1601,6 +1940,80 @@ static int wolfsentry_setup(
+         err_sys("unable to initialize wolfSentry");
+     }
+ 
++    {
++        wolfsentry_ent_id_t id;
++
++        if (wolfsentry_addr_family_handler_install(
++                wolfsentry,
++                WOLFSENTRY_AF_USER_OFFSET,
++                "my_AF",
++                WOLFSENTRY_LENGTH_NULL_TERMINATED,
++                my_addr_family_parser,
++                my_addr_family_formatter,
++                24 /* max_addr_bits */) < 0)
++            err_sys("unable to install my_AF handlers.");
++
++        if (wolfsentry_action_insert(
++                wolfsentry,
++                "handle-insert",
++                WOLFSENTRY_LENGTH_NULL_TERMINATED,
++                WOLFSENTRY_ACTION_FLAG_NONE,
++                wolfsentry_test_action,
++                NULL,
++                &id) < 0)
++            err_sys("unable to initialize wolfSentry");
++
++        if (wolfsentry_action_insert(
++                wolfsentry,
++                "handle-delete",
++                WOLFSENTRY_LENGTH_NULL_TERMINATED,
++                WOLFSENTRY_ACTION_FLAG_NONE,
++                wolfsentry_test_action,
++                NULL,
++                &id) < 0)
++            err_sys("unable to initialize wolfSentry");
++
++        if (wolfsentry_action_insert(
++                wolfsentry,
++                "handle-match",
++                WOLFSENTRY_LENGTH_NULL_TERMINATED,
++                WOLFSENTRY_ACTION_FLAG_NONE,
++                wolfsentry_test_action,
++                NULL,
++                &id) < 0)
++            err_sys("unable to initialize wolfSentry");
++
++        if (wolfsentry_action_insert(
++                wolfsentry,
++                "notify-on-decision",
++                WOLFSENTRY_LENGTH_NULL_TERMINATED,
++                WOLFSENTRY_ACTION_FLAG_NONE,
++                wolfsentry_notify_via_UDP_JSON,
++                NULL,
++                &id) < 0)
++            err_sys("unable to initialize wolfSentry");
++
++        if (wolfsentry_action_insert(
++                wolfsentry,
++                "handle-connect",
++                WOLFSENTRY_LENGTH_NULL_TERMINATED,
++                WOLFSENTRY_ACTION_FLAG_NONE,
++                wolfsentry_test_action,
++                NULL,
++                &id) < 0)
++            err_sys("unable to initialize wolfSentry");
++
++        if (wolfsentry_action_insert(
++                wolfsentry,
++                "handle-connect2",
++                WOLFSENTRY_LENGTH_NULL_TERMINATED,
++                WOLFSENTRY_ACTION_FLAG_NONE,
++                wolfsentry_test_action,
++                NULL,
++                &id) < 0)
++            err_sys("unable to initialize wolfSentry");
++    }
++
+     if (wolfsentry_data_index < 0)
+         wolfsentry_data_index = wolfSSL_get_ex_new_index(0, NULL, NULL, NULL,
+                                                          NULL);

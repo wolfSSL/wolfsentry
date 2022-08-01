@@ -96,3 +96,8 @@ and `test_json()`.
 Example JSON configuration files are at `tests/test-config.json` and
 `tests/test-config-numeric.json`.  The latter differs only by the use of raw
 numbers rather than names for address families and protocols.
+
+In the wolfsentry/examples/ directory are a set of example ports and
+applications, including a port to FreeRTOS-LWIP (integrated directly in the IP
+stack) and a demo pop-up notification system integrating with the Linux D-Bus
+facility.

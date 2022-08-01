@@ -1,6 +1,6 @@
 # Makefile
 #
-# Copyright (C) 2021 wolfSSL Inc.
+# Copyright (C) 2021-2022 wolfSSL Inc.
 #
 # This file is part of wolfSentry.
 #

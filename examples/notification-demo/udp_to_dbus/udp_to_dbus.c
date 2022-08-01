@@ -33,9 +33,15 @@
  *
  * Building the demo:
  *
- * Modern Linux and Gnu toolchain are assumed throughout. glib-2.0 and
- * gdk-pixbuf-2.0, with header files, are also needed.  We've tested with
- * glib-2.72.3 and gdk-pixbuf-2.42.
+ * Modern Linux and Gnu toolchain are assumed throughout.
+ *
+ * Gnome's glib-2.0, gdk-pixbuf-2.0, and libnotify, with header files, are also
+ * needed.  We've tested with glib 2.72.3, gdk-pixbuf 2.42.8, and libnotify
+ * 0.7.12 and 0.8.1.  On Ubuntu and Debian, it may suffice to install package
+ * "libnotify-dev" with its dependencies.  On Fedora, "sudo dnf install
+ * libnotify-devel" should install all dependencies.  On Gentoo, "emerge
+ * x11-libs/libnotify" will install all dependencies.
+ *
  *
  * Set up a top level source tree with wolfSSL 5.4.0 or later in ./wolfssl/, and
  * this release of wolfSentry at ./wolfsentry/.
@@ -43,18 +49,9 @@
  * Starting in the top level source tree:
  *
  *   pushd wolfsentry
- *   make -j test
+ *   make -j install INSTALL_DIR=./install_image
  *   cd examples/notification-demo/udp_to_dbus/
- *   make
- *   popd
- *
- * Alternatively, to install wolfSentry and target that installation with the
- * udp_to_dbus build, use
- *
- *   pushd wolfsentry
- *   make -j install INSTALL_DIR={the_install_top}
- *   cd examples/notification-demo/udp_to_dbus/
- *   make WOLFSENTRY_ROOT={the_install_top}
+ *   make WOLFSENTRY_ROOT=../../../install_image
  *   popd
  *
  * Now build libwolfssl with the patched example client and server applications:
@@ -70,6 +67,8 @@
  *
  *
  * Running the demo:
+ *
+ * Open 3 terminal windows.
  *
  * Run the message daemon in terminal #1:
  *
@@ -333,18 +332,17 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
     if (notify == NULL)
         return -1;
 
-    notify_notification_set_category (notify, type);
-    notify_notification_set_urgency (notify, urgency);
-    notify_notification_set_timeout (notify, expire_timeout);
-    notify_notification_set_app_name (notify, app_name);
+    notify_notification_set_category(notify, type);
+    notify_notification_set_urgency(notify, urgency);
+    notify_notification_set_timeout(notify, expire_timeout);
+    notify_notification_set_app_name(notify, app_name);
 
-    notify_notification_set_hint (notify, "transient",
-                                              g_variant_new_boolean (TRUE));
+    notify_notification_set_hint(notify, "transient", g_variant_new_boolean (TRUE));
 
-    retval = notify_notification_show (notify, &error);
+    retval = notify_notification_show(notify, &error);
     if (! retval) {
         fprintf (stderr, "%s\n", error->message);
-        g_clear_error (&error);
+        g_clear_error(&error);
     }
 
     return 0;

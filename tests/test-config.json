@@ -179,7 +179,7 @@
 	"user-string2" : { "string" : "hello" },
 	"user-base64" : { "base64" : "aGVsbG8=" },
 
-	"notification-dest-addr" : "192.168.3.1",
+	"notification-dest-addr" : "127.0.0.1",
 	"notification-dest-port" : 55555
     }
 }

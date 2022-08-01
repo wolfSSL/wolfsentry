@@ -1,3 +1,24 @@
+# wolfSentry Release 0.5.0 (Aug 1, 2022)
+
+Preview Release 0.5.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:
+
+## New Example
+
+#### examples/notification-demo
+
+Added examples/notification-demo, demonstrating plugin actions, JSON event representation, and pop-up messages using the D-Bus notification facility and a middleware transation daemon.
+
+## Noteworthy Changes
+
+* Added new API wolfsentry_init_ex() with wolfsentry_init_flags_t argument.
+
+* Added runtime error-checking on lock facility.
+
+## Bug Fixes
+
+Fix missing assignment in wolfsentry_list_ent_insert_after().
+
+
 # wolfSentry Release 0.4.0 (May 27, 2022)
 
 Preview Release 0.4.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:

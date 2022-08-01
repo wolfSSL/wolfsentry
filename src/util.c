@@ -197,41 +197,43 @@ const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned i
             return "deallocated";
         case WOLFSENTRY_ACTION_RES_ERROR:
             return "error";
-        case 13U:
-        case 14U:
-        case 15U:
+        case WOLFSENTRY_ACTION_RES_FALLTHROUGH:
+            return "fallthrough";
+        case (1U << 13U):
+        case (1U << 14U):
+        case (1U << 15U):
             return "(unknown)";
         case WOLFSENTRY_ACTION_RES_USER_BASE:
             return "user+0";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+1:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 1U:
             return "user+1";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+2:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 2U:
             return "user+2";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+3:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 3U:
             return "user+3";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+4:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 4U:
             return "user+4";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+5:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 5U:
             return "user+5";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+6:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 6U:
             return "user+6";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+7:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 7U:
             return "user+7";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+8:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 8U:
             return "user+8";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+9:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 9U:
             return "user+9";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+10:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 10U:
             return "user+10";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+11:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 11U:
             return "user+11";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+12:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 12U:
             return "user+12";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+13:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 13U:
             return "user+13";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+14:
+        case WOLFSENTRY_ACTION_RES_USER_BASE << 14U:
             return "user+14";
-        case WOLFSENTRY_ACTION_RES_USER_BASE+15:
+        case (unsigned)WOLFSENTRY_ACTION_RES_USER_BASE << 15U:
             return "user+15";
         }
         return "(?)"; /* unreachable */

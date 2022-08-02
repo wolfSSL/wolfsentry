@@ -311,7 +311,8 @@ typedef enum {
     WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO = 1<<4,
     WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO = 1<<5,
     WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO = 1<<6,
-    WOLFSENTRY_LOCK_FLAG_TIMED = 1<<7
+    WOLFSENTRY_LOCK_FLAG_TIMED = 1<<7,
+    WOLFSENTRY_LOCK_FLAG_READONLY = 1<<8
 } wolfsentry_lock_flags_t;
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_lock_flags_t base_lock_flags);
@@ -323,27 +324,27 @@ struct wolfsentry_rwlock;
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_rwlock **lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_timed(struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_rwlock *lock, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_timed(struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwlock *lock, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed(struct wolfsentry_rwlock *lock, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_timed(struct wolfsentry_rwlock *lock, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_either(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservation(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_get_flags(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t *flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_timed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_timed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_timed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_time_t max_wait, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_either(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservation(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_get_flags(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t *flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwlock **lock, wolfsentry_lock_flags_t flags);
 
@@ -359,26 +360,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwloc
 
 #define wolfsentry_lock_init(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_alloc(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared_abstimed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_mutex_timed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_mutex(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_mutex_abstimed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_mutex_timed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_mutex2shared(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex_abstimed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex_timed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex_reserve(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex_redeem(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex_redeem_abstimed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex_redeem_timed(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_shared2mutex_abandon(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_have_shared(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_have_mutex(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_have_either(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_have_shared2mutex_reservation(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
-#define wolfsentry_lock_unlock(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared_abstimed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_mutex_timed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_mutex(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_mutex_abstimed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_mutex_timed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_mutex2shared(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex_abstimed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex_timed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex_reserve(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex_redeem(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex_redeem_abstimed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex_redeem_timed(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_shared2mutex_abandon(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_have_shared(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_have_mutex(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_have_either(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_have_shared2mutex_reservation(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_lock_unlock(x, y, z) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_destroy(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_free(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
 

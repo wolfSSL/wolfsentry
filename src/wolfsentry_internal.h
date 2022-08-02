@@ -66,15 +66,6 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
-struct wolfsentry_thread_context {
-    wolfsentry_thread_id_t id;
-    struct timespec deadline;
-    wolfsentry_lock_flags_t base_lock_flags;
-};
-
-#define WOLFSENTRY_DEADLINE_NEVER (-1)
-#define WOLFSENTRY_DEADLINE_NOW (-2)
-
 #ifdef WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING
 
 struct wolfsentry_shared_locker_list_ent {
@@ -129,6 +120,26 @@ struct wolfsentry_rwlock {
 #endif
 };
 
+struct wolfsentry_thread_context {
+    wolfsentry_thread_id_t id;
+    struct timespec deadline;
+    wolfsentry_lock_flags_t current_lock_flags; /* only relevant bit at present is _LOCK_FLAG_READONLY */
+    union {
+        struct wolfsentry_rwlock *outermost_shared_lock; /* only if _LOCK_FLAG_READONLY */
+        struct wolfsentry_rwlock *current_shared_lock; /* only if !_LOCK_FLAG_READONLY.
+                                                        * locker can have shared lock(s) only
+                                                        * for this lock.  if another shared lock is
+                                                        * obtained, first this one will be
+                                                        * promoted.  a currently held lock can
+                                                        * be demoted only if it matches
+                                                        * current_shared_lock.
+                                                        */
+    };
+    int recursion_of_shared_lock; /* recursion count for outermost_shared_lock/current_shared_lock */
+};
+
+#define WOLFSENTRY_DEADLINE_NEVER (-1)
+#define WOLFSENTRY_DEADLINE_NOW (-2)
 #define WOLFSENTRY_CONTEXT_DEADLINE ((thread && (thread->base_lock_flags & WOLFSENTRY_LOCK_FLAG_TIMED)) ? &thread->deadline : NULL)
 #define WOLFSENTRY_INTERNAL_LOCK_FLAGS (thread ? thread->base_lock_flags | WOLFSENTRY_LOCK_FLAG_RECURSIVE_MUTEX : WOLFSENTRY_LOCK_FLAG_RECURSIVE_MUTEX)
 

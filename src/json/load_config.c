@@ -55,8 +55,8 @@
 "config-update" : {
     "max-connection-count" : number,
     "penaltybox-duration" : number|string, // allow suffixes s,m,h,d
-    "derog-thres-for-penalty-boxing" : number,
-    "derog-thres-ignore-commendable" : true|false,
+    "derog-thresh-for-penalty-boxing" : number,
+    "derog-thresh-ignore-commendable" : true|false,
     "commendable-clears-derogatory" : true|false,
 },
 

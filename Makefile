@@ -314,7 +314,7 @@ ifndef VERSION
 endif
 
 ifndef RELEASE
-	RELEASE := $(shell git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1)")
+	RELEASE := $(shell git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1)" 2>/dev/null)
 endif
 
 .PHONY: dist
@@ -345,6 +345,7 @@ CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h 
 
 .PHONY: release
 release:
+	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make release -- version isn't known."; exit 1; fi
 ifndef VERY_QUIET
 	@echo "generating wolfsentry-$(RELEASE).zip"
 endif

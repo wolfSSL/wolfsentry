@@ -455,11 +455,16 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete(struct wolfsentry_context *wolf
 }
 
 wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results) {
+    wolfsentry_errcode_t ret;
+    wolfsentry_refcount_t refs_left;
     if (ent->refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if (action_results)
         WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
-    if (WOLFSENTRY_REFCOUNT_DECREMENT(ent->refcount) > 0)
+    WOLFSENTRY_REFCOUNT_DECREMENT(ent->refcount, refs_left, ret);
+    if (ret < 0)
+        return ret;
+    if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
     WOLFSENTRY_FREE(ent);
     if (action_results)

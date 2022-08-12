@@ -84,13 +84,18 @@ wolfsentry_errcode_t wolfsentry_kv_drop_reference(
     struct wolfsentry_kv_pair_internal *kv,
     wolfsentry_action_res_t *action_results)
 {
+    wolfsentry_errcode_t ret;
+    wolfsentry_refcount_t refs_left;
     (void)action_results;
     if (kv->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if ((kv->header.parent_table != NULL) &&
         (kv->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_KV))
         WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
-    if (WOLFSENTRY_REFCOUNT_DECREMENT(kv->header.refcount) > 0)
+    WOLFSENTRY_REFCOUNT_DECREMENT(kv->header.refcount, refs_left, ret);
+    if (ret < 0)
+        return ret;
+    if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
     WOLFSENTRY_FREE(kv);
     WOLFSENTRY_RETURN_OK;
@@ -236,7 +241,9 @@ static wolfsentry_errcode_t wolfsentry_kv_get_reference_1(
     wolfsentry_errcode_t ret = wolfsentry_kv_get_1(kv_table, kv_template, kv);
     if (ret < 0)
         return ret;
-    WOLFSENTRY_REFCOUNT_INCREMENT((*kv)->header.refcount);
+    WOLFSENTRY_REFCOUNT_INCREMENT((*kv)->header.refcount, ret);
+    if (ret < 0)
+        return ret;
     WOLFSENTRY_RETURN_OK;
 }
 

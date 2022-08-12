@@ -342,8 +342,9 @@ typedef enum {
     WOLFSENTRY_ACTION_TYPE_POST = 1, /* called when an event is posted. */
     WOLFSENTRY_ACTION_TYPE_INSERT = 2, /* called when a route is added to the route table for this event. */
     WOLFSENTRY_ACTION_TYPE_MATCH = 3, /* called by wolfsentry_route_dispatch() for a route match. */
-    WOLFSENTRY_ACTION_TYPE_DELETE = 4, /* called when a route associated with this event expires or is otherwise deleted. */
-    WOLFSENTRY_ACTION_TYPE_DECISION = 5 /* called after final decision has been made by wolfsentry_route_event_dispatch*(). */
+    WOLFSENTRY_ACTION_TYPE_UPDATE = 4, /* called by wolfsentry_route_dispatch() when the logical state (currently, flags) of an existing route changes. */
+    WOLFSENTRY_ACTION_TYPE_DELETE = 5, /* called when a route associated with this event expires or is otherwise deleted. */
+    WOLFSENTRY_ACTION_TYPE_DECISION = 6 /* called after final decision has been made by wolfsentry_route_event_dispatch*(). */
 } wolfsentry_action_type_t;
 
 #define WOLFSENTRY_ACTION_RES_USER_SHIFT 16U
@@ -363,6 +364,7 @@ typedef enum {
     WOLFSENTRY_ACTION_RES_DEALLOCATED = 1U << 10U, /* when an API call returns this, the route and its associated ID were deallocated from the system. */
     WOLFSENTRY_ACTION_RES_ERROR       = 1U << 11U,
     WOLFSENTRY_ACTION_RES_FALLTHROUGH = 1U << 12U, /* dispatch resolved to the fallthrough route. */
+    WOLFSENTRY_ACTION_RES_UPDATE      = 1U << 13U, /* signals to subsequent actions and the caller that the route state was updated (e.g. penaltyboxed). */
     WOLFSENTRY_ACTION_RES_USER_BASE   = 1U << WOLFSENTRY_ACTION_RES_USER_SHIFT /* start of user-defined results, with user-defined scheme (bitfield, sequential, or other) */
 } wolfsentry_action_res_t;
 
@@ -467,13 +469,16 @@ typedef enum {
 
 typedef enum {
     WOLFSENTRY_EVENTCONFIG_FLAG_NONE = 0U,
-    WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS = 1U << 0U
+    WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE = 1U << 0U,
+    WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY = 1U << 1U,
+    WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS = 1U << 2U
 } wolfsentry_eventconfig_flags_t;
 
 struct wolfsentry_eventconfig {
     size_t route_private_data_size;
     size_t route_private_data_alignment;
     uint32_t max_connection_count;
+    wolfsentry_hitcount_t derogatory_threshold_for_penaltybox;
     wolfsentry_time_t penaltybox_duration; /* zero means time-unbounded. */
     wolfsentry_eventconfig_flags_t flags;
 };
@@ -1001,7 +1006,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_update_flags(
     wolfsentry_route_flags_t flags_to_set,
     wolfsentry_route_flags_t flags_to_clear,
     wolfsentry_route_flags_t *flags_before,
-    wolfsentry_route_flags_t *flags_after);
+    wolfsentry_route_flags_t *flags_after,
+    wolfsentry_action_res_t *action_results);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_set_wildcard(
     struct wolfsentry_route *route,

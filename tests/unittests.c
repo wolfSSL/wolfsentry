@@ -28,6 +28,7 @@
 #include "src/wolfsentry_internal.h"
 
 #include <stdlib.h>
+#include <unistd.h>
 
 #ifdef WOLFSENTRY_NO_STDIO
 #define printf(...)
@@ -527,7 +528,14 @@ static int test_static_routes (void) {
         byte addr_buf[4];
     } remote, local, remote_wildcard, local_wildcard;
 
-    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+    struct wolfsentry_eventconfig config = {
+        .route_private_data_size = PRIVATE_DATA_SIZE,
+        .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+        .max_connection_count = 10,
+        .derogatory_threshold_for_penaltybox = 4,
+        .penaltybox_duration = 1, /* denominated in seconds when passing to wolfsentry_init(). */
+        .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+    };
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init(
@@ -1015,6 +1023,40 @@ static int test_static_routes (void) {
     WOLFSENTRY_EXIT_ON_SUCCESS(wolfsentry_route_delete_static(wolfsentry, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &action_results, &n_deleted));
 
     WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes_static->header.n_ents == 0);
+
+
+    /* finally, test config.derogatory_threshold_for_penaltybox */
+
+    WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_ROUTE_FLAG_GREENLISTED);
+    WOLFSENTRY_CLEAR_BITS(flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED);
+    memcpy(remote.sa.addr,"\3\4\5\6",sizeof remote.addr_buf);
+    memcpy(local.sa.addr,"\373\372\371\370",sizeof local.addr_buf);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert_static(wolfsentry, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &id, &action_results));
+
+    {
+        wolfsentry_hitcount_t i;
+        for (i=1; i <= config.derogatory_threshold_for_penaltybox + 1; ++i) {
+            WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+            WOLFSENTRY_SET_BITS(action_results, WOLFSENTRY_ACTION_RES_DEROGATORY);
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch_with_inited_result(wolfsentry, &remote.sa, &local.sa, flags, NULL /* event_label */, 0 /* event_label_len */, NULL /* caller_arg */,
+                                                                                          &route_id, &inexact_matches, &action_results));
+            if (i == config.derogatory_threshold_for_penaltybox) {
+                WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+                WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+                printf("sleeping for %lld seconds to test penaltybox timeout...", (long long int)(config.penaltybox_duration + 1));
+                fflush(stdout);
+                sleep((unsigned int)config.penaltybox_duration + 1);
+                printf(" done.\n");
+                fflush(stdout);
+            } else {
+                WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+                WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+            }
+        }
+    }
+
+    /* leave the route in the table, to be cleaned up by wolfsentry_shutdown(). */
 
     printf("all subtests succeeded -- %d distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
 
@@ -2355,6 +2397,15 @@ static int test_json(const char *fname) {
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
                                    wolfsentry,
                                    "handle-match",
+                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                   WOLFSENTRY_ACTION_FLAG_NONE,
+                                   test_action,
+                                   NULL,
+                                   &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
+                                   wolfsentry,
+                                   "handle-update",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
                                    test_action,

@@ -55,8 +55,9 @@
 "config-update" : {
     "max-connection-count" : number,
     "penaltybox-duration" : number|string, // allow suffixes s,m,h,d
-    "default-policy-static" : "accept" | "reject"
-    "default-policy-dynamic" : "accept" | "reject"
+    "derog-thres-for-penalty-boxing" : number,
+    "derog-thres-ignore-commendable" : true|false,
+    "commendable-clears-derogatory" : true|false,
 },
 
 "events-insert" : [
@@ -66,18 +67,24 @@
     "config" : {
         "max-connection-count" : number
         "penalty-box-duration" : number|string // allow suffixes s,m,h,d
+        "derog-thresh-for-penalty-boxing" : number,
+        "derog-thresh-ignore-commendable" : true|false,
+        "commendable-clears-derogatory" : true|false,
     }
     "actions" : [ string ... ],
     "insert-event" : string,
     "match-event" : string,
+    "update-event" : string,
     "delete-event" : string
     "decision-event" : string
 
 }
 ],
 
-"config-update" : {
-    "default-event-static" : string,
+"default-policies" : {
+    "default-policy-static" : "accept" | "reject"
+    "default-event-static" : string
+    "default-policy-dynamic" : "accept" | "reject"
     "default-event-dynamic" : string
 },
 
@@ -90,7 +97,7 @@
     "penalty-boxed" : true|false,
     "green-listed" : true|false,
     "dont-count-hits" : true|false,
-    "dont-count-current-connections" : true|false
+    "dont-count-current-connections" : true|false,
     "family" : string|number,
     "protocol" : string|number,
     "remote" : {
@@ -378,6 +385,16 @@ static wolfsentry_errcode_t convert_double(JSON_TYPE type, const char *data, siz
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t convert_boolean_flag(JSON_TYPE type, enumint_t *flags, enumint_t flag) {
+    if (type == JSON_FALSE)
+        *flags &= ~flag;
+    else if (type == JSON_TRUE)
+        *flags |= flag;
+    else
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_context *wolfsentry, JSON_TYPE type, const char *data, size_t data_size, wolfsentry_time_t *out) {
     wolfsentry_errcode_t ret;
     char *endptr;
@@ -454,6 +471,13 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
         return convert_uint32(type, data, data_size, &eventconfig->max_connection_count);
     if (! strcmp(jps->cur_keyname, "penalty-box-duration"))
         return convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->penaltybox_duration);
+    if (! strcmp(jps->cur_keyname, "derog-thresh-for-penalty-boxing"))
+        return convert_uint32(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox);
+    if (! strcmp(jps->cur_keyname, "derog-thresh-ignore-commendable"))
+        return convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE);
+    if (! strcmp(jps->cur_keyname, "commendable-clears-derogatory"))
+        return convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY);
+
     WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 }
 
@@ -924,6 +948,8 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
             subevent_type = WOLFSENTRY_ACTION_TYPE_INSERT;
         else if (! strcmp(jps->cur_keyname, "match-event"))
             subevent_type = WOLFSENTRY_ACTION_TYPE_MATCH;
+        else if (! strcmp(jps->cur_keyname, "update-event"))
+            subevent_type = WOLFSENTRY_ACTION_TYPE_UPDATE;
         else if (! strcmp(jps->cur_keyname, "delete-event"))
             subevent_type = WOLFSENTRY_ACTION_TYPE_DELETE;
         else if (! strcmp(jps->cur_keyname, "decision-event"))

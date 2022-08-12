@@ -94,7 +94,7 @@ do {                                                                    \
             _post_i = 0;                                                \
             break;                                                      \
         }                                                               \
-        _post_i = _pre_i + (x);                                         \
+        _post_i = (__typeof__(i))(_pre_i + (x));                        \
         if (_post_i == _pre_i)                                          \
             break;                                                      \
         if (__atomic_compare_exchange_n(                                \
@@ -121,7 +121,7 @@ do {                                                                    \
             _post_i = MAX_UINT_OF(i);                                   \
             break;                                                      \
         }                                                               \
-        _post_i = _pre_i - (x);                                         \
+        _post_i = (__typeof__(i))(_pre_i - (x));                        \
         if (_post_i == _pre_i)                                          \
             break;                                                      \
         if (__atomic_compare_exchange_n(                                \

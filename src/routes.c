@@ -274,12 +274,17 @@ static wolfsentry_errcode_t wolfsentry_route_drop_reference_1(
     wolfsentry_action_res_t *action_results)
 {
     struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
+    wolfsentry_errcode_t ret;
+    wolfsentry_refcount_t refs_left;
     if (route->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if ((route->header.parent_table != NULL) &&
         (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE))
         WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
-    if (WOLFSENTRY_REFCOUNT_DECREMENT(route->header.refcount) > 0)
+    WOLFSENTRY_REFCOUNT_DECREMENT(route->header.refcount, refs_left, ret);
+    if (ret < 0)
+        return ret;
+    if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
     if (route->parent_event)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(wolfsentry, route->parent_event, NULL /* action_results */));
@@ -395,7 +400,7 @@ static wolfsentry_errcode_t wolfsentry_route_new(
         *new = NULL;
     } else {
         if (parent_event != NULL) {
-            WOLFSENTRY_REFCOUNT_INCREMENT(parent_event->header.refcount);
+            WOLFSENTRY_REFCOUNT_INCREMENT(parent_event->header.refcount, ret);
         }
     }
 
@@ -481,7 +486,9 @@ wolfsentry_errcode_t wolfsentry_route_clone(
             wolfsentry_route_free_1(dest_context, config, *new_route);
             return ret;
         }
-        WOLFSENTRY_REFCOUNT_INCREMENT((*new_route)->parent_event->header.refcount);
+        WOLFSENTRY_REFCOUNT_INCREMENT((*new_route)->parent_event->header.refcount, ret);
+        if (ret < 0)
+            return ret;
     }
 
     WOLFSENTRY_RETURN_OK;
@@ -625,13 +632,39 @@ wolfsentry_errcode_t wolfsentry_route_insert_static(
     return ret;
 }
 
+static void wolfsentry_route_increment_hitcount(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    wolfsentry_action_res_t *action_results)
+{
+    if (route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS)
+        return;
+    else {
+        wolfsentry_hitcount_t post_hitcount;
+        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(route->header.hitcount, post_hitcount);
+        if (post_hitcount == 0) {
+            wolfsentry_route_flags_t flags_before, flags_after;
+            WOLFSENTRY_WARN_ON_FAILURE(
+                wolfsentry_route_update_flags(
+                    wolfsentry,
+                    route,
+                    WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS,
+                    WOLFSENTRY_ROUTE_FLAG_NONE,
+                    &flags_before,
+                    &flags_after,
+                    action_results));
+        }
+    }
+}
+
 static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     struct wolfsentry_context *wolfsentry,
     const struct wolfsentry_route_table *table,
     struct wolfsentry_route *target_route,
     int exact_p,
     wolfsentry_route_flags_t *inexact_matches,
-    struct wolfsentry_route **found_route)
+    struct wolfsentry_route **found_route,
+    wolfsentry_action_res_t *action_results)
 {
     struct wolfsentry_cursor cursor;
     int cursor_position;
@@ -708,10 +741,8 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 
   out:
 
-    if (ret >= 0) {
-        if (! (target_route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS))
-            WOLFSENTRY_ATOMIC_INCREMENT((*found_route)->header.hitcount, 1);
-    }
+    if ((ret >= 0) && (action_results != NULL))
+        wolfsentry_route_increment_hitcount(wolfsentry, target_route, action_results);
 
     return ret;
 }
@@ -725,7 +756,8 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_1(
     struct wolfsentry_event *parent_event,
     int exact_p,
     wolfsentry_route_flags_t *inexact_matches,
-    struct wolfsentry_route **found_route)
+    struct wolfsentry_route **found_route,
+    wolfsentry_action_res_t *action_results)
 {
     struct {
         struct wolfsentry_route route;
@@ -736,7 +768,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_1(
     if ((ret = wolfsentry_route_init(parent_event, remote, local, flags, 0 /* data_addr_offset */, sizeof target.buf, &target.route)) < 0)
         return ret;
 
-    return wolfsentry_route_lookup_0(wolfsentry, table, &target.route, exact_p, inexact_matches, found_route);
+    return wolfsentry_route_lookup_0(wolfsentry, table, &target.route, exact_p, inexact_matches, found_route, action_results);
 }
 
 wolfsentry_errcode_t wolfsentry_route_get_table_static(
@@ -795,12 +827,14 @@ wolfsentry_errcode_t wolfsentry_route_get_reference(
         if ((ret = wolfsentry_event_get_reference(wolfsentry, event_label, event_label_len, &event)) < 0)
             return ret;
     }
-    ret = wolfsentry_route_lookup_1(wolfsentry, table, remote, local, flags, event, exact_p, inexact_matches, (struct wolfsentry_route **)route);
+    ret = wolfsentry_route_lookup_1(wolfsentry, table, remote, local, flags, event, exact_p, inexact_matches, (struct wolfsentry_route **)route, NULL /* action_results */);
     if (event != NULL)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(wolfsentry, event, NULL /* action_results */));
     if (ret < 0)
         return ret;
-    WOLFSENTRY_REFCOUNT_INCREMENT((*route)->header.refcount);
+    WOLFSENTRY_REFCOUNT_INCREMENT((*route)->header.refcount, ret);
+    if (ret < 0)
+        return ret;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -856,7 +890,7 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_1(
     struct wolfsentry_route *route = NULL;
 
     for (;;) {
-        wolfsentry_errcode_t lookup_ret = wolfsentry_route_lookup_1(wolfsentry, wolfsentry->routes_static, remote, local, flags, event, 1 /* exact_p */, NULL /* inexact matches */, &route);
+        wolfsentry_errcode_t lookup_ret = wolfsentry_route_lookup_1(wolfsentry, wolfsentry->routes_static, remote, local, flags, event, 1 /* exact_p */, NULL /* inexact matches */, &route, NULL /* action_results */);
         if (lookup_ret < 0)
             break;
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
@@ -1036,8 +1070,22 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         if (rule_route) {
             if (action_results)
                 *action_results |= WOLFSENTRY_ACTION_RES_FALLTHROUGH;
-            if (! (rule_route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS))
-                WOLFSENTRY_ATOMIC_INCREMENT(rule_route->header.hitcount, 1);
+            if (! (rule_route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS)) {
+                wolfsentry_hitcount_t post_hitcount;
+                WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->header.hitcount, post_hitcount);
+                if (post_hitcount == 0) {
+                    wolfsentry_route_flags_t flags_before, flags_after;
+                    WOLFSENTRY_WARN_ON_FAILURE(
+                        wolfsentry_route_update_flags(
+                            wolfsentry,
+                            rule_route,
+                            WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS,
+                            WOLFSENTRY_ROUTE_FLAG_NONE,
+                            &flags_before,
+                            &flags_after,
+                            action_results));
+                }
+            }
         }
         parent_event = route_table->default_event;
     }
@@ -1073,33 +1121,71 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT)
             WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(rule_route->meta.connection_count);
     }
-    if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY)
-        WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(rule_route->meta.derogatory_count);
-    if (*action_results & WOLFSENTRY_ACTION_RES_COMMENDABLE)
-        WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(rule_route->meta.commendable_count);
 
-    if ((rule_route->flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)) {
-        if ((config->config.penaltybox_duration > 0) && (rule_route->meta.last_penaltybox_time != 0)) {
-            wolfsentry_time_t now;
-            ret = WOLFSENTRY_GET_TIME(&now);
-            if (ret < 0) {
-                *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
-                goto done;
-            }
-            if (WOLFSENTRY_DIFF_TIME(now, rule_route->meta.last_penaltybox_time) > config->config.penaltybox_duration) {
-                wolfsentry_route_flags_t flags_before, flags_after;
-                WOLFSENTRY_WARN_ON_FAILURE(
-                    wolfsentry_route_update_flags(
-                        wolfsentry,
-                        rule_route,
-                        WOLFSENTRY_ROUTE_FLAG_NONE,
-                        WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED,
-                        &flags_before,
-                        &flags_after));
-            } else
-                *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-        } else
-            *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
+    if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY) {
+        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.derogatory_count, ret);
+        (void)ret;
+    }
+    if (*action_results & WOLFSENTRY_ACTION_RES_COMMENDABLE) {
+        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.commendable_count, ret);
+        (void)ret;
+        if (config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY)
+            WOLFSENTRY_ATOMIC_STORE(rule_route->meta.derogatory_count, 0);
+    }
+
+    if (((WOLFSENTRY_ATOMIC_LOAD(rule_route->flags) & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)) &&
+        ((config->config.penaltybox_duration > 0) && (rule_route->meta.last_penaltybox_time != 0))) {
+        wolfsentry_time_t now;
+        ret = WOLFSENTRY_GET_TIME(&now);
+        if (ret < 0) {
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR | WOLFSENTRY_ACTION_RES_REJECT;
+            goto done;
+        }
+        if (WOLFSENTRY_DIFF_TIME(now, rule_route->meta.last_penaltybox_time) > config->config.penaltybox_duration) {
+            wolfsentry_route_flags_t flags_before, flags_after;
+            WOLFSENTRY_WARN_ON_FAILURE(
+                wolfsentry_route_update_flags(
+                    wolfsentry,
+                    rule_route,
+                    WOLFSENTRY_ROUTE_FLAG_NONE,
+                    WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED,
+                    &flags_before,
+                    &flags_after,
+                    action_results));
+        }
+    }
+
+    if (WOLFSENTRY_ATOMIC_LOAD(rule_route->flags) & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED) {
+        *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        goto done;
+    } else if ((config->config.derogatory_threshold_for_penaltybox > 0)
+               && ((config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE) ?
+                   (WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
+                    >= config->config.derogatory_threshold_for_penaltybox)
+                   :
+                   (WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
+                    - WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count)
+                    >= (int)config->config.derogatory_threshold_for_penaltybox)))
+    {
+        wolfsentry_route_flags_t flags_before, flags_after;
+        WOLFSENTRY_WARN_ON_FAILURE(
+            ret = wolfsentry_route_update_flags(
+                wolfsentry,
+                rule_route,
+                WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED,
+                WOLFSENTRY_ROUTE_FLAG_NONE,
+                &flags_before,
+                &flags_after,
+                action_results));
+        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+            /* once the penalty box threshold is reached, counting starts over
+             * from zero.
+             */
+            WOLFSENTRY_ATOMIC_STORE(rule_route->meta.derogatory_count, 0);
+            WOLFSENTRY_ATOMIC_STORE(rule_route->meta.commendable_count, 0);
+        }
+        *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
         goto done;
     } else if ((rule_route->flags & WOLFSENTRY_ROUTE_FLAG_GREENLISTED)) {
@@ -1116,6 +1202,21 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
   done:
+
+    if (parent_event && parent_event->update_event && parent_event->update_event->action_list.header.head) {
+        if (action_results)
+            WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
+                                       wolfsentry,
+                                       caller_arg,
+                                       parent_event->update_event,
+                                       trigger_event,
+                                       WOLFSENTRY_ACTION_TYPE_UPDATE,
+                                       target_route,
+                                       route_table,
+                                       rule_route,
+                                       action_results));
+    }
 
     if (parent_event && parent_event->decision_event && parent_event->decision_event->action_list.header.head) {
         if (action_results)
@@ -1166,7 +1267,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         goto just_free_resources;
 
     /* simple static route match. */
-    if ((ret = wolfsentry_route_lookup_0(wolfsentry, wolfsentry->routes_static, target_route, 0 /* exact_p */, inexact_matches, &rule_route)) >= 0) {
+    if ((ret = wolfsentry_route_lookup_0(wolfsentry, wolfsentry->routes_static, target_route, 0 /* exact_p */, inexact_matches, &rule_route, action_results)) >= 0) {
         route_table = wolfsentry->routes_static;
     }
 
@@ -1177,7 +1278,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     }
 
     /* dynamic route match. */
-    else if ((ret = wolfsentry_route_lookup_0(wolfsentry, wolfsentry->routes_dynamic, target_route, 0 /* exact_p */, inexact_matches, &rule_route)) >= 0) {
+    else if ((ret = wolfsentry_route_lookup_0(wolfsentry, wolfsentry->routes_dynamic, target_route, 0 /* exact_p */, inexact_matches, &rule_route, action_results)) >= 0) {
         route_table = wolfsentry->routes_dynamic;
     }
 
@@ -1198,7 +1299,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
             goto just_free_resources;
         if ((rule_route->parent_event == NULL) && (route_table->default_event != NULL)) {
             rule_route->parent_event = route_table->default_event;
-            WOLFSENTRY_REFCOUNT_INCREMENT(rule_route->parent_event->header.refcount);
+            WOLFSENTRY_REFCOUNT_INCREMENT(rule_route->parent_event->header.refcount, ret);
+            if (ret < 0)
+                return ret;
         }
     }
 
@@ -1515,7 +1618,7 @@ static void wolfsentry_route_update_flags_1(
     wolfsentry_route_flags_t *flags_before,
     wolfsentry_route_flags_t *flags_after)
 {
-    WOLFSENTRY_ATOMIC_UPDATE(route->flags, flags_to_set, flags_to_clear, flags_before, flags_after);
+    WOLFSENTRY_ATOMIC_UPDATE_FLAGS(route->flags, flags_to_set, flags_to_clear, flags_before, flags_after);
 }
 
 wolfsentry_errcode_t wolfsentry_route_update_flags(
@@ -1524,7 +1627,8 @@ wolfsentry_errcode_t wolfsentry_route_update_flags(
     wolfsentry_route_flags_t flags_to_set,
     wolfsentry_route_flags_t flags_to_clear,
     wolfsentry_route_flags_t *flags_before,
-    wolfsentry_route_flags_t *flags_after)
+    wolfsentry_route_flags_t *flags_after,
+    wolfsentry_action_res_t *action_results)
 {
     if ((flags_to_set & (WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED|WOLFSENTRY_ROUTE_FLAG_GREENLISTED)) ==
         (WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED|WOLFSENTRY_ROUTE_FLAG_GREENLISTED))
@@ -1537,12 +1641,12 @@ wolfsentry_errcode_t wolfsentry_route_update_flags(
         WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
 
     wolfsentry_route_update_flags_1(route, flags_to_set, flags_to_clear, flags_before, flags_after);
+    if (action_results) {
+        if (*flags_before != *flags_after)
+            *action_results |= WOLFSENTRY_ACTION_RES_UPDATE;
+    }
     if ((*flags_after & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED) && (! (*flags_before & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)))
         WOLFSENTRY_WARN_ON_FAILURE(WOLFSENTRY_GET_TIME(&route->meta.last_penaltybox_time));
-    else if ((*flags_before & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED) && (! (*flags_after & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED))) {
-        WOLFSENTRY_ATOMIC_DECREMENT(route->meta.derogatory_count, route->meta.derogatory_count);
-        WOLFSENTRY_ATOMIC_DECREMENT(route->meta.commendable_count, route->meta.commendable_count);
-    }
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -2111,7 +2215,9 @@ wolfsentry_errcode_t wolfsentry_route_table_clone_header(
         }
         if ((ret = wolfsentry_table_ent_get_by_id(dest_context, ((struct wolfsentry_route_table *)src_table)->fallthrough_route->header.id, (struct wolfsentry_table_ent_header **)&fallthrough_route)) < 0)
             return ret;
-        WOLFSENTRY_REFCOUNT_INCREMENT(fallthrough_route->header.refcount);
+        WOLFSENTRY_REFCOUNT_INCREMENT(fallthrough_route->header.refcount, ret);
+        if (ret < 0)
+            return ret;
     }
 
     WOLFSENTRY_RETURN_OK;

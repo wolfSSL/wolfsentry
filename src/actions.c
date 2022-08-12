@@ -173,7 +173,9 @@ static wolfsentry_errcode_t wolfsentry_action_get_reference_1(struct wolfsentry_
     struct wolfsentry_action *ret_action = (struct wolfsentry_action *)action_template;
     if ((ret = wolfsentry_table_ent_get(&wolfsentry->actions->header, (struct wolfsentry_table_ent_header **)&ret_action)) < 0)
         return ret;
-    WOLFSENTRY_REFCOUNT_INCREMENT(ret_action->header.refcount);
+    WOLFSENTRY_REFCOUNT_INCREMENT(ret_action->header.refcount, ret);
+    if (ret < 0)
+        return ret;
     *action = ret_action;
     WOLFSENTRY_RETURN_OK;
 }
@@ -223,7 +225,7 @@ wolfsentry_errcode_t wolfsentry_action_update_flags(
     wolfsentry_action_flags_t *flags_before,
     wolfsentry_action_flags_t *flags_after)
 {
-    WOLFSENTRY_ATOMIC_UPDATE(action->flags, flags_to_set, flags_to_clear, flags_before, flags_after);
+    WOLFSENTRY_ATOMIC_UPDATE_FLAGS(action->flags, flags_to_set, flags_to_clear, flags_before, flags_after);
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -386,7 +388,9 @@ wolfsentry_errcode_t wolfsentry_action_list_clone(
         }
 
         new_ale->action = new_action;
-        WOLFSENTRY_REFCOUNT_INCREMENT(new_action->header.refcount);
+        WOLFSENTRY_REFCOUNT_INCREMENT(new_action->header.refcount, ret);
+        if (ret < 0)
+            return ret;
         wolfsentry_list_ent_append(&dest_action_list->header, &new_ale->header);
     }
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
@@ -470,7 +474,7 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
         else {
             wolfsentry_route_flags_t flags_before;
             wolfsentry_route_flags_t flags_after;
-            WOLFSENTRY_ATOMIC_UPDATE(
+            WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
                 rule_route->flags,
                 (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED,
                 (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
@@ -483,7 +487,7 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
         else {
             wolfsentry_route_flags_t flags_before;
             wolfsentry_route_flags_t flags_after;
-            WOLFSENTRY_ATOMIC_UPDATE(
+            WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
                 rule_route->flags,
                 (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED,
                 (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,

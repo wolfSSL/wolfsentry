@@ -351,6 +351,8 @@ wolfsentry_errcode_t wolfsentry_addr_family_drop_reference(
     struct wolfsentry_addr_family_bynumber *family_bynumber,
     wolfsentry_action_res_t *action_results)
 {
+    wolfsentry_errcode_t ret;
+    wolfsentry_refcount_t refs_left;
     if (family_bynumber->header.refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if ((family_bynumber->header.parent_table != NULL) &&
@@ -358,7 +360,10 @@ wolfsentry_errcode_t wolfsentry_addr_family_drop_reference(
         WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
     if (action_results != NULL)
         WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
-    if (WOLFSENTRY_REFCOUNT_DECREMENT(family_bynumber->header.refcount) > 0)
+    WOLFSENTRY_REFCOUNT_DECREMENT(family_bynumber->header.refcount, refs_left, ret);
+    if (ret < 0)
+        return ret;
+    if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     /* note byname_ent->header.refcount is not used. */
@@ -791,9 +796,14 @@ const char *wolfsentry_addr_family_ntop(
             family,
             addr_family);
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-            WOLFSENTRY_REFCOUNT_INCREMENT((*addr_family)->header.refcount);
             if (errcode != NULL)
                 *errcode = ret;
+            WOLFSENTRY_REFCOUNT_INCREMENT((*addr_family)->header.refcount, ret);
+            if (ret < 0) {
+                if (errcode != NULL)
+                    *errcode = ret;
+                return NULL;
+            }
             return (*addr_family)->byname_ent->name;
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND)) {
             if (errcode != NULL)

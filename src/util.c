@@ -154,6 +154,10 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Item type does not match request";
     case WOLFSENTRY_ERROR_ID_BAD_VALUE:
         return "Bad value";
+    case WOLFSENTRY_ERROR_ID_DEADLOCK_AVERTED:
+        return "Deadlock averted";
+    case WOLFSENTRY_ERROR_ID_OVERFLOW_AVERTED:
+        return "Overflow averted";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
     }
@@ -199,10 +203,8 @@ const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned i
             return "error";
         case WOLFSENTRY_ACTION_RES_FALLTHROUGH:
             return "fallthrough";
-        case (1U << 13U):
-        case (1U << 14U):
-        case (1U << 15U):
-            return "(unknown)";
+        case WOLFSENTRY_ACTION_RES_UPDATE:
+            return "update";
         case WOLFSENTRY_ACTION_RES_USER_BASE:
             return "user+0";
         case WOLFSENTRY_ACTION_RES_USER_BASE << 1U:
@@ -236,7 +238,7 @@ const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned i
         case (unsigned)WOLFSENTRY_ACTION_RES_USER_BASE << 15U:
             return "user+15";
         }
-        return "(?)"; /* unreachable */
+        return "(?)";
     } else
         return NULL;
 }
@@ -3537,6 +3539,12 @@ wolfsentry_errcode_t wolfsentry_init_ex(
     if ((ret = wolfsentry_eventconfig_load(config, &(*wolfsentry)->config)) < 0)
         goto out;
 
+    /* config->penaltybox_duration is passed to wolfsentry_init_ex() in seconds,
+     * because wolfsentry_interval_from_seconds() needs a valid
+     * wolfsentry_context (circular dependency).  fix it now that we can.
+     */
+    timecbs->interval_from_seconds((long int)(*wolfsentry)->config.config.penaltybox_duration, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.penaltybox_duration));
+
     (*wolfsentry)->config_at_creation = (*wolfsentry)->config;
 
     if ((ret = wolfsentry_route_table_fallthrough_route_alloc(*wolfsentry, (*wolfsentry)->routes_static)) < 0)
@@ -3630,7 +3638,7 @@ wolfsentry_errcode_t wolfsentry_shutdown(struct wolfsentry_context **wolfsentry)
 
 wolfsentry_errcode_t wolfsentry_context_inhibit_actions(struct wolfsentry_context *wolfsentry) {
     wolfsentry_eventconfig_flags_t flags_before, flags_after;
-    WOLFSENTRY_ATOMIC_UPDATE(
+    WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
         wolfsentry->config.config.flags,
         (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS,
         (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
@@ -3641,7 +3649,7 @@ wolfsentry_errcode_t wolfsentry_context_inhibit_actions(struct wolfsentry_contex
 
 wolfsentry_errcode_t wolfsentry_context_enable_actions(struct wolfsentry_context *wolfsentry) {
     wolfsentry_eventconfig_flags_t flags_before, flags_after;
-    WOLFSENTRY_ATOMIC_UPDATE(
+    WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
         wolfsentry->config.config.flags,
         (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
         (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS,

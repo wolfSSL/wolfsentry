@@ -116,8 +116,24 @@ struct wolfsentry_rwlock {
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
-#define WOLFSENTRY_REFCOUNT_INCREMENT(x) WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(x)
-#define WOLFSENTRY_REFCOUNT_DECREMENT(x) WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(x)
+#define WOLFSENTRY_REFCOUNT_INCREMENT(x, ret)                           \
+    do {                                                                \
+        wolfsentry_refcount_t _out;                                     \
+        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(x, _out);    \
+        if (_out == 0)                                                  \
+            (ret) = WOLFSENTRY_ERROR_ENCODE(OVERFLOW_AVERTED);          \
+        else                                                            \
+            (ret) = WOLFSENTRY_ERROR_ENCODE(OK);                        \
+    } while(0)
+
+#define WOLFSENTRY_REFCOUNT_DECREMENT(x, res, ret) \
+    do {                                                                \
+        WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY_BY_ONE(x, res);     \
+        if (res == MAX_UINT_OF(x))                                      \
+            (ret) = WOLFSENTRY_ERROR_ENCODE(INTERNAL_CHECK_FATAL);      \
+        else                                                            \
+            (ret) = WOLFSENTRY_ERROR_ENCODE(OK);                        \
+    } while(0)
 
 struct wolfsentry_table_header;
 
@@ -230,6 +246,7 @@ struct wolfsentry_event {
                                               */
     struct wolfsentry_event *insert_event; /* child event with setup routines (if any) for routes inserted with this as parent_event. */
     struct wolfsentry_event *match_event; /* child event with state management for routes inserted with this as parent_event. */
+    struct wolfsentry_event *update_event; /* child event with logic to act on changes in the state of routes inserted with this as parent_event. */
     struct wolfsentry_event *delete_event; /* child event with cleanup routines (if any) for routes inserted with this as parent_event. */
     struct wolfsentry_event *decision_event; /* child event with logic for notifications and logging around decisions for routes inserted with this as parent_event. */
 

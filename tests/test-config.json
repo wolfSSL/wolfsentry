@@ -2,7 +2,10 @@
     "wolfsentry-config-version" : 1,
     "config-update" : {
 	"max-connection-count" : 5,
-	"penalty-box-duration" : "1h"
+	"penalty-box-duration" : "1h",
+	"derog-thresh-for-penalty-boxing" : 4,
+	"derog-thresh-ignore-commendable" : false,
+	"commendable-clears-derogatory" : false
     },
     "events-insert" : [
         {
@@ -18,6 +21,10 @@
 	    "actions" : [ "handle-match" ]
 	},
 	{
+	    "label" : "event-on-update",
+	    "actions" : [ "handle-update" ]
+	},
+	{
 	    "label" : "event-on-decision",
 	    "actions" : [ "notify-on-decision" ]
 	},
@@ -26,11 +33,32 @@
 	    "priority" : 1,
 	    "config" : {
 		"max-connection-count" : 10,
-		"penalty-box-duration" : "10m"
+		"penalty-box-duration" : "10m",
+		"derog-thresh-for-penalty-boxing" : 4,
+		"derog-thresh-ignore-commendable" : false,
+		"commendable-clears-derogatory" : false
 	    },
 	    "actions" : [ "handle-connect", "handle-connect2" ],
 	    "insert-event" : "event-on-insert",
 	    "match-event" : "event-on-match",
+	    "update-event" : "event-on-update",
+	    "delete-event" : "event-on-delete",
+	    "decision-event" : "event-on-decision"
+	},
+	{
+	    "label" : "dynamic-route-parent",
+	    "priority" : 1,
+	    "config" : {
+		"max-connection-count" : 10,
+		"penalty-box-duration" : "10m",
+		"derog-thresh-for-penalty-boxing" : 4,
+		"derog-thresh-ignore-commendable" : false,
+		"commendable-clears-derogatory" : false
+	    },
+	    "actions" : [ "handle-connect", "handle-connect2" ],
+	    "insert-event" : "event-on-insert",
+	    "match-event" : "event-on-match",
+	    "update-event" : "event-on-update",
 	    "delete-event" : "event-on-delete",
 	    "decision-event" : "event-on-decision"
 	},
@@ -40,7 +68,9 @@
     ],
     "default-policies" : {
 	"default-policy-static" : "reject",
-	"default-event-static" : "static-route-parent"
+	"default-event-static" : "static-route-parent",
+	"default-policy-dynamic" : "reject",
+	"default-event-dynamic" : "dynamic-route-parent"
     },
     "static-routes-insert" : [
 	{

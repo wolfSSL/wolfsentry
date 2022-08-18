@@ -135,7 +135,9 @@ struct wolfsentry_thread_context {
                                                         * current_shared_lock.
                                                         */
     };
-    int recursion_of_shared_lock; /* recursion count for outermost_shared_lock/current_shared_lock */
+    int recursion_of_shared_lock; /* recursion count for outermost_shared_lock/current_shared_lock -- 1 if locked only once. */
+    int shared_count; /* total count of shared locks held */
+    int mutex_and_reservation_count;
 };
 
 #define WOLFSENTRY_DEADLINE_NEVER (-1)

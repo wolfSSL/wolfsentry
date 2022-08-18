@@ -452,14 +452,14 @@ static const struct wolfsentry_allocator default_allocator = {
 
 #ifdef WOLFSENTRY_THREADSAFE
 
-wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_lock_flags_t base_lock_flags) {
+wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_lock_flags_t init_lock_flags) {
     memset(thread_context, 0, sizeof *thread_context);
     thread_context->id = WOLFSENTRY_THREAD_GET_ID;
     if (thread_context->id == WOLFSENTRY_THREAD_NO_ID)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
     thread_context->deadline.tv_sec = WOLFSENTRY_DEADLINE_NEVER;
     thread_context->deadline.tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
-    thread_context->base_lock_flags = base_lock_flags;
+    thread_context->current_lock_flags = init_lock_flags;
     WOLFSENTRY_RETURN_OK;
 };
 
@@ -496,6 +496,20 @@ wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN) {
     (void)wolfsentry;
     thread->deadline.tv_sec = WOLFSENTRY_DEADLINE_NEVER;
     thread->deadline.tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfsentry_thread_context *thread_context) {
+    if (thread_context->mutex_and_reservation_count > 0)
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    current_lock_flags |= WOLFSENTRY_LOCK_FLAG_READONLY;
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfsentry_thread_context *thread_context) {
+    if (thread_context->shared_count > thread_context->recursion_of_shared_lock)
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    current_lock_flags &= ~WOLFSENTRY_LOCK_FLAG_READONLY;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -1275,7 +1289,7 @@ static wolfsentry_errcode_t _shared_locker_list_check_consistency(struct wolfsen
 #define SHARED_LOCKER_LIST_ASSERT_CONSISTENCY(lock) do {} while (0)
 #endif
 
-wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
+wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
     int ret;
 
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)

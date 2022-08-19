@@ -741,8 +741,8 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 
   out:
 
-    if ((ret >= 0) && (action_results != NULL))
-        wolfsentry_route_increment_hitcount(wolfsentry, target_route, action_results);
+    if ((*found_route != NULL) && (ret >= 0) && (action_results != NULL))
+        wolfsentry_route_increment_hitcount(wolfsentry, *found_route, action_results);
 
     return ret;
 }
@@ -1070,22 +1070,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         if (rule_route) {
             if (action_results)
                 *action_results |= WOLFSENTRY_ACTION_RES_FALLTHROUGH;
-            if (! (rule_route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS)) {
-                wolfsentry_hitcount_t post_hitcount;
-                WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->header.hitcount, post_hitcount);
-                if (post_hitcount == 0) {
-                    wolfsentry_route_flags_t flags_before, flags_after;
-                    WOLFSENTRY_WARN_ON_FAILURE(
-                        wolfsentry_route_update_flags(
-                            wolfsentry,
-                            rule_route,
-                            WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS,
-                            WOLFSENTRY_ROUTE_FLAG_NONE,
-                            &flags_before,
-                            &flags_after,
-                            action_results));
-                }
-            }
+            wolfsentry_route_increment_hitcount(wolfsentry, rule_route, action_results);
         }
         parent_event = route_table->default_event;
     }

@@ -92,7 +92,7 @@ struct wolfsentry_shared_locker_list {
 #endif /* WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING */
 
 struct wolfsentry_rwlock {
-    struct wolfsentry_host_platform_interface *hpi;
+    const struct wolfsentry_host_platform_interface *hpi;
     sem_t sem;
     sem_t sem_read_waiters;
     sem_t sem_write_waiters;
@@ -123,10 +123,10 @@ struct wolfsentry_rwlock {
 struct wolfsentry_thread_context {
     wolfsentry_thread_id_t id;
     struct timespec deadline;
-    wolfsentry_lock_flags_t current_lock_flags; /* only relevant bit at present is _LOCK_FLAG_READONLY */
+    wolfsentry_thread_flags_t current_thread_flags;
     union {
-        struct wolfsentry_rwlock *outermost_shared_lock; /* only if _LOCK_FLAG_READONLY */
-        struct wolfsentry_rwlock *current_shared_lock; /* only if !_LOCK_FLAG_READONLY.
+        struct wolfsentry_rwlock *outermost_shared_lock; /* only if _THREAD_FLAG_READONLY */
+        struct wolfsentry_rwlock *current_shared_lock; /* only if !_THREAD_FLAG_READONLY.
                                                         * locker can have shared lock(s) only
                                                         * for this lock.  if another shared lock is
                                                         * obtained, first this one will be
@@ -142,8 +142,8 @@ struct wolfsentry_thread_context {
 
 #define WOLFSENTRY_DEADLINE_NEVER (-1)
 #define WOLFSENTRY_DEADLINE_NOW (-2)
-#define WOLFSENTRY_CONTEXT_DEADLINE ((thread && (thread->base_lock_flags & WOLFSENTRY_LOCK_FLAG_TIMED)) ? &thread->deadline : NULL)
-#define WOLFSENTRY_INTERNAL_LOCK_FLAGS (thread ? thread->base_lock_flags | WOLFSENTRY_LOCK_FLAG_RECURSIVE_MUTEX : WOLFSENTRY_LOCK_FLAG_RECURSIVE_MUTEX)
+#define WOLFSENTRY_CONTEXT_DEADLINE ((thread && (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE)) ? &thread->deadline : NULL)
+#define WOLFSENTRY_INTERNAL_LOCK_FLAGS WOLFSENTRY_LOCK_FLAG_RECURSIVE_MUTEX
 
 /* prefabbed code patterns for simple locking scenarios: */
 

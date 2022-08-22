@@ -285,14 +285,43 @@ struct wolfsentry_timecbs {
     wolfsentry_interval_from_seconds_cb_t interval_from_seconds;
 };
 
+#ifdef WOLFSENTRY_THREADSAFE
+
+typedef int (*sem_init_cb_t)(sem_t *sem, int pshared, unsigned int value);
+typedef int (*sem_post_cb_t)(sem_t *sem);
+typedef int (*sem_wait_cb_t)(sem_t *sem);
+typedef int (*sem_timedwait_cb_t)(sem_t *sem, struct timespec *abs_timeout);
+typedef int (*sem_trywait_cb_t)(sem_t *sem);
+typedef int (*sem_destroy_cb_t)(sem_t *sem);
+
+struct wolfsentry_semcbs {
+    sem_init_cb_t sem_init;
+    sem_post_cb_t sem_post;
+    sem_wait_cb_t sem_wait;
+    sem_timedwait_cb_t sem_timedwait;
+    sem_trywait_cb_t sem_trywait;
+    sem_destroy_cb_t sem_destroy;
+};
+
+#endif /* WOLFSENTRY_THREADSAFE */
+
 struct wolfsentry_host_platform_interface {
     struct wolfsentry_allocator allocator;
     struct wolfsentry_timecbs timecbs;
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_semcbs semcbs;
+#endif
 };
 
 #ifdef WOLFSENTRY_THREADSAFE
 
 struct wolfsentry_thread_context;
+
+typedef enum {
+    WOLFSENTRY_THREAD_FLAG_NONE = 0,
+    WOLFSENTRY_THREAD_FLAG_DEADLINE = 1<<0,
+    WOLFSENTRY_THREAD_FLAG_READONLY = 1<<1
+} wolfsentry_thread_flags_t;
 
 #define WOLFSENTRY_CONTEXT_ARGS_IN struct wolfsentry_context *wolfsentry, struct wolfsentry_thread_context *thread
 #define WOLFSENTRY_CONTEXT_ELEMENTS struct wolfsentry_context *wolfsentry; struct wolfsentry_thread_context *thread
@@ -311,12 +340,11 @@ typedef enum {
     WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO = 1<<4,
     WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO = 1<<5,
     WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO = 1<<6,
-    WOLFSENTRY_LOCK_FLAG_TIMED = 1<<7,
-    WOLFSENTRY_LOCK_FLAG_READONLY = 1<<8
+    WOLFSENTRY_LOCK_FLAG_READONLY = 1<<7
 } wolfsentry_lock_flags_t;
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_lock_flags_t init_lock_flags);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_lock_flags_t init_lock_flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t init_thread_flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t init_thread_flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, int usecs);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, long epoch_secs, long epoch_nsecs);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN);

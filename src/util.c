@@ -463,6 +463,24 @@ wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_con
     WOLFSENTRY_RETURN_OK;
 };
 
+wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_lock_flags_t init_lock_flags) {
+    wolfsentry_errcode_t ret;
+    if ((*thread_context = (struct wolfsentry_thread_context *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof **thread_context)) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    ret = wolfsentry_init_thread_context(*thread_context, init_lock_flags);
+    if (ret < 0) {
+        WOLFSENTRY_FREE_1(hpi->allocator, *thread_context);
+        *thread_context = NULL;
+    }
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context) {
+    WOLFSENTRY_FREE_1(hpi->allocator, *thread_context);
+    *thread_context = NULL;
+    WOLFSENTRY_RETURN_OK;
+}
+
 wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, int usecs) {
     wolfsentry_time_t now;
     wolfsentry_errcode_t ret;
@@ -502,14 +520,14 @@ wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN) {
 wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfsentry_thread_context *thread_context) {
     if (thread_context->mutex_and_reservation_count > 0)
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
-    current_lock_flags |= WOLFSENTRY_LOCK_FLAG_READONLY;
+    thread_context->current_lock_flags |= WOLFSENTRY_LOCK_FLAG_READONLY;
     WOLFSENTRY_RETURN_OK;
 }
 
 wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfsentry_thread_context *thread_context) {
     if (thread_context->shared_count > thread_context->recursion_of_shared_lock)
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
-    current_lock_flags &= ~WOLFSENTRY_LOCK_FLAG_READONLY;
+    thread_context->current_lock_flags &= ~(enumint_t)WOLFSENTRY_LOCK_FLAG_READONLY;
     WOLFSENTRY_RETURN_OK;
 }
 

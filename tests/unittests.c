@@ -1056,6 +1056,121 @@ static int test_static_routes (void) {
         }
     }
 
+
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_reference(
+                                 wolfsentry,
+                                 static_routes,
+                                 &remote.sa,
+                                 &local.sa,
+                                 flags,
+                                 0 /* event_label_len */,
+                                 0 /* event_label */,
+                                 1 /* exact_p */,
+                                 &inexact_matches,
+                                 &route_ref));
+
+
+    {
+        int old_derogatory_count;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_reset_derogatory_count(
+                                       wolfsentry,
+                                       route_ref,
+                                       &old_derogatory_count));
+        /* 1 left from final iteration above. */
+        WOLFSENTRY_EXIT_ON_FALSE(old_derogatory_count == 1);
+    }
+
+    {
+        int new_derogatory_count;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_increment_derogatory_count(
+                                       wolfsentry,
+                                       route_ref,
+                                       123,
+                                       &new_derogatory_count));
+        WOLFSENTRY_EXIT_ON_FALSE(new_derogatory_count == 123);
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_route_increment_derogatory_count(
+                wolfsentry,
+                route_ref,
+                -124,
+                NULL),
+            OVERFLOW_AVERTED));
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_route_increment_derogatory_count(
+                wolfsentry,
+                route_ref,
+                65536 - 123,
+                NULL),
+            OVERFLOW_AVERTED));
+
+    {
+        int new_derogatory_count;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_increment_derogatory_count(
+                                       wolfsentry,
+                                       route_ref,
+                                       1,
+                                       &new_derogatory_count));
+        WOLFSENTRY_EXIT_ON_FALSE(new_derogatory_count == 124);
+    }
+
+    {
+        int old_commendable_count;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_reset_commendable_count(
+                                       wolfsentry,
+                                       route_ref,
+                                       &old_commendable_count));
+        WOLFSENTRY_EXIT_ON_FALSE(old_commendable_count == 0);
+    }
+
+    {
+        int new_commendable_count;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_increment_commendable_count(
+                                       wolfsentry,
+                                       route_ref,
+                                       123,
+                                       &new_commendable_count));
+        WOLFSENTRY_EXIT_ON_FALSE(new_commendable_count == 123);
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_route_increment_commendable_count(
+                wolfsentry,
+                route_ref,
+                -124,
+                NULL),
+            OVERFLOW_AVERTED));
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_route_increment_commendable_count(
+                wolfsentry,
+                route_ref,
+                65536 - 123,
+                NULL),
+            OVERFLOW_AVERTED));
+
+    {
+        int new_commendable_count;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_increment_commendable_count(
+                                       wolfsentry,
+                                       route_ref,
+                                       1,
+                                       &new_commendable_count));
+        WOLFSENTRY_EXIT_ON_FALSE(new_commendable_count == 124);
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(
+                                   wolfsentry,
+                                   route_ref,
+                                   NULL /* action_results */));
+
     /* leave the route in the table, to be cleaned up by wolfsentry_shutdown(). */
 
     printf("all subtests succeeded -- %d distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
@@ -1092,7 +1207,7 @@ static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     wolfsentry_action_type_t action_type,
     const struct wolfsentry_route *target_route,
     struct wolfsentry_route_table *route_table,
-    const struct wolfsentry_route *rule_route,
+    struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
     (void)wolfsentry;
@@ -2230,7 +2345,7 @@ static wolfsentry_errcode_t test_action(
     wolfsentry_action_type_t action_type,
     const struct wolfsentry_route *target_route,
     struct wolfsentry_route_table *route_table,
-    const struct wolfsentry_route *rule_route,
+    struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
     const struct wolfsentry_event *parent_event;

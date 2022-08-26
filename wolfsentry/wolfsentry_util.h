@@ -85,6 +85,23 @@ do {                                                                    \
     }                                                                   \
 } while (0)
 
+#define WOLFSENTRY_ATOMIC_RESET(i, pre_i)                               \
+do {                                                                    \
+    *(pre_i) = (i);                                                     \
+    for (;;) {                                                          \
+        if (*(pre_i) == 0)                                              \
+            break;                                                      \
+        if (__atomic_compare_exchange_n(                                \
+                &(i),                                                   \
+                (pre_i),                                                \
+                0,                                                      \
+                0 /* weak */,                                           \
+                __ATOMIC_SEQ_CST /* success_memmodel */,                \
+                __ATOMIC_SEQ_CST /* failure_memmodel */))               \
+            break;                                                      \
+    }                                                                   \
+} while (0)
+
 #define WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(i, x, out)          \
 do {                                                                    \
     __typeof__(i) _pre_i = (i);                                         \
@@ -158,13 +175,27 @@ do {                                                                    \
         (i) = *(post_i);                                                \
 } while (0)
 
+#define WOLFSENTRY_ATOMIC_RESET(i, pre_i) do { *(pre_i) = (i); (i) = 0; } while (0)
+
 #define WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(i, x, out)          \
-    (out) = ((MAX_UINT_OF(i) - (i) >= (x)) ? (i+=x) : 0U)
+    do {                                                                \
+        if (((x) > MAX_UINT_OF(i)) || ((MAX_UINT_OF(i) - (i) < (x))))   \
+            (out) = 0U;                                                 \
+        else                                                            \
+            (out) = ((i)+=(__typeof__(i))(x));                          \
+    } while (0)
+
 #define WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(i, out)      \
     WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(i, 1U, out)
 
 #define WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(i, x, out)          \
-    (out) = (((i) >= (x)) ? (i-=x) : MAX_UINT_OF(i))
+    do {                                                                \
+        if (((x) > MAX_UINT_OF(i)) || ((i) < (x)))                      \
+            (out) = MAX_UINT_OF(i);                                     \
+        else                                                            \
+            (out) = ((i) -= (__typeof__(i))(x));                        \
+    } while (0)
+
 #define WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY_BY_ONE(i, out)      \
     WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(i, 1U, out)
 

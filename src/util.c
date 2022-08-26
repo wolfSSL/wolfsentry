@@ -1344,6 +1344,17 @@ wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *l
 
     SHARED_LOCKER_LIST_ASSERT_CONSISTENCY(lock);
 
+    if ((flags & WOLFSENTRY_LOCK_FLAG_RECURSIVE_SHARED) &&
+        (thread->current_shared_lock == lock)) {
+        ++lock->holder_count.read;
+        ++thread->recursion_of_shared_lock;
+        ++thread->shared_count;
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_RETURN_OK;
+    }
+
     if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0)) {
 #ifdef WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING
         struct wolfsentry_locker_list_ent *ll_ent = NULL;

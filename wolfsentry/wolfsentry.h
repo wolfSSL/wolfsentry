@@ -390,7 +390,7 @@ typedef wolfsentry_errcode_t (*wolfsentry_action_callback_t)(
     wolfsentry_action_type_t action_type,
     const struct wolfsentry_route *trigger_route,
     struct wolfsentry_route_table *route_table,
-    const struct wolfsentry_route *rule_route,
+    struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results);
 
 typedef enum {
@@ -1008,6 +1008,28 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_update_flags(
     wolfsentry_route_flags_t *flags_before,
     wolfsentry_route_flags_t *flags_after,
     wolfsentry_action_res_t *action_results);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_increment_derogatory_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int count_to_add,
+    int *new_derogatory_count_ptr);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_increment_commendable_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int count_to_add,
+    int *new_commendable_count);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_reset_derogatory_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int *old_derogatory_count_ptr);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_reset_commendable_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int *old_commendable_count_ptr);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_set_wildcard(
     struct wolfsentry_route *route,

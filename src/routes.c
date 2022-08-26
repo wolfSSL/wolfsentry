@@ -1635,6 +1635,84 @@ wolfsentry_errcode_t wolfsentry_route_update_flags(
     WOLFSENTRY_RETURN_OK;
 }
 
+wolfsentry_errcode_t wolfsentry_route_increment_derogatory_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int count_to_add,
+    int *new_derogatory_count_ptr)
+{
+    uint16_t new_derogatory_count;
+
+    (void)wolfsentry;
+
+    if (count_to_add > 0) {
+        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(route->meta.derogatory_count, (unsigned)count_to_add, new_derogatory_count);
+        if (new_derogatory_count == 0)
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    } else {
+        WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(route->meta.derogatory_count, (unsigned)(-count_to_add), new_derogatory_count);
+        if (new_derogatory_count == MAX_UINT_OF(route->meta.derogatory_count))
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    }
+
+    if (new_derogatory_count_ptr)
+        *new_derogatory_count_ptr = (int)new_derogatory_count;
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_increment_commendable_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int count_to_add,
+    int *new_commendable_count_ptr)
+{
+    uint16_t new_commendable_count;
+
+    (void)wolfsentry;
+
+    if (count_to_add > 0) {
+        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(route->meta.commendable_count, (unsigned)count_to_add, new_commendable_count);
+        if (new_commendable_count == 0)
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    } else {
+        WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(route->meta.commendable_count, (unsigned)(-count_to_add), new_commendable_count);
+        if (new_commendable_count == MAX_UINT_OF(route->meta.commendable_count))
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    }
+
+    if (new_commendable_count_ptr)
+        *new_commendable_count_ptr = (int)new_commendable_count;
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_reset_derogatory_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int *old_derogatory_count_ptr)
+{
+    uint16_t old_derogatory_count;
+    (void)wolfsentry;
+    WOLFSENTRY_ATOMIC_RESET(route->meta.derogatory_count, &old_derogatory_count);
+    if (old_derogatory_count_ptr)
+        *old_derogatory_count_ptr = (int)old_derogatory_count;
+    WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_route_reset_commendable_count(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    int *old_commendable_count_ptr)
+{
+    uint16_t old_commendable_count;
+    (void)wolfsentry;
+    WOLFSENTRY_ATOMIC_RESET(route->meta.commendable_count, &old_commendable_count);
+    if (old_commendable_count_ptr)
+        *old_commendable_count_ptr = (int)old_commendable_count;
+    WOLFSENTRY_RETURN_OK;
+}
+
 /* only possible before route is inserted. */
 wolfsentry_errcode_t wolfsentry_route_set_wildcard(
     struct wolfsentry_route *route,

@@ -3273,6 +3273,16 @@ wolfsentry_errcode_t wolfsentry_interval_from_seconds(struct wolfsentry_context 
     return wolfsentry->timecbs.interval_from_seconds(howlong_secs, howlong_nsecs, howlong);
 }
 
+wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
+    return ((const struct wolfsentry_table_ent_header *)object)->id;
+}
+
+wolfsentry_errcode_t wolfsentry_object_checkout(void *object) {
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_REFCOUNT_INCREMENT(((struct wolfsentry_table_ent_header *)object)->refcount, ret);
+    return ret;
+}
+
 wolfsentry_errcode_t wolfsentry_eventconfig_init(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_eventconfig *config)

@@ -302,10 +302,6 @@ wolfsentry_errcode_t wolfsentry_id_allocate(
     /* not reached */
 }
 
-wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
-    return ((const struct wolfsentry_table_ent_header *)object)->id;
-}
-
 wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent) {
     struct wolfsentry_table_ent_header *i = wolfsentry->ents_by_id.head;
     int cmpret;

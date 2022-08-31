@@ -769,8 +769,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(
 
 #define WOLFSENTRY_LENGTH_NULL_TERMINATED -1
 
-WOLFSENTRY_API wolfsentry_ent_id_t wolfsentry_get_table_id(const void *table);
 WOLFSENTRY_API wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_checkout(void *object);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_static(
     struct wolfsentry_context *wolfsentry,

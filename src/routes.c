@@ -1435,6 +1435,63 @@ wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_id_with_inited_result(
     return wolfsentry_route_event_dispatch_by_id_1(wolfsentry, id, event_label, event_label_len, caller_arg, action_results);
 }
 
+static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_1(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    const char *event_label,
+    int event_label_len,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    wolfsentry_action_res_t *action_results
+    )
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_event *trigger_event = NULL;
+
+    if (event_label) {
+        if ((ret = wolfsentry_event_get_reference(wolfsentry, event_label, event_label_len, &trigger_event)) < 0)
+            return ret;
+    }
+
+    if (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE) {
+        ret = WOLFSENTRY_ERROR_ENCODE(WRONG_OBJECT);
+        goto out;
+    }
+
+    ret = wolfsentry_route_event_dispatch_0(wolfsentry, trigger_event, caller_arg, NULL /* target_route */, (struct wolfsentry_route_table *)route->header.parent_table, route, action_results);
+
+  out:
+    if (trigger_event)
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(wolfsentry, trigger_event, NULL /* action_results */));
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    const char *event_label,
+    int event_label_len,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    wolfsentry_action_res_t *action_results
+    )
+{
+    WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
+    return wolfsentry_route_event_dispatch_by_route_1(wolfsentry, route, event_label, event_label_len, caller_arg, action_results);
+}
+
+wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_with_inited_result(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    const char *event_label,
+    int event_label_len,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    wolfsentry_action_res_t *action_results
+    )
+{
+    int ret = check_user_inited_result(*action_results);
+    if (ret < 0)
+        return ret;
+    return wolfsentry_route_event_dispatch_by_route_1(wolfsentry, route, event_label, event_label_len, caller_arg, action_results);
+}
 
 struct check_if_route_expired_args {
     struct wolfsentry_context *wolfsentry;

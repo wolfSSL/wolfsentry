@@ -969,6 +969,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_id_with_i
     wolfsentry_action_res_t *action_results
     );
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    const char *event_label,
+    int event_label_len,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    wolfsentry_action_res_t *action_results
+    );
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_with_inited_result(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route *route,
+    const char *event_label,
+    int event_label_len,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    wolfsentry_action_res_t *action_results
+    );
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route_table *table);

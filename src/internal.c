@@ -345,7 +345,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(struct wolfsentry_context *w
     if (id == WOLFSENTRY_ENT_ID_NONE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    for (i = wolfsentry->ents_by_id.head; i; i = i->next) {
+    for (i = wolfsentry->ents_by_id.head; i; i = i->next_by_id) {
         int c = wolfsentry_ent_id_cmp(i, id);
         if (c >= 0) {
             if (c == 0) {

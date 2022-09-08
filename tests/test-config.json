@@ -3,6 +3,7 @@
     "config-update" : {
 	"max-connection-count" : 5,
 	"penalty-box-duration" : "1h",
+	"max-purgeable-routes" : 10,
 	"derog-thresh-for-penalty-boxing" : 4,
 	"derog-thresh-ignore-commendable" : false,
 	"commendable-clears-derogatory" : false
@@ -53,7 +54,8 @@
 		"penalty-box-duration" : "10m",
 		"derog-thresh-for-penalty-boxing" : 4,
 		"derog-thresh-ignore-commendable" : false,
-		"commendable-clears-derogatory" : false
+		"commendable-clears-derogatory" : false,
+		"route-idle-time-for-purge" : "1h"
 	    },
 	    "actions" : [ "handle-connect", "handle-connect2" ],
 	    "insert-event" : "event-on-insert",

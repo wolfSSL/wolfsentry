@@ -144,6 +144,8 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Configuration clause is not in the correct sequence";
     case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
         return "Configuration has unexpected or invalid structure";
+    case WOLFSENTRY_ERROR_ID_CONFIG_MISPLACED_KEY:
+        return "Configuration uses a key in the wrong context";
     case WOLFSENTRY_ERROR_ID_CONFIG_PARSER:
         return "Configuration parsing failed";
     case WOLFSENTRY_ERROR_ID_CONFIG_MISSING_HANDLER:

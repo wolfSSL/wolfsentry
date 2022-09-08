@@ -30,6 +30,9 @@
 #ifndef sizeof_field
 #define sizeof_field(structure, element) sizeof(((structure *)0)->element)
 #endif
+#ifndef container_of
+#define container_of(ptr, container_type, member_name) ((container_type *)(void *)(((byte *)(ptr)) - offsetof(container_type, member_name)))
+#endif
 
 #define streq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
 #define strcaseeq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (strncasecmp(vs,fs,vs_len) == 0))

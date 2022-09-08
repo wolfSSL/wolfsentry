@@ -263,6 +263,9 @@ struct wolfsentry_event_table {
 struct wolfsentry_route {
     struct wolfsentry_table_ent_header header;
 
+    struct wolfsentry_list_ent_header purge_links;
+#define WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(purge_link) container_of(purge_link, struct wolfsentry_route, purge_links)
+
     struct wolfsentry_event *parent_event; /* applicable config is parent_event->config or if null, wolfsentry->config */
 
     wolfsentry_route_flags_t flags;
@@ -277,6 +280,10 @@ struct wolfsentry_route {
         wolfsentry_time_t insert_time;
         wolfsentry_time_t last_hit_time;
         wolfsentry_time_t last_penaltybox_time;
+        wolfsentry_time_t purge_after;
+#ifndef WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS
+#define WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS 60
+#endif
         uint16_t connection_count;
         uint16_t derogatory_count;
         uint16_t commendable_count;
@@ -304,9 +311,10 @@ struct wolfsentry_route {
 
 struct wolfsentry_route_table {
     struct wolfsentry_table_header header;
+    struct wolfsentry_list_header purge_list;
+    wolfsentry_hitcount_t max_purgeable_routes;
     struct wolfsentry_event *default_event; /* used as the parent_event by wolfsentry_route_dispatch() for a static route match with a null parent_event. */
     struct wolfsentry_route *fallthrough_route; /* used as the rule_route when no rule_route is matched or inserted. */
-    wolfsentry_time_t purge_age; /* when now - last_transition_time >= purge_age, purge from the route table. */
     wolfsentry_action_res_t default_policy;
 };
 

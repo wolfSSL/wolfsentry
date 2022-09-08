@@ -29,10 +29,11 @@ struct wolfsentry_list_ent_header {
 
 struct wolfsentry_list_header {
     struct wolfsentry_list_ent_header *head, *tail;
+    wolfsentry_hitcount_t len;
     /* note no cmp_fn slot */
 };
 
-#define WOLFSENTRY_LIST_HEADER_RESET(list) (list).head = (list).tail = NULL
+#define WOLFSENTRY_LIST_HEADER_RESET(list) do { (list).head = (list).tail = NULL; (list).len = 0; } while (0)
 
 static inline void wolfsentry_list_ent_prepend(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
     ent->prev = NULL;
@@ -44,6 +45,7 @@ static inline void wolfsentry_list_ent_prepend(struct wolfsentry_list_header *li
         ent->next = NULL;
         list->head = list->tail = ent;
     }
+    ++list->len;
 }
 
 static inline void wolfsentry_list_ent_append(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
@@ -56,6 +58,22 @@ static inline void wolfsentry_list_ent_append(struct wolfsentry_list_header *lis
         ent->prev = NULL;
         list->head = list->tail = ent;
     }
+    ++list->len;
+}
+
+static inline void wolfsentry_list_ent_insert_before(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *point_ent, struct wolfsentry_list_ent_header *new_ent) {
+    if (point_ent == NULL) {
+        wolfsentry_list_ent_append(list, new_ent);
+        return;
+    }
+    new_ent->next = point_ent;
+    if (point_ent->prev) {
+        new_ent->prev = point_ent->prev;
+        new_ent->prev->next = new_ent;
+    } else
+        list->head = new_ent;
+    point_ent->prev = new_ent;
+    ++list->len;
 }
 
 static inline void wolfsentry_list_ent_insert_after(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *point_ent, struct wolfsentry_list_ent_header *new_ent) {
@@ -73,6 +91,7 @@ static inline void wolfsentry_list_ent_insert_after(struct wolfsentry_list_heade
     } else
         list->tail = new_ent;
     point_ent->next = new_ent;
+    ++list->len;
 }
 
 static inline void wolfsentry_list_ent_delete(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
@@ -89,6 +108,7 @@ static inline void wolfsentry_list_ent_delete(struct wolfsentry_list_header *lis
         ent->next->prev = ent->prev;
         ent->prev->next = ent->next;
     }
+    --list->len;
 }
 
 static inline void wolfsentry_list_ent_get_first(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header **ent) {
@@ -107,6 +127,10 @@ static inline void wolfsentry_list_ent_get_next(struct wolfsentry_list_header *l
 static inline void wolfsentry_list_ent_get_prev(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header **ent) {
     (void)list;
     *ent = (*ent)->prev;
+}
+
+static inline wolfsentry_hitcount_t wolfsentry_list_ent_get_len(struct wolfsentry_list_header *list) {
+    return list->len;
 }
 
 #endif /* WOLFSENTRY_LL_H */

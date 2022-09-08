@@ -418,6 +418,9 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
     case 'm':
         conv *= 60;
         ++endptr;
+        /* fallthrough */
+    case 's':
+        break;
     }
     if ((size_t)(endptr - data) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -471,12 +474,35 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
         return convert_uint32(type, data, data_size, &eventconfig->max_connection_count);
     if (! strcmp(jps->cur_keyname, "penalty-box-duration"))
         return convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->penaltybox_duration);
+    if (! strcmp(jps->cur_keyname, "route-idle-time-for-purge"))
+        return convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->route_idle_time_for_purge);
     if (! strcmp(jps->cur_keyname, "derog-thresh-for-penalty-boxing"))
         return convert_uint32(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox);
     if (! strcmp(jps->cur_keyname, "derog-thresh-ignore-commendable"))
         return convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE);
     if (! strcmp(jps->cur_keyname, "commendable-clears-derogatory"))
         return convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY);
+
+    if (! strcmp(jps->cur_keyname, "max-purgeable-routes")) {
+        struct wolfsentry_route_table *route_table;
+        wolfsentry_hitcount_t max_purgeable_routes;
+        wolfsentry_errcode_t ret;
+        if ((ret = convert_uint32(type, data, data_size, &max_purgeable_routes)) < 0)
+            return ret;
+        if (jps->table_under_construction != T_U_C_TOPCONFIG)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
+        ret = wolfsentry_route_get_table_static(jps->wolfsentry, &route_table);
+        if (ret < 0)
+            return ret;
+        if ((ret = wolfsentry_route_table_max_purgeable_routes_set(jps->wolfsentry, route_table, max_purgeable_routes)) < 0)
+            return ret;
+        ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &route_table);
+        if (ret < 0)
+            return ret;
+        if ((ret = wolfsentry_route_table_max_purgeable_routes_set(jps->wolfsentry, route_table, max_purgeable_routes)) < 0)
+            return ret;
+        WOLFSENTRY_RETURN_OK;
+    }
 
     WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 }

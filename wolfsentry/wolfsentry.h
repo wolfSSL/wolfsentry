@@ -441,6 +441,7 @@ struct wolfsentry_route_metadata_exports {
     wolfsentry_time_t insert_time;
     wolfsentry_time_t last_hit_time;
     wolfsentry_time_t last_penaltybox_time;
+    wolfsentry_time_t purge_after;
     wolfsentry_hitcount_t connection_count;
     wolfsentry_hitcount_t derogatory_count;
     wolfsentry_hitcount_t commendable_count;
@@ -480,6 +481,7 @@ struct wolfsentry_eventconfig {
     uint32_t max_connection_count;
     wolfsentry_hitcount_t derogatory_threshold_for_penaltybox;
     wolfsentry_time_t penaltybox_duration; /* zero means time-unbounded. */
+    wolfsentry_time_t route_idle_time_for_purge; /* zero means no automatic purge. */
     wolfsentry_eventconfig_flags_t flags;
 };
 
@@ -987,9 +989,25 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_wit
     wolfsentry_action_res_t *action_results
     );
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_get(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *table,
+    wolfsentry_hitcount_t *max_purgeable_routes);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_set(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *table,
+    wolfsentry_hitcount_t max_purgeable_routes);
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge(
     struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_route_table *table);
+    struct wolfsentry_route_table *table,
+    wolfsentry_action_res_t *action_results);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge_one(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *table,
+    wolfsentry_action_res_t *action_results);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_flush_table(
     struct wolfsentry_context *wolfsentry,

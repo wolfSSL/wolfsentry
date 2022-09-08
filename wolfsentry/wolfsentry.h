@@ -785,6 +785,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_static(
     wolfsentry_ent_id_t *id,
     wolfsentry_action_res_t *action_results);
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_and_check_out(
+    struct wolfsentry_context *wolfsentry,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
+    wolfsentry_route_flags_t flags,
+    const char *event_label,
+    int event_label_len,
+    struct wolfsentry_route **route,
+    wolfsentry_action_res_t *action_results);
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_static(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */

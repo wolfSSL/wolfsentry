@@ -775,12 +775,18 @@ static int test_static_routes (void) {
     remote_wildcard.sa.sa_port = 0;
     WOLFSENTRY_SET_BITS(flags_wildcard, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD);
 
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert_static(wolfsentry, NULL /* caller_arg */, &remote_wildcard.sa, &local_wildcard.sa, flags_wildcard, 0 /* event_label_len */, 0 /* event_label */, &id, &action_results));
+    {
+        struct wolfsentry_route *new_route;
 
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(wolfsentry, &remote.sa, &local.sa, flags, NULL /* event_label */, 0 /* event_label_len */, NULL /* caller_arg */,
-                                                           &route_id, &inexact_matches, &action_results));
-    WOLFSENTRY_EXIT_ON_FALSE(route_id == id);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert_and_check_out(wolfsentry, NULL /* caller_arg */, &remote_wildcard.sa, &local_wildcard.sa, flags_wildcard, 0 /* event_label_len */, 0 /* event_label */, &new_route, &action_results));
 
+        id = wolfsentry_get_object_id(new_route);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(wolfsentry, new_route, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(wolfsentry, &remote.sa, &local.sa, flags, NULL /* event_label */, 0 /* event_label_len */, NULL /* caller_arg */,
+                                                                   &route_id, &inexact_matches, &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(route_id == id);
+    }
 
     local.sa.sa_port = 8765;
     WOLFSENTRY_EXIT_ON_SUCCESS(wolfsentry_route_event_dispatch(wolfsentry, &remote.sa, &local.sa, flags, NULL /* event_label */, 0 /* event_label_len */, NULL /* caller_arg */,

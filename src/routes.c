@@ -313,7 +313,18 @@ static wolfsentry_errcode_t wolfsentry_route_init(
     size_t data_addr_size,
     struct wolfsentry_route *new)
 {
-    if (data_addr_size < WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len))
+    size_t remote_addr_len, local_addr_len;
+
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)
+        remote_addr_len = 0;
+    else
+        remote_addr_len = remote->addr_len;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD)
+        local_addr_len = 0;
+    else
+        local_addr_len = local->addr_len;
+
+    if (data_addr_size < WOLFSENTRY_BITS_TO_BYTES(remote_addr_len) + WOLFSENTRY_BITS_TO_BYTES(local_addr_len))
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     if (data_addr_size > MAX_UINT_OF(uint16_t))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
@@ -322,26 +333,56 @@ static wolfsentry_errcode_t wolfsentry_route_init(
     if (! (flags & (WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN | WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT)))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    /* make sure wildcards are sensical. */
+    if (((flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD) &&
+         ((! (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) ||
+          (! (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD)) ||
+          (! (flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)))) ||
+        ((flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD) &&
+         ((! (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)) ||
+          (! (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)))))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     memset(new,0,offsetof(struct wolfsentry_route, data));
 
     new->parent_event = parent_event;
     new->flags = flags;
-    new->sa_family = remote->sa_family;
-    new->sa_proto = remote->sa_proto;
-    new->remote.sa_port = remote->sa_port;
-    new->remote.addr_len = remote->addr_len;
-    new->remote.interface = remote->interface;
-    new->local.sa_port = local->sa_port;
-    new->local.addr_len = local->addr_len;
-    new->local.interface = local->interface;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)
+        new->sa_family = 0;
+    else
+        new->sa_family = remote->sa_family;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)
+        new->sa_proto = 0;
+    else
+        new->sa_proto = remote->sa_proto;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)
+        new->remote.sa_port = 0;
+    else
+        new->remote.sa_port = remote->sa_port;
+    new->remote.addr_len = (wolfsentry_addr_bits_t)remote_addr_len;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)
+        new->remote.interface = 0;
+    else
+        new->remote.interface = remote->interface;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)
+        new->local.sa_port = 0;
+    else
+        new->local.sa_port = local->sa_port;
+    new->local.addr_len = (wolfsentry_addr_bits_t)local_addr_len;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD)
+        new->local.interface = 0;
+    else
+        new->local.interface = local->interface;
     new->data_addr_offset = (uint16_t)data_addr_offset;
     new->data_addr_size = (uint16_t)data_addr_size;
 
     if (data_addr_offset > 0)
         memset(new->data, 0, (size_t)data_addr_offset); /* zero private data. */
 
-    memcpy(WOLFSENTRY_ROUTE_REMOTE_ADDR(new), remote->addr, WOLFSENTRY_BITS_TO_BYTES((size_t)remote->addr_len));
-    memcpy(WOLFSENTRY_ROUTE_LOCAL_ADDR(new), local->addr, WOLFSENTRY_BITS_TO_BYTES((size_t)local->addr_len));
+    if (remote_addr_len > 0)
+        memcpy(WOLFSENTRY_ROUTE_REMOTE_ADDR(new), remote->addr, WOLFSENTRY_BITS_TO_BYTES(remote_addr_len));
+    if (local_addr_len > 0)
+        memcpy(WOLFSENTRY_ROUTE_LOCAL_ADDR(new), local->addr, WOLFSENTRY_BITS_TO_BYTES(local_addr_len));
 
     /* make sure the pad bits in the addresses are zero. */
     {
@@ -378,8 +419,18 @@ static wolfsentry_errcode_t wolfsentry_route_new(
     size_t new_size;
     wolfsentry_errcode_t ret;
     struct wolfsentry_eventconfig_internal *config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
+    size_t remote_addr_len, local_addr_len;
 
-    new_size = WOLFSENTRY_BITS_TO_BYTES((size_t)remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES((size_t)local->addr_len);
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)
+        remote_addr_len = 0;
+    else
+        remote_addr_len = remote->addr_len;
+    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD)
+        local_addr_len = 0;
+    else
+        local_addr_len = local->addr_len;
+
+    new_size = WOLFSENTRY_BITS_TO_BYTES(remote_addr_len) + WOLFSENTRY_BITS_TO_BYTES(local_addr_len);
     if (new_size > (size_t)(uint16_t)~0UL)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     new_size += offsetof(struct wolfsentry_route, data);
@@ -613,6 +664,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_2(
     wolfsentry_route_flags_t flags,
     struct wolfsentry_event *parent_event,
     wolfsentry_ent_id_t *id,
+    struct wolfsentry_route **route,
     wolfsentry_action_res_t *action_results)
 {
     struct wolfsentry_route *new;
@@ -630,6 +682,9 @@ static wolfsentry_errcode_t wolfsentry_route_insert_2(
 
     if (id)
         *id = new->header.id;
+
+    if (route && (wolfsentry_object_checkout(new) >= 0))
+        *route = new;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
@@ -660,7 +715,31 @@ wolfsentry_errcode_t wolfsentry_route_insert_static(
             return ret;
     }
     WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
-    ret = wolfsentry_route_insert_2(wolfsentry, caller_arg, wolfsentry->routes_static, remote, local, flags, event, id, action_results);
+    ret = wolfsentry_route_insert_2(wolfsentry, caller_arg, wolfsentry->routes_static, remote, local, flags, event, id, NULL /* route */, action_results);
+    if (event != NULL)
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(wolfsentry, event, NULL /* action_results */));
+    return ret;
+}
+
+wolfsentry_errcode_t wolfsentry_route_insert_and_check_out(
+    struct wolfsentry_context *wolfsentry,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
+    wolfsentry_route_flags_t flags,
+    const char *event_label,
+    int event_label_len,
+    struct wolfsentry_route **route,
+    wolfsentry_action_res_t *action_results)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_event *event = NULL;
+    if (event_label) {
+        if ((ret = wolfsentry_event_get_reference(wolfsentry, event_label, event_label_len, &event)) < 0)
+            return ret;
+    }
+    WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
+    ret = wolfsentry_route_insert_2(wolfsentry, caller_arg, wolfsentry->routes_static, remote, local, flags, event, NULL /* id */, route, action_results);
     if (event != NULL)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(wolfsentry, event, NULL /* action_results */));
     return ret;

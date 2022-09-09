@@ -49,7 +49,7 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
         return "actions.c";
     case WOLFSENTRY_SOURCE_ID_EVENTS_C:
         return "events.c";
-    case WOLFSENTRY_SOURCE_ID_INTERNAL_C:
+    case WOLFSENTRY_SOURCE_ID_WOLFSENTRY_INTERNAL_C:
         return "wolfsentry_internal.c";
     case WOLFSENTRY_SOURCE_ID_ROUTES_C:
         return "routes.c";
@@ -1343,7 +1343,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared_timed(struct wolfsentry_context *wol
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared_abstimed(lock, &abs_timeout);
     } else
@@ -1629,7 +1629,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared_timed_and_reserve_shared2mutex(struc
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared_abstimed_and_reserve_shared2mutex(lock, &abs_timeout);
     } else
@@ -1873,7 +1873,7 @@ wolfsentry_errcode_t wolfsentry_lock_mutex_timed(struct wolfsentry_context *wolf
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_mutex_abstimed(lock, &abs_timeout);
     } else
@@ -2529,7 +2529,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_timed(struct wolfsentry
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared2mutex_redeem_abstimed(lock, &abs_timeout);
     } else
@@ -2777,7 +2777,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_contex
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared2mutex_abstimed(lock, &abs_timeout);
     } else
@@ -3166,7 +3166,7 @@ static wolfsentry_time_t wolfsentry_builtin_add_time(wolfsentry_time_t start_tim
     return start_time + time_interval;
 }
 
-static wolfsentry_errcode_t wolfsentry_builtin_to_epoch_time(wolfsentry_time_t when, long *epoch_secs, long *epoch_nsecs) {
+static wolfsentry_errcode_t wolfsentry_builtin_to_epoch_time(wolfsentry_time_t when, time_t *epoch_secs, long *epoch_nsecs) {
     if (when / (wolfsentry_time_t)1000000 > MAX_SINT_OF(*epoch_secs))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     *epoch_secs = (long)(when / (wolfsentry_time_t)1000000);
@@ -3174,7 +3174,7 @@ static wolfsentry_errcode_t wolfsentry_builtin_to_epoch_time(wolfsentry_time_t w
     WOLFSENTRY_RETURN_OK;
 }
 
-static wolfsentry_errcode_t wolfsentry_builtin_from_epoch_time(long epoch_secs, long epoch_nsecs, wolfsentry_time_t *when) {
+static wolfsentry_errcode_t wolfsentry_builtin_from_epoch_time(time_t epoch_secs, long epoch_nsecs, wolfsentry_time_t *when) {
     if ((wolfsentry_time_t)epoch_secs > MAX_SINT_OF(*when) / (wolfsentry_time_t)1000000)
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     *when = ((wolfsentry_time_t)epoch_secs * (wolfsentry_time_t)1000000) + ((wolfsentry_time_t)epoch_nsecs / (wolfsentry_time_t)1000);
@@ -3216,7 +3216,8 @@ wolfsentry_errcode_t wolfsentry_time_now_plus_delta(struct wolfsentry_context *w
 
 #ifdef WOLFSENTRY_THREADSAFE
 wolfsentry_errcode_t wolfsentry_time_to_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t t, struct timespec *ts) {
-    long int epoch_secs, epoch_nsecs;
+    time_t epoch_secs;
+    long int epoch_nsecs;
     WOLFSENTRY_TO_EPOCH_TIME(t, &epoch_secs, &epoch_nsecs);
     ts->tv_sec = epoch_secs;
     ts->tv_nsec = epoch_nsecs;
@@ -3225,7 +3226,8 @@ wolfsentry_errcode_t wolfsentry_time_to_timespec(struct wolfsentry_context *wolf
 
 wolfsentry_errcode_t wolfsentry_time_now_plus_delta_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t td, struct timespec *ts) {
     wolfsentry_time_t now;
-    long int epoch_secs, epoch_nsecs;
+    time_t epoch_secs;
+    long int epoch_nsecs;
     wolfsentry_errcode_t ret = WOLFSENTRY_GET_TIME(&now);
     if (ret < 0)
         return ret;
@@ -3262,16 +3264,16 @@ wolfsentry_time_t wolfsentry_diff_time(struct wolfsentry_context *wolfsentry, wo
 wolfsentry_time_t wolfsentry_add_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t start_time, wolfsentry_time_t time_interval) {
     return wolfsentry->timecbs.add_time(start_time, time_interval);
 }
-wolfsentry_errcode_t wolfsentry_to_epoch_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t when, long *epoch_secs, long *epoch_nsecs) {
+wolfsentry_errcode_t wolfsentry_to_epoch_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t when, time_t *epoch_secs, long *epoch_nsecs) {
     return wolfsentry->timecbs.to_epoch_time(when, epoch_secs, epoch_nsecs);
 }
-wolfsentry_errcode_t wolfsentry_from_epoch_time(struct wolfsentry_context *wolfsentry, long epoch_secs, long epoch_nsecs, wolfsentry_time_t *when) {
+wolfsentry_errcode_t wolfsentry_from_epoch_time(struct wolfsentry_context *wolfsentry, time_t epoch_secs, long epoch_nsecs, wolfsentry_time_t *when) {
     return wolfsentry->timecbs.from_epoch_time(epoch_secs, epoch_nsecs, when);
 }
-wolfsentry_errcode_t wolfsentry_interval_to_seconds(struct wolfsentry_context *wolfsentry, wolfsentry_time_t howlong, long *howlong_secs, long *howlong_nsecs) {
+wolfsentry_errcode_t wolfsentry_interval_to_seconds(struct wolfsentry_context *wolfsentry, wolfsentry_time_t howlong, time_t *howlong_secs, long *howlong_nsecs) {
     return wolfsentry->timecbs.interval_to_seconds(howlong, howlong_secs, howlong_nsecs);
 }
-wolfsentry_errcode_t wolfsentry_interval_from_seconds(struct wolfsentry_context *wolfsentry, long howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
+wolfsentry_errcode_t wolfsentry_interval_from_seconds(struct wolfsentry_context *wolfsentry, time_t howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
     return wolfsentry->timecbs.interval_from_seconds(howlong_secs, howlong_nsecs, howlong);
 }
 

@@ -22,7 +22,7 @@
 
 #include "wolfsentry_internal.h"
 
-#define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_INTERNAL_C
+#define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_WOLFSENTRY_INTERNAL_C
 
 wolfsentry_errcode_t wolfsentry_table_ent_insert(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_header *table, int unique_p) {
     struct wolfsentry_table_ent_header *i = table->head;

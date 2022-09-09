@@ -2244,7 +2244,7 @@ static wolfsentry_errcode_t wolfsentry_route_render_proto(int proto, wolfsentry_
         fprintf(f, ", proto = *");
         WOLFSENTRY_RETURN_OK;
     }
-#ifndef WOLFSENTRY_PROTOCOL_NAMES
+#if !defined(WOLFSENTRY_PROTOCOL_NAMES) || defined(WOLFSENTRY_NO_GETPROTOBY)
     (void)flags;
 #else
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS)) {

@@ -658,7 +658,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(struct wolfsentry_json_proc
     }
 }
 
-#ifdef WOLFSENTRY_PROTOCOL_NAMES
+#if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
 
 static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_process_state *jps, const char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     char d_buf[64];
@@ -698,7 +698,7 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD);
         if (type == JSON_NUMBER)
             return convert_uint16(type, data, data_size, &sa->sa_port);
-#ifdef WOLFSENTRY_PROTOCOL_NAMES
+#if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
         else if (type == JSON_STRING)
             return convert_sockaddr_port_name(jps, data, data_size, sa);
 #endif
@@ -763,7 +763,7 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
             return ret;
         jps->o_u_c.route.local.sa_proto = jps->o_u_c.route.remote.sa_proto;
     }
-#ifdef WOLFSENTRY_PROTOCOL_NAMES
+#if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
     else if (type == JSON_STRING) {
         char d_buf[64];
         struct protoent *p;

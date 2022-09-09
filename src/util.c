@@ -1343,7 +1343,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared_timed(struct wolfsentry_context *wol
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared_abstimed(lock, &abs_timeout);
     } else
@@ -1629,7 +1629,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared_timed_and_reserve_shared2mutex(struc
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared_abstimed_and_reserve_shared2mutex(lock, &abs_timeout);
     } else
@@ -1873,7 +1873,7 @@ wolfsentry_errcode_t wolfsentry_lock_mutex_timed(struct wolfsentry_context *wolf
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_mutex_abstimed(lock, &abs_timeout);
     } else
@@ -2529,7 +2529,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_timed(struct wolfsentry
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared2mutex_redeem_abstimed(lock, &abs_timeout);
     } else
@@ -2777,7 +2777,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wolfsentry_contex
     else if (max_wait > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             return ret;
-        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), &abs_timeout.tv_sec, &abs_timeout.tv_nsec)) < 0)
+        if ((ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now,max_wait), (long int*)&abs_timeout.tv_sec, (long int*)&abs_timeout.tv_nsec)) < 0)
             return ret;
         return wolfsentry_lock_shared2mutex_abstimed(lock, &abs_timeout);
     } else

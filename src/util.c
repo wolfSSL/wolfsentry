@@ -50,7 +50,7 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
     case WOLFSENTRY_SOURCE_ID_EVENTS_C:
         return "events.c";
     case WOLFSENTRY_SOURCE_ID_INTERNAL_C:
-        return "internal.c";
+        return "wolfsentry_internal.c";
     case WOLFSENTRY_SOURCE_ID_ROUTES_C:
         return "routes.c";
     case WOLFSENTRY_SOURCE_ID_UTIL_C:

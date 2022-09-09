@@ -30,7 +30,7 @@ ifdef USER_MAKE_CONF
     include $(USER_MAKE_CONF)
 endif
 
-SRCS := util.c internal.c addr_families.c routes.c events.c actions.c kv.c
+SRCS := util.c wolfsentry_internal.c addr_families.c routes.c events.c actions.c kv.c
 
 ifndef SRC_TOP
     SRC_TOP := $(shell pwd -P)

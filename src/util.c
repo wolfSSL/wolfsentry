@@ -3169,7 +3169,7 @@ static wolfsentry_time_t wolfsentry_builtin_add_time(wolfsentry_time_t start_tim
 static wolfsentry_errcode_t wolfsentry_builtin_to_epoch_time(wolfsentry_time_t when, time_t *epoch_secs, long *epoch_nsecs) {
     if (when / (wolfsentry_time_t)1000000 > MAX_SINT_OF(*epoch_secs))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
-    *epoch_secs = (long)(when / (wolfsentry_time_t)1000000);
+    *epoch_secs = (time_t)(when / (wolfsentry_time_t)1000000);
     *epoch_nsecs = (long)((when % (wolfsentry_time_t)1000000) * (wolfsentry_time_t)1000);
     WOLFSENTRY_RETURN_OK;
 }

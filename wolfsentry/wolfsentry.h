@@ -172,10 +172,6 @@ typedef uint16_t wolfsentry_priority_t;
 #endif
 #define WOLFSENTRY_PRIORITY_NEXT 0
 
-#ifndef __unused
-#define __unused __attribute__((unused))
-#endif
-
 typedef uint32_t enumint_t;
 
 #if defined(WOLFSENTRY_THREADSAFE) && defined(WOLFSENTRY_LOCK_ERROR_CHECKING)

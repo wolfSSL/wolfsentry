@@ -2822,7 +2822,7 @@ int main (int argc, char* argv[]) {
 #endif
 
 #ifdef TEST_JSON
-#ifdef WOLFSENTRY_PROTOCOL_NAMES
+#if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
     ret = test_json(TEST_JSON_CONFIG_PATH);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
     // GCOV_EXCL_START

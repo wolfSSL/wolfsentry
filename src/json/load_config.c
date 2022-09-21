@@ -37,10 +37,6 @@
 #include <netdb.h>
 #endif
 
-#ifndef __unused
-#define __unused __attribute__((unused))
-#endif
-
 /* note that the order of objects in the JSON is semantically significant.
  * Thus, any application-level JSON preprocessing must be ES5-compliant
  * (preserve the order of pairs exactly).

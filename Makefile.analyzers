@@ -30,7 +30,9 @@ ifndef CLANG_PATH
 	CLANG_PATH:=/usr/lib/llvm/15/bin:/usr/lib/llvm-15:/usr/lib/llvm/14/bin:/usr/lib/llvm-14:/usr/lib/llvm/13/bin:/usr/lib/llvm-13:/usr/bin
 endif
 
-PATH:=$(CLANG_PATH):$(PATH)
+valgrind-all-clang: PATH:=$(CLANG_PATH):$(PATH)
+sanitize-all-clang: PATH:=$(CLANG_PATH):$(PATH)
+c99-test-clang: PATH:=$(CLANG_PATH):$(PATH)
 
 .PHONY: clang-version-test
 clang-version-test:
@@ -163,18 +165,23 @@ sanitize-all-clang: clang-version-test
 analyze-all: valgrind-all-gcc sanitize-all-gcc sanitize-all-clang
 	@echo "analyzers found no defects."
 
-.PHONY: c99-test
-c99-test: clang-version-test
+.PHONY: c99-test-gcc
+c99-test-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds EXTRA_CFLAGS+='-std=c99 -pedantic'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds CC=$(CLANG) EXTRA_CFLAGS+='-std=c99 -pedantic'
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds CC=$(CLANG) EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
-	@echo "std=c99 library build tests passed."
+	@echo "gcc std=c99 library build tests passed."
+
+.PHONY: c99-test-clang
+c99-test-clang: clang-version-test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=clang-c99-builds clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=clang-c99-builds CC=$(CLANG) EXTRA_CFLAGS+='-std=c99 -pedantic'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=clang-c99-builds clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=clang-c99-builds CC=$(CLANG) EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=clang-c99-builds clean
+	@echo "clang std=c99 library build tests passed."
 
 .PHONY: m32-test
 m32-test:
@@ -255,7 +262,7 @@ dist-check:
 	@echo $@ 'passed.'
 
 .PHONY: check
-check: analyze-all dynamic-build-test c99-test m32-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check lock-error-checking-test
+check: analyze-all dynamic-build-test c99-test-gcc c99-test-clang m32-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check lock-error-checking-test
 	@echo "all checks passed."
 
 # recipe to run the pre-push hook on the commit head, without actually pushing:

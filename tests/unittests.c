@@ -80,12 +80,12 @@ static wolfsentry_errcode_t test_init (void) {
                           &wolfsentry);
     printf("wolfsentry_init() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     if (ret < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 
     ret = wolfsentry_shutdown(&wolfsentry);
     printf("wolfsentry_shutdown() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 #endif /* TEST_INIT */
@@ -284,7 +284,7 @@ static int test_rw_locks (void) {
         fprintf(stderr,"wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
-        return 1;
+        WOLFSENTRY_RETURN_VALUE(1);
     // GCOV_EXCL_STOP
     }
 
@@ -370,7 +370,7 @@ static int test_rw_locks (void) {
         fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
-        return 1;
+        WOLFSENTRY_RETURN_VALUE(1);
     // GCOV_EXCL_STOP
     }
 
@@ -464,7 +464,7 @@ static int test_rw_locks (void) {
         fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
-        return 1;
+        WOLFSENTRY_RETURN_VALUE(1);
     // GCOV_EXCL_STOP
     }
 
@@ -490,7 +490,7 @@ static int test_rw_locks (void) {
 
     (void)alarm(0);
 
-    return 0;
+    WOLFSENTRY_RETURN_OK;
 }
 
 #else
@@ -636,13 +636,13 @@ static int test_static_routes (void) {
     if (private_data_size < PRIVATE_DATA_SIZE) {
     // GCOV_EXCL_START
         printf("private_data_size is %zu but expected %d.\n",private_data_size,PRIVATE_DATA_SIZE);
-        return 1;
+        WOLFSENTRY_RETURN_VALUE(1);
     // GCOV_EXCL_STOP
     }
     if ((PRIVATE_DATA_ALIGNMENT > 0) && ((uintptr_t)private_data % (uintptr_t)PRIVATE_DATA_ALIGNMENT)) {
     // GCOV_EXCL_START
         printf("private_data (%p) is not aligned to %d.\n",private_data,PRIVATE_DATA_ALIGNMENT);
-        return 1;
+        WOLFSENTRY_RETURN_VALUE(1);
     // GCOV_EXCL_STOP
     }
 
@@ -1183,7 +1183,7 @@ static int test_static_routes (void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
 
-    return 0;
+    WOLFSENTRY_RETURN_OK;
 }
 
 #undef PRIVATE_DATA_SIZE
@@ -1227,7 +1227,7 @@ static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     (void)rule_route;
     (void)action_results;
 
-    return 0;
+    WOLFSENTRY_RETURN_OK;
 }
 // GCOV_EXCL_STOP
 
@@ -1629,7 +1629,7 @@ int wolfsentry_event_set_subevent(
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
 
-    return 0;
+    WOLFSENTRY_RETURN_OK;
 }
 
 #undef PRIVATE_DATA_SIZE
@@ -2033,7 +2033,7 @@ static int test_user_values (void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
 
-    return 0;
+    WOLFSENTRY_RETURN_OK;
 }
 
 #endif /* TEST_USER_VALUES */
@@ -2099,7 +2099,7 @@ static wolfsentry_errcode_t my_addr_family_formatter(
     else
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
     *addr_text_len = out_len;
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 #endif /* TEST_USER_ADDR_FAMILIES || TEST_JSON */
@@ -2316,7 +2316,7 @@ static int test_user_addr_families (void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry));
 
-    return 0;
+    WOLFSENTRY_RETURN_OK;
 }
 
 #endif /* TEST_USER_ADDR_FAMILIES */
@@ -2363,7 +2363,7 @@ static wolfsentry_errcode_t test_action(
 
     if (rule_route == NULL) {
         printf("null rule_route, target_route=%p\n",target_route);
-        return 0;
+        WOLFSENTRY_RETURN_OK;
     }
 
     parent_event = wolfsentry_route_parent_event(rule_route);
@@ -2375,7 +2375,7 @@ static wolfsentry_errcode_t test_action(
            action_type,
            wolfsentry_get_object_id(rule_route),
            caller_arg);
-    return 0;
+    WOLFSENTRY_RETURN_OK;
 }
 
 static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry, const char *fname, wolfsentry_config_load_flags_t flags) {
@@ -2446,7 +2446,7 @@ static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry
     if (ret < 0)
         fprintf(stderr,"error processing file %s\n",fname);
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 
@@ -2744,8 +2744,7 @@ static int test_json(const char *fname) {
     }
 #endif /* WOLFSENTRY_HAVE_JSON_DOM */
 
-
-    return wolfsentry_shutdown(&wolfsentry);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_shutdown(&wolfsentry));
 }
 
 #endif /* TEST_JSON */
@@ -2840,5 +2839,5 @@ int main (int argc, char* argv[]) {
     }
 #endif
 
-    return err;
+    WOLFSENTRY_RETURN_VALUE(err);
 }

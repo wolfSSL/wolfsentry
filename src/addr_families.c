@@ -25,7 +25,7 @@
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_ADDR_FAMILIES_C
 
 static int wolfsentry_addr_family_bynumber_key_cmp(struct wolfsentry_addr_family_bynumber *left, struct wolfsentry_addr_family_bynumber *right) {
-    return left->number - right->number;
+    WOLFSENTRY_RETURN_VALUE(left->number - right->number);
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -42,7 +42,7 @@ static inline int wolfsentry_addr_family_byname_key_cmp_1(const char *left_label
             ret = -1;
     }
 
-    return ret;
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 static int wolfsentry_addr_family_byname_key_cmp(struct wolfsentry_addr_family_byname *left, struct wolfsentry_addr_family_byname *right) {
@@ -171,7 +171,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
 #endif
     }
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 static wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber_1(
@@ -193,7 +193,7 @@ static wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber_1(
     target.number = family_bynumber;
 
     if ((ret = wolfsentry_table_ent_get(&bynumber_table->header, (struct wolfsentry_table_ent_header **)&addr_family_1)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 
     *addr_family = addr_family_1;
 
@@ -216,7 +216,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_get_parser(
              wolfsentry->addr_families_bynumber,
              family,
              &addr_family)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     *parser = addr_family->parser;
     WOLFSENTRY_RETURN_OK;
 }
@@ -236,7 +236,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_get_formatter(
              wolfsentry->addr_families_bynumber,
              family,
              &addr_family)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     *formatter = addr_family->formatter;
     WOLFSENTRY_RETURN_OK;
 }
@@ -278,7 +278,7 @@ static wolfsentry_errcode_t wolfsentry_addr_family_get_byname_1(
     target.target.name_len = (byte)family_byname_len;
 
     if ((ret = wolfsentry_table_ent_get(&byname_table->header, (struct wolfsentry_table_ent_header **)&addr_family_1)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 
     *addr_family = addr_family_1->bynumber_ent;
 
@@ -361,8 +361,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_drop_reference(
     if (action_results != NULL)
         WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     WOLFSENTRY_REFCOUNT_DECREMENT(family_bynumber->header.refcount, refs_left, ret);
-    if (ret < 0)
-        return ret;
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -386,16 +385,17 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_bynumber(
     struct wolfsentry_addr_family_bynumber *old;
 
     if ((ret = wolfsentry_addr_family_get_bynumber_1(bynumber_table, family_bynumber, &old)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 
     if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, &old->header)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, &old->byname_ent->header)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 #endif
 
-    return wolfsentry_addr_family_drop_reference(wolfsentry, old, action_results);
+    ret = wolfsentry_addr_family_drop_reference(wolfsentry, old, action_results);
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -410,16 +410,17 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_byname(
     struct wolfsentry_addr_family_bynumber *old;
 
     if ((ret = wolfsentry_addr_family_get_byname_1(byname_table, family_byname, family_byname_len, &old)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 
     if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, &old->header)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, &old->byname_ent->header)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
 #endif
 
-    return wolfsentry_addr_family_drop_reference(wolfsentry, old, action_results);
+    ret = wolfsentry_addr_family_drop_reference(wolfsentry, old, action_results);
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 #endif
 
@@ -432,7 +433,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_install(
     wolfsentry_addr_family_formatter_t formatter,
     int max_addr_bits)
 {
-    return wolfsentry_addr_family_insert(wolfsentry, wolfsentry->addr_families_bynumber, family_bynumber, family_byname, family_byname_len, parser, formatter, max_addr_bits);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_addr_family_insert(wolfsentry, wolfsentry->addr_families_bynumber, family_bynumber, family_byname, family_byname_len, parser, formatter, max_addr_bits));
 }
 
 wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
@@ -440,7 +441,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_bynumber(
     wolfsentry_addr_family_t family_bynumber,
     wolfsentry_action_res_t *action_results)
 {
-    return wolfsentry_addr_family_handler_delete_bynumber(wolfsentry, wolfsentry->addr_families_bynumber, family_bynumber, action_results);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_addr_family_handler_delete_bynumber(wolfsentry, wolfsentry->addr_families_bynumber, family_bynumber, action_results));
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -450,7 +451,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname(
     int family_byname_len,
     wolfsentry_action_res_t *action_results)
 {
-    return wolfsentry_addr_family_handler_delete_byname(wolfsentry, wolfsentry->addr_families_byname, family_byname, family_byname_len, action_results);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_addr_family_handler_delete_byname(wolfsentry, wolfsentry->addr_families_byname, family_byname, family_byname_len, action_results));
 }
 #endif
 
@@ -467,7 +468,7 @@ wolfsentry_addr_family_t wolfsentry_addr_family_pton(
     if (family_name == NULL) {
         if (errcode != NULL)
             *errcode = WOLFSENTRY_ERROR_ENCODE(INVALID_ARG);
-        return WOLFSENTRY_AF_UNSPEC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_UNSPEC);
     }
 
     if (family_name_len < 0)
@@ -483,156 +484,156 @@ wolfsentry_addr_family_t wolfsentry_addr_family_pton(
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
             if (errcode)
                 *errcode = ret;
-            return addr_family->number;
+            WOLFSENTRY_RETURN_VALUE(addr_family->number);
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND)) {
             if (errcode != NULL)
                 *errcode = ret;
-            return WOLFSENTRY_AF_UNSPEC;
+            WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_UNSPEC);
         }
     }
 
     if (errcode)
         *errcode = WOLFSENTRY_ERROR_ENCODE(OK);
     if (strcaseeq(family_name, "UNIX", (size_t)family_name_len))
-        return WOLFSENTRY_AF_UNIX;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_UNIX);
     if (strcaseeq(family_name, "LOCAL", (size_t)family_name_len))
-        return WOLFSENTRY_AF_LOCAL;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_LOCAL);
     if (strcaseeq(family_name, "INET", (size_t)family_name_len))
-        return WOLFSENTRY_AF_INET;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_INET);
     if (strcaseeq(family_name, "AX25", (size_t)family_name_len))
-        return WOLFSENTRY_AF_AX25;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_AX25);
     if (strcaseeq(family_name, "IPX", (size_t)family_name_len))
-        return WOLFSENTRY_AF_IPX;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_IPX);
     if (strcaseeq(family_name, "APPLETALK", (size_t)family_name_len))
-        return WOLFSENTRY_AF_APPLETALK;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_APPLETALK);
     if (strcaseeq(family_name, "NETROM", (size_t)family_name_len))
-        return WOLFSENTRY_AF_NETROM;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_NETROM);
     if (strcaseeq(family_name, "BRIDGE", (size_t)family_name_len))
-        return WOLFSENTRY_AF_BRIDGE;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_BRIDGE);
     if (strcaseeq(family_name, "ATMPVC", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ATMPVC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ATMPVC);
     if (strcaseeq(family_name, "X25", (size_t)family_name_len))
-        return WOLFSENTRY_AF_X25;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_X25);
     if (strcaseeq(family_name, "INET6", (size_t)family_name_len))
-        return WOLFSENTRY_AF_INET6;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_INET6);
     if (strcaseeq(family_name, "ROSE", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ROSE;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ROSE);
     if (strcaseeq(family_name, "DECnet", (size_t)family_name_len))
-        return WOLFSENTRY_AF_DECnet;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_DECnet);
     if (strcaseeq(family_name, "NETBEUI", (size_t)family_name_len))
-        return WOLFSENTRY_AF_NETBEUI;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_NETBEUI);
     if (strcaseeq(family_name, "SECURITY", (size_t)family_name_len))
-        return WOLFSENTRY_AF_SECURITY;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_SECURITY);
     if (strcaseeq(family_name, "KEY", (size_t)family_name_len))
-        return WOLFSENTRY_AF_KEY;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_KEY);
     if (strcaseeq(family_name, "NETLINK", (size_t)family_name_len))
-        return WOLFSENTRY_AF_NETLINK;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_NETLINK);
     if (strcaseeq(family_name, "ROUTE", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ROUTE;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ROUTE);
     if (strcaseeq(family_name, "PACKET", (size_t)family_name_len))
-        return WOLFSENTRY_AF_PACKET;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_PACKET);
     if (strcaseeq(family_name, "ASH", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ASH;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ASH);
     if (strcaseeq(family_name, "ECONET", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ECONET;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ECONET);
     if (strcaseeq(family_name, "ATMSVC", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ATMSVC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ATMSVC);
     if (strcaseeq(family_name, "RDS", (size_t)family_name_len))
-        return WOLFSENTRY_AF_RDS;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_RDS);
     if (strcaseeq(family_name, "SNA", (size_t)family_name_len))
-        return WOLFSENTRY_AF_SNA;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_SNA);
     if (strcaseeq(family_name, "IRDA", (size_t)family_name_len))
-        return WOLFSENTRY_AF_IRDA;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_IRDA);
     if (strcaseeq(family_name, "PPPOX", (size_t)family_name_len))
-        return WOLFSENTRY_AF_PPPOX;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_PPPOX);
     if (strcaseeq(family_name, "WANPIPE", (size_t)family_name_len))
-        return WOLFSENTRY_AF_WANPIPE;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_WANPIPE);
     if (strcaseeq(family_name, "LLC", (size_t)family_name_len))
-        return WOLFSENTRY_AF_LLC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_LLC);
     if (strcaseeq(family_name, "IB", (size_t)family_name_len))
-        return WOLFSENTRY_AF_IB;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_IB);
     if (strcaseeq(family_name, "MPLS", (size_t)family_name_len))
-        return WOLFSENTRY_AF_MPLS;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_MPLS);
     if (strcaseeq(family_name, "CAN", (size_t)family_name_len))
-        return WOLFSENTRY_AF_CAN;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_CAN);
     if (strcaseeq(family_name, "TIPC", (size_t)family_name_len))
-        return WOLFSENTRY_AF_TIPC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_TIPC);
     if (strcaseeq(family_name, "BLUETOOTH", (size_t)family_name_len))
-        return WOLFSENTRY_AF_BLUETOOTH;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_BLUETOOTH);
     if (strcaseeq(family_name, "IUCV", (size_t)family_name_len))
-        return WOLFSENTRY_AF_IUCV;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_IUCV);
     if (strcaseeq(family_name, "RXRPC", (size_t)family_name_len))
-        return WOLFSENTRY_AF_RXRPC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_RXRPC);
     if (strcaseeq(family_name, "ISDN", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ISDN;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ISDN);
     if (strcaseeq(family_name, "PHONET", (size_t)family_name_len))
-        return WOLFSENTRY_AF_PHONET;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_PHONET);
     if (strcaseeq(family_name, "IEEE802154", (size_t)family_name_len))
-        return WOLFSENTRY_AF_IEEE802154;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_IEEE802154);
     if (strcaseeq(family_name, "CAIF", (size_t)family_name_len))
-        return WOLFSENTRY_AF_CAIF;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_CAIF);
     if (strcaseeq(family_name, "ALG", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ALG;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ALG);
     if (strcaseeq(family_name, "NFC", (size_t)family_name_len))
-        return WOLFSENTRY_AF_NFC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_NFC);
     if (strcaseeq(family_name, "VSOCK", (size_t)family_name_len))
-        return WOLFSENTRY_AF_VSOCK;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_VSOCK);
     if (strcaseeq(family_name, "KCM", (size_t)family_name_len))
-        return WOLFSENTRY_AF_KCM;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_KCM);
     if (strcaseeq(family_name, "QIPCRTR", (size_t)family_name_len))
-        return WOLFSENTRY_AF_QIPCRTR;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_QIPCRTR);
     if (strcaseeq(family_name, "SMC", (size_t)family_name_len))
-        return WOLFSENTRY_AF_SMC;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_SMC);
     if (strcaseeq(family_name, "XDP", (size_t)family_name_len))
-        return WOLFSENTRY_AF_XDP;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_XDP);
     if (strcaseeq(family_name, "IMPLINK", (size_t)family_name_len))
-        return WOLFSENTRY_AF_IMPLINK;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_IMPLINK);
     if (strcaseeq(family_name, "PUP", (size_t)family_name_len))
-        return WOLFSENTRY_AF_PUP;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_PUP);
     if (strcaseeq(family_name, "CHAOS", (size_t)family_name_len))
-        return WOLFSENTRY_AF_CHAOS;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_CHAOS);
     if (strcaseeq(family_name, "NETBIOS", (size_t)family_name_len))
-        return WOLFSENTRY_AF_NETBIOS;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_NETBIOS);
     if (strcaseeq(family_name, "ISO", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ISO;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ISO);
     if (strcaseeq(family_name, "OSI", (size_t)family_name_len))
-        return WOLFSENTRY_AF_OSI;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_OSI);
     if (strcaseeq(family_name, "ECMA", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ECMA;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ECMA);
     if (strcaseeq(family_name, "DATAKIT", (size_t)family_name_len))
-        return WOLFSENTRY_AF_DATAKIT;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_DATAKIT);
     if (strcaseeq(family_name, "DLI", (size_t)family_name_len))
-        return WOLFSENTRY_AF_DLI;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_DLI);
     if (strcaseeq(family_name, "LAT", (size_t)family_name_len))
-        return WOLFSENTRY_AF_LAT;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_LAT);
     if (strcaseeq(family_name, "HYLINK", (size_t)family_name_len))
-        return WOLFSENTRY_AF_HYLINK;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_HYLINK);
     if (strcaseeq(family_name, "LINK", (size_t)family_name_len))
-        return WOLFSENTRY_AF_LINK;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_LINK);
     if (strcaseeq(family_name, "COIP", (size_t)family_name_len))
-        return WOLFSENTRY_AF_COIP;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_COIP);
     if (strcaseeq(family_name, "CNT", (size_t)family_name_len))
-        return WOLFSENTRY_AF_CNT;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_CNT);
     if (strcaseeq(family_name, "SIP", (size_t)family_name_len))
-        return WOLFSENTRY_AF_SIP;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_SIP);
     if (strcaseeq(family_name, "SLOW", (size_t)family_name_len))
-        return WOLFSENTRY_AF_SLOW;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_SLOW);
     if (strcaseeq(family_name, "SCLUSTER", (size_t)family_name_len))
-        return WOLFSENTRY_AF_SCLUSTER;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_SCLUSTER);
     if (strcaseeq(family_name, "ARP", (size_t)family_name_len))
-        return WOLFSENTRY_AF_ARP;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_ARP);
     if (strcaseeq(family_name, "IEEE80211", (size_t)family_name_len))
-        return WOLFSENTRY_AF_IEEE80211;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_IEEE80211);
     if (strcaseeq(family_name, "INET_SDP", (size_t)family_name_len))
-        return WOLFSENTRY_AF_INET_SDP;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_INET_SDP);
     if (strcaseeq(family_name, "INET6_SDP", (size_t)family_name_len))
-        return WOLFSENTRY_AF_INET6_SDP;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_INET6_SDP);
     if (strcaseeq(family_name, "HYPERV", (size_t)family_name_len))
-        return WOLFSENTRY_AF_HYPERV;
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_HYPERV);
 
     if (errcode != NULL)
         *errcode = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
-    return WOLFSENTRY_AF_UNSPEC;
+    WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_AF_UNSPEC);
 }
 
 static const char *wolfsentry_addr_family_ntop_1(
@@ -643,141 +644,141 @@ static const char *wolfsentry_addr_family_ntop_1(
         *errcode = WOLFSENTRY_ERROR_ENCODE(OK);
     switch(family) {
     case WOLFSENTRY_AF_UNSPEC:
-        return "UNSPEC";
+        WOLFSENTRY_RETURN_VALUE("UNSPEC");
     case WOLFSENTRY_AF_LOCAL: /* AF_UNIX is an alias. */
-        return "LOCAL";
+        WOLFSENTRY_RETURN_VALUE("LOCAL");
     case WOLFSENTRY_AF_INET:
-        return "INET";
+        WOLFSENTRY_RETURN_VALUE("INET");
     case WOLFSENTRY_AF_AX25:
-        return "AX25";
+        WOLFSENTRY_RETURN_VALUE("AX25");
     case WOLFSENTRY_AF_IPX:
-        return "IPX";
+        WOLFSENTRY_RETURN_VALUE("IPX");
     case WOLFSENTRY_AF_APPLETALK:
-        return "APPLETALK";
+        WOLFSENTRY_RETURN_VALUE("APPLETALK");
     case WOLFSENTRY_AF_NETROM:
-        return "NETROM";
+        WOLFSENTRY_RETURN_VALUE("NETROM");
     case WOLFSENTRY_AF_BRIDGE:
-        return "BRIDGE";
+        WOLFSENTRY_RETURN_VALUE("BRIDGE");
     case WOLFSENTRY_AF_ATMPVC:
-        return "ATMPVC";
+        WOLFSENTRY_RETURN_VALUE("ATMPVC");
     case WOLFSENTRY_AF_X25:
-        return "X25";
+        WOLFSENTRY_RETURN_VALUE("X25");
     case WOLFSENTRY_AF_INET6:
-        return "INET6";
+        WOLFSENTRY_RETURN_VALUE("INET6");
     case WOLFSENTRY_AF_ROSE:
-        return "ROSE";
+        WOLFSENTRY_RETURN_VALUE("ROSE");
     case WOLFSENTRY_AF_DECnet:
-        return "DECnet";
+        WOLFSENTRY_RETURN_VALUE("DECnet");
     case WOLFSENTRY_AF_NETBEUI:
-        return "NETBEUI";
+        WOLFSENTRY_RETURN_VALUE("NETBEUI");
     case WOLFSENTRY_AF_SECURITY:
-        return "SECURITY";
+        WOLFSENTRY_RETURN_VALUE("SECURITY");
     case WOLFSENTRY_AF_KEY:
-        return "KEY";
+        WOLFSENTRY_RETURN_VALUE("KEY");
     case WOLFSENTRY_AF_ROUTE: /* AF_NETLINK is an alias. */
-        return "ROUTE";
+        WOLFSENTRY_RETURN_VALUE("ROUTE");
     case WOLFSENTRY_AF_PACKET:
-        return "PACKET";
+        WOLFSENTRY_RETURN_VALUE("PACKET");
     case WOLFSENTRY_AF_ASH:
-        return "ASH";
+        WOLFSENTRY_RETURN_VALUE("ASH");
     case WOLFSENTRY_AF_ECONET:
-        return "ECONET";
+        WOLFSENTRY_RETURN_VALUE("ECONET");
     case WOLFSENTRY_AF_ATMSVC:
-        return "ATMSVC";
+        WOLFSENTRY_RETURN_VALUE("ATMSVC");
     case WOLFSENTRY_AF_RDS:
-        return "RDS";
+        WOLFSENTRY_RETURN_VALUE("RDS");
     case WOLFSENTRY_AF_SNA:
-        return "SNA";
+        WOLFSENTRY_RETURN_VALUE("SNA");
     case WOLFSENTRY_AF_IRDA:
-        return "IRDA";
+        WOLFSENTRY_RETURN_VALUE("IRDA");
     case WOLFSENTRY_AF_PPPOX:
-        return "PPPOX";
+        WOLFSENTRY_RETURN_VALUE("PPPOX");
     case WOLFSENTRY_AF_WANPIPE:
-        return "WANPIPE";
+        WOLFSENTRY_RETURN_VALUE("WANPIPE");
     case WOLFSENTRY_AF_LLC:
-        return "LLC";
+        WOLFSENTRY_RETURN_VALUE("LLC");
     case WOLFSENTRY_AF_IB:
-        return "IB";
+        WOLFSENTRY_RETURN_VALUE("IB");
     case WOLFSENTRY_AF_MPLS:
-        return "MPLS";
+        WOLFSENTRY_RETURN_VALUE("MPLS");
     case WOLFSENTRY_AF_CAN:
-        return "CAN";
+        WOLFSENTRY_RETURN_VALUE("CAN");
     case WOLFSENTRY_AF_TIPC:
-        return "TIPC";
+        WOLFSENTRY_RETURN_VALUE("TIPC");
     case WOLFSENTRY_AF_BLUETOOTH:
-        return "BLUETOOTH";
+        WOLFSENTRY_RETURN_VALUE("BLUETOOTH");
     case WOLFSENTRY_AF_IUCV:
-        return "IUCV";
+        WOLFSENTRY_RETURN_VALUE("IUCV");
     case WOLFSENTRY_AF_RXRPC:
-        return "RXRPC";
+        WOLFSENTRY_RETURN_VALUE("RXRPC");
     case WOLFSENTRY_AF_ISDN:
-        return "ISDN";
+        WOLFSENTRY_RETURN_VALUE("ISDN");
     case WOLFSENTRY_AF_PHONET:
-        return "PHONET";
+        WOLFSENTRY_RETURN_VALUE("PHONET");
     case WOLFSENTRY_AF_IEEE802154:
-        return "IEEE802154";
+        WOLFSENTRY_RETURN_VALUE("IEEE802154");
     case WOLFSENTRY_AF_CAIF:
-        return "CAIF";
+        WOLFSENTRY_RETURN_VALUE("CAIF");
     case WOLFSENTRY_AF_ALG:
-        return "ALG";
+        WOLFSENTRY_RETURN_VALUE("ALG");
     case WOLFSENTRY_AF_NFC:
-        return "NFC";
+        WOLFSENTRY_RETURN_VALUE("NFC");
     case WOLFSENTRY_AF_VSOCK:
-        return "VSOCK";
+        WOLFSENTRY_RETURN_VALUE("VSOCK");
     case WOLFSENTRY_AF_KCM:
-        return "KCM";
+        WOLFSENTRY_RETURN_VALUE("KCM");
     case WOLFSENTRY_AF_QIPCRTR:
-        return "QIPCRTR";
+        WOLFSENTRY_RETURN_VALUE("QIPCRTR");
     case WOLFSENTRY_AF_SMC:
-        return "SMC";
+        WOLFSENTRY_RETURN_VALUE("SMC");
     case WOLFSENTRY_AF_XDP:
-        return "XDP";
+        WOLFSENTRY_RETURN_VALUE("XDP");
     case WOLFSENTRY_AF_IMPLINK:
-        return "IMPLINK";
+        WOLFSENTRY_RETURN_VALUE("IMPLINK");
     case WOLFSENTRY_AF_PUP:
-        return "PUP";
+        WOLFSENTRY_RETURN_VALUE("PUP");
     case WOLFSENTRY_AF_CHAOS:
-        return "CHAOS";
+        WOLFSENTRY_RETURN_VALUE("CHAOS");
     case WOLFSENTRY_AF_NETBIOS:
-        return "NETBIOS";
+        WOLFSENTRY_RETURN_VALUE("NETBIOS");
     case WOLFSENTRY_AF_ISO: /* AF_OSI is an alias. */
-        return "ISO";
+        WOLFSENTRY_RETURN_VALUE("ISO");
     case WOLFSENTRY_AF_ECMA:
-        return "ECMA";
+        WOLFSENTRY_RETURN_VALUE("ECMA");
     case WOLFSENTRY_AF_DATAKIT:
-        return "DATAKIT";
+        WOLFSENTRY_RETURN_VALUE("DATAKIT");
     case WOLFSENTRY_AF_DLI:
-        return "DLI";
+        WOLFSENTRY_RETURN_VALUE("DLI");
     case WOLFSENTRY_AF_LAT:
-        return "LAT";
+        WOLFSENTRY_RETURN_VALUE("LAT");
     case WOLFSENTRY_AF_HYLINK:
-        return "HYLINK";
+        WOLFSENTRY_RETURN_VALUE("HYLINK");
     case WOLFSENTRY_AF_LINK:
-        return "LINK";
+        WOLFSENTRY_RETURN_VALUE("LINK");
     case WOLFSENTRY_AF_COIP:
-        return "COIP";
+        WOLFSENTRY_RETURN_VALUE("COIP");
     case WOLFSENTRY_AF_CNT:
-        return "CNT";
+        WOLFSENTRY_RETURN_VALUE("CNT");
     case WOLFSENTRY_AF_SIP:
-        return "SIP";
+        WOLFSENTRY_RETURN_VALUE("SIP");
     case WOLFSENTRY_AF_SLOW:
-        return "SLOW";
+        WOLFSENTRY_RETURN_VALUE("SLOW");
     case WOLFSENTRY_AF_SCLUSTER:
-        return "SCLUSTER";
+        WOLFSENTRY_RETURN_VALUE("SCLUSTER");
     case WOLFSENTRY_AF_ARP:
-        return "ARP";
+        WOLFSENTRY_RETURN_VALUE("ARP");
     case WOLFSENTRY_AF_IEEE80211:
-        return "IEEE80211";
+        WOLFSENTRY_RETURN_VALUE("IEEE80211");
     case WOLFSENTRY_AF_INET_SDP:
-        return "INET_SDP";
+        WOLFSENTRY_RETURN_VALUE("INET_SDP");
     case WOLFSENTRY_AF_INET6_SDP:
-        return "INET6_SDP";
+        WOLFSENTRY_RETURN_VALUE("INET6_SDP");
     case WOLFSENTRY_AF_HYPERV:
-        return "HYPERV";
+        WOLFSENTRY_RETURN_VALUE("HYPERV");
     default:
         if (errcode != NULL)
             *errcode = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
-        return NULL;
+        WOLFSENTRY_RETURN_VALUE(NULL);
     }
 }
 
@@ -802,17 +803,17 @@ const char *wolfsentry_addr_family_ntop(
             if (ret < 0) {
                 if (errcode != NULL)
                     *errcode = ret;
-                return NULL;
+                WOLFSENTRY_RETURN_VALUE(NULL);
             }
-            return (*addr_family)->byname_ent->name;
+            WOLFSENTRY_RETURN_VALUE((*addr_family)->byname_ent->name);
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND)) {
             if (errcode != NULL)
                 *errcode = ret;
-            return NULL;
+            WOLFSENTRY_RETURN_VALUE(NULL);
         }
     }
 
-    return wolfsentry_addr_family_ntop_1(family, errcode);
+    WOLFSENTRY_RETURN_VALUE(wolfsentry_addr_family_ntop_1(family, errcode));
 }
 
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */

@@ -58,7 +58,6 @@ typedef int32_t wolfsentry_errcode_t;
 #define WOLFSENTRY_ERROR_ENCODE_1(x) WOLFSENTRY_ERROR_ENCODE_0(x)
 #endif
 
-#define WOLFSENTRY_ERROR_RERETURN(x) return WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x))
 #define WOLFSENTRY_ERROR_RECODE(x) WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x))
 #define WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) (((x) < 0) ? (-(x) & WOLFSENTRY_ERROR_ID_MAX) : ((x) & WOLFSENTRY_ERROR_ID_MAX))
 #define WOLFSENTRY_ERROR_CODE_IS(x, y) (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) == WOLFSENTRY_ERROR_ID_ ## y)
@@ -74,12 +73,43 @@ typedef int32_t wolfsentry_errcode_t;
 #endif /* WOLFSENTRY_ERROR_STRINGS */
 
 #define WOLFSENTRY_ERROR_ENCODE(x) WOLFSENTRY_ERROR_ENCODE_1(WOLFSENTRY_ERROR_ID_ ## x)
-#define WOLFSENTRY_ERROR_RETURN(x) return WOLFSENTRY_ERROR_ENCODE(x)
+
+#if defined(WOLFSENTRY_DEBUG_CALL_TRACE) && !defined(WOLFSENTRY_NO_STDIO)
+    #if defined(WOLFSENTRY_ERROR_STRINGS) && defined(__GNUC__) && !defined(__STRICT_ANSI__)
+        extern unsigned int _wolfsentry_call_depth(void);
+        #define WOLFSENTRY_ERROR_RETURN(x) do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%*s%s L%d %s(): return %d (%s)\n", _wolfsentry_call_depth(), "", _fn, __LINE__, __FUNCTION__, WOLFSENTRY_ERROR_ID_ ## x, wolfsentry_errcode_error_name(WOLFSENTRY_ERROR_ID_ ## x)); return WOLFSENTRY_ERROR_ENCODE(x); } while (0)
+        #define WOLFSENTRY_ERROR_RETURN_RECODED(x) do { wolfsentry_errcode_t _xret = (x); const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%*s%s L%d %s(): return-recoded %d (%s)\n", _wolfsentry_call_depth(), "", _fn, __LINE__, __FUNCTION__, WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret), wolfsentry_errcode_error_name(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret))); return WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret)); } while (0)
+        #define WOLFSENTRY_ERROR_RERETURN(x) do { wolfsentry_errcode_t _xret = (x); const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%*s%s L%d %s(): rereturn %d (%s)\n", _wolfsentry_call_depth(), "", _fn, __LINE__, __FUNCTION__, WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret), wolfsentry_errcode_error_name(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret))); return (_xret); } while (0)
+        #define WOLFSENTRY_RETURN_VALUE(x) do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%*s%s L%d %s(): return value\n", _wolfsentry_call_depth(), "", _fn, __LINE__, __FUNCTION__); return (x); } while (0)
+        #define WOLFSENTRY_RETURN_VOID do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%*s%s L%d %s(): return void\n", _wolfsentry_call_depth(), "", _fn, __LINE__, __FUNCTION__); return; } while (0)
+    #elif defined(WOLFSENTRY_ERROR_STRINGS)
+        #define WOLFSENTRY_ERROR_RETURN(x) do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return %d (%s)\n", _fn, __LINE__, WOLFSENTRY_ERROR_ID_ ## x, wolfsentry_errcode_error_name(WOLFSENTRY_ERROR_ID_ ## x)); return WOLFSENTRY_ERROR_ENCODE(x); } while (0)
+        #define WOLFSENTRY_ERROR_RETURN_RECODED(x) do { wolfsentry_errcode_t _xret = (x); const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return-recoded %d (%s)\n", _fn, __LINE__, WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret), wolfsentry_errcode_error_name(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret))); return WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret)); } while (0)
+        #define WOLFSENTRY_ERROR_RERETURN(x) do { wolfsentry_errcode_t _xret = (x); const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: rereturn %d (%s)\n", _fn, __LINE__, WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret), wolfsentry_errcode_error_name(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret))); return (_xret); } while (0)
+        #define WOLFSENTRY_RETURN_VALUE(x) do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return value\n", _fn, __LINE__); return (x); } while (0)
+        #define WOLFSENTRY_RETURN_VOID do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return void\n", _fn, __LINE__); return; } while (0)
+    #else
+        #define WOLFSENTRY_ERROR_RETURN(x) do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return %d\n", _fn, __LINE__, WOLFSENTRY_ERROR_ID_ ## x); return WOLFSENTRY_ERROR_ENCODE(x); } while (0)
+        #define WOLFSENTRY_ERROR_RETURN_RECODED(x) do { wolfsentry_errcode_t _xret = (x); const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return-recoded %d\n", _fn, __LINE__, WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret)); return WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret)); } while (0)
+        #define WOLFSENTRY_ERROR_RERETURN(x) do { wolfsentry_errcode_t _xret = (x); const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: rereturn %d\n", _fn, __LINE__, WOLFSENTRY_ERROR_DECODE_ERROR_CODE(_xret)); return (_xret); } while (0)
+        #define WOLFSENTRY_RETURN_VALUE(x) do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return value\n", _fn, __LINE__); return (x); } while (0)
+        #define WOLFSENTRY_RETURN_VOID do { const char *_fn = strrchr(__FILE__, '/'); if (_fn) { ++_fn; } else { _fn = __FILE__; } fprintf(stderr, "%s L%d: return void\n", _fn, __LINE__); return; } while (0)
+    #endif
+#else
+    #define WOLFSENTRY_ERROR_RETURN(x) return WOLFSENTRY_ERROR_ENCODE(x)
+    #define WOLFSENTRY_ERROR_RETURN_RECODED(x) return WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x))
+    #define WOLFSENTRY_ERROR_RERETURN(x) return (x)
+    #define WOLFSENTRY_RETURN_VALUE(x) return (x)
+    #define WOLFSENTRY_RETURN_VOID return
+#endif
+
 #define WOLFSENTRY_RETURN_OK WOLFSENTRY_ERROR_RETURN(OK)
+#define WOLFSENTRY_RERETURN_IF_ERROR(x) if (x < 0) WOLFSENTRY_ERROR_RERETURN(x)
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
 WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e);
 WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e);
+WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e);
 #endif
 
 #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_NO_DIAG_MSGS)

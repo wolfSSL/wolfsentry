@@ -1,5 +1,5 @@
 /*
- * internal.c
+ * wolfsentry_internal.c
  *
  * Copyright (C) 2021-2022 wolfSSL Inc.
  *
@@ -88,7 +88,7 @@ static wolfsentry_errcode_t wolfsentry_table_clone_map(
          i && i_new;
          i = i->next, i_new = i_new->next) {
         if ((ret = clone_map_fn(wolfsentry, i, dest_context, i_new, flags)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
     }
     if (i || i_new)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
@@ -117,22 +117,22 @@ wolfsentry_errcode_t wolfsentry_table_clone(
     switch(src_table->ent_type) {
     case WOLFSENTRY_OBJECT_TYPE_ACTION:
         if ((ret = wolfsentry_action_table_clone_header(wolfsentry, src_table, dest_context, dest_table, flags)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         clone_fn = wolfsentry_action_clone;
         break;
     case WOLFSENTRY_OBJECT_TYPE_EVENT:
         if ((ret = wolfsentry_event_table_clone_header(wolfsentry, src_table, dest_context, dest_table, flags)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         clone_fn = wolfsentry_event_clone_bare;
         break;
     case WOLFSENTRY_OBJECT_TYPE_ROUTE:
         if ((ret = wolfsentry_route_table_clone_header(wolfsentry, src_table, dest_context, dest_table, flags)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         clone_fn = wolfsentry_route_clone;
         break;
     case WOLFSENTRY_OBJECT_TYPE_KV:
         if ((ret = wolfsentry_kv_table_clone_header(wolfsentry, src_table, dest_context, dest_table, flags)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         clone_fn = wolfsentry_kv_clone;
         break;
 
@@ -142,7 +142,7 @@ wolfsentry_errcode_t wolfsentry_table_clone(
 #else
     case WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER:
         if ((ret = wolfsentry_addr_family_bynumber_table_clone_header(wolfsentry, src_table, dest_context, dest_table, flags)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         clone_fn = wolfsentry_addr_family_bynumber_clone;
         break;
 #endif
@@ -184,7 +184,7 @@ wolfsentry_errcode_t wolfsentry_table_clone(
 
   out:
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -222,7 +222,7 @@ wolfsentry_errcode_t wolfsentry_coupled_table_clone(
         if (src_table2->ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME)
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         if ((ret = wolfsentry_addr_family_table_clone_headers(wolfsentry, src_table1, src_table2, dest_context, dest_table1, dest_table2, flags)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         clone_fn = wolfsentry_addr_family_clone;
         break;
     case WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME:
@@ -268,7 +268,7 @@ wolfsentry_errcode_t wolfsentry_coupled_table_clone(
 
   out:
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 
@@ -289,15 +289,14 @@ wolfsentry_errcode_t wolfsentry_id_allocate(
     for (;;) {
         if (wolfsentry->mk_id_cb) {
             ret = wolfsentry->mk_id_cb(wolfsentry->mk_id_cb_state.mk_id_cb_arg, &ent->id);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
         } else {
             ent->id = ++wolfsentry->mk_id_cb_state.id_counter;
         }
 
         ret = wolfsentry_table_ent_insert_by_id(wolfsentry, ent);
         if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_ALREADY_PRESENT))
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
     }
     /* not reached */
 }
@@ -379,7 +378,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(struct wolfsentry_context
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((ret = wolfsentry_table_ent_get_by_id(wolfsentry, id, ent)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     wolfsentry_table_ent_delete_by_id_1(wolfsentry, *ent);
     if ((*ent)->parent_table)
         wolfsentry_table_ent_delete_1(wolfsentry, *ent);
@@ -441,7 +440,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete(struct wolfsentry_context *wolf
         if (c >= 0) {
             if (c == 0) {
                 *ent = i;
-                return wolfsentry_table_ent_delete_1(wolfsentry, i);
+                WOLFSENTRY_ERROR_RERETURN(wolfsentry_table_ent_delete_1(wolfsentry, i));
             }
             WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
         }
@@ -458,8 +457,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(struct wolfsentry_conte
     if (action_results)
         WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     WOLFSENTRY_REFCOUNT_DECREMENT(ent->refcount, refs_left, ret);
-    if (ret < 0)
-        return ret;
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
     WOLFSENTRY_FREE(ent);
@@ -482,7 +480,7 @@ wolfsentry_errcode_t wolfsentry_table_free_ents(struct wolfsentry_context *wolfs
         next = i->next;
         wolfsentry_table_ent_delete_by_id_1(wolfsentry, i);
         if ((ret = table->free_fn(wolfsentry, i, NULL /* action_results */)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         i = next;
     }
     WOLFSENTRY_RETURN_OK;
@@ -569,7 +567,7 @@ wolfsentry_errcode_t wolfsentry_table_filter(
             break;
     }
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_table_map(
@@ -592,5 +590,5 @@ wolfsentry_errcode_t wolfsentry_table_map(
             break;
     }
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }

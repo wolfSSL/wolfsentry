@@ -37,7 +37,7 @@ static inline int wolfsentry_event_key_cmp_1(const char *left_label, const unsig
             ret = -1;
     }
 
-    return ret;
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_event *right) {
@@ -63,8 +63,7 @@ static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label
 
     if (config) {
         wolfsentry_errcode_t ret = wolfsentry_eventconfig_load(config, event->config);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
     WOLFSENTRY_RETURN_OK;
@@ -75,6 +74,7 @@ static void wolfsentry_event_free(struct wolfsentry_context *wolfsentry, struct 
     if (event->config)
         WOLFSENTRY_FREE(event->config);
     WOLFSENTRY_FREE(event);
+    WOLFSENTRY_RETURN_VOID;
 }
 
 static wolfsentry_errcode_t wolfsentry_event_new_1(struct wolfsentry_context *wolfsentry, const char *label, int label_len, wolfsentry_priority_t priority, const struct wolfsentry_eventconfig *config, struct wolfsentry_event **event) {
@@ -108,7 +108,7 @@ static wolfsentry_errcode_t wolfsentry_event_new_1(struct wolfsentry_context *wo
         wolfsentry_event_free(wolfsentry, *event);
         *event = NULL;
     }
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_event_clone_bare(
@@ -159,67 +159,62 @@ wolfsentry_errcode_t wolfsentry_event_clone_resolve(
     struct wolfsentry_event * const src_event = (struct wolfsentry_event * const)src_ent;
     struct wolfsentry_event * const new_event = (struct wolfsentry_event * const)new_ent;
 
-    if ((ret = wolfsentry_action_list_clone(
-             src_context,
-             &src_event->action_list,
-             dest_context,
-             &new_event->action_list,
-             flags)) < 0)
-        return ret;
+    ret = wolfsentry_action_list_clone(
+        src_context,
+        &src_event->action_list,
+        dest_context,
+        &new_event->action_list,
+        flags);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     if (src_event->insert_event) {
         new_event->insert_event = src_event->insert_event;
         if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->insert_event)) < 0) {
             new_event->insert_event = NULL;
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RETURN_RECODED(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT(new_event->insert_event->header.refcount, ret);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
     if (src_event->match_event) {
         new_event->match_event = src_event->match_event;
         if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->match_event)) < 0) {
             new_event->match_event = NULL;
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RETURN_RECODED(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT(new_event->match_event->header.refcount, ret);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
     if (src_event->update_event) {
         new_event->update_event = src_event->update_event;
         if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->update_event)) < 0) {
             new_event->update_event = NULL;
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RETURN_RECODED(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT(new_event->update_event->header.refcount, ret);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
     if (src_event->delete_event) {
         new_event->delete_event = src_event->delete_event;
         if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->delete_event)) < 0) {
             new_event->delete_event = NULL;
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RETURN_RECODED(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT(new_event->delete_event->header.refcount, ret);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
     if (src_event->decision_event) {
         new_event->decision_event = src_event->decision_event;
         if ((ret = wolfsentry_table_ent_get(&dest_context->events->header, (struct wolfsentry_table_ent_header **)&new_event->decision_event)) < 0) {
             new_event->decision_event = NULL;
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RETURN_RECODED(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT(new_event->decision_event->header.refcount, ret);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
     WOLFSENTRY_RETURN_OK;
@@ -239,21 +234,22 @@ wolfsentry_errcode_t wolfsentry_event_insert(
 
     (void)flags; /* for now */
 
-    if ((ret = wolfsentry_event_new_1(wolfsentry, label, label_len, priority, config, &new)) < 0)
-        return ret;
+    ret = wolfsentry_event_new_1(wolfsentry, label, label_len, priority, config, &new);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
     if ((ret = wolfsentry_id_allocate(wolfsentry, &new->header)) < 0) {
         wolfsentry_event_free(wolfsentry, new);
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     }
     if (id)
         *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(wolfsentry, &new->header, &wolfsentry->events->header, 1 /* unique_p */)) < 0) {
         wolfsentry_table_ent_delete_by_id_1(wolfsentry, &new->header);
         wolfsentry_event_free(wolfsentry, new);
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_RETURN_RECODED(ret);
     }
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 const char *wolfsentry_event_get_label(const struct wolfsentry_event *event)
@@ -281,11 +277,11 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wo
     if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
 
-    if ((ret = wolfsentry_event_init_1(label, label_len, 0, NULL, &target.event, sizeof target)) < 0)
-        return ret;
+    ret = wolfsentry_event_init_1(label, label_len, 0, NULL, &target.event, sizeof target);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
-    if ((ret = wolfsentry_table_ent_get(&wolfsentry->events->header, (struct wolfsentry_table_ent_header **)&event_1)) < 0)
-        return ret;
+    ret = wolfsentry_table_ent_get(&wolfsentry->events->header, (struct wolfsentry_table_ent_header **)&event_1);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     *event = event_1;
 
@@ -295,8 +291,7 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(struct wolfsentry_context *wo
 wolfsentry_errcode_t wolfsentry_event_get_config(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_eventconfig *config) {
     struct wolfsentry_event *event;
     wolfsentry_errcode_t ret = wolfsentry_event_get_1(wolfsentry, label, label_len, &event);
-    if (ret < 0)
-        return ret;
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (event->config == NULL)
         return wolfsentry_eventconfig_get_1(&wolfsentry->config, config);
     else
@@ -306,8 +301,7 @@ wolfsentry_errcode_t wolfsentry_event_get_config(struct wolfsentry_context *wolf
 wolfsentry_errcode_t wolfsentry_event_update_config(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_eventconfig *config) {
     struct wolfsentry_event *event;
     wolfsentry_errcode_t ret = wolfsentry_event_get_1(wolfsentry, label, label_len, &event);
-    if (ret < 0)
-        return ret;
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (WOLFSENTRY_CHECK_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT))
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
 
@@ -318,19 +312,20 @@ wolfsentry_errcode_t wolfsentry_event_update_config(struct wolfsentry_context *w
             WOLFSENTRY_FREE(event->config);
             event->config = NULL;
         }
-        return ret;
-    } else
-        return wolfsentry_eventconfig_load(config, event->config);
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    } else {
+        ret = wolfsentry_eventconfig_load(config, event->config);
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
 }
 
 wolfsentry_errcode_t wolfsentry_event_get_reference(struct wolfsentry_context *wolfsentry, const char *label, int label_len, struct wolfsentry_event **event) {
     wolfsentry_errcode_t ret;
 
-    if ((ret = wolfsentry_event_get_1(wolfsentry, label, label_len, event)) < 0)
-        return ret;
+    ret = wolfsentry_event_get_1(wolfsentry, label, label_len, event);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     WOLFSENTRY_REFCOUNT_INCREMENT((*event)->header.refcount, ret);
-    if (ret < 0)
-        return ret;
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -346,8 +341,7 @@ wolfsentry_errcode_t wolfsentry_event_drop_reference(struct wolfsentry_context *
     if (action_results)
         WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     WOLFSENTRY_REFCOUNT_DECREMENT(event->header.refcount, refs_left, ret);
-    if (ret < 0)
-        return ret;
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
     if (event->insert_event)
@@ -375,42 +369,43 @@ wolfsentry_errcode_t wolfsentry_event_delete(
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *old;
 
-    if ((ret = wolfsentry_event_get_1(wolfsentry, label, label_len, &old)) < 0)
-        return ret;
+    ret = wolfsentry_event_get_1(wolfsentry, label, label_len, &old);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
-    if ((ret = wolfsentry_action_list_delete_all(wolfsentry, &old->action_list)) < 0)
-        return ret;
+    ret = wolfsentry_action_list_delete_all(wolfsentry, &old->action_list);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     if (old->insert_event) {
-        if ((ret = wolfsentry_event_drop_reference(wolfsentry, old->insert_event, NULL /* action_results */)) < 0)
-            return ret;
+        ret = wolfsentry_event_drop_reference(wolfsentry, old->insert_event, NULL /* action_results */);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         old->insert_event = NULL;
     }
     if (old->match_event) {
-        if ((ret = wolfsentry_event_drop_reference(wolfsentry, old->match_event, NULL /* action_results */)) < 0)
-            return ret;
+        ret = wolfsentry_event_drop_reference(wolfsentry, old->match_event, NULL /* action_results */);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         old->match_event = NULL;
     }
     if (old->update_event) {
-        if ((ret = wolfsentry_event_drop_reference(wolfsentry, old->update_event, NULL /* action_results */)) < 0)
-            return ret;
+        ret = wolfsentry_event_drop_reference(wolfsentry, old->update_event, NULL /* action_results */);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         old->update_event = NULL;
     }
     if (old->delete_event) {
-        if ((ret = wolfsentry_event_drop_reference(wolfsentry, old->delete_event, NULL /* action_results */)) < 0)
-            return ret;
+        ret = wolfsentry_event_drop_reference(wolfsentry, old->delete_event, NULL /* action_results */);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         old->delete_event = NULL;
     }
     if (old->decision_event) {
-        if ((ret = wolfsentry_event_drop_reference(wolfsentry, old->decision_event, NULL /* action_results */)) < 0)
-            return ret;
+        ret = wolfsentry_event_drop_reference(wolfsentry, old->decision_event, NULL /* action_results */);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         old->decision_event = NULL;
     }
 
-    if ((ret = wolfsentry_table_ent_delete_1(wolfsentry, &old->header)) < 0)
-        return ret;
+    ret = wolfsentry_table_ent_delete_1(wolfsentry, &old->header);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
-    return wolfsentry_event_drop_reference(wolfsentry, old, action_results);
+    ret = wolfsentry_event_drop_reference(wolfsentry, old, action_results);
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_event_flush_all(struct wolfsentry_context *wolfsentry) {
@@ -432,8 +427,8 @@ static inline wolfsentry_errcode_t wolfsentry_event_action_change_1(
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *event;
 
-    if ((ret = wolfsentry_event_get_1(wolfsentry, event_label, event_label_len, &event)) < 0)
-        return ret;
+    ret = wolfsentry_event_get_1(wolfsentry, event_label, event_label_len, &event);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     switch (what) {
     case W_E_A_A_PREPEND:
@@ -449,7 +444,7 @@ static inline wolfsentry_errcode_t wolfsentry_event_action_change_1(
         ret = wolfsentry_action_list_delete(wolfsentry, &event->action_list, action_label, action_label_len);
         break;
     };
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_event_action_prepend(
@@ -459,7 +454,7 @@ wolfsentry_errcode_t wolfsentry_event_action_prepend(
     const char *action_label,
     int action_label_len)
 {
-    return wolfsentry_event_action_change_1(
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_action_change_1(
         wolfsentry,
         event_label,
         event_label_len,
@@ -467,7 +462,7 @@ wolfsentry_errcode_t wolfsentry_event_action_prepend(
         action_label,
         action_label_len,
         NULL /* point_action_label */,
-        0 /* point_action_label_len */);
+        0 /* point_action_label_len */));
 }
 
 wolfsentry_errcode_t wolfsentry_event_action_append(
@@ -477,7 +472,7 @@ wolfsentry_errcode_t wolfsentry_event_action_append(
     const char *action_label,
     int action_label_len)
 {
-    return wolfsentry_event_action_change_1(
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_action_change_1(
         wolfsentry,
         event_label,
         event_label_len,
@@ -485,7 +480,7 @@ wolfsentry_errcode_t wolfsentry_event_action_append(
         action_label,
         action_label_len,
         NULL /* point_action_label */,
-        0 /* point_action_label_len */);
+        0 /* point_action_label_len */));
 }
 
 wolfsentry_errcode_t wolfsentry_event_action_insert_after(
@@ -497,7 +492,7 @@ wolfsentry_errcode_t wolfsentry_event_action_insert_after(
     const char *point_action_label,
     int point_action_label_len)
 {
-    return wolfsentry_event_action_change_1(
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_action_change_1(
         wolfsentry,
         event_label,
         event_label_len,
@@ -505,7 +500,7 @@ wolfsentry_errcode_t wolfsentry_event_action_insert_after(
         action_label,
         action_label_len,
         point_action_label,
-        point_action_label_len);
+        point_action_label_len));
 }
 
 wolfsentry_errcode_t wolfsentry_event_action_delete(
@@ -515,7 +510,7 @@ wolfsentry_errcode_t wolfsentry_event_action_delete(
     const char *action_label,
     int action_label_len)
 {
-    return wolfsentry_event_action_change_1(
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_action_change_1(
         wolfsentry,
         event_label,
         event_label_len,
@@ -523,7 +518,7 @@ wolfsentry_errcode_t wolfsentry_event_action_delete(
         action_label,
         action_label_len,
         NULL /* point_action_label */,
-        0 /* point_action_label_len */);
+        0 /* point_action_label_len */));
 }
 
 wolfsentry_errcode_t wolfsentry_event_set_subevent(
@@ -537,8 +532,8 @@ wolfsentry_errcode_t wolfsentry_event_set_subevent(
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *event, *subevent = NULL;
 
-    if ((ret = wolfsentry_event_get_reference(wolfsentry, event_label, event_label_len, &event)) < 0)
-        return ret;
+    ret = wolfsentry_event_get_reference(wolfsentry, event_label, event_label_len, &event);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (WOLFSENTRY_CHECK_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT)) {
         ret = WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
         goto out;
@@ -608,7 +603,7 @@ wolfsentry_errcode_t wolfsentry_event_set_subevent(
         }
     }
 
-    return ret;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 
@@ -623,8 +618,8 @@ wolfsentry_errcode_t wolfsentry_event_action_list_start(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *event;
-    if ((ret = wolfsentry_event_get_1(wolfsentry, event_label, event_label_len, &event)) < 0)
-        return ret;
+    ret = wolfsentry_event_get_1(wolfsentry, event_label, event_label_len, &event);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *cursor = (struct wolfsentry_action_list_ent *)event->action_list.header.head;
     if (*cursor == NULL)
         WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);

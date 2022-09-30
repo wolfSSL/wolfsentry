@@ -79,6 +79,7 @@ static void json_free(JSON_PARSER *parser, void *ptr) {
         wolfsentry_free(parser->config.wolfsentry_context, ptr);
     else
         free(ptr);
+    WOLFSENTRY_RETURN_VOID;
 }
 #define JSON_FREE(ptr) json_free(parser, ptr)
 static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
@@ -103,6 +104,7 @@ void
 json_default_config(JSON_CONFIG* cfg)
 {
     memcpy(cfg, &json_defaults, sizeof(JSON_CONFIG));
+    WOLFSENTRY_RETURN_VOID;
 }
 
 
@@ -149,7 +151,7 @@ json_init(JSON_PARSER* parser, const JSON_CALLBACKS* callbacks,
 
     parser->last_cl_offset = SIZE_MAX-1;
 
-    return 0;
+    WOLFSENTRY_RETURN_VALUE(0);
 }
 
 static void
@@ -209,7 +211,7 @@ static inline void
 json_process(JSON_PARSER* parser, JSON_TYPE type, const char* data, size_t size)
 {
     if(parser->errcode < 0)
-        return;
+        WOLFSENTRY_RETURN_VOID;
 
     if(type != JSON_ARRAY_END  &&  type != JSON_OBJECT_END) {
         if(parser->value_counter == 0) {
@@ -281,6 +283,8 @@ json_process(JSON_PARSER* parser, JSON_TYPE type, const char* data, size_t size)
     }
 
     json_switch_automaton(parser, AUTOMATON_MAIN);
+
+    WOLFSENTRY_RETURN_VOID;
 }
 
 static int
@@ -293,7 +297,7 @@ json_buf_append(JSON_PARSER* parser, const char* data, size_t size)
         new_buf = (char *) JSON_REALLOC(parser->buf, new_alloced);
         if(new_buf == NULL) {
             json_raise(parser, JSON_ERR_OUTOFMEMORY);
-            return -1;
+            WOLFSENTRY_RETURN_VALUE(-1);
         }
 
         parser->buf = new_buf;
@@ -848,7 +852,7 @@ json_feed(JSON_PARSER* parser, const char* input, size_t size)
             size_t n = json_dispatch(parser, input+off, size-off);
 
             if(parser->errcode < 0)
-                return parser->errcode;
+                WOLFSENTRY_RETURN_VALUE(parser->errcode);
 
             off += n;
             continue;
@@ -923,7 +927,7 @@ json_feed(JSON_PARSER* parser, const char* input, size_t size)
         json_handle_new_line(parser, ch);
     }
 
-    return parser->errcode;
+    WOLFSENTRY_RETURN_VALUE(parser->errcode);
 }
 
 int
@@ -949,7 +953,7 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
 
     JSON_FREE(parser->nesting_stack);
     JSON_FREE(parser->buf);
-    return parser->errcode;
+    WOLFSENTRY_RETURN_VALUE(parser->errcode);
 }
 
 int
@@ -962,12 +966,12 @@ json_parse(const char* input, size_t size,
 
     ret = json_init(&parser, callbacks, config, user_data);
     if(ret < 0)
-        return ret;
+        WOLFSENTRY_RETURN_VALUE(ret);
 
     /* We rely on propagation of any error code into json_fini(). */
     json_feed(&parser, input, size);
 
-    return json_fini(&parser, p_pos);
+    WOLFSENTRY_RETURN_VALUE(json_fini(&parser, p_pos));
 }
 
 

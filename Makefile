@@ -102,6 +102,10 @@ else
     endif
 endif
 
+ifdef CALL_TRACE
+	CFLAGS += -DWOLFSENTRY_DEBUG_CALL_TRACE -fno-omit-frame-pointer
+endif
+
 ifdef USER_SETTINGS_FILE
     CFLAGS += -DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
 endif

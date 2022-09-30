@@ -421,7 +421,7 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
     if ((size_t)(endptr - data) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if ((ret = wolfsentry_interval_from_seconds(wolfsentry, conv, 0 /* howlong_nsecs */, out)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     else
         WOLFSENTRY_RETURN_OK;
 }
@@ -444,59 +444,52 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
     if (type == JSON_OBJECT_END) {
         wolfsentry_errcode_t ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
         jps->table_under_construction = T_U_C_NONE;
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if (jps->default_policy_static) {
             struct wolfsentry_route_table *static_routes;
             ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
             ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, static_routes, jps->default_policy_static);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
         }
         if (jps->default_policy_dynamic) {
             struct wolfsentry_route_table *dynamic_routes;
             ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &dynamic_routes);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
             ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, dynamic_routes, jps->default_policy_dynamic);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
         }
         WOLFSENTRY_RETURN_OK;
     }
     if (! strcmp(jps->cur_keyname, "max-connection-count"))
-        return convert_uint32(type, data, data_size, &eventconfig->max_connection_count);
+        WOLFSENTRY_ERROR_RERETURN(convert_uint32(type, data, data_size, &eventconfig->max_connection_count));
     if (! strcmp(jps->cur_keyname, "penalty-box-duration"))
-        return convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->penaltybox_duration);
+        WOLFSENTRY_ERROR_RERETURN(convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->penaltybox_duration));
     if (! strcmp(jps->cur_keyname, "route-idle-time-for-purge"))
-        return convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->route_idle_time_for_purge);
+        WOLFSENTRY_ERROR_RERETURN(convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->route_idle_time_for_purge));
     if (! strcmp(jps->cur_keyname, "derog-thresh-for-penalty-boxing"))
-        return convert_uint32(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox);
+        WOLFSENTRY_ERROR_RERETURN(convert_uint32(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox));
     if (! strcmp(jps->cur_keyname, "derog-thresh-ignore-commendable"))
-        return convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE);
+        WOLFSENTRY_ERROR_RERETURN(convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE));
     if (! strcmp(jps->cur_keyname, "commendable-clears-derogatory"))
-        return convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY);
+        WOLFSENTRY_ERROR_RERETURN(convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY));
 
     if (! strcmp(jps->cur_keyname, "max-purgeable-routes")) {
         struct wolfsentry_route_table *route_table;
         wolfsentry_hitcount_t max_purgeable_routes;
         wolfsentry_errcode_t ret;
         if ((ret = convert_uint32(type, data, data_size, &max_purgeable_routes)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         if (jps->table_under_construction != T_U_C_TOPCONFIG)
             WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
         ret = wolfsentry_route_get_table_static(jps->wolfsentry, &route_table);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if ((ret = wolfsentry_route_table_max_purgeable_routes_set(jps->wolfsentry, route_table, max_purgeable_routes)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &route_table);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if ((ret = wolfsentry_route_table_max_purgeable_routes_set(jps->wolfsentry, route_table, max_purgeable_routes)) < 0)
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         WOLFSENTRY_RETURN_OK;
     }
 
@@ -509,49 +502,42 @@ static wolfsentry_errcode_t handle_defaultpolicy_clause(struct wolfsentry_json_p
     if (type == JSON_OBJECT_END) {
         wolfsentry_errcode_t ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
         jps->table_under_construction = T_U_C_NONE;
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if (jps->default_policy_static) {
             struct wolfsentry_route_table *static_routes;
             ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
             ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, static_routes, jps->default_policy_static);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
         }
         if (jps->default_policy_dynamic) {
             struct wolfsentry_route_table *dynamic_routes;
             ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &dynamic_routes);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
             ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, dynamic_routes, jps->default_policy_dynamic);
-            if (ret < 0)
-                return ret;
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
         }
         WOLFSENTRY_RETURN_OK;
     }
     if (! strcmp(jps->cur_keyname, "default-policy-static"))
-        return convert_default_policy(type, data, data_size, &jps->default_policy_static);
+        WOLFSENTRY_ERROR_RERETURN(convert_default_policy(type, data, data_size, &jps->default_policy_static));
     if (! strcmp(jps->cur_keyname, "default-policy-dynamic"))
-        return convert_default_policy(type, data, data_size, &jps->default_policy_dynamic);
+        WOLFSENTRY_ERROR_RERETURN(convert_default_policy(type, data, data_size, &jps->default_policy_dynamic));
     if (! strcmp(jps->cur_keyname, "default-event-static")) {
         struct wolfsentry_route_table *static_routes;
         if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
             WOLFSENTRY_RETURN_OK;
         wolfsentry_errcode_t ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
-        if (ret < 0)
-            return ret;
-        return wolfsentry_route_table_set_default_event(jps->wolfsentry, static_routes, data, (int)data_size);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_table_set_default_event(jps->wolfsentry, static_routes, data, (int)data_size));
     }
     if (! strcmp(jps->cur_keyname, "default-event-dynamic")) {
         struct wolfsentry_route_table *dynamic_routes;
         if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
             WOLFSENTRY_RETURN_OK;
         wolfsentry_errcode_t ret = wolfsentry_route_get_table_static(jps->wolfsentry, &dynamic_routes);
-        if (ret < 0)
-            return ret;
-        return wolfsentry_route_table_set_default_event(jps->wolfsentry, dynamic_routes, data, (int)data_size);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_table_set_default_event(jps->wolfsentry, dynamic_routes, data, (int)data_size));
     }
     WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 }
@@ -650,7 +636,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(struct wolfsentry_json_proc
         if ((ret = wolfsentry_addr_family_get_parser(jps->wolfsentry, sa->sa_family, &parser)) < 0)
             WOLFSENTRY_ERROR_RETURN(CONFIG_MISSING_HANDLER);
         sa->addr_len = WOLFSENTRY_MAX_ADDR_BITS;
-        return parser(jps->wolfsentry, data, (int)data_size, sa->addr, &sa->addr_len);
+        WOLFSENTRY_ERROR_RERETURN(parser(jps->wolfsentry, data, (int)data_size, sa->addr, &sa->addr_len));
     }
 }
 
@@ -693,10 +679,10 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
                               WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD :
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD);
         if (type == JSON_NUMBER)
-            return convert_uint16(type, data, data_size, &sa->sa_port);
+            WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &sa->sa_port));
 #if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
         else if (type == JSON_STRING)
-            return convert_sockaddr_port_name(jps, data, data_size, sa);
+            WOLFSENTRY_ERROR_RERETURN(convert_sockaddr_port_name(jps, data, data_size, sa));
 #endif
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -705,15 +691,15 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
                               WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD :
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD);
-        return convert_sockaddr_address(jps, type, data, data_size, sa);
+        WOLFSENTRY_ERROR_RERETURN(convert_sockaddr_address(jps, type, data, data_size, sa));
     } else if (! strcmp(jps->cur_keyname, "prefix-bits"))
-        return convert_uint16(type, data, data_size, &sa->addr_len);
+        WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &sa->addr_len));
     else if (! strcmp(jps->cur_keyname, "interface")) {
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
                               WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD :
                               WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD);
-        return convert_uint8(type, data, data_size, &sa->interface);
+        WOLFSENTRY_ERROR_RERETURN(convert_uint8(type, data, data_size, &sa->interface));
     } else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 }
@@ -734,8 +720,7 @@ static wolfsentry_errcode_t handle_route_family_clause(struct wolfsentry_json_pr
 
     if (type == JSON_NUMBER) {
         wolfsentry_errcode_t ret = convert_uint16(type, data, data_size, &jps->o_u_c.route.remote.sa_family);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         jps->o_u_c.route.local.sa_family = jps->o_u_c.route.remote.sa_family;
         WOLFSENTRY_RETURN_OK;
     }
@@ -743,7 +728,7 @@ static wolfsentry_errcode_t handle_route_family_clause(struct wolfsentry_json_pr
     else if (type == JSON_STRING) {
         wolfsentry_errcode_t ret;
         jps->o_u_c.route.remote.sa_family = jps->o_u_c.route.local.sa_family = wolfsentry_addr_family_pton(jps->wolfsentry, data, (int)data_size, &ret);
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     }
 #endif
     else
@@ -755,8 +740,7 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
 
     if (type == JSON_NUMBER) {
         wolfsentry_errcode_t ret = convert_uint16(type, data, data_size, &jps->o_u_c.route.remote.sa_proto);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         jps->o_u_c.route.local.sa_proto = jps->o_u_c.route.remote.sa_proto;
     }
 #if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
@@ -812,7 +796,7 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
                 &id,
                 &action_results);
         reset_o_u_c(jps);
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     }
     if ((jps->cur_depth == 3) && (type == JSON_OBJECT_BEG)) {
         reset_o_u_c(jps);
@@ -840,9 +824,9 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
             } else
                 WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
         } else if (jps->section_under_construction == S_U_C_REMOTE_ENDPOINT)
-            return handle_route_endpoint_clause(jps, type, data, data_size, (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote);
-        else if (jps->section_under_construction == S_U_C_LOCAL_ENDPOINT)            
-            return handle_route_endpoint_clause(jps, type, data, data_size, (struct wolfsentry_sockaddr *)&jps->o_u_c.route.local);
+            WOLFSENTRY_ERROR_RERETURN(handle_route_endpoint_clause(jps, type, data, data_size, (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote));
+        else if (jps->section_under_construction == S_U_C_LOCAL_ENDPOINT)
+            WOLFSENTRY_ERROR_RERETURN(handle_route_endpoint_clause(jps, type, data, data_size, (struct wolfsentry_sockaddr *)&jps->o_u_c.route.local));
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_UNEXPECTED); /* can't happen. */
     }
@@ -862,23 +846,23 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD);
     }
     else if (! strcmp(jps->cur_keyname, "family"))
-        return handle_route_family_clause(jps, type, data, data_size);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_family_clause(jps, type, data, data_size));
     else if (! strcmp(jps->cur_keyname, "protocol"))
-        return handle_route_protocol_clause(jps, type, data, data_size);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_protocol_clause(jps, type, data, data_size));
     else if (! strcmp(jps->cur_keyname, "tcplike-port-numbers"))
-        return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS));
     else if (! strcmp(jps->cur_keyname, "direction-in"))
-        return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN));
     else if (! strcmp(jps->cur_keyname, "direction-out"))
-        return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT));
     else if (! strcmp(jps->cur_keyname, "penalty-boxed"))
-        return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED));
     else if (! strcmp(jps->cur_keyname, "green-listed"))
-        return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_GREENLISTED);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_GREENLISTED));
     else if (! strcmp(jps->cur_keyname, "dont-count-hits"))
-        return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS));
     else if (! strcmp(jps->cur_keyname, "dont-count-current-connections"))
-        return handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS);
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS));
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 
@@ -914,7 +898,7 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
         if (! strcmp(jps->cur_keyname, "priority")) {
             if (jps->o_u_c.event.inserted)
                 WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
-            return convert_uint16(type, data, data_size, &jps->o_u_c.event.priority);
+            WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &jps->o_u_c.event.priority));
         }
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
     }
@@ -929,14 +913,14 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
     }
 
     if ((jps->cur_depth == 4) && (jps->section_under_construction == S_U_C_EVENTCONFIG))
-        return handle_eventconfig_clause(jps, type, data, data_size, &jps->o_u_c.event.config);
+        WOLFSENTRY_ERROR_RERETURN(handle_eventconfig_clause(jps, type, data, data_size, &jps->o_u_c.event.config));
 
     if ((jps->cur_depth == 3) && (type == JSON_OBJECT_END) && (jps->section_under_construction == S_U_C_EVENTCONFIG)) {
         jps->section_under_construction = S_U_C_NONE;
         if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
             WOLFSENTRY_RETURN_OK;
         else if (jps->o_u_c.event.inserted)
-            return wolfsentry_event_update_config(jps->wolfsentry, jps->o_u_c.event.label, jps->o_u_c.event.label_len, &jps->o_u_c.event.config);
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_update_config(jps->wolfsentry, jps->o_u_c.event.label, jps->o_u_c.event.label_len, &jps->o_u_c.event.config));
         else
             WOLFSENTRY_RETURN_OK;
     }
@@ -955,13 +939,12 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
                 jps->o_u_c.event.configed ? &jps->o_u_c.event.config : NULL,
                 WOLFSENTRY_EVENT_FLAG_NONE,
                 &id);
-        if (ret < 0)
-            return ret;
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         jps->o_u_c.event.inserted = 1;
     }
 
     if ((jps->cur_depth == 2) && (type == JSON_OBJECT_END))
-        return reset_o_u_c(jps);
+        WOLFSENTRY_ERROR_RERETURN(reset_o_u_c(jps));
 
     if ((jps->cur_depth == 3) && (type == JSON_STRING)) {
         wolfsentry_action_type_t subevent_type = WOLFSENTRY_ACTION_TYPE_NONE;
@@ -982,13 +965,13 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
             if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
                 WOLFSENTRY_RETURN_OK;
-            return wolfsentry_event_set_subevent(
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_set_subevent(
                 jps->wolfsentry,
                 jps->o_u_c.event.label,
                 jps->o_u_c.event.label_len,
                 subevent_type,
                 data,
-                (int)data_size);
+                (int)data_size));
         }
 
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
@@ -1004,12 +987,12 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
         if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
             WOLFSENTRY_RETURN_OK;
-        return wolfsentry_event_action_append(
+        WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_action_append(
                     jps->wolfsentry,
                     jps->o_u_c.event.label,
                     jps->o_u_c.event.label_len,
                     data,
-                    (int)data_size);
+                    (int)data_size));
     }
 
     if ((jps->cur_depth == 3) && (type == JSON_ARRAY_END) && (jps->section_under_construction == S_U_C_ACTION_LIST)) {
@@ -1032,7 +1015,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
     }
 
     if ((jps->cur_depth == 2) && (jps->object_under_construction == O_U_C_USER_VALUE) && (json_type == JSON_OBJECT_END))
-        return reset_o_u_c(jps);
+        WOLFSENTRY_ERROR_RERETURN(reset_o_u_c(jps));
 
     if ((jps->cur_depth == 3) && (jps->cur_keydepth == 2) && (jps->object_under_construction == O_U_C_NONE)) {
         jps->o_u_c.user_value.label_len = (int)strlen(jps->cur_keyname);
@@ -1050,32 +1033,32 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 0);
             jps->object_under_construction = O_U_C_NONE;
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         case JSON_FALSE:
             ret = wolfsentry_user_value_store_bool(
-                jps->wolfsentry, 
+                jps->wolfsentry,
                 jps->cur_keyname,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 WOLFSENTRY_KV_FALSE,
                 0);
             jps->object_under_construction = O_U_C_NONE;
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         case JSON_TRUE:
             ret = wolfsentry_user_value_store_bool(
-                jps->wolfsentry, 
+                jps->wolfsentry,
                 jps->cur_keyname,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 WOLFSENTRY_KV_TRUE,
                 0);
             jps->object_under_construction = O_U_C_NONE;
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         case JSON_NUMBER:
             do {
                 int64_t i;
                 if ((ret = convert_sint64(json_type, data, data_size, &i)) < 0)
                     break;
                 ret = wolfsentry_user_value_store_sint(
-                    jps->wolfsentry, 
+                    jps->wolfsentry,
                     jps->cur_keyname,
                     WOLFSENTRY_LENGTH_NULL_TERMINATED,
                     i,
@@ -1084,28 +1067,28 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
                 double d;
                 if ((ret = convert_double(json_type, data, data_size, &d)) < 0)
-                    return ret;
+                    WOLFSENTRY_ERROR_RERETURN(ret);
                 ret = wolfsentry_user_value_store_double(
-                    jps->wolfsentry, 
+                    jps->wolfsentry,
                     jps->cur_keyname,
                     WOLFSENTRY_LENGTH_NULL_TERMINATED,
                     d,
                     0);
             }
             jps->object_under_construction = O_U_C_NONE;
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         case JSON_STRING:
             if (data_size >= WOLFSENTRY_KV_MAX_VALUE_BYTES)
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
             ret = wolfsentry_user_value_store_string(
-                jps->wolfsentry, 
+                jps->wolfsentry,
                 jps->cur_keyname,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 data,
                 (int)data_size,
                 0);
             jps->object_under_construction = O_U_C_NONE;
-            return ret;
+            WOLFSENTRY_ERROR_RERETURN(ret);
         case JSON_OBJECT_BEG:
             jps->o_u_c.user_value.label_len = (int)strlen(jps->cur_keyname);
             memcpy(jps->o_u_c.user_value.label, jps->cur_keyname, (size_t)jps->o_u_c.user_value.label_len);
@@ -1145,57 +1128,57 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
         case WOLFSENTRY_KV_UINT: {
             uint64_t i;
             if ((ret = convert_uint64(json_type, data, data_size, &i)) < 0)
-                return ret;
-            return wolfsentry_user_value_store_uint(
-                jps->wolfsentry, 
+                WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_uint(
+                jps->wolfsentry,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 i,
-                0);
+                0));
         }
         case WOLFSENTRY_KV_SINT: {
             int64_t i;
             if ((ret = convert_sint64(json_type, data, data_size, &i)) < 0)
-                return ret;
-            return wolfsentry_user_value_store_sint(
-                jps->wolfsentry, 
+                WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_sint(
+                jps->wolfsentry,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 i,
-                0);
+                0));
         }
         case WOLFSENTRY_KV_FLOAT: {
             double d;
             if ((ret = convert_double(json_type, data, data_size, &d)) < 0)
-                return ret;
-            return wolfsentry_user_value_store_double(
-                jps->wolfsentry, 
+                WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_double(
+                jps->wolfsentry,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 d,
-                0);
+                0));
         }
         case WOLFSENTRY_KV_STRING:
             if (data_size >= WOLFSENTRY_KV_MAX_VALUE_BYTES)
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-            return wolfsentry_user_value_store_string(
-                jps->wolfsentry, 
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_string(
+                jps->wolfsentry,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 data,
                 (int)data_size,
-                0);
+                0));
 
         case WOLFSENTRY_KV_BYTES:
             if (data_size >= WOLFSENTRY_KV_MAX_VALUE_BYTES)
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-            return wolfsentry_user_value_store_bytes_base64(
-                jps->wolfsentry, 
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_bytes_base64(
+                jps->wolfsentry,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 data,
                 (int)data_size,
-                0);
+                0));
 
         case WOLFSENTRY_KV_NONE:
         case WOLFSENTRY_KV_NULL:
@@ -1376,7 +1359,7 @@ static wolfsentry_errcode_t json_process(
             memcpy(&jps->parser.err_pos, &jps->parser.value_pos, sizeof(JSON_INPUT_POS));
         else
             memcpy(&jps->parser.err_pos, &jps->parser.pos, sizeof(JSON_INPUT_POS));
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     } else
         WOLFSENTRY_RETURN_OK;
 }
@@ -1454,7 +1437,7 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
             (void)wolfsentry_context_free(&(*jps)->wolfsentry);
         wolfsentry_free(wolfsentry, *jps);
         *jps = NULL;
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     } else
         WOLFSENTRY_RETURN_OK;
 }
@@ -1496,7 +1479,7 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
         if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
             WOLFSENTRY_ERROR_RETURN(CONFIG_PARSER);
         else
-            return jps->fini_ret;
+            WOLFSENTRY_ERROR_RERETURN(jps->fini_ret);
     }
     WOLFSENTRY_RETURN_OK;
 }
@@ -1592,7 +1575,7 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
     *jps = NULL;
 
     if (ret < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     else
         WOLFSENTRY_RETURN_OK;
 }
@@ -1608,10 +1591,10 @@ wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     wolfsentry_errcode_t ret;
     struct wolfsentry_json_process_state *jps;
     if ((ret = wolfsentry_config_json_init(wolfsentry, load_flags, &jps)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size)) < 0) {
         (void)wolfsentry_config_json_fini(&jps, NULL, 0);
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     }
-    return wolfsentry_config_json_fini(&jps, err_buf, err_buf_size);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_config_json_fini(&jps, err_buf, err_buf_size));
 }

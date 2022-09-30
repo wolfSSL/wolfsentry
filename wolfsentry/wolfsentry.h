@@ -827,7 +827,7 @@ wolfsentry_errcode_t wolfsentry_route_insert_into_table_and_check_out(
     wolfsentry_action_res_t *action_results);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_and_check_out(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     const struct wolfsentry_sockaddr *remote,
     const struct wolfsentry_sockaddr *local,
@@ -1036,7 +1036,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_id_with_i
     );
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route *route,
     const char *event_label,
     int event_label_len,
@@ -1045,7 +1045,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route(
     );
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_with_inited_result(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route *route,
     const char *event_label,
     int event_label_len,
@@ -1059,7 +1059,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_
     wolfsentry_hitcount_t *max_purgeable_routes);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_set(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table *table,
     wolfsentry_hitcount_t max_purgeable_routes);
 

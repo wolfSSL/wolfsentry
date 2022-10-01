@@ -770,7 +770,19 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(
 WOLFSENTRY_API wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_checkout(void *object);
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_static(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_into_table(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *route_table,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
+    wolfsentry_route_flags_t flags,
+    const char *event_label,
+    int event_label_len,
+    wolfsentry_ent_id_t *id,
+    wolfsentry_action_res_t *action_results);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     const struct wolfsentry_sockaddr *remote,
@@ -779,6 +791,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_static(
     const char *event_label,
     int event_label_len,
     wolfsentry_ent_id_t *id,
+    wolfsentry_action_res_t *action_results);
+
+wolfsentry_errcode_t wolfsentry_route_insert_into_table_and_check_out(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *route_table,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
+    wolfsentry_route_flags_t flags,
+    const char *event_label,
+    int event_label_len,
+    struct wolfsentry_route **route,
     wolfsentry_action_res_t *action_results);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_and_check_out(
@@ -792,29 +816,19 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_and_check_out(
     struct wolfsentry_route **route,
     wolfsentry_action_res_t *action_results);
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_static(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_from_table(
     struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *route_table,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     const struct wolfsentry_sockaddr *remote,
     const struct wolfsentry_sockaddr *local,
     wolfsentry_route_flags_t flags,
-    const char *trigger_label,
-    int trigger_label_len,
+    const char *event_label,
+    int event_label_len,
     wolfsentry_action_res_t *action_results,
     int *n_deleted);
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_dynamic(
-    struct wolfsentry_context *wolfsentry,
-    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
-    const struct wolfsentry_sockaddr *remote,
-    const struct wolfsentry_sockaddr *local,
-    wolfsentry_route_flags_t flags,
-    const char *trigger_label,
-    int trigger_label_len,
-    wolfsentry_action_res_t *action_results,
-    int *n_deleted);
-
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_everywhere(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete(
     struct wolfsentry_context *wolfsentry,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     const struct wolfsentry_sockaddr *remote,
@@ -833,11 +847,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_by_id(
     int event_label_len,
     wolfsentry_action_res_t *action_results);
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_table_static(
-    struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_route_table **table);
-
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_table_dynamic(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_main_table(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_route_table **table);
 
@@ -936,6 +946,19 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_export(
 /* returned wolfsentry_event remains valid only as long as the wolfsentry lock is held (shared or exclusive). */
 WOLFSENTRY_API const struct wolfsentry_event *wolfsentry_route_parent_event(const struct wolfsentry_route *route);
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_with_table(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *route_table,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
+    wolfsentry_route_flags_t flags,
+    const char *event_label,
+    int event_label_len,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    wolfsentry_ent_id_t *id,
+    wolfsentry_route_flags_t *inexact_matches,
+    wolfsentry_action_res_t *action_results);
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch(
     struct wolfsentry_context *wolfsentry,
     const struct wolfsentry_sockaddr *remote,
@@ -944,6 +967,19 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch(
     const char *event_label,
     int event_label_len,
     void *caller_arg, /* passed to action callback(s). */
+    wolfsentry_ent_id_t *id,
+    wolfsentry_route_flags_t *inexact_matches,
+    wolfsentry_action_res_t *action_results);
+
+wolfsentry_errcode_t wolfsentry_route_event_dispatch_with_table_with_inited_result(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_route_table *route_table,
+    const struct wolfsentry_sockaddr *remote,
+    const struct wolfsentry_sockaddr *local,
+    wolfsentry_route_flags_t flags,
+    const char *event_label,
+    int event_label_len,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     wolfsentry_ent_id_t *id,
     wolfsentry_route_flags_t *inexact_matches,
     wolfsentry_action_res_t *action_results);

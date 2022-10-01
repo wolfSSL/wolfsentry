@@ -3318,7 +3318,6 @@ static const struct wolfsentry_timecbs default_timecbs = {
     wolfsentry_builtin_get_time,
     wolfsentry_builtin_diff_time,
     wolfsentry_builtin_add_time,
-    wolfsentry_builtin_epoch_time,
     wolfsentry_builtin_to_epoch_time,
     wolfsentry_builtin_from_epoch_time,
     wolfsentry_builtin_to_epoch_time,
@@ -3509,10 +3508,8 @@ wolfsentry_errcode_t wolfsentry_defaultconfig_update(
 static void wolfsentry_context_free_1(
     struct wolfsentry_context **wolfsentry)
 {
-    if ((*wolfsentry)->routes_static != NULL)
-        wolfsentry_route_table_free(*wolfsentry, &(*wolfsentry)->routes_static);
-    if ((*wolfsentry)->routes_dynamic != NULL)
-        wolfsentry_route_table_free(*wolfsentry, &(*wolfsentry)->routes_dynamic);
+    if ((*wolfsentry)->routes != NULL)
+        wolfsentry_route_table_free(*wolfsentry, &(*wolfsentry)->routes);
     if ((*wolfsentry)->events != NULL)
         (*wolfsentry)->allocator.free((*wolfsentry)->allocator.context, (*wolfsentry)->events);
     if ((*wolfsentry)->actions != NULL)
@@ -3539,9 +3536,7 @@ static wolfsentry_errcode_t wolfsentry_context_init_1(
         WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_action_table_init(wolfsentry->actions)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    if ((ret = wolfsentry_route_table_init(wolfsentry->routes_static)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
-    if ((ret = wolfsentry_route_table_init(wolfsentry->routes_dynamic)) < 0)
+    if ((ret = wolfsentry_route_table_init(wolfsentry->routes)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_kv_table_init(wolfsentry->user_values)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
@@ -3576,8 +3571,7 @@ static wolfsentry_errcode_t wolfsentry_context_alloc_1(
 
     if ((((*wolfsentry)->events = (struct wolfsentry_event_table *)allocator->malloc(allocator->context, sizeof *(*wolfsentry)->events)) == NULL) ||
         (((*wolfsentry)->actions = (struct wolfsentry_action_table *)allocator->malloc(allocator->context, sizeof *(*wolfsentry)->actions)) == NULL) ||
-        (((*wolfsentry)->routes_static = (struct wolfsentry_route_table *)allocator->malloc(allocator->context, sizeof *(*wolfsentry)->routes_static)) == NULL) ||
-        (((*wolfsentry)->routes_dynamic = (struct wolfsentry_route_table *)allocator->malloc(allocator->context, sizeof *(*wolfsentry)->routes_dynamic)) == NULL) ||
+        (((*wolfsentry)->routes = (struct wolfsentry_route_table *)allocator->malloc(allocator->context, sizeof *(*wolfsentry)->routes)) == NULL) ||
         (((*wolfsentry)->user_values = (struct wolfsentry_kv_table *)allocator->malloc(allocator->context, sizeof *(*wolfsentry)->user_values)) == NULL) ||
         (((*wolfsentry)->addr_families_bynumber = (struct wolfsentry_addr_family_bynumber_table *)allocator->malloc(allocator->context, sizeof *(*wolfsentry)->addr_families_bynumber)) == NULL)
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -3591,8 +3585,7 @@ static wolfsentry_errcode_t wolfsentry_context_alloc_1(
 
     memset((*wolfsentry)->events, 0, sizeof *(*wolfsentry)->events);
     memset((*wolfsentry)->actions, 0, sizeof *(*wolfsentry)->actions);
-    memset((*wolfsentry)->routes_static, 0, sizeof *(*wolfsentry)->routes_static);
-    memset((*wolfsentry)->routes_dynamic, 0, sizeof *(*wolfsentry)->routes_dynamic);
+    memset((*wolfsentry)->routes, 0, sizeof *(*wolfsentry)->routes);
     memset((*wolfsentry)->user_values, 0, sizeof *(*wolfsentry)->user_values);
     memset((*wolfsentry)->addr_families_bynumber, 0, sizeof *(*wolfsentry)->addr_families_bynumber);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -3681,10 +3674,7 @@ wolfsentry_errcode_t wolfsentry_init_ex(
 
     (*wolfsentry)->config_at_creation = (*wolfsentry)->config;
 
-    if ((ret = wolfsentry_route_table_fallthrough_route_alloc(*wolfsentry, (*wolfsentry)->routes_static)) < 0)
-        goto out;
-
-    if ((ret = wolfsentry_route_table_fallthrough_route_alloc(*wolfsentry, (*wolfsentry)->routes_dynamic)) < 0)
+    if ((ret = wolfsentry_route_table_fallthrough_route_alloc(*wolfsentry, (*wolfsentry)->routes)) < 0)
         goto out;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
@@ -3711,11 +3701,7 @@ wolfsentry_errcode_t wolfsentry_context_flush(struct wolfsentry_context *wolfsen
     wolfsentry_action_res_t action_results;
 
     action_results = WOLFSENTRY_ACTION_RES_NONE;
-    if ((ret = wolfsentry_route_flush_table(wolfsentry, wolfsentry->routes_static, &action_results)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
-
-    action_results = WOLFSENTRY_ACTION_RES_NONE;
-    if ((ret = wolfsentry_route_flush_table(wolfsentry, wolfsentry->routes_dynamic, &action_results)) < 0)
+    if ((ret = wolfsentry_route_flush_table(wolfsentry, wolfsentry->routes, &action_results)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
     if ((ret = wolfsentry_table_free_ents(wolfsentry, &wolfsentry->events->header)) < 0)
@@ -3733,12 +3719,8 @@ wolfsentry_errcode_t wolfsentry_context_free(struct wolfsentry_context **wolfsen
     if ((ret = wolfsentry_lock_destroy(&(*wolfsentry)->lock)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
-    if ((*wolfsentry)->routes_static != NULL) {
-        if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_static->header)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
-    }
-    if ((*wolfsentry)->routes_dynamic != NULL) {
-        if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes_dynamic->header)) < 0)
+    if ((*wolfsentry)->routes != NULL) {
+        if ((ret = wolfsentry_table_free_ents(*wolfsentry, &(*wolfsentry)->routes->header)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
     }
     if ((*wolfsentry)->actions != NULL) {
@@ -3854,9 +3836,7 @@ wolfsentry_errcode_t wolfsentry_context_clone(
 
     if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->events->header, *clone, &(*clone)->events->header, flags)) < 0)
         goto out;
-    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->routes_static->header, *clone, &(*clone)->routes_static->header, flags)) < 0)
-        goto out;
-    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->routes_dynamic->header, *clone, &(*clone)->routes_dynamic->header, flags)) < 0)
+    if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->routes->header, *clone, &(*clone)->routes->header, flags)) < 0)
         goto out;
     if ((ret = wolfsentry_table_clone(wolfsentry, &wolfsentry->user_values->header, *clone, &(*clone)->user_values->header, flags)) < 0)
         goto out;
@@ -3886,8 +3866,7 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
     wolfsentry1->config_at_creation = wolfsentry2->config_at_creation;
     wolfsentry1->events = wolfsentry2->events;
     wolfsentry1->actions = wolfsentry2->actions;
-    wolfsentry1->routes_static =  wolfsentry2->routes_static;
-    wolfsentry1->routes_dynamic = wolfsentry2->routes_dynamic;
+    wolfsentry1->routes =  wolfsentry2->routes;
     wolfsentry1->user_values = wolfsentry2->user_values;
     wolfsentry1->addr_families_bynumber = wolfsentry2->addr_families_bynumber;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -3901,8 +3880,7 @@ wolfsentry_errcode_t wolfsentry_context_exchange(struct wolfsentry_context *wolf
     wolfsentry2->config_at_creation = scratch.config_at_creation;
     wolfsentry2->events = scratch.events;
     wolfsentry2->actions = scratch.actions;
-    wolfsentry2->routes_static = scratch.routes_static;
-    wolfsentry2->routes_dynamic = scratch.routes_dynamic;
+    wolfsentry2->routes = scratch.routes;
     wolfsentry2->user_values = scratch.user_values;
     wolfsentry2->addr_families_bynumber = scratch.addr_families_bynumber;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES

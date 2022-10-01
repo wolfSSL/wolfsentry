@@ -374,8 +374,7 @@ struct wolfsentry_context {
     struct wolfsentry_eventconfig_internal config, config_at_creation;
     struct wolfsentry_event_table *events;
     struct wolfsentry_action_table *actions;
-    struct wolfsentry_route_table *routes_static;
-    struct wolfsentry_route_table *routes_dynamic;
+    struct wolfsentry_route_table *routes;
     struct wolfsentry_kv_table *user_values;
     struct wolfsentry_addr_family_bynumber_table *addr_families_bynumber;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES

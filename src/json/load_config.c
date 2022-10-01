@@ -78,10 +78,8 @@
 ],
 
 "default-policies" : {
-    "default-policy-static" : "accept" | "reject"
-    "default-event-static" : string
-    "default-policy-dynamic" : "accept" | "reject"
-    "default-event-dynamic" : string
+    "default-policy" : "accept" | "reject",
+    "default-event" : string
 },
 
 "static-routes-insert" : [
@@ -161,10 +159,8 @@ struct wolfsentry_json_process_state {
     const struct wolfsentry_host_platform_interface *hpi;
 
     struct wolfsentry_eventconfig default_config;
-    wolfsentry_action_res_t default_policy_static;
-    wolfsentry_action_res_t default_policy_dynamic;
-    struct wolfsentry_event *default_event_static;
-    struct wolfsentry_event *default_event_dynamic;
+    wolfsentry_action_res_t default_policy;
+    struct wolfsentry_event *default_event;
 
     JSON_PARSER parser;
     struct wolfsentry_context *wolfsentry_actual, *wolfsentry;
@@ -445,18 +441,11 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
         wolfsentry_errcode_t ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
         jps->table_under_construction = T_U_C_NONE;
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        if (jps->default_policy_static) {
-            struct wolfsentry_route_table *static_routes;
-            ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
+        if (jps->default_policy) {
+            struct wolfsentry_route_table *routes;
+            ret = wolfsentry_route_get_main_table(jps->wolfsentry, &routes);
             WOLFSENTRY_RERETURN_IF_ERROR(ret);
-            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, static_routes, jps->default_policy_static);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        }
-        if (jps->default_policy_dynamic) {
-            struct wolfsentry_route_table *dynamic_routes;
-            ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &dynamic_routes);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
-            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, dynamic_routes, jps->default_policy_dynamic);
+            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, routes, jps->default_policy);
             WOLFSENTRY_RERETURN_IF_ERROR(ret);
         }
         WOLFSENTRY_RETURN_OK;
@@ -482,11 +471,7 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
             WOLFSENTRY_ERROR_RERETURN(ret);
         if (jps->table_under_construction != T_U_C_TOPCONFIG)
             WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
-        ret = wolfsentry_route_get_table_static(jps->wolfsentry, &route_table);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        if ((ret = wolfsentry_route_table_max_purgeable_routes_set(jps->wolfsentry, route_table, max_purgeable_routes)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
-        ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &route_table);
+        ret = wolfsentry_route_get_main_table(jps->wolfsentry, &route_table);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if ((ret = wolfsentry_route_table_max_purgeable_routes_set(jps->wolfsentry, route_table, max_purgeable_routes)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
@@ -503,41 +488,24 @@ static wolfsentry_errcode_t handle_defaultpolicy_clause(struct wolfsentry_json_p
         wolfsentry_errcode_t ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
         jps->table_under_construction = T_U_C_NONE;
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        if (jps->default_policy_static) {
-            struct wolfsentry_route_table *static_routes;
-            ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
+        if (jps->default_policy) {
+            struct wolfsentry_route_table *routes;
+            ret = wolfsentry_route_get_main_table(jps->wolfsentry, &routes);
             WOLFSENTRY_RERETURN_IF_ERROR(ret);
-            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, static_routes, jps->default_policy_static);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        }
-        if (jps->default_policy_dynamic) {
-            struct wolfsentry_route_table *dynamic_routes;
-            ret = wolfsentry_route_get_table_dynamic(jps->wolfsentry, &dynamic_routes);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
-            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, dynamic_routes, jps->default_policy_dynamic);
+            ret = wolfsentry_route_table_default_policy_set(jps->wolfsentry, routes, jps->default_policy);
             WOLFSENTRY_RERETURN_IF_ERROR(ret);
         }
         WOLFSENTRY_RETURN_OK;
     }
-    if (! strcmp(jps->cur_keyname, "default-policy-static"))
-        WOLFSENTRY_ERROR_RERETURN(convert_default_policy(type, data, data_size, &jps->default_policy_static));
-    if (! strcmp(jps->cur_keyname, "default-policy-dynamic"))
-        WOLFSENTRY_ERROR_RERETURN(convert_default_policy(type, data, data_size, &jps->default_policy_dynamic));
-    if (! strcmp(jps->cur_keyname, "default-event-static")) {
-        struct wolfsentry_route_table *static_routes;
+    if (! strcmp(jps->cur_keyname, "default-policy"))
+        WOLFSENTRY_ERROR_RERETURN(convert_default_policy(type, data, data_size, &jps->default_policy));
+    if (! strcmp(jps->cur_keyname, "default-event")) {
+        struct wolfsentry_route_table *routes;
         if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
             WOLFSENTRY_RETURN_OK;
-        wolfsentry_errcode_t ret = wolfsentry_route_get_table_static(jps->wolfsentry, &static_routes);
+        wolfsentry_errcode_t ret = wolfsentry_route_get_main_table(jps->wolfsentry, &routes);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_table_set_default_event(jps->wolfsentry, static_routes, data, (int)data_size));
-    }
-    if (! strcmp(jps->cur_keyname, "default-event-dynamic")) {
-        struct wolfsentry_route_table *dynamic_routes;
-        if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
-            WOLFSENTRY_RETURN_OK;
-        wolfsentry_errcode_t ret = wolfsentry_route_get_table_static(jps->wolfsentry, &dynamic_routes);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_table_set_default_event(jps->wolfsentry, dynamic_routes, data, (int)data_size));
+        WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_table_set_default_event(jps->wolfsentry, routes, data, (int)data_size));
     }
     WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 }
@@ -785,7 +753,7 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
         if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
             ret = WOLFSENTRY_ERROR_ENCODE(OK);
         else
-            ret = wolfsentry_route_insert_static(
+            ret = wolfsentry_route_insert(
                 jps->wolfsentry,
                 jps->o_u_c.route.caller_arg,
                 (const struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote,
@@ -1529,13 +1497,13 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
 
     if (WOLFSENTRY_CHECK_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
         int flush_routes_p = ! WOLFSENTRY_MASKIN_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH);
-        struct wolfsentry_route_table *old_static_route_table, *new_static_route_table;
-        if ((ret = wolfsentry_route_get_table_static((*jps)->wolfsentry_actual, &old_static_route_table)) < 0)
+        struct wolfsentry_route_table *old_route_table, *new_route_table;
+        if ((ret = wolfsentry_route_get_main_table((*jps)->wolfsentry_actual, &old_route_table)) < 0)
             goto out;
-        if ((ret = wolfsentry_route_get_table_static((*jps)->wolfsentry, &new_static_route_table)) < 0)
+        if ((ret = wolfsentry_route_get_main_table((*jps)->wolfsentry, &new_route_table)) < 0)
             goto out;
-        if (wolfsentry_table_n_deletes((struct wolfsentry_table_header *)new_static_route_table)
-            != wolfsentry_table_n_deletes((struct wolfsentry_table_header *)old_static_route_table))
+        if (wolfsentry_table_n_deletes((struct wolfsentry_table_header *)new_route_table)
+            != wolfsentry_table_n_deletes((struct wolfsentry_table_header *)old_route_table))
         {
             wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
             if ((ret = wolfsentry_route_bulk_clear_insert_action_status((*jps)->wolfsentry, &action_results)) < 0)

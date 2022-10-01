@@ -39,8 +39,8 @@
 	}
     ],
     "default-policies" : {
-	"default-policy-static" : "reject",
-	"default-event-static" : "static-route-parent"
+	"default-policy" : "reject",
+	"default-event" : "static-route-parent"
     },
     "static-routes-insert" : [
 	{

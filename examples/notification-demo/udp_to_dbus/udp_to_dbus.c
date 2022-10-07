@@ -20,124 +20,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/*
- * This is a demonstration application daemon that pairs with
- * ../wolfssl-wolfsentry_notify_via_UDP_JSON.patch, which adds corresponding
- * functionality to libwolfssl's example server application.
- *
- * The patched wolfssl server transmits JSON-encoded UDP datagrams with event
- * descriptions to udp_to_dbus.  udp_to_dbus decodes and formats the
- * JSON-encoded messages, and sends the resulting messages to the local dbus,
- * producing a pop-up message.
- * 
- *
- * Building the demo:
- *
- * Modern Linux and Gnu toolchain are assumed throughout.
- *
- * Gnome's glib-2.0, gdk-pixbuf-2.0, and libnotify, with header files, are also
- * needed.  We've tested with glib 2.72.3, gdk-pixbuf 2.42.8, and libnotify
- * 0.7.12 and 0.8.1.  On Ubuntu and Debian, it may suffice to install package
- * "libnotify-dev" with its dependencies.  On Fedora, "sudo dnf install
- * libnotify-devel" should install all dependencies.  On Gentoo, "emerge
- * x11-libs/libnotify" will install all dependencies.
- *
- *
- * Set up a top level source tree with wolfSSL 5.4.0 or later in ./wolfssl/, and
- * this release of wolfSentry at ./wolfsentry/.
- *
- * Starting in the top level source tree:
- *
- *   pushd wolfsentry
- *   make -j install INSTALL_DIR=./install_image
- *   cd examples/notification-demo/udp_to_dbus/
- *   make WOLFSENTRY_ROOT=../../../install_image
- *   popd
- *
- * Now build libwolfssl with the patched example client and server applications:
- *
- *   pushd wolfssl
- *   patch -p1 < ../wolfsentry/examples/notification-demo/wolfssl-wolfsentry_notify_via_UDP_JSON.patch
- *   [optional: autoreconf --install --force]
- *   ./configure --quiet --enable-all --enable-wolfsentry --with-wolfsentry=../wolfsentry/install_image
- *   make -j
- *   popd
- *
- * At this point, all executables should be built and ready for use.
- *
- *
- * Running the demo:
- *
- * Open 3 terminal windows.
- *
- * Run the message daemon in terminal #1:
- *
- *   pushd wolfsentry/examples/notification-demo/udp_to_dbus
- *   ./udp_to_dbus
- *
- * Run the example server in a terminal #2:
- *
- *   pushd wolfssl
- *   ./examples/server/server -x -i -v 4 -b -g --wolfsentry-config ../wolfsentry/tests/test-config.json
- *
- * Run the example client from a third terminal, and try various target addresses to exercise the ruleset:
- *
- *   pushd wolfssl
- *   ./examples/client/client -v 4 localhost
- *       [should succeed]
- *   ./examples/client/client -v 4 192.168.0.1
- *       [if 192.168.0.1 is a configured address of your local workstation, this
- *              will be blocked by wolfSentry, else it will time out eventually]
- *
- * Note that the example client is also calling wolfSentry for the outbound
- * connections, but by default it won't load the JSON config.
- *
- * If instead you issue
- *
- *   ./examples/client/client -v 4 localhost --wolfsentry-config ../wolfsentry/tests/test-config.json
- *
- * Then the example client will also generate notifications.  In fact, if the
- * connection succeeds, it will generate two, because the test client both calls
- * wolfsentry_route_event_dispatch() directly before connecting, and also
- * installs a callback in the wolfSSL library that calls
- * wolfsentry_route_event_dispatch() at the start of the TLS negotiation
- * process.  Obviously this is for demonstration purposes -- a production
- * wolfSentry-aware application would always filter outbound connections at the
- * earliest opportunity, and in any case, before establishing a network
- * connection.
- *
- *
- * tests/test-config.json has these clauses in its "user-values" section to
- * support coordination of the notification pipeline:
- *
- *      "notification-dest-addr" : "127.0.0.1",
- *      "notification-dest-port" : 55555
- *
- * If these values aren't suitable -- e.g., to experiment with sending
- * notifications over a LAN connection -- modify the values to suit, and pass
- * the path of the modified file in the above commands.
- *
- *
- * New rules can also be added to test-config.json, e.g. to allow 192.168.*.*,
- * inbound and outbound, add this rule to the "static-routes-insert" array:
- * 
- *
- *      {
- *          "parent-event" : "static-route-parent",
- *          "direction-in" : true,
- *          "direction-out" : true,
- *          "green-listed" : true,
- *          "family" : "inet",
- *          "protocol" : "tcp",
- *          "remote" : {
- *              "address" : "192.168.0.0",
- *              "prefix-bits" : 16,
- *              "interface" : 1
- *          },
- *      }
- *
- */
-
 #define _GNU_SOURCE
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_USER_BASE
@@ -164,7 +46,18 @@
 
 static int notnormal = 0;
 
-static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_t json_message_len) {
+#define SNPRINTF_MSGPTR(ptr, ptr_len_left, fmt, args...) {              \
+    int _len = snprintf((ptr), (size_t)(ptr_len_left), (fmt), ## args); \
+    if ((_len < 0) || ((size_t)_len >= (ptr_len_left))) {               \
+        (ptr_len_left) = -1;                                            \
+        break;                                                          \
+    }                                                                   \
+    (ptr) += _len;                                                      \
+}
+
+static int notify(JSON_CONFIG *centijson_config, const char *json_message,
+    size_t json_message_len)
+{
     VALUE p_root;
     VALUE *action_v = NULL,
         *rule_id_v = NULL,
@@ -196,7 +89,8 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
                               0 /* dom_flags */, &p_root, &json_pos) < 0)) {
         if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
             fprintf(stderr,
-                    "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n",
+                    "json_dom_parse failed at offset " SIZET_FMT ", L%u, " \
+                    "col %u, with centijson code %d: %s\n",
                     json_pos.offset,
                     json_pos.line_number,
                     json_pos.column_number,
@@ -204,7 +98,8 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
                     json_error_str(ret));
         else
             fprintf(stderr,
-                    "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT "\n",
+                    "json_dom_parse failed at offset " SIZET_FMT ", L%u, " \
+                    "col %u, with " WOLFSENTRY_ERROR_FMT "\n",
                     json_pos.offset,
                     json_pos.line_number,
                     json_pos.column_number,
@@ -213,23 +108,6 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
     }
 
     do {
-        /* {
-             "action" : "notify-on-decision",
-             "trigger" : "(null)",
-             "parent" : "(null)",
-             "af" : "INET",
-             "proto" : "6",
-             "remote" : {
-               "address" : "108.65.49.10",
-               "port" : 36558
-             },
-             "local" : {
-               "address" : "108.65.49.10",
-               "port" : 11111
-             },
-             "decision" : ["reject"]
-           }
-        */
         const char *action, *af, *remote_addr, *local_addr;
         char msgbuf[1024], *msgbuf_ptr = msgbuf;
         ssize_t msgbuf_len_left = sizeof msgbuf;
@@ -259,16 +137,7 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
         local_port = value_int32(local_port_v);
         n_decisions = value_array_size(decision_array_v);
 
-#define snprintf_msgptr(ptr, ptr_len_left, fmt, args...) {                      \
-            int _len = snprintf((ptr), (size_t)(ptr_len_left), (fmt), ## args); \
-            if ((_len < 0) || ((size_t)_len >= (ptr_len_left))) {               \
-                (ptr_len_left) = -1;                                            \
-                break;                                                          \
-            }                                                                   \
-            (ptr) += _len;                                                      \
-        }
-
-        snprintf_msgptr(msgbuf_ptr, msgbuf_len_left, "%s/%d from %s:%d to %s:%d\n",
+        SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "%s/%d from %s:%d to %s:%d\n",
                         af,
                         proto,
                         remote_addr,
@@ -276,7 +145,7 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
                         local_addr,
                         local_port);
 
-        snprintf_msgptr(msgbuf_ptr, msgbuf_len_left, "rule %u, %u hits\ndecision: [",
+        SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "rule %u, %u hits\ndecision: [",
                         rule_id,
                         rule_hitcount);
 
@@ -288,7 +157,8 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
             decision_string = value_string(decision_string_v);
             if (decision_string == NULL)
                 continue;
-            snprintf_msgptr(msgbuf_ptr, msgbuf_len_left, "%s%s", i>0 ? "," : "", decision_string);
+            SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "%s%s", i>0 ? "," : "",
+                decision_string);
             value_fini(decision_string_v);
             decision_string_v = NULL;
         }
@@ -296,7 +166,7 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
         if (msgbuf_len_left < 0)
             break;
 
-        snprintf_msgptr(msgbuf_ptr, msgbuf_len_left, "]");
+        SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "]");
 
         /* xxx note that dbus notification daemons expect fragments of basic
          * HTML as input, so msgbuf needs rewriting to escape HTML entities.
@@ -337,7 +207,7 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message, size_
     notify_notification_set_timeout(notify, expire_timeout);
     notify_notification_set_app_name(notify, app_name);
 
-    notify_notification_set_hint(notify, "transient", g_variant_new_boolean (TRUE));
+    notify_notification_set_hint(notify, "transient", g_variant_new_boolean(TRUE));
 
     retval = notify_notification_show(notify, &error);
     if (! retval) {
@@ -361,16 +231,16 @@ static wolfsentry_errcode_t my_addr_family_parser(
 
     (void)wolfsentry;
 
-    if (snprintf(abuf,sizeof abuf,"%.*s",addr_text_len,addr_text) >= (int)sizeof abuf)
+    if (snprintf(abuf, sizeof(abuf), "%.*s",addr_text_len,addr_text) >= (int)sizeof(abuf))
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-    if ((n_octets = sscanf(abuf,"%o/%o/%o%n",&a[0],&a[1],&a[2],&parsed_len)) < 1)
+    if ((n_octets = sscanf(abuf, "%o/%o/%o%n", &a[0], &a[1], &a[2], &parsed_len)) < 1)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if (parsed_len != addr_text_len) {
-        if ((n_octets = sscanf(abuf,"%o/%o/%n",&a[0],&a[1],&parsed_len)) < 1)
+        if ((n_octets = sscanf(abuf,"%o/%o/%n", &a[0], &a[1], &parsed_len)) < 1)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     }
     if (parsed_len != addr_text_len) {
-        if ((n_octets = sscanf(abuf,"%o/%n",&a[0],&parsed_len)) < 1)
+        if ((n_octets = sscanf(abuf, "%o/%n", &a[0], &parsed_len)) < 1)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     }
     if (parsed_len != addr_text_len)
@@ -428,15 +298,16 @@ int main(int argc, char **argv) {
     struct stat wolfsentry_config_st;
     const char *wolfsentry_config_map = MAP_FAILED;
     char buf[1024];
-    int inbound_fd = -1;
-    struct sockaddr_in inbound_sa;
     const char *wolfsentry_configfile = "../../../tests/test-config.json";
-    uint64_t notification_dest_port;
     const char *notification_dest_addr;
     int notification_dest_addr_len;
     struct wolfsentry_kv_pair_internal *notification_dest_addr_record = NULL;
+    int inbound_fd = -1;
+    struct sockaddr_in inbound_sa;
+    uint64_t notification_dest_port;
     int pton_ret;
     ssize_t recv_ret;
+    int i;
 
     JSON_CONFIG centijson_config = {
         2000,  /* max_total_len */
@@ -450,8 +321,23 @@ int main(int argc, char **argv) {
 
     struct wolfsentry_context *wolfsentry;
 
-    if (argc > 1)
-        wolfsentry_configfile = argv[1];
+    for (i=1; i<argc; i+=2) {
+        if (argc < i+2) {
+            fprintf(stderr,"%s: missing argument to \"%s\"\n", argv[0], argv[i]);
+            exit(1);
+        }
+        if (! strcmp(argv[i],"--config")) {
+            wolfsentry_configfile = argv[i+1];
+        }
+        else if (! strcmp(argv[i],"--kv-string")) {
+        }
+        else if (! strcmp(argv[i],"--kv-int")) {
+        }
+        else {
+            fprintf(stderr,"%s: unrecognized argument \"%s\"\n", argv[0], argv[i]);
+            exit(1);
+        }
+    }
 
     g_set_prgname (argv[0]);
     g_log_set_always_fatal (G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL);
@@ -469,9 +355,11 @@ int main(int argc, char **argv) {
             WOLFSENTRY_LENGTH_NULL_TERMINATED,
             my_addr_family_parser,
             my_addr_family_formatter,
-            24 /* max_addr_bits */) < 0)
+            24 /* max_addr_bits */) < 0) {
         exit(1);
+    }
 
+    fprintf(stderr, "Loading configuration file %s\n", wolfsentry_configfile);
     if ((wolfsentry_config_fd = open(wolfsentry_configfile, O_RDONLY)) < 0) {
         perror(wolfsentry_configfile);
         exit(1);
@@ -505,6 +393,48 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    for (i=1; i<argc; i+=2) {
+        if (! strcmp(argv[i],"--kv-string")) {
+            char *cp = strchr(argv[i+1], '=');
+            if (cp == NULL) {
+                fprintf(stderr,"%s: missing '=' in argument to %s\n",
+                    argv[0], argv[i]);
+                exit(1);
+            }
+            fprintf(stderr, "\tCustom string: %s\n", argv[i+1]);
+            ret = wolfsentry_user_value_store_string(wolfsentry, argv[i+1],
+                (int)(cp - argv[i+1]), cp + 1,
+                WOLFSENTRY_LENGTH_NULL_TERMINATED, 1 /* overwrite_p */);
+            if (ret < 0) {
+                fprintf(stderr, "wolfsentry_user_value_store_string(): " \
+                    WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                exit(1);
+            }
+        }
+        else if (! strcmp(argv[i],"--kv-int")) {
+            char *cp = strchr(argv[i+1], '=');
+            uint64_t the_int;
+            char *end_of_the_int;
+            if (cp == NULL) {
+                fprintf(stderr,"%s: missing '=' in argument to %s\n",argv[0],argv[i]);
+                exit(1);
+            }
+            the_int = strtoul(cp+1, &end_of_the_int, 0);
+            if ((*end_of_the_int != 0) || (end_of_the_int == cp+1)) {
+                fprintf(stderr,"%s: bad numeric argument to %s: \"%s\"\n",
+                    argv[0], cp+1, argv[i]);
+                exit(1);
+            }
+            ret = wolfsentry_user_value_store_uint(wolfsentry, argv[i+1],
+                (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
+            if (ret < 0) {
+                fprintf(stderr, "wolfsentry_user_value_store_string(): " \
+                    WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                exit(1);
+            }
+        }
+    }
+
     ret = wolfsentry_user_value_get_uint(
         wolfsentry,
         "notification-dest-port",
@@ -522,8 +452,12 @@ int main(int argc, char **argv) {
         &notification_dest_addr_len,
         &notification_dest_addr_record);
 
-    if (ret < 0)
+    if (ret < 0) {
+        fprintf(stderr, "wolfsentry_user_value_get_string(\"notification-dest-addr\") returned "
+                WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
+    }
 
     pton_ret = inet_pton(AF_INET, notification_dest_addr, &inbound_sa.sin_addr);
 
@@ -545,8 +479,6 @@ int main(int argc, char **argv) {
     inbound_sa.sin_family = AF_INET;
     inbound_sa.sin_port = htons(notification_dest_port);
 
-    centijson_config.wolfsentry_context = wolfsentry;
-
     inbound_fd = socket(AF_INET, SOCK_DGRAM, 17 /* UDP */);
     if (inbound_fd < 0) {
         perror("socket(AF_INET, SOCK_DGRAM, UDP");
@@ -557,6 +489,8 @@ int main(int argc, char **argv) {
         perror("bind");
         exit(1);
     }
+
+    centijson_config.wolfsentry_context = wolfsentry;
 
     if (setjmp(interrupt_jmp_buf))
         goto done;
@@ -586,7 +520,6 @@ int main(int argc, char **argv) {
             perror("recv");
             break;
         }
-
         if (notify(&centijson_config,buf,recv_ret) < 0)
             notnormal = 1;
     }

@@ -1,1 +1,4 @@
-See instructions at top of udp_to_dbus/udp_to_dbus.c.
+# Notification Demos
+
+* `echo_server`: A TLS server that reports wolfSentry logs
+* `udp_to_dbus`: Accepts UDP packets and generates DBUS notifications

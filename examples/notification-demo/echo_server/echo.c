@@ -5,6 +5,10 @@
 #define DEBUG_TLS
 //#define DEBUG_WOLFSENTRY
 
+/* use test-config.h */
+#undef  NO_FILESYSTEM
+#define NO_FILESYSTEM
+
 #define WOLFSENTRY_SOURCE_ID (WOLFSENTRY_SOURCE_ID_USER_BASE+1)
 
 #define SERVER_PRIME256V1
@@ -1214,6 +1218,7 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
     return 0;
 }
 
+#ifndef NO_FILESYSTEM
 /* reads file size, allocates buffer, reads into buffer, returns buffer */
 #include <stdio.h>
 static int load_file(const char* fname, char** buf, size_t* bufLen)
@@ -1262,7 +1267,10 @@ static int load_file(const char* fname, char** buf, size_t* bufLen)
 
     return ret;
 }
-
+#else
+    /* for wolfsentry_config_data */
+    #include "test-config.h"
+#endif
 
 int main(int argc, char **argv) {
     wolfsentry_errcode_t ret;
@@ -1273,9 +1281,10 @@ int main(int argc, char **argv) {
     int i;
     const char *wolfsentry_configfile = "../../../tests/test-config.json";
     uint64_t circlog_size_uint64;
+#ifndef NO_FILESYSTEM
     char* wolfsentry_config_data = NULL;
     size_t wolfsentry_config_data_sz = 0;
-
+#endif
 
     http_buf_size = 1024;
     http_buf = (char *)malloc(http_buf_size);
@@ -1284,10 +1293,9 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-#ifdef DEBUG_HTTP
+#ifdef DEBUG_TLS
     printf("Echo SSL init\n");
 #endif
-
     if (echo_ssl_init() < 0)
         exit(1);
 
@@ -1324,18 +1332,27 @@ int main(int argc, char **argv) {
         }
     }
 
+#ifndef NO_FILESYSTEM
+    printf("Loading configuration file %s\n", wolfsentry_configfile);
     if (load_file(wolfsentry_configfile, &wolfsentry_config_data, &wolfsentry_config_data_sz) != 0) {
         fprintf(stderr, "Error loading configuration file %s\n", wolfsentry_configfile);
         exit(1);
     }
     (void)wolfsentry_config_data_sz;
+#else
+    printf("Loading configuration from test-config.h\n");
+#endif
 
     if (sentry_init(wolf_ctx, NULL /* hpi */, wolfsentry_config_data) < 0) {
+    #ifndef NO_FILESYSTEM
         free(wolfsentry_config_data);
+    #endif
         exit(1);
     }
+#ifndef NO_FILESYSTEM
     free(wolfsentry_config_data);
     wolfsentry_config_data = NULL;
+#endif
 
     /* parse other arguments */
     for (i=1; i<argc; i+=2) {

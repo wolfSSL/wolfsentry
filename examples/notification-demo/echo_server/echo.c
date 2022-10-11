@@ -5,7 +5,11 @@
 #define DEBUG_TLS
 //#define DEBUG_WOLFSENTRY
 
-/* use test-config.h */
+//#define HTTP_NONBLOCKING
+#define HTTP_MAX_NB_TRIES 10
+#define HTTP_BUF_SZ 1024
+
+/* use notify-config.h */
 #undef  NO_FILESYSTEM
 #define NO_FILESYSTEM
 
@@ -41,7 +45,6 @@
 
 #include "sentry.h"
 #include "echo.h"
-#include "printf.h"
 
 #define USE_CERT_BUFFERS_2048
 
@@ -59,13 +62,7 @@
 #include <wolfssl/ssl.h>
 #include <wolfssl/error-ssl.h>
 
-/* need internal.h to access WOLFSSL_X509_NAME.name */
-//#include "wolfssl/internal.h"
-
-
-
-WOLFSSL_CTX* wolf_ctx = NULL;
-
+static WOLFSSL_CTX* wolf_ctx = NULL;
 static int echo_server_data_index = -1;
 
 #ifdef BUILD_FOR_FREERTOS_LWIP
@@ -835,6 +832,7 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
 int echo_ssl_init()
 {
     int ret;
+    struct ca_cert *ca_certs_i;
 
     wolfSSL_Init();
     wolfSSL_Debugging_ON();
@@ -876,9 +874,13 @@ int echo_ssl_init()
         return -1;
     }
 
-    for (struct ca_cert *ca_certs_i = ca_certs; ca_certs_i < &ca_certs[sizeof ca_certs / sizeof ca_certs[0]]; ++ca_certs_i) {
-        if ((ret = wolfSSL_CTX_load_verify_buffer(wolf_ctx, (const unsigned char *)ca_certs_i->pem,
-            strlen(ca_certs_i->pem), SSL_FILETYPE_PEM)) != WOLFSSL_SUCCESS)
+    for (ca_certs_i = ca_certs;
+        ca_certs_i < &ca_certs[sizeof(ca_certs) / sizeof(ca_certs[0])];
+        ++ca_certs_i)
+    {
+        if ((ret = wolfSSL_CTX_load_verify_buffer(wolf_ctx,
+            (const unsigned char *)ca_certs_i->pem, strlen(ca_certs_i->pem),
+                WOLFSSL_FILETYPE_PEM)) != WOLFSSL_SUCCESS)
         {
             fprintf(stderr, "%s L%d: failed to load verify buffer: %s\n",
                 __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(ret));
@@ -931,7 +933,9 @@ int echo_ssl_init()
         }
     }
 
-    wolfSSL_CTX_set_verify(wolf_ctx, WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT, myVerifyCheck);
+    wolfSSL_CTX_set_verify(wolf_ctx,
+        (WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT),
+        myVerifyCheck);
 
     return 0;
 }
@@ -943,9 +947,13 @@ int echo_ssl_init()
 void echo_msgclose(struct tcp_pcb *pcb)
 {
     printf("Closing connection from: %s\n", ipaddr_ntoa(&(pcb->remote_ip)));
+
+#if 0
     /* Tell sentry_action() that this is a disconnect event which decrements
      * the connection count */
-    //sentry_action(&pcb->local_ip, &pcb->remote_ip, pcb->local_port, pcb->remote_port, SENTRY_ACTION_DISCONNECT);
+    sentry_action(&pcb->local_ip, &pcb->remote_ip, pcb->local_port,
+        pcb->remote_port, SENTRY_ACTION_DISCONNECT);
+#endif
 
     /* Remove all the callbacks and shutdown the connection */
     tcp_arg(pcb, NULL);
@@ -964,28 +972,31 @@ static void echo_msgerr(void *arg, err_t err)
 /* TCP accept connection callback handler */
 static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 {
-        WOLFSSL *ssl;
+    WOLFSSL *ssl;
+    struct thread_data tdata;
+
     /* Accepted new connection */
     LWIP_PLATFORM_DIAG(("echo_msgaccept called\n"));
 
     printf("Connect from: %s port: %d\n", ipaddr_ntoa(&(pcb->remote_ip)), pcb->remote_port);
 
+#if 0
     /* The below is an alternative hook to check for incoming connections. The
      * down side of this is that it will only trigger after the initial SYN/ACK
      */
-    /*
     if (sentry_action(pcb, SENTRY_ACTION_CONNECT) != 0)
     {
         printf("Sentry rejected connection\n");
         tcp_abort(pcb);
         return ERR_ABRT;
     }
-    */
+#endif
 
+#if 0
     /* Set an arbitrary pointer for callbacks. We don't use this right now */
-    //tcp_arg(pcb, esm);
+    tcp_arg(pcb, esm);
+#endif
 
-    struct thread_data tdata;
     tdata.pcb = pcb;
     /* Create a WOLFSSL object */
     if ((ssl = wolfSSL_new(wolf_ctx)) == NULL) {
@@ -1007,13 +1018,15 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 
 int echo_init()
 {
-        struct tcp_pcb *pcb;
+    int r;
+    struct tcp_pcb *pcb;
+
     /* Create lwIP TCP instance */
     pcb = tcp_new();
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %x\n", pcb));
     if (pcb == NULL)
         return -1;
-    int r = tcp_bind(pcb, IP_ADDR_ANY, 8080);
+    r = tcp_bind(pcb, IP_ADDR_ANY, 8080);
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: tcp_bind: %d\n", r));
     if (r < 0)
         return -1;
@@ -1041,7 +1054,7 @@ int sentry_tcp_inpkt(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint16_t optlen,
         /* The tcp_pcb struct does is not filled in with the IP/port details
          * yet, that happens immediately after this callback, so we get these
          * details from other sources. The same sources that are about to fill
-         * in the details into the sruct */
+         * in the details into the struct */
         //fprintf(stderr, "Incoming connection from: %s\n",
         //        ipaddr_ntoa(ip_current_src_addr()));
 
@@ -1198,7 +1211,8 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
     } else if (! body)
         body = "";
 
-    resp_len = snprintf(http_buf, http_buf_size, "HTTP/1.0 %d %s\r\nDate: %.*s\r\nServer: Helicopter\r\nContent-Length: %zu%s%s\r\n\r\n%s",
+    resp_len = snprintf(http_buf, http_buf_size, "HTTP/1.0 %d %s\r\n" \
+        "Date: %.*s\r\nServer: Helicopter\r\nContent-Length: %zu%s%s\r\n\r\n%s",
                         http_code,
                         http_code_description,
                         (int)now_formatted_len,
@@ -1208,11 +1222,13 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
                         content_type ? content_type : "",
                         body);
     if (resp_len > (int)http_buf_size) {
-        fprintf(stderr, "overrun averted while formatting header, http_buf_size = %zu, needed = %d\n", http_buf_size, resp_len);
+        fprintf(stderr, "overrun averted while formatting header, " \
+            "http_buf_size = %zu, needed = %d\n", http_buf_size, resp_len);
         return -1;
     }
     if ((ret = wolfSSL_write(ssl, http_buf, resp_len)) != resp_len) {
-        fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
+        fprintf(stderr, "ERROR: failed to write: %s\n",
+            wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
         return -1;
     }
     return 0;
@@ -1269,7 +1285,7 @@ static int load_file(const char* fname, char** buf, size_t* bufLen)
 }
 #else
     /* for wolfsentry_config_data */
-    #include "test-config.h"
+    #include "../notify-config.h"
 #endif
 
 int main(int argc, char **argv) {
@@ -1279,14 +1295,14 @@ int main(int argc, char **argv) {
     size_t http_buf_size = 0, http_buf_len;
     static const struct io_ctx io_ctx = { 1000 }; /* timeout = 1 second */
     int i;
-    const char *wolfsentry_configfile = "../../../tests/test-config.json";
+    const char *wolfsentry_configfile = "../notify-config.json";
     uint64_t circlog_size_uint64;
 #ifndef NO_FILESYSTEM
     char* wolfsentry_config_data = NULL;
     size_t wolfsentry_config_data_sz = 0;
 #endif
 
-    http_buf_size = 1024;
+    http_buf_size = HTTP_BUF_SZ;
     http_buf = (char *)malloc(http_buf_size);
     if (http_buf == NULL) {
         perror("malloc");
@@ -1575,7 +1591,7 @@ int main(int argc, char **argv) {
     struct wolfsentry_data *wolfsentry_data = NULL;
     int ret;
 #ifdef HTTP_NONBLOCKING
-    int retry = 10;
+    int retry;
 #endif
     WOLFSSL *ssl = NULL;
     struct echo_server_data *app_data = NULL;
@@ -1627,7 +1643,7 @@ int main(int argc, char **argv) {
                                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN, &wolfsentry_data);
 
 #ifdef HTTP_NONBLOCKING
-    retry = 10;
+    retry = HTTP_MAX_NB_TRIES;
     do {
 /*
         if (pcb->state == CLOSE_WAIT) {
@@ -1680,18 +1696,17 @@ int main(int argc, char **argv) {
             goto ssl_shutdown;
         }
         ret = wolfSSL_read(ssl, http_buf + http_buf_len, http_buf_size - http_buf_len);
-        if (ret < 0)
-{
-#ifdef DEBUG_HTTP
-    fprintf(stderr,"\nL%d\n%.*s\n",__LINE__,(int)http_buf_len, http_buf);
-#endif
+        if (ret < 0) {
+        #ifdef DEBUG_HTTP
+            fprintf(stderr,"\nL%d\n%.*s\n",__LINE__,(int)http_buf_len, http_buf);
+        #endif
             break;
-}
+        }
         http_buf_len += (size_t)ret;
 #ifdef HTTP_NONBLOCKING
         if ((wolfSSL_want_read(ssl) || wolfSSL_want_write(ssl))) {
-            if (retry == 9) {
-                fprintf(stderr,"giving up on client payload read after %d retries.\n",retry);
+            if (retry == HTTP_MAX_NB_TRIES-1) {
+                fprintf(stderr, "giving up on client payload read after %d retries.\n", retry);
                 break;
             }
             usleep(100000);
@@ -1699,7 +1714,8 @@ int main(int argc, char **argv) {
 #ifdef DEBUG_HTTP
             fprintf(stderr,"%s L%d retry %d\n",__FILE__,__LINE__,retry);
 #endif
-        } else
+        }
+        else
 #endif /* HTTP_NONBLOCKING */
         {
             if ((http_buf_len >= 4) && (! strncmp(http_buf + http_buf_len - 4, "\r\n\r\n", 4)))
@@ -1905,7 +1921,7 @@ ssl_shutdown:
 
     if (handshake_done) {
 #ifdef HTTP_NONBLOCKING
-        retry = 10;
+        retry = HTTP_MAX_NB_TRIES;
         do {
             ret = wolfSSL_shutdown(ssl);
             if (ret == SSL_SHUTDOWN_NOT_DONE) {

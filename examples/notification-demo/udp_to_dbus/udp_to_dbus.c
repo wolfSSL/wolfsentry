@@ -298,7 +298,7 @@ int main(int argc, char **argv) {
     struct stat wolfsentry_config_st;
     const char *wolfsentry_config_map = MAP_FAILED;
     char buf[1024];
-    const char *wolfsentry_configfile = "../../../tests/test-config.json";
+    const char *wolfsentry_configfile = "../notify-config.json";
     const char *notification_dest_addr;
     int notification_dest_addr_len;
     struct wolfsentry_kv_pair_internal *notification_dest_addr_record = NULL;

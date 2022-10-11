@@ -154,8 +154,8 @@
     "user-values" : {
         "notification-interface-server" : "lo",
         "notification-listen-addr" : "0.0.0.0",
-        "notification-interface-client" : "dtsec",
-        "notification-server-addr" : "1@_udp://10.0.4.4",
+        "notification-interface-client" : "lo",
+        "notification-server-addr" : "127.0.0.1",
         "notification-dest-port" : 55555,
         "admin-listen-addr" : "0.0.0.0",
         "admin-listen-port" : 10443,

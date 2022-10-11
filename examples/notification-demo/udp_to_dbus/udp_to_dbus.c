@@ -292,6 +292,13 @@ static void handle_interrupt(int sig) {
     longjmp(interrupt_jmp_buf, 1);
 }
 
+#if __linux__
+#include <linux/version.h>
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,22)
+#define _MAP_POPULATE_AVAILABLE
+#endif
+#endif
+
 int main(int argc, char **argv) {
     wolfsentry_errcode_t ret;
     int wolfsentry_config_fd = -1;
@@ -373,7 +380,11 @@ int main(int argc, char **argv) {
     if ((wolfsentry_config_map = mmap(NULL,
                                       wolfsentry_config_st.st_size,
                                       PROT_READ,
-                                      MAP_SHARED|MAP_POPULATE,
+                                      MAP_SHARED
+                                    #ifdef _MAP_POPULATE_AVAILABLE
+                                         | MAP_POPULATE
+                                    #endif
+                                      ,
                                       wolfsentry_config_fd,
                                       0))
         == MAP_FAILED)
@@ -446,14 +457,14 @@ int main(int argc, char **argv) {
 
     ret = wolfsentry_user_value_get_string(
         wolfsentry,
-        "notification-dest-addr",
+        "notification-listen-addr",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &notification_dest_addr,
         &notification_dest_addr_len,
         &notification_dest_addr_record);
 
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_user_value_get_string(\"notification-dest-addr\") returned "
+        fprintf(stderr, "wolfsentry_user_value_get_string(\"notification-listen-addr\") returned "
                 WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
@@ -485,7 +496,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (bind(inbound_fd, &inbound_sa, sizeof inbound_sa) < 0) {
+    if (bind(inbound_fd, (const struct sockaddr*)&inbound_sa, sizeof(inbound_sa)) < 0) {
         perror("bind");
         exit(1);
     }

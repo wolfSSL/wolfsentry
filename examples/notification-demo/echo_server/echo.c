@@ -9,10 +9,6 @@
 #define HTTP_MAX_NB_TRIES 10
 #define HTTP_BUF_SZ 1024
 
-/* use notify-config.h */
-#undef  NO_FILESYSTEM
-#define NO_FILESYSTEM
-
 #define WOLFSENTRY_SOURCE_ID (WOLFSENTRY_SOURCE_ID_USER_BASE+1)
 
 #define SERVER_PRIME256V1

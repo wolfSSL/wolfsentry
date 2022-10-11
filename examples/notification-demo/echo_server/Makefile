@@ -30,7 +30,7 @@ CFLAGS += $(EXTRA_CFLAGS)
 	$(CC) $(CFLAGS) -c $< -o $@ -ggdb -I$(WOLFSENTRY_INCLUDEDIR) -I$(WOLFSSL_INCLUDEDIR)
 
 echo_server: echo.o sentry.o $(DDS_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $+ -ldl -L$(WOLFSENTRY_LIBDIR) -lwolfsentry -L$(WOLFSSL_LIBDIR) -lwolfssl
+	$(CC) $(LDFLAGS) -o $@ $+ -ldl -lpthread -L$(WOLFSENTRY_LIBDIR) -lwolfsentry -L$(WOLFSSL_LIBDIR) -lwolfssl
 
 clean:
 	$(RM) -f echo_server *.o $(DDS_OBJS)

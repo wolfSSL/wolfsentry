@@ -1,6 +1,6 @@
 # UDP to DBUS Notification example
 
-This is a demonstration application daemon uses `../../tests/test-config.json` to show wolfSentry notifications with the `echo_server`.
+This is a demonstration application daemon uses `../../tests/test-config.json` to show wolfSentry notifications with the `log_server`.
 
 ## Building the demo
 

@@ -35,7 +35,7 @@ make
 4) Build this echo server example
 
 ```
-cd examples/notification-demo/echo_server
+cd examples/notification-demo/log_server
 make
 ```
 
@@ -43,10 +43,10 @@ make
 
 ```sh
 # start the echo server
-./echo_server
+./log_server
 
 # if using the notification server then provide the address of it
-./echo_server --kv-string notification-dest-addr=10.0.4.4
+./log_server --kv-string notification-dest-addr=10.0.4.4
 
 # start the notification server (see examples/notification-demo/udp_to_dbus)
 ./udp_to_dbus

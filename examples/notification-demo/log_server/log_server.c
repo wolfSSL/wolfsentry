@@ -5,7 +5,7 @@
 #define DEBUG_TLS
 //#define DEBUG_WOLFSENTRY
 
-//#define HTTP_NONBLOCKING
+//#define HTTP_NONBLOCKING /* not tested */
 #define HTTP_MAX_NB_TRIES 10
 #define HTTP_BUF_SZ 1024
 
@@ -23,6 +23,7 @@
 
 #if defined(HAVE_POLL) || defined(BUILD_FOR_LINUX)
 #include <poll.h>
+#undef  HAVE_POLL
 #define HAVE_POLL
 #elif defined(HAVE_SELECT)
 #include <sys/select.h>
@@ -40,7 +41,7 @@
 #endif /* BUILD_FOR_FREERTOS_LWIP */
 
 #include "sentry.h"
-#include "echo.h"
+#include "log_server.h"
 
 #define USE_CERT_BUFFERS_2048
 
@@ -59,7 +60,7 @@
 #include <wolfssl/error-ssl.h>
 
 static WOLFSSL_CTX* wolf_ctx = NULL;
-static int echo_server_data_index = -1;
+static int log_server_data_index = -1;
 
 #ifdef BUILD_FOR_FREERTOS_LWIP
 QueueHandle_t connQueue;
@@ -412,14 +413,14 @@ wolfsentry_errcode_t circlog_reset(void) {
 }
 
 
-struct echo_server_data {
+struct log_server_data {
     struct ca_cert *issuer_cert;
     int error_code;
 };
 
 
 static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
-    struct echo_server_data *app_data = NULL;
+    struct log_server_data *app_data = NULL;
     const char* issuerName = NULL;
     unsigned long issuerHash = 0;
 #if defined(DEBUG_TLS) && defined(OPENSSL_EXTRA)
@@ -427,30 +428,36 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     const char* subjectName;
     unsigned long subjectHash = 0;
 #endif
+    struct ca_cert *ca_certs_i;
 
-    (void)preverify; /* incoming validation of cert 1=okay, 0=failed */
+    /* check incoming validation of cert 1=okay, 0=failed */
+    if (preverify != 1) {
+        fprintf(stderr, "%s L%d pre-verify check failed! %d\n",
+            __FILE__,__LINE__, preverify);
+        return preverify;
+    }
 
     if (store == NULL) {
-        fprintf(stderr,"%s L%d null store!\n",__FILE__,__LINE__);
+        fprintf(stderr, "%s L%d null store!\n", __FILE__,__LINE__);
         return WOLFSSL_FAILURE;
     }
 
-    app_data = (struct echo_server_data *)store->userCtx;
+    app_data = (struct log_server_data *)store->userCtx;
     if (app_data == NULL) {
-        fprintf(stderr,"%s L%d null store->userCtx!\n",__FILE__,__LINE__);
+        fprintf(stderr, "%s L%d null store->userCtx!\n", __FILE__,__LINE__);
         return WOLFSSL_FAILURE;
     }
 
     app_data->error_code = NO_PEER_CERT; /* default error code */
 
     if (store->current_cert == NULL) {
-        fprintf(stderr,"%s L%d null store->current_cert\n",__FILE__,__LINE__);
+        fprintf(stderr, "%s L%d null store->current_cert\n", __FILE__,__LINE__);
         return WOLFSSL_FAILURE;
     }
 
     if (store->error != 0) {
 #ifdef DEBUG_TLS
-        fprintf(stderr, "%s L%d depth=%d ->error=%d (%s)\n",__FILE__,__LINE__,
+        fprintf(stderr, "%s L%d depth=%d ->error=%d (%s)\n", __FILE__,__LINE__,
             store->error_depth,store->error,
             wolfSSL_ERR_reason_error_string(store->error));
 #endif
@@ -465,7 +472,7 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
 
 #ifdef OPENSSL_EXTRA
     issuerHash = wolfSSL_X509_issuer_name_hash(store->current_cert);
-    issuerName  = wolfSSL_X509_NAME_oneline(
+    issuerName = wolfSSL_X509_NAME_oneline(
             wolfSSL_X509_get_issuer_name(store->current_cert), 0, 0);
 
     #ifdef DEBUG_TLS
@@ -479,8 +486,8 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     #endif
 #endif
 
-    for (struct ca_cert *ca_certs_i = ca_certs;
-         ca_certs_i < &ca_certs[sizeof ca_certs / sizeof ca_certs[0]];
+    for (ca_certs_i = ca_certs;
+         ca_certs_i < &ca_certs[sizeof(ca_certs) / sizeof(ca_certs[0])];
          ++ca_certs_i)
     {
         if ((issuerHash == ca_certs_i->subjectHash) &&
@@ -833,13 +840,13 @@ int echo_ssl_init()
     wolfSSL_Init();
     wolfSSL_Debugging_ON();
 
-    if (echo_server_data_index < 0) {
-        echo_server_data_index = wolfSSL_get_ex_new_index(WOLF_CRYPTO_EX_INDEX_X509,
+    if (log_server_data_index < 0) {
+        log_server_data_index = wolfSSL_get_ex_new_index(WOLF_CRYPTO_EX_INDEX_X509,
             NULL, NULL, NULL, NULL);
-        if (echo_server_data_index < 0) {
+        if (log_server_data_index < 0) {
             fprintf(stderr,
                 "wolfSSL_get_ex_new_index(WOLF_CRYPTO_EX_INDEX_X509, ...) returned %d\n",
-                echo_server_data_index);
+                log_server_data_index);
             return -1;
         }
     }
@@ -1208,7 +1215,7 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
         body = "";
 
     resp_len = snprintf(http_buf, http_buf_size, "HTTP/1.0 %d %s\r\n" \
-        "Date: %.*s\r\nServer: Helicopter\r\nContent-Length: %zu%s%s\r\n\r\n%s",
+        "Date: %.*s\r\nServer: LogServer\r\nContent-Length: %zu%s%s\r\n\r\n%s",
                         http_code,
                         http_code_description,
                         (int)now_formatted_len,
@@ -1401,6 +1408,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr,"%s: bad numeric argument to %s: \"%s\"\n",argv[0],cp+1,argv[i]);
                 exit(1);
             }
+            fprintf(stderr, "\tCustom int: %s (%llu)\n", argv[i+1], the_int);
             ret = wolfsentry_user_value_store_uint(wolfsentry, argv[i+1], (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {
                 fprintf(stderr, "wolfsentry_user_value_store_string(): " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -1590,7 +1598,7 @@ int main(int argc, char **argv) {
     int retry;
 #endif
     WOLFSSL *ssl = NULL;
-    struct echo_server_data *app_data = NULL;
+    struct log_server_data *app_data = NULL;
     int handshake_done = 0, transaction_successful = 0;
     char *url, *url_end;
 
@@ -1608,7 +1616,7 @@ int main(int argc, char **argv) {
         break;
     }
 
-    app_data = (struct echo_server_data *)XMALLOC(sizeof *app_data, NULL /* heap */, DYNAMIC_TYPE_TMP_BUFFER);
+    app_data = (struct log_server_data *)XMALLOC(sizeof *app_data, NULL /* heap */, DYNAMIC_TYPE_TMP_BUFFER);
     if (app_data == NULL) {
         fprintf(stderr,"%s L%d: XMALLOC(%zu) failed: %s\n", __FILE__, __LINE__, sizeof *app_data, strerror(errno));
         goto ssl_shutdown;

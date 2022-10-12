@@ -1,10 +1,10 @@
 # to build with debugging messages:
-# make -j -f Makefile.linux EXTRA_CFLAGS='-DDEBUG_WOLFSENTRY -DDEBUG_HTTP'
+# make -j EXTRA_CFLAGS='-DDEBUG_WOLFSENTRY -DDEBUG_HTTP'
 #
 # and with profuse debugging messages for each I/O op:
-# make -j -f Makefile.linux EXTRA_CFLAGS='-DDEBUG_WOLFSENTRY -DDEBUG_HTTP -DDEBUG_HTTP_IO'
+# make -j EXTRA_CFLAGS='-DDEBUG_WOLFSENTRY -DDEBUG_HTTP -DDEBUG_HTTP_IO'
 
-all: echo_server
+all: log_server
 
 ifndef WOLFSENTRY_ROOT
     WOLFSENTRY_ROOT=/usr/local
@@ -29,8 +29,8 @@ CFLAGS += $(EXTRA_CFLAGS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@ -ggdb -I$(WOLFSENTRY_INCLUDEDIR) -I$(WOLFSSL_INCLUDEDIR)
 
-echo_server: echo.o sentry.o $(DDS_OBJS)
+log_server: log_server.o sentry.o $(DDS_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $+ -ldl -lpthread -L$(WOLFSENTRY_LIBDIR) -lwolfsentry -L$(WOLFSSL_LIBDIR) -lwolfssl
 
 clean:
-	$(RM) -f echo_server *.o $(DDS_OBJS)
+	$(RM) -f log_server *.o $(DDS_OBJS)

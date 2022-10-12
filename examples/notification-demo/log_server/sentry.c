@@ -6,7 +6,7 @@
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_USER_BASE
 
 #include "sentry.h"
-#include "echo.h"
+#include "log_server.h"
 
 struct wolfsentry_context *wolfsentry = NULL;
 static int wolfsentry_data_index = -1;

@@ -1,3 +1,4 @@
+
 /*
  * udp_to_dbus.c
  *
@@ -292,13 +293,6 @@ static void handle_interrupt(int sig) {
     longjmp(interrupt_jmp_buf, 1);
 }
 
-#if __linux__
-#include <linux/version.h>
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,22)
-#define _MAP_POPULATE_AVAILABLE
-#endif
-#endif
-
 int main(int argc, char **argv) {
     wolfsentry_errcode_t ret;
     int wolfsentry_config_fd = -1;
@@ -380,11 +374,7 @@ int main(int argc, char **argv) {
     if ((wolfsentry_config_map = mmap(NULL,
                                       wolfsentry_config_st.st_size,
                                       PROT_READ,
-                                      MAP_SHARED
-                                    #ifdef _MAP_POPULATE_AVAILABLE
-                                         | MAP_POPULATE
-                                    #endif
-                                      ,
+                                      MAP_SHARED,
                                       wolfsentry_config_fd,
                                       0))
         == MAP_FAILED)
@@ -436,6 +426,7 @@ int main(int argc, char **argv) {
                     argv[0], cp+1, argv[i]);
                 exit(1);
             }
+            fprintf(stderr, "\tCustom int: %s (%llu)\n", argv[i+1], the_int);
             ret = wolfsentry_user_value_store_uint(wolfsentry, argv[i+1],
                 (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {

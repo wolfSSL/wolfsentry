@@ -20,5 +20,5 @@ tests/test_*
 .tested
 wolfsentry_options.h
 
-examples/notification-demo/echo_server/echo_server
+examples/notification-demo/log_server/log_server
 examples/notification-demo/udp_to_dbus/udp_to_dbus

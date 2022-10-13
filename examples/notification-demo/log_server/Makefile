@@ -20,11 +20,27 @@ WOLFSENTRY_LIBDIR := $(WOLFSENTRY_ROOT)/lib
 WOLFSSL_INCLUDEDIR := $(WOLFSSL_ROOT)/include
 WOLFSSL_LIBDIR := $(WOLFSSL_ROOT)/lib
 
-CFLAGS += -DBUILD_FOR_LINUX
+ifndef OPTFLAGS
+  OPTFLAGS := -Wall -Wextra -O2 -g
+endif
+
+CFLAGS += $(OPTFLAGS)
+
+ifndef TARGET
+  TARGET := linux
+endif
+
+ifeq ($(TARGET), linux)
+  CFLAGS += -DBUILD_FOR_LINUX
+  LDFLAGS += -Xlinker -rpath -Xlinker $(WOLFSSL_LIBDIR)
+else ifeq ($(TARGET), macosx)
+  CFLAGS += -DBUILD_FOR_MACOSX
+  LDFLAGS += -Xlinker -rpath -Xlinker $(WOLFSSL_LIBDIR)
+else
+  $(error TARGET $(TARGET) is unknown -- use "linux" or "macosx")
+endif
 
 CFLAGS += $(EXTRA_CFLAGS)
-
-%.o: CFLAGS += -Wall -Wextra -O3 -g
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@ -ggdb -I$(WOLFSENTRY_INCLUDEDIR) -I$(WOLFSSL_INCLUDEDIR)

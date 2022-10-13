@@ -64,6 +64,20 @@
             "delete-event" : "event-on-delete"
         },
         {
+            "label" : "event-on-connect",
+            "priority" : 1,
+            "config" : {
+                "max-connection-count" : 10,
+                "penalty-box-duration" : "1h",
+                "derog-thresh-for-penalty-boxing" : 4
+            },
+            "actions" : [ "handle-connect", "handle-connect2" ],
+            "insert-event" : "event-on-insert",
+            "match-event" : "event-on-match",
+            "decision-event" : "event-on-decision",
+            "delete-event" : "event-on-delete"
+        },
+        {
             "label" : "call-in-from-echo"
         }
     ],
@@ -113,8 +127,8 @@
             "family" : 2,
             "protocol" : 6,
             "remote" : {
-                "address" : "192.168.4.85",
-                "prefix-bits" : 32,
+                "address" : "192.168.0.0",
+                "prefix-bits" : 16,
                 "interface" : 0
             }
         },
@@ -130,8 +144,8 @@
             "protocol" : 1,
             "remote" : {
                 "port" : 8,
-                "address" : "192.168.4.85",
-                "prefix-bits" : 32,
+                "address" : "192.168.0.0",
+                "prefix-bits" : 16,
                 "interface" : 0
             }
         },
@@ -152,9 +166,7 @@
         }
     ],
     "user-values" : {
-        "notification-interface-server" : "lo",
         "notification-listen-addr" : "0.0.0.0",
-        "notification-interface-client" : "lo",
         "notification-server-addr" : "127.0.0.1",
         "notification-dest-port" : 55555,
         "admin-listen-addr" : "0.0.0.0",

@@ -402,7 +402,7 @@ int main(int argc, char **argv) {
                     argv[0], argv[i]);
                 exit(1);
             }
-            fprintf(stderr, "\tCustom string: %s\n", argv[i+1]);
+            fprintf(stderr, "\tOverride string assignment loaded: %s\n", argv[i+1]);
             ret = wolfsentry_user_value_store_string(wolfsentry, argv[i+1],
                 (int)(cp - argv[i+1]), cp + 1,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED, 1 /* overwrite_p */);
@@ -426,7 +426,7 @@ int main(int argc, char **argv) {
                     argv[0], cp+1, argv[i]);
                 exit(1);
             }
-            fprintf(stderr, "\tCustom int: %s (%llu)\n", argv[i+1], the_int);
+            fprintf(stderr, "\tOverride int assignment loaded: %s (%llu)\n", argv[i+1], (unsigned long long int)the_int);
             ret = wolfsentry_user_value_store_uint(wolfsentry, argv[i+1],
                 (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {

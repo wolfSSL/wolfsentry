@@ -76,11 +76,11 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
 #ifdef BUILD_FOR_FREERTOS_LWIP
     u32_t remoteip = remote_ip->addr;
     u32_t localip = local_ip->addr;
-#elif defined(BUILD_FOR_LINUX)
+#elif defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
     u32_t remoteip = remote_ip->s_addr;
     u32_t localip = local_ip->s_addr;
 #else
-#error only know how to build for FreeRTOS-LWIP and Linux
+#error only know how to build for FreeRTOS-LWIP, Linux, and MacOSX
 #endif
 
     /* Connect will increment the connection count in wolfSentry, disconnect
@@ -250,8 +250,8 @@ int wolfSentry_NetworkFilterCallback(
         (const struct wolfsentry_sockaddr *)&data->remote,
         (const struct wolfsentry_sockaddr *)&data->local,
         data->flags,
-        NULL /* event_label */,
-        0 /* event_label_len */,
+        "event-on-connect",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
         data /* caller_context */,
         &data->rule_route_id /* id */,
         NULL /* inexact_matches */,
@@ -319,6 +319,10 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     struct sockaddr_in sa;
     int pton_ret;
     int sockfd;
+    wolfsentry_time_t when;
+    struct timespec ts;
+    struct tm tm;
+    char timebuf[32];
     char msgbuf[1024], *msgbuf_ptr = msgbuf;
     int msgbuf_space_left = (int)sizeof msgbuf;
     int msgbuf_len;
@@ -390,7 +394,19 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
 
     addr_family = NULL;
-    family_name = wolfsentry_addr_family_ntop(wolfsentry, trigger_route_exports.sa_family, &addr_family, &ret);
+    family_name = wolfsentry_addr_family_ntop(ws_ctx, trigger_route_exports.sa_family, &addr_family, &ret);
+
+    ret = wolfsentry_time_now_plus_delta(ws_ctx, 0 /* td */, &when);
+    if (ret < 0)
+        return ret;
+    ret = wolfsentry_time_to_timespec(ws_ctx, when, &ts);
+    if (ret < 0)
+        return ret;
+    if (gmtime_r(&ts.tv_sec, &tm) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
+    msgbuf_len = strftime(timebuf, sizeof timebuf, "%Y-%m-%dT%H:%M:%SZ", &tm);
+    if (msgbuf_len == 0)
+        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     /* note that strings, and ideally numbers, should use helpers in
      * centijson_sax.h, mainly json_dump_uint64() and json_dump_string(), which
@@ -399,10 +415,11 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     msgbuf_len = snprintf(
         msgbuf_ptr,
         (size_t)msgbuf_space_left,
-        "{ \"action\" : \"%s\", \"trigger\" : \"%s\", \"parent\" : \"%s\", \"rule-id\" : " WOLFSENTRY_ENT_ID_FMT ", \"rule-hitcount\" : " WOLFSENTRY_HITCOUNT_FMT ", \"af\" : \"%s\", \"proto\" : %d, \"remote\" : { \"address\" : \"",
+        "{ \"timestamp\" : \"%s\", \"action\" : \"%s\", \"trigger\" : %s%s%s, \"parent\" : %s%s%s, \"rule-id\" : " WOLFSENTRY_ENT_ID_FMT ", \"rule-hitcount\" : " WOLFSENTRY_HITCOUNT_FMT ", \"af\" : \"%s\", \"proto\" : %d, \"remote\" : { \"address\" : \"",
+        timebuf,
         wolfsentry_action_get_label(action),
-        wolfsentry_event_get_label(trigger_event),
-        trigger_route_exports.parent_event_label,
+        trigger_event ? "\"" : "", trigger_event ? wolfsentry_event_get_label(trigger_event) : "null", trigger_event ? "\"" : "",
+        trigger_route_exports.parent_event_label ? "\"" : "", trigger_route_exports.parent_event_label ? trigger_route_exports.parent_event_label : "null", trigger_route_exports.parent_event_label ? "\"" : "",
         wolfsentry_get_object_id(rule_route),
         rule_route_exports.meta.hit_count,
         family_name,
@@ -417,7 +434,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     msgbuf_ptr += msgbuf_len;
 
     if (addr_family) {
-        if ((ret = wolfsentry_addr_family_drop_reference(wolfsentry, addr_family, NULL /* action_results */ )) < 0) {
+        if ((ret = wolfsentry_addr_family_drop_reference(ws_ctx, addr_family, NULL /* action_results */ )) < 0) {
             fprintf(stderr, "wolfsentry_addr_family_drop_reference: " WOLFSENTRY_ERROR_FMT,
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
             return ret;
@@ -426,7 +443,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     msgbuf_len = msgbuf_space_left;
     ret = wolfsentry_route_format_address(
-        wolfsentry,
+        ws_ctx,
         trigger_route_exports.sa_family,
         trigger_route_exports.remote_address,
         trigger_route_exports.remote.addr_len,
@@ -462,7 +479,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     msgbuf_len = (int)msgbuf_space_left;
     ret = wolfsentry_route_format_address(
-        wolfsentry,
+        ws_ctx,
         trigger_route_exports.sa_family,
         trigger_route_exports.local_address,
         trigger_route_exports.local.addr_len,
@@ -652,7 +669,7 @@ static wolfsentry_errcode_t handle_derogatory(
         wolfsentry_action_res_t action_results_2;
 
         ret = wolfsentry_route_format_address(
-            wolfsentry,
+            ws_ctx,
             remote_addr->sa_family,
             remote_addr->addr,
             remote_addr->addr_len,
@@ -663,7 +680,7 @@ static wolfsentry_errcode_t handle_derogatory(
             return ret;
 
         ret = wolfsentry_route_insert_and_check_out(
-            wolfsentry,
+            ws_ctx,
             NULL /* void *caller_arg*/, /* passed to action callback(s) as the caller_arg. */
             (struct wolfsentry_sockaddr *)&((struct wolfsentry_data *)caller_arg)->remote,
             (struct wolfsentry_sockaddr *)&((struct wolfsentry_data *)caller_arg)->local,
@@ -687,7 +704,7 @@ static wolfsentry_errcode_t handle_derogatory(
             return ret;
         }
 
-        ret = wolfsentry_route_increment_derogatory_count(wolfsentry, new_route, 1 /* count_to_add */, &new_derogatory_count);
+        ret = wolfsentry_route_increment_derogatory_count(ws_ctx, new_route, 1 /* count_to_add */, &new_derogatory_count);
         if (ret < 0) {
             fprintf(stderr, "wolfsentry_route_increment_derogatory_count() returned " WOLFSENTRY_ERROR_FMT "\n",
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -697,7 +714,7 @@ static wolfsentry_errcode_t handle_derogatory(
 #endif
         }
 
-        ret = wolfsentry_route_drop_reference(wolfsentry, new_route, NULL /* action_results */);
+        ret = wolfsentry_route_drop_reference(ws_ctx, new_route, NULL /* action_results */);
         if (ret < 0) {
             fprintf(stderr, "wolfsentry_route_drop_reference() returned "
                     WOLFSENTRY_ERROR_FMT "\n",

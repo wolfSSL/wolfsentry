@@ -21,7 +21,7 @@
 #include <time.h>
 #include <signal.h>
 
-#if defined(HAVE_POLL) || defined(BUILD_FOR_LINUX)
+#if defined(HAVE_POLL) || defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
 #include <poll.h>
 #undef  HAVE_POLL
 #define HAVE_POLL
@@ -378,30 +378,16 @@ wolfsentry_errcode_t circlog_iterate(struct circlog_message **msg) {
 }
 
 wolfsentry_errcode_t circlog_format_one(struct circlog_message *msg, char **out, size_t *out_space) {
-    wolfsentry_errcode_t ret;
-    struct timespec ts;
-    struct tm tm;
-    size_t retlen;
-
     if (out == NULL) {
-        *out_space = msg->len + 20 + 1;
+        *out_space = msg->len;
         WOLFSENTRY_RETURN_OK;
     }
 
-    ret = wolfsentry_time_to_timespec(wolfsentry, msg->when, &ts);
-    if (ret < 0)
-        return ret;
-    if (gmtime_r(&ts.tv_sec, &tm) == NULL)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-    retlen = strftime(*out, *out_space, "%Y-%m-%d %H:%M:%S ", &tm);
-    if ((retlen == 0) || (retlen + msg->len + 1 >= *out_space))
+    if ((size_t)msg->len + 1 >= *out_space)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-    *out += retlen;
-    *out_space -= retlen;
     memcpy(*out, msg->msg_buf, msg->len);
-    (*out)[msg->len] = '\n';
-    *out += msg->len + 1;
-    *out_space -= msg->len + 1;
+    *out += msg->len;
+    *out_space -= msg->len;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -1072,7 +1058,7 @@ int sentry_tcp_inpkt(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint16_t optlen,
     return ERR_OK;
 }
 
-#elif defined(BUILD_FOR_LINUX)
+#elif defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
 
 static int inbound_fd = -1;
 
@@ -1386,7 +1372,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr,"%s: missing '=' in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
-            fprintf(stderr, "\tCustom string: %s\n", argv[i+1]);
+            fprintf(stderr, "\tOverride string assignment loaded: %s\n", argv[i+1]);
             ret = wolfsentry_user_value_store_string(wolfsentry, argv[i+1],
                 (int)(cp - argv[i+1]), cp + 1, WOLFSENTRY_LENGTH_NULL_TERMINATED, 1 /* overwrite_p */);
             if (ret < 0) {
@@ -1408,7 +1394,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr,"%s: bad numeric argument to %s: \"%s\"\n",argv[0],cp+1,argv[i]);
                 exit(1);
             }
-            fprintf(stderr, "\tCustom int: %s (%llu)\n", argv[i+1], the_int);
+            fprintf(stderr, "\tOverride int assignment loaded: %s (%llu)\n", argv[i+1], (unsigned long long int)the_int);
             ret = wolfsentry_user_value_store_uint(wolfsentry, argv[i+1], (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {
                 fprintf(stderr, "wolfsentry_user_value_store_string(): " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -1798,11 +1784,12 @@ int main(int argc, char **argv) {
     if (strncmp(url, "/show-log", strlen("/show-log")) == 0) {
         int resp_len;
         struct circlog_message *msg_i = NULL;
-        size_t total_msg_len = 0;
+        size_t total_msg_len;
         char *show_log_args = url + strlen("/show-log");
 
         (void)show_log_args;
 
+        total_msg_len = 2; /* "[\n" */
         for (ret = circlog_iterate(&msg_i); ret >= 0; ret = circlog_iterate(&msg_i)) {
             size_t this_out_len;
             ret = circlog_format_one(msg_i, NULL /* char **out */, &this_out_len);
@@ -1810,8 +1797,9 @@ int main(int argc, char **argv) {
                 fprintf(stderr, " %s L%d circlog_format_one() for size failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
                 goto ssl_shutdown;
             }
-            total_msg_len += this_out_len;
+            total_msg_len += this_out_len + 2; /* +2 for the ",\n" or "\n]" */
         }
+        total_msg_len += 1; /* "\n" */
 
 #ifdef DEBUG_HTTP
         fprintf(stderr, "Sending response\n");
@@ -1826,16 +1814,34 @@ int main(int argc, char **argv) {
         {
             char *out_ptr = http_buf;
             size_t out_space = http_buf_size;
+            int is_first;
 
-            for (ret = circlog_iterate(&msg_i); ret >= 0; ret = circlog_iterate(&msg_i)) {
+            for (ret = circlog_iterate(&msg_i), is_first = 1; ret >= 0; ret = circlog_iterate(&msg_i)) {
+                int printed_this_sep = 0;
                 for (;;) {
+                    if (printed_this_sep) {
+                    } else if (is_first) {
+                        memcpy(out_ptr, "[\n", strlen("[\n"));
+                        out_ptr += strlen("[\n");
+                        out_space -= strlen("[\n");
+                        is_first = 0;
+                        printed_this_sep = 1;
+                    } else {
+                        if (out_space < strlen(",\n"))
+                            goto flush_now;
+                        memcpy(out_ptr, ",\n", strlen(",\n"));
+                        out_ptr += strlen(",\n");
+                        out_space -= strlen(",\n");
+                        printed_this_sep = 1;
+                    }
                     ret = circlog_format_one(msg_i, &out_ptr, &out_space);
                     if (ret < 0) {
                         if (WOLFSENTRY_ERROR_CODE_IS(ret, BUFFER_TOO_SMALL)) {
-                            if (out_ptr == http_buf) {
+                            if (http_buf_size - out_space <= strlen(",\n")) {
                                 fprintf(stderr,"%s L%d msg won't fit in http_buf!\n",__FILE__,__LINE__);
                                 goto ssl_shutdown;
                             }
+                        flush_now:
                             resp_len = (int)(http_buf_size - out_space);
                             if ((ret = wolfSSL_write(ssl, http_buf, resp_len)) != resp_len) {
                                 fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
@@ -1859,6 +1865,11 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
                     goto ssl_shutdown;
                 }
+            }
+
+            if ((ret = wolfSSL_write(ssl, "\n]\n", strlen("\n]\n"))) != strlen("\n]\n")) {
+                fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
+                goto ssl_shutdown;
             }
         }
 

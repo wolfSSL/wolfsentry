@@ -19,7 +19,7 @@
 #include <netif/etharp.h>
 #include "lwip/etharp.h"
 
-#elif defined(BUILD_FOR_LINUX)
+#elif defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
 
 #include <inttypes.h>
 #include <unistd.h>

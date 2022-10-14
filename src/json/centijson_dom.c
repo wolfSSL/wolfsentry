@@ -27,7 +27,7 @@
 
 
 static int
-init_number(VALUE* v, const char* data, size_t data_size)
+init_number(JSON_VALUE* v, const char* data, size_t data_size)
 {
     int is_int32_compatible;
     int is_uint32_compatible;
@@ -39,20 +39,20 @@ init_number(VALUE* v, const char* data, size_t data_size)
             &is_int64_compatible, &is_uint64_compatible);
 
     if(is_int32_compatible) {
-        return value_init_int32(v, json_number_to_int32(data, data_size));
+        return json_value_init_int32(v, json_number_to_int32(data, data_size));
     } else if(is_uint32_compatible) {
-        return value_init_uint32(v, json_number_to_uint32(data, data_size));
+        return json_value_init_uint32(v, json_number_to_uint32(data, data_size));
     } else if(is_int64_compatible) {
-        return value_init_int64(v, json_number_to_int64(data, data_size));
+        return json_value_init_int64(v, json_number_to_int64(data, data_size));
     } else if(is_uint64_compatible) {
-        return value_init_uint64(v, json_number_to_uint64(data, data_size));
+        return json_value_init_uint64(v, json_number_to_uint64(data, data_size));
     } else {
         double d;
         int err;
         err = json_number_to_double(data, data_size, &d);
         if(err != 0)
             return err;
-        return value_init_double(v, d);
+        return json_value_init_double(v, d);
     }
 }
 
@@ -60,7 +60,7 @@ static int
 json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_data)
 {
     JSON_DOM_PARSER* dom_parser = (JSON_DOM_PARSER*) user_data;
-    VALUE* new_value;
+    JSON_VALUE* new_json_value;
     int init_val_ret = 0;
 
     if(type == JSON_ARRAY_END || type == JSON_OBJECT_END) {
@@ -70,36 +70,36 @@ json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_
     }
 
     if(type == JSON_KEY) {
-        /* Object key: We just store it until we get the value to use it with. */
-        if(value_init_string_(&dom_parser->key, data, data_size) != 0)
+        /* Object key: We just store it until we get the json_value to use it with. */
+        if(json_value_init_string_(&dom_parser->key, data, data_size) != 0)
             return JSON_ERR_OUTOFMEMORY;
         return 0;
     }
 
-    /* We have to create a new value. We need to add it into the enclosing
+    /* We have to create a new json_value. We need to add it into the enclosing
      * array or object; or we are not in one, then store it directly into the
      * root. */
     if(dom_parser->path_size > 0) {
-        VALUE* parent = dom_parser->path[dom_parser->path_size - 1];
+        JSON_VALUE* parent = dom_parser->path[dom_parser->path_size - 1];
 
-        if(value_type(parent) == VALUE_ARRAY) {
-            new_value = value_array_append(parent);
-            if(new_value == NULL)
+        if(json_value_type(parent) == JSON_VALUE_ARRAY) {
+            new_json_value = json_value_array_append(parent);
+            if(new_json_value == NULL)
                 return JSON_ERR_OUTOFMEMORY;
         } else {
-            new_value = value_dict_get_or_add_(parent,
-                                value_string(&dom_parser->key),
-                                value_string_length(&dom_parser->key));
-            value_fini(&dom_parser->key);
+            new_json_value = json_value_dict_get_or_add_(parent,
+                                json_value_string(&dom_parser->key),
+                                json_value_string_length(&dom_parser->key));
+            json_value_fini(&dom_parser->key);
 
-            if(new_value == NULL)
+            if(new_json_value == NULL)
                 return JSON_ERR_OUTOFMEMORY;
 
-            if(!value_is_new(new_value)) {
-                /* We have already set value for this key. */
+            if(!json_value_is_new(new_json_value)) {
+                /* We have already set json_value for this key. */
                 switch(dom_parser->flags & JSON_DOM_DUPKEY_MASK) {
                     case JSON_DOM_DUPKEY_USEFIRST:  return 0;
-                    case JSON_DOM_DUPKEY_USELAST:   value_fini(new_value); break;
+                    case JSON_DOM_DUPKEY_USELAST:   json_value_fini(new_json_value); break;
                     case JSON_DOM_DUPKEY_ABORT:     /* Pass through. */
                     default:
                         memcpy(&dom_parser->parser.err_pos, &dom_parser->parser.value_pos, sizeof(JSON_INPUT_POS));
@@ -108,18 +108,18 @@ json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_
             }
         }
     } else {
-        new_value = &dom_parser->root;
+        new_json_value = &dom_parser->root;
     }
 
-    /* Initialize the new value. */
+    /* Initialize the new json_value. */
     switch(type) {
-        case JSON_NULL:         value_init_null(new_value); break;
-        case JSON_FALSE:        value_init_bool(new_value, 0); break;
-        case JSON_TRUE:         value_init_bool(new_value, 1); break;
-        case JSON_NUMBER:       init_val_ret = init_number(new_value, data, data_size); break;
-        case JSON_STRING:       init_val_ret = value_init_string_(new_value, data, data_size); break;
-        case JSON_ARRAY_BEG:    init_val_ret = value_init_array(new_value); break;
-        case JSON_OBJECT_BEG:   init_val_ret = value_init_dict_ex(new_value, NULL, dom_parser->dict_flags); break;
+        case JSON_NULL:         json_value_init_null(new_json_value); break;
+        case JSON_FALSE:        json_value_init_bool(new_json_value, 0); break;
+        case JSON_TRUE:         json_value_init_bool(new_json_value, 1); break;
+        case JSON_NUMBER:       init_val_ret = init_number(new_json_value, data, data_size); break;
+        case JSON_STRING:       init_val_ret = json_value_init_string_(new_json_value, data, data_size); break;
+        case JSON_ARRAY_BEG:    init_val_ret = json_value_init_array(new_json_value); break;
+        case JSON_OBJECT_BEG:   init_val_ret = json_value_init_dict_ex(new_json_value, NULL, dom_parser->dict_flags); break;
         default:                return JSON_ERR_INTERNAL;
     }
 
@@ -128,14 +128,14 @@ json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_
 
     if(type == JSON_ARRAY_BEG || type == JSON_OBJECT_BEG) {
         /* Push the array or object to the path, so we know where to
-         * append their values. */
+         * append their json_values. */
         if(dom_parser->path_size >= dom_parser->path_alloc) {
-            VALUE** new_path;
+            JSON_VALUE** new_path;
             size_t new_path_alloc = dom_parser->path_alloc * 2;
 
             if(new_path_alloc == 0)
                 new_path_alloc = 32;
-            new_path = (VALUE**) realloc(dom_parser->path, new_path_alloc * sizeof(VALUE*));
+            new_path = (JSON_VALUE**) realloc(dom_parser->path, new_path_alloc * sizeof(JSON_VALUE*));
             if(new_path == NULL)
                 return JSON_ERR_OUTOFMEMORY;
 
@@ -143,7 +143,7 @@ json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_
             dom_parser->path_alloc = new_path_alloc;
         }
 
-        dom_parser->path[dom_parser->path_size++] = new_value;
+        dom_parser->path[dom_parser->path_size++] = new_json_value;
     }
 
     return 0;
@@ -159,10 +159,10 @@ json_dom_init(JSON_DOM_PARSER* dom_parser, const JSON_CONFIG* config, unsigned d
     dom_parser->path = NULL;
     dom_parser->path_size = 0;
     dom_parser->path_alloc = 0;
-    value_init_null(&dom_parser->root);
-    value_init_null(&dom_parser->key);
+    json_value_init_null(&dom_parser->root);
+    json_value_init_null(&dom_parser->key);
     dom_parser->flags = dom_flags;
-    dom_parser->dict_flags = (dom_flags & JSON_DOM_MAINTAINDICTORDER) ? VALUE_DICT_MAINTAINORDER : 0;
+    dom_parser->dict_flags = (dom_flags & JSON_DOM_MAINTAINDICTORDER) ? JSON_VALUE_DICT_MAINTAINORDER : 0;
 
     return json_init(&dom_parser->parser, &callbacks, config, (void*) dom_parser);
 }
@@ -174,20 +174,20 @@ json_dom_feed(JSON_DOM_PARSER* dom_parser, const char* input, size_t size)
 }
 
 int
-json_dom_fini(JSON_DOM_PARSER* dom_parser, VALUE* p_root, JSON_INPUT_POS* p_pos)
+json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
 {
     int ret;
 
     ret = json_fini(&dom_parser->parser, p_pos);
 
     if(ret >= 0) {
-        memcpy(p_root, &dom_parser->root, sizeof(VALUE));
+        memcpy(p_root, &dom_parser->root, sizeof(JSON_VALUE));
     } else {
-        value_init_null(p_root);
-        value_fini(&dom_parser->root);
+        json_value_init_null(p_root);
+        json_value_fini(&dom_parser->root);
     }
 
-    value_fini(&dom_parser->key);
+    json_value_fini(&dom_parser->key);
     free(dom_parser->path);
 
     return ret;
@@ -195,7 +195,7 @@ json_dom_fini(JSON_DOM_PARSER* dom_parser, VALUE* p_root, JSON_INPUT_POS* p_pos)
 
 int
 json_dom_parse(const char* input, size_t size, const JSON_CONFIG* config,
-               unsigned dom_flags, VALUE* p_root, JSON_INPUT_POS* p_pos)
+               unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
 {
     JSON_DOM_PARSER dom_parser;
     int ret;
@@ -265,7 +265,7 @@ json_dom_dump_newline(JSON_DOM_DUMP_PARAMS* params)
 }
 
 static int
-json_dom_dump_helper(const VALUE* node, int nest_level,
+json_dom_dump_helper(const JSON_VALUE* node, int nest_level,
                      JSON_DOM_DUMP_PARAMS* params)
 {
     int ret;
@@ -278,52 +278,52 @@ json_dom_dump_helper(const VALUE* node, int nest_level,
         nest_level = -nest_level;
     }
 
-    switch(value_type(node)) {
-        case VALUE_NULL:
+    switch(json_value_type(node)) {
+        case JSON_VALUE_NULL:
             ret = params->write_func("null", 4, params->user_data);
             break;
 
-        case VALUE_BOOL:
-            if(value_bool(node))
+        case JSON_VALUE_BOOL:
+            if(json_value_bool(node))
                 ret = params->write_func("true", 4, params->user_data);
             else
                 ret = params->write_func("false", 5, params->user_data);
             break;
 
-        case VALUE_INT32:
-            ret = json_dump_int32(value_int32(node),
+        case JSON_VALUE_INT32:
+            ret = json_dump_int32(json_value_int32(node),
                             params->write_func, params->user_data);
             break;
 
-        case VALUE_UINT32:
-            ret = json_dump_uint32(value_uint32(node),
+        case JSON_VALUE_UINT32:
+            ret = json_dump_uint32(json_value_uint32(node),
                             params->write_func, params->user_data);
             break;
 
-        case VALUE_INT64:
-            ret = json_dump_int64(value_int64(node),
+        case JSON_VALUE_INT64:
+            ret = json_dump_int64(json_value_int64(node),
                             params->write_func, params->user_data);
             break;
 
-        case VALUE_UINT64:
-            ret = json_dump_uint64(value_uint64(node),
+        case JSON_VALUE_UINT64:
+            ret = json_dump_uint64(json_value_uint64(node),
                             params->write_func, params->user_data);
             break;
 
-        case VALUE_FLOAT:
-        case VALUE_DOUBLE:
-            ret = json_dump_double(value_double(node),
+        case JSON_VALUE_FLOAT:
+        case JSON_VALUE_DOUBLE:
+            ret = json_dump_double(json_value_double(node),
                             params->write_func, params->user_data);
             break;
 
-        case VALUE_STRING:
-            ret = json_dump_string(value_string(node), value_string_length(node),
+        case JSON_VALUE_STRING:
+            ret = json_dump_string(json_value_string(node), json_value_string_length(node),
                             params->write_func, params->user_data);
             break;
 
-        case VALUE_ARRAY:
+        case JSON_VALUE_ARRAY:
         {
-            const VALUE* values;
+            const JSON_VALUE* json_values;
             size_t i, n;
 
             ret = params->write_func("[", 1, params->user_data);
@@ -334,10 +334,10 @@ json_dom_dump_helper(const VALUE* node, int nest_level,
             if(ret < 0)
                 return ret;
 
-            n = value_array_size(node);
-            values = value_array_get_all(node);
+            n = json_value_array_size(node);
+            json_values = json_value_array_get_all(node);
             for(i = 0; i < n; i++) {
-                ret = json_dom_dump_helper(&values[i], nest_level+1, params);
+                ret = json_dom_dump_helper(&json_values[i], nest_level+1, params);
                 if(ret < 0)
                     return ret;
 
@@ -360,9 +360,9 @@ json_dom_dump_helper(const VALUE* node, int nest_level,
             break;
         }
 
-        case VALUE_DICT:
+        case JSON_VALUE_DICT:
         {
-            const VALUE** keys;
+            const JSON_VALUE** keys;
             size_t i, n;
 
             ret = params->write_func("{", 1, params->user_data);
@@ -373,20 +373,20 @@ json_dom_dump_helper(const VALUE* node, int nest_level,
             if(ret < 0)
                 return ret;
 
-            n = value_dict_size(node);
+            n = json_value_dict_size(node);
             if(n > 0) {
-                keys = malloc(sizeof(VALUE*) * n);
+                keys = malloc(sizeof(JSON_VALUE*) * n);
                 if(keys == NULL)
                     return JSON_ERR_OUTOFMEMORY;
 
                 if((params->flags & JSON_DOM_DUMP_PREFERDICTORDER)  &&
-                   (value_dict_flags(node) & VALUE_DICT_MAINTAINORDER))
-                    value_dict_keys_ordered(node, keys, n);
+                   (json_value_dict_flags(node) & JSON_VALUE_DICT_MAINTAINORDER))
+                    json_value_dict_keys_ordered(node, keys, n);
                 else
-                    value_dict_keys_sorted(node, keys, n);
+                    json_value_dict_keys_sorted(node, keys, n);
 
                 for(i = 0; i < n; i++) {
-                    VALUE* value;
+                    JSON_VALUE* json_value;
 
                     ret = json_dom_dump_helper(keys[i], nest_level+1, params);
                     if(ret < 0)
@@ -398,8 +398,8 @@ json_dom_dump_helper(const VALUE* node, int nest_level,
                     if(ret < 0)
                         break;
 
-                    value = value_dict_get_(node, value_string(keys[i]), value_string_length(keys[i]));
-                    ret = json_dom_dump_helper(value, -(nest_level+1), params);
+                    json_value = json_value_dict_get_(node, json_value_string(keys[i]), json_value_string_length(keys[i]));
+                    ret = json_dom_dump_helper(json_value, -(nest_level+1), params);
                     if(ret < 0)
                         break;
 
@@ -432,7 +432,7 @@ json_dom_dump_helper(const VALUE* node, int nest_level,
 }
 
 int
-json_dom_dump(const VALUE* root, JSON_DUMP_CALLBACK write_func,
+json_dom_dump(const JSON_VALUE* root, JSON_DUMP_CALLBACK write_func,
               void* user_data, unsigned tab_width, unsigned flags)
 {
     JSON_DOM_DUMP_PARAMS params = { write_func, user_data, tab_width, flags };

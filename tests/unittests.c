@@ -2664,8 +2664,8 @@ static int test_json(const char *fname) {
     {
         char *test_json = NULL;
         int fd = -1;
-        VALUE p_root = {};
-        VALUE *v1 = NULL, *v2 = NULL, *v3 = NULL;
+        JSON_VALUE p_root = {};
+        JSON_VALUE *v1 = NULL, *v2 = NULL, *v3 = NULL;
         struct stat st;
         static const JSON_CONFIG centijson_config = {
             65536,  /* max_total_len */
@@ -2698,45 +2698,45 @@ static int test_json(const char *fname) {
             exit(1);
         }
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "wolfsentry-config-version")) == NULL);
-        WOLFSENTRY_EXIT_ON_FALSE(value_uint32(v1) == 1U);
-        value_fini(v1);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "wolfsentry-config-version")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_uint32(v1) == 1U);
+        json_value_fini(v1);
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "default-policies")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((v2 = value_path(v1, "default-policy")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((s = value_string(v2)) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "default-policies")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-policy")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(strcmp(s, "reject") == 0);
-        value_fini(v2);
+        json_value_fini(v2);
 
-        WOLFSENTRY_EXIT_ON_TRUE((v2 = value_path(v1, "default-event")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((s = value_string(v2)) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-event")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(strcmp(s, "static-route-parent") == 0);
-        value_fini(v2);
+        json_value_fini(v2);
         v2 = NULL;
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "static-routes-insert")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((alen = value_array_size(v1)) <= 0);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "static-routes-insert")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((alen = json_value_array_size(v1)) <= 0);
         for (i = 0; i < alen; ++i) {
-            WOLFSENTRY_EXIT_ON_TRUE((v2 = value_array_get(v1, i)) == NULL);
-            WOLFSENTRY_EXIT_ON_TRUE((v3 = value_path(v2, "family")) == NULL);
-            WOLFSENTRY_EXIT_ON_TRUE((value_string(v3) == NULL) && (value_int32(v3) <= 0));
-            value_fini(v3);
+            WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_array_get(v1, i)) == NULL);
+            WOLFSENTRY_EXIT_ON_TRUE((v3 = json_value_path(v2, "family")) == NULL);
+            WOLFSENTRY_EXIT_ON_TRUE((json_value_string(v3) == NULL) && (json_value_int32(v3) <= 0));
+            json_value_fini(v3);
             v3 = NULL;
-            value_fini(v2);
+            json_value_fini(v2);
             v2 = NULL;
         }
-        value_fini(v1);
+        json_value_fini(v1);
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "user-values/user-null")) == NULL);
-        WOLFSENTRY_EXIT_ON_FALSE(value_type(v1) == VALUE_NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "user-values/user-null")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_type(v1) == JSON_VALUE_NULL);
 
         if (v3)
-            value_fini(v3);
+            json_value_fini(v3);
         if (v2)
-            value_fini(v2);
+            json_value_fini(v2);
         if (v1)
-            value_fini(v1);
-        value_fini(&p_root);
+            json_value_fini(v1);
+        json_value_fini(&p_root);
         if (test_json != NULL)
             free(test_json);
         if (fd != -1)

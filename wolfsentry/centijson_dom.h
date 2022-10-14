@@ -52,7 +52,7 @@ extern "C" {
 #define JSON_DOM_DUPKEY_MASK                                            \
             (JSON_DOM_DUPKEY_ABORT | JSON_DOM_DUPKEY_USEFIRST | JSON_DOM_DUPKEY_USELAST)
 
-/* When creating VALUE_DICT (for JSON_OBJECT), use flag VALUE_DICT_MAINTAINORDER. */
+/* When creating JSON_VALUE_DICT (for JSON_OBJECT), use flag JSON_VALUE_DICT_MAINTAINORDER. */
 #define JSON_DOM_MAINTAINDICTORDER      0x0010
 
 
@@ -60,11 +60,11 @@ extern "C" {
  */
 typedef struct JSON_DOM_PARSER {
     JSON_PARSER parser;
-    VALUE** path;
+    JSON_VALUE** path;
     size_t path_size;
     size_t path_alloc;
-    VALUE root;
-    VALUE key;
+    JSON_VALUE root;
+    JSON_VALUE key;
     unsigned flags;
     unsigned dict_flags;
 } JSON_DOM_PARSER;
@@ -82,23 +82,23 @@ WOLFSENTRY_API int json_dom_feed(JSON_DOM_PARSER* dom_parser, const char* input,
 
 /* Finish the parsing and free any resources associated with the parser.
  *
- * On success, zero is returned and the VALUE pointed by `p_dom` is initialized
+ * On success, zero is returned and the JSON_VALUE pointed by `p_dom` is initialized
  * accordingly to the root of the data in the JSON input (typically array or
  * object), and it contains all the data from the JSON input.
  *
  * On failure, the error code is returned; info about position of the issue in
  * the input is filled in the structure pointed by `p_pos` (if `p_pos` is not
  * NULL and if it is a parsing kind of error); and the value pointed by `p_dom`
- * is initialized to VALUE_NULL.
+ * is initialized to JSON_VALUE_NULL.
  */
-WOLFSENTRY_API int json_dom_fini(JSON_DOM_PARSER* dom_parser, VALUE* p_dom, JSON_INPUT_POS* p_pos);
+WOLFSENTRY_API int json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_dom, JSON_INPUT_POS* p_pos);
 
 
 /* Simple wrapper for json_dom_init() + json_dom_feed() + json_dom_fini(),
  * usable when the provided input contains complete JSON document.
  */
 WOLFSENTRY_API int json_dom_parse(const char* input, size_t size, const JSON_CONFIG* config,
-                   unsigned dom_flags, VALUE* p_root, JSON_INPUT_POS* p_pos);
+                   unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos);
 
 
 /* Dump recursively all the DOM hierarchy out, via the provided writing
@@ -116,7 +116,7 @@ WOLFSENTRY_API int json_dom_parse(const char* input, size_t size, const JSON_CON
 #define JSON_DOM_DUMP_INDENTWITHSPACES  0x0004  /* Indent with `tab_width` spaces instead of with '\t'. */
 #define JSON_DOM_DUMP_PREFERDICTORDER   0x0008  /* Prefer original dictionary order, if available. */
 
-WOLFSENTRY_API int json_dom_dump(const VALUE* root,
+WOLFSENTRY_API int json_dom_dump(const JSON_VALUE* root,
                   JSON_DUMP_CALLBACK write_func, void* user_data,
                   unsigned tab_width, unsigned flags);
 

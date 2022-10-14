@@ -26,16 +26,16 @@
 #include "wolfsentry/centijson_value.h"
 
 #define TYPE_MASK       0x0f
-#define IS_NEW          0x10    /* only for VALUE_NULL */
-#define HAS_REDCOLOR    0x10    /* only for VALUE_STRING (when used as RBTREE::key) */
-#define HAS_ORDERLIST   0x10    /* only for VALUE_DICT */
-#define HAS_CUSTOMCMP   0x20    /* only for VALUE_DICT */
+#define IS_NEW          0x10    /* only for JSON_VALUE_NULL */
+#define HAS_REDCOLOR    0x10    /* only for JSON_VALUE_STRING (when used as RBTREE::key) */
+#define HAS_ORDERLIST   0x10    /* only for JSON_VALUE_DICT */
+#define HAS_CUSTOMCMP   0x20    /* only for JSON_VALUE_DICT */
 #define IS_MALLOCED     0x80
 
 
 typedef struct ARRAY_tag ARRAY;
 struct ARRAY_tag {
-    VALUE* value_buf;
+    JSON_VALUE* json_value_buf;
     size_t size;
     size_t alloc;
 };
@@ -43,8 +43,8 @@ struct ARRAY_tag {
 typedef struct RBTREE_tag RBTREE;
 struct RBTREE_tag {
     /* We store color by using the flag HAS_REDCOLOR of the key. */
-    VALUE key;
-    VALUE value;
+    JSON_VALUE key;
+    JSON_VALUE json_value;
     RBTREE* left;
     RBTREE* right;
 
@@ -64,7 +64,7 @@ struct DICT_tag {
     RBTREE* root;
     size_t size;
 
-    /* These are present only when flags VALUE_DICT_MAINTAINORDER or
+    /* These are present only when flags JSON_VALUE_DICT_MAINTAINORDER or
      * custom_cmp_func is used. */
     RBTREE* order_head;
     RBTREE* order_tail;
@@ -93,11 +93,11 @@ struct DICT_tag {
 
 
 static void*
-value_init_ex(VALUE* v, VALUE_TYPE type, size_t size, size_t align)
+json_value_init_ex(JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size, size_t align)
 {
     v->data.data_bytes[0] = (uint8_t) type;
 
-    if(size + align <= sizeof(VALUE)) {
+    if(size + align <= sizeof(JSON_VALUE)) {
         return &v->data.data_bytes[align];
     } else {
         void* buf;
@@ -105,7 +105,7 @@ value_init_ex(VALUE* v, VALUE_TYPE type, size_t size, size_t align)
         v->data.data_bytes[0] |= IS_MALLOCED;
         buf = malloc(size);
         if(buf == NULL) {
-            v->data.data_bytes[0] = (uint8_t) VALUE_NULL;
+            v->data.data_bytes[0] = (uint8_t) JSON_VALUE_NULL;
             return NULL;
         }
 
@@ -115,17 +115,17 @@ value_init_ex(VALUE* v, VALUE_TYPE type, size_t size, size_t align)
 }
 
 static void*
-value_init(VALUE* v, VALUE_TYPE type, size_t size)
+json_value_init(JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size)
 {
-    return value_init_ex(v, type, size, 1);
+    return json_value_init_ex(v, type, size, 1);
 }
 
 static int
-value_init_simple(VALUE* v, VALUE_TYPE type, const void* data, size_t size)
+json_value_init_simple(JSON_VALUE* v, JSON_VALUE_TYPE type, const void* data, size_t size)
 {
     void* payload;
 
-    payload = value_init(v, type, size);
+    payload = json_value_init(v, type, size);
     if(payload == NULL)
         return -1;
 
@@ -134,7 +134,7 @@ value_init_simple(VALUE* v, VALUE_TYPE type, const void* data, size_t size)
 }
 
 static void*
-value_payload_ex(VALUE* v, size_t align)
+json_value_payload_ex(JSON_VALUE* v, size_t align)
 {
     if(v == NULL)
         return NULL;
@@ -146,9 +146,9 @@ value_payload_ex(VALUE* v, size_t align)
 }
 
 static void*
-value_payload(VALUE* v)
+json_value_payload(JSON_VALUE* v)
 {
-    return value_payload_ex(v, 1);
+    return json_value_payload_ex(v, 1);
 }
 
 
@@ -156,62 +156,62 @@ value_payload(VALUE* v)
  *** Generic info ***
  ********************/
 
-VALUE_TYPE
-value_type(const VALUE* v)
+JSON_VALUE_TYPE
+json_value_type(const JSON_VALUE* v)
 {
     if(v == NULL)
-        return VALUE_NULL;
-    return (VALUE_TYPE)(v->data.data_bytes[0] & TYPE_MASK);
+        return JSON_VALUE_NULL;
+    return (JSON_VALUE_TYPE)(v->data.data_bytes[0] & TYPE_MASK);
 }
 
 int
-value_is_compatible(const VALUE* v, VALUE_TYPE type)
+json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
 {
-    if(value_type(v) == type)
+    if(json_value_type(v) == type)
         return 1;
 
-    /* We say any numeric value is compatible with another numeric value as
+    /* We say any numeric json_value is compatible with another numeric json_value as
      * long as the conversion does not loose much information. */
-    switch(value_type(v)) {
-        case VALUE_INT32:
-            return (type == VALUE_INT64 || type == VALUE_FLOAT || type == VALUE_DOUBLE)  ||
-                   (type == VALUE_UINT32 && value_int32(v) >= 0)  ||
-                   (type == VALUE_UINT64 && value_int32(v) >= 0);
+    switch(json_value_type(v)) {
+        case JSON_VALUE_INT32:
+            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_UINT32 && json_value_int32(v) >= 0)  ||
+                   (type == JSON_VALUE_UINT64 && json_value_int32(v) >= 0);
             break;
 
-        case VALUE_UINT32:
-            return (type == VALUE_INT64 || type == VALUE_UINT64 || type == VALUE_FLOAT || type == VALUE_DOUBLE)  ||
-                   (type == VALUE_INT32 && value_uint32(v) <= INT32_MAX);
+        case JSON_VALUE_UINT32:
+            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_UINT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_INT32 && json_value_uint32(v) <= INT32_MAX);
             break;
 
-        case VALUE_INT64:
-            return (type == VALUE_FLOAT || type == VALUE_DOUBLE)  ||
-                   (type == VALUE_INT32 && value_int64(v) >= INT32_MIN && value_int64(v) <= INT32_MAX)  ||
-                   (type == VALUE_UINT32 && value_int64(v) >= 0 && value_int64(v) <= UINT32_MAX)  ||
-                   (type == VALUE_UINT64 && value_int64(v) >= 0);
+        case JSON_VALUE_INT64:
+            return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_INT32 && json_value_int64(v) >= INT32_MIN && json_value_int64(v) <= INT32_MAX)  ||
+                   (type == JSON_VALUE_UINT32 && json_value_int64(v) >= 0 && json_value_int64(v) <= UINT32_MAX)  ||
+                   (type == JSON_VALUE_UINT64 && json_value_int64(v) >= 0);
             break;
 
-        case VALUE_UINT64:
-            return (type == VALUE_FLOAT || type == VALUE_DOUBLE)  ||
-                   (type == VALUE_INT32 && value_uint64(v) <= INT32_MAX)  ||
-                   (type == VALUE_UINT32 && value_uint64(v) <= UINT32_MAX)  ||
-                   (type == VALUE_INT64 && value_uint64(v) <= INT64_MAX);
+        case JSON_VALUE_UINT64:
+            return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_INT32 && json_value_uint64(v) <= INT32_MAX)  ||
+                   (type == JSON_VALUE_UINT32 && json_value_uint64(v) <= UINT32_MAX)  ||
+                   (type == JSON_VALUE_INT64 && json_value_uint64(v) <= INT64_MAX);
             break;
 
-        case VALUE_FLOAT:
-            return (type == VALUE_DOUBLE)  ||
-                   (type == VALUE_INT32 && value_float(v) == (float)value_int32(v))  ||
-                   (type == VALUE_UINT32 && value_float(v) == (float)value_uint32(v))  ||
-                   (type == VALUE_INT64 && value_float(v) == (float)value_int64(v))  ||
-                   (type == VALUE_UINT64 && value_float(v) == (float)value_uint64(v));
+        case JSON_VALUE_FLOAT:
+            return (type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_INT32 && json_value_float(v) == (float)json_value_int32(v))  ||
+                   (type == JSON_VALUE_UINT32 && json_value_float(v) == (float)json_value_uint32(v))  ||
+                   (type == JSON_VALUE_INT64 && json_value_float(v) == (float)json_value_int64(v))  ||
+                   (type == JSON_VALUE_UINT64 && json_value_float(v) == (float)json_value_uint64(v));
             break;
 
-        case VALUE_DOUBLE:
-            return (type == VALUE_FLOAT)  ||
-                   (type == VALUE_INT32 && value_double(v) == (double)value_int32(v))  ||
-                   (type == VALUE_UINT32 && value_double(v) == (double)value_uint32(v))  ||
-                   (type == VALUE_INT64 && value_double(v) == (double)value_int64(v))  ||
-                   (type == VALUE_UINT64 && value_double(v) == (double)value_uint64(v));
+        case JSON_VALUE_DOUBLE:
+            return (type == JSON_VALUE_FLOAT)  ||
+                   (type == JSON_VALUE_INT32 && json_value_double(v) == (double)json_value_int32(v))  ||
+                   (type == JSON_VALUE_UINT32 && json_value_double(v) == (double)json_value_uint32(v))  ||
+                   (type == JSON_VALUE_INT64 && json_value_double(v) == (double)json_value_int64(v))  ||
+                   (type == JSON_VALUE_UINT64 && json_value_double(v) == (double)json_value_uint64(v));
             break;
 
         default:
@@ -222,17 +222,17 @@ value_is_compatible(const VALUE* v, VALUE_TYPE type)
 }
 
 int
-value_is_new(const VALUE* v)
+json_value_is_new(const JSON_VALUE* v)
 {
-    return (v != NULL  &&  value_type(v) == VALUE_NULL  &&  (v->data.data_bytes[0] & IS_NEW));
+    return (v != NULL  &&  json_value_type(v) == JSON_VALUE_NULL  &&  (v->data.data_bytes[0] & IS_NEW));
 }
 
-VALUE*
-value_path(VALUE* root, const char* path)
+JSON_VALUE*
+json_value_path(JSON_VALUE* root, const char* path)
 {
     const char* token_beg = path;
     const char* token_end;
-    VALUE* v = root;
+    JSON_VALUE* v = root;
 
     while(1) {
         token_end = token_beg;
@@ -250,9 +250,9 @@ value_path(VALUE* root, const char* path)
             if(*token_beg != ']')
                 return NULL;
 
-            v = value_array_get(v, index);
+            v = json_value_array_get(v, index);
         } else if(token_end - token_beg > 0) {
-            v = value_dict_get_(v, token_beg, token_end - token_beg);
+            v = json_value_dict_get_(v, token_beg, token_end - token_beg);
         }
 
         if(v == NULL)
@@ -271,86 +271,86 @@ value_path(VALUE* root, const char* path)
  ********************/
 
 void
-value_init_null(VALUE* v)
+json_value_init_null(JSON_VALUE* v)
 {
     if(v != NULL)
-        v->data.data_bytes[0] = (uint8_t) VALUE_NULL;
+        v->data.data_bytes[0] = (uint8_t) JSON_VALUE_NULL;
 }
 
 static void
-value_init_new(VALUE* v)
+json_value_init_new(JSON_VALUE* v)
 {
-    v->data.data_bytes[0] = ((uint8_t) VALUE_NULL) | IS_NEW;
+    v->data.data_bytes[0] = ((uint8_t) JSON_VALUE_NULL) | IS_NEW;
 }
 
 int
-value_init_bool(VALUE* v, int b)
+json_value_init_bool(JSON_VALUE* v, int b)
 {
     if(v == NULL)
         return -1;
 
-    v->data.data_bytes[0] = (uint8_t) VALUE_BOOL;
+    v->data.data_bytes[0] = (uint8_t) JSON_VALUE_BOOL;
     v->data.data_bytes[1] = (b != 0) ? 1 : 0;
 
     return 0;
 }
 
 int
-value_init_int32(VALUE* v, int32_t i32)
+json_value_init_int32(JSON_VALUE* v, int32_t i32)
 {
     if(v == NULL)
         return -1;
 
-    return value_init_simple(v, VALUE_INT32, &i32, sizeof(int32_t));
+    return json_value_init_simple(v, JSON_VALUE_INT32, &i32, sizeof(int32_t));
 }
 
 int
-value_init_uint32(VALUE* v, uint32_t u32)
+json_value_init_uint32(JSON_VALUE* v, uint32_t u32)
 {
     if(v == NULL)
         return -1;
 
-    return value_init_simple(v, VALUE_UINT32, &u32, sizeof(uint32_t));
+    return json_value_init_simple(v, JSON_VALUE_UINT32, &u32, sizeof(uint32_t));
 }
 
 int
-value_init_int64(VALUE* v, int64_t i64)
+json_value_init_int64(JSON_VALUE* v, int64_t i64)
 {
     if(v == NULL)
         return -1;
 
-    return value_init_simple(v, VALUE_INT64, &i64, sizeof(int64_t));
+    return json_value_init_simple(v, JSON_VALUE_INT64, &i64, sizeof(int64_t));
 }
 
 int
-value_init_uint64(VALUE* v, uint64_t u64)
+json_value_init_uint64(JSON_VALUE* v, uint64_t u64)
 {
     if(v == NULL)
         return -1;
 
-    return value_init_simple(v, VALUE_UINT64, &u64, sizeof(uint64_t));
+    return json_value_init_simple(v, JSON_VALUE_UINT64, &u64, sizeof(uint64_t));
 }
 
 int
-value_init_float(VALUE* v, float f)
+json_value_init_float(JSON_VALUE* v, float f)
 {
     if(v == NULL)
         return -1;
 
-    return value_init_simple(v, VALUE_FLOAT, &f, sizeof(float));
+    return json_value_init_simple(v, JSON_VALUE_FLOAT, &f, sizeof(float));
 }
 
 int
-value_init_double(VALUE* v, double d)
+json_value_init_double(JSON_VALUE* v, double d)
 {
     if(v == NULL)
         return -1;
 
-    return value_init_simple(v, VALUE_DOUBLE, &d, sizeof(double));
+    return json_value_init_simple(v, JSON_VALUE_DOUBLE, &d, sizeof(double));
 }
 
 int
-value_init_string_(VALUE* v, const char* str, size_t len)
+json_value_init_string_(JSON_VALUE* v, const char* str, size_t len)
 {
     uint8_t* payload;
     size_t tmplen;
@@ -367,7 +367,7 @@ value_init_string_(VALUE* v, const char* str, size_t len)
     }
     off++;
 
-    payload = value_init(v, VALUE_STRING, off + len + 1);
+    payload = json_value_init(v, JSON_VALUE_STRING, off + len + 1);
     if(payload == NULL)
         return -1;
 
@@ -385,20 +385,20 @@ value_init_string_(VALUE* v, const char* str, size_t len)
 }
 
 int
-value_init_string(VALUE* v, const char* str)
+json_value_init_string(JSON_VALUE* v, const char* str)
 {
-    return value_init_string_(v, str, (str != NULL) ? strlen(str) : 0);
+    return json_value_init_string_(v, str, (str != NULL) ? strlen(str) : 0);
 }
 
 int
-value_init_array(VALUE* v)
+json_value_init_array(JSON_VALUE* v)
 {
     uint8_t* payload;
 
     if(v == NULL)
         return -1;
 
-    payload = value_init_ex(v, VALUE_ARRAY, sizeof(ARRAY), sizeof(void*));
+    payload = json_value_init_ex(v, JSON_VALUE_ARRAY, sizeof(ARRAY), sizeof(void*));
     if(payload == NULL)
         return -1;
     memset(payload, 0, sizeof(ARRAY));
@@ -407,13 +407,13 @@ value_init_array(VALUE* v)
 }
 
 int
-value_init_dict(VALUE* v)
+json_value_init_dict(JSON_VALUE* v)
 {
-    return value_init_dict_ex(v, NULL, 0);
+    return json_value_init_dict_ex(v, NULL, 0);
 }
 
 int
-value_init_dict_ex(VALUE* v,
+json_value_init_dict_ex(JSON_VALUE* v,
                    int (*custom_cmp_func)(const char*, size_t, const char*, size_t),
                    unsigned flags)
 {
@@ -423,12 +423,12 @@ value_init_dict_ex(VALUE* v,
     if(v == NULL)
         return -1;
 
-    if(custom_cmp_func != NULL  ||  (flags & VALUE_DICT_MAINTAINORDER))
+    if(custom_cmp_func != NULL  ||  (flags & JSON_VALUE_DICT_MAINTAINORDER))
         payload_size = sizeof(DICT);
     else
         payload_size = OFFSETOF(DICT, order_head);
 
-    payload = value_init_ex(v, VALUE_DICT, payload_size, sizeof(void*));
+    payload = json_value_init_ex(v, JSON_VALUE_DICT, payload_size, sizeof(void*));
     if(payload == NULL)
         return -1;
     memset(payload, 0, payload_size);
@@ -438,28 +438,28 @@ value_init_dict_ex(VALUE* v,
         ((DICT*)payload)->cmp_func = custom_cmp_func;
     }
 
-    if(flags & VALUE_DICT_MAINTAINORDER)
+    if(flags & JSON_VALUE_DICT_MAINTAINORDER)
         v->data.data_bytes[0] |= HAS_ORDERLIST;
 
     return 0;
 }
 
 void
-value_fini(VALUE* v)
+json_value_fini(JSON_VALUE* v)
 {
     if(v == NULL)
         return;
 
-    if(value_type(v) == VALUE_ARRAY)
-        value_array_clean(v);
+    if(json_value_type(v) == JSON_VALUE_ARRAY)
+        json_value_array_clean(v);
 
-    if(value_type(v) == VALUE_DICT)
-        value_dict_clean(v);
+    if(json_value_type(v) == JSON_VALUE_DICT)
+        json_value_dict_clean(v);
 
     if(v->data.data_bytes[0] & 0x80)
-        free(value_payload(v));
+        free(json_value_payload(v));
 
-    v->data.data_bytes[0] = VALUE_NULL;
+    v->data.data_bytes[0] = JSON_VALUE_NULL;
 }
 
 
@@ -468,18 +468,18 @@ value_fini(VALUE* v)
  **************************/
 
 int
-value_bool(const VALUE* v)
+json_value_bool(const JSON_VALUE* v)
 {
-    if(value_type(v) != VALUE_BOOL)
+    if(json_value_type(v) != JSON_VALUE_BOOL)
         return -1;
 
     return v->data.data_bytes[1];
 }
 
 int32_t
-value_int32(const VALUE* v)
+json_value_int32(const JSON_VALUE* v)
 {
-    uint8_t* payload = value_payload((VALUE*) v);
+    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -489,21 +489,21 @@ value_int32(const VALUE* v)
         double d;
     } ret;
 
-    switch(value_type(v)) {
-        case VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (int32_t) ret.i32;
-        case VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (int32_t) ret.u32;
-        case VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (int32_t) ret.i64;
-        case VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (int32_t) ret.u64;
-        case VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(int32_t, ret.f);
-        case VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(int32_t, ret.d);
+    switch(json_value_type(v)) {
+        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (int32_t) ret.i32;
+        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (int32_t) ret.u32;
+        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (int32_t) ret.i64;
+        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (int32_t) ret.u64;
+        case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(int32_t, ret.f);
+        case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(int32_t, ret.d);
         default:            return -1;
     }
 }
 
 uint32_t
-value_uint32(const VALUE* v)
+json_value_uint32(const JSON_VALUE* v)
 {
-    uint8_t* payload = value_payload((VALUE*) v);
+    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -513,21 +513,21 @@ value_uint32(const VALUE* v)
         double d;
     } ret;
 
-    switch(value_type(v)) {
-        case VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (uint32_t) ret.i32;
-        case VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (uint32_t) ret.u32;
-        case VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (uint32_t) ret.i64;
-        case VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (uint32_t) ret.u64;
-        case VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(uint32_t, ret.f);
-        case VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(uint32_t, ret.d);
+    switch(json_value_type(v)) {
+        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (uint32_t) ret.i32;
+        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (uint32_t) ret.u32;
+        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (uint32_t) ret.i64;
+        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (uint32_t) ret.u64;
+        case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(uint32_t, ret.f);
+        case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(uint32_t, ret.d);
         default:            return UINT32_MAX;
     }
 }
 
 int64_t
-value_int64(const VALUE* v)
+json_value_int64(const JSON_VALUE* v)
 {
-    uint8_t* payload = value_payload((VALUE*) v);
+    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -537,21 +537,21 @@ value_int64(const VALUE* v)
         double d;
     } ret;
 
-    switch(value_type(v)) {
-        case VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (int64_t) ret.i32;
-        case VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (int64_t) ret.u32;
-        case VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (int64_t) ret.i64;
-        case VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (int64_t) ret.u64;
-        case VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(int64_t, ret.f);
-        case VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(int64_t, ret.d);
+    switch(json_value_type(v)) {
+        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (int64_t) ret.i32;
+        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (int64_t) ret.u32;
+        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (int64_t) ret.i64;
+        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (int64_t) ret.u64;
+        case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(int64_t, ret.f);
+        case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(int64_t, ret.d);
         default:            return -1;
     }
 }
 
 uint64_t
-value_uint64(const VALUE* v)
+json_value_uint64(const JSON_VALUE* v)
 {
-    uint8_t* payload = value_payload((VALUE*) v);
+    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -561,21 +561,21 @@ value_uint64(const VALUE* v)
         double d;
     } ret;
 
-    switch(value_type(v)) {
-        case VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (uint64_t) ret.i32;
-        case VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (uint64_t) ret.u32;
-        case VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (uint64_t) ret.i64;
-        case VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (uint64_t) ret.u64;
-        case VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(uint64_t, ret.f);
-        case VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(uint64_t, ret.d);
+    switch(json_value_type(v)) {
+        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (uint64_t) ret.i32;
+        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (uint64_t) ret.u32;
+        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (uint64_t) ret.i64;
+        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (uint64_t) ret.u64;
+        case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(uint64_t, ret.f);
+        case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(uint64_t, ret.d);
         default:            return UINT64_MAX;
     }
 }
 
 float
-value_float(const VALUE* v)
+json_value_float(const JSON_VALUE* v)
 {
-    uint8_t* payload = value_payload((VALUE*) v);
+    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -585,21 +585,21 @@ value_float(const VALUE* v)
         double d;
     } ret;
 
-    switch(value_type(v)) {
-        case VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (float) ret.i32;
-        case VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (float) ret.u32;
-        case VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (float) ret.i64;
-        case VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (float) ret.u64;
-        case VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ret.f;
-        case VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return (float) ret.d;
+    switch(json_value_type(v)) {
+        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (float) ret.i32;
+        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (float) ret.u32;
+        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (float) ret.i64;
+        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (float) ret.u64;
+        case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ret.f;
+        case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return (float) ret.d;
         default:            return -1.0f;   /* FIXME: NaN would be likely better but we do not include <math.h> */
     }
 }
 
 double
-value_double(const VALUE* v)
+json_value_double(const JSON_VALUE* v)
 {
-    uint8_t* payload = value_payload((VALUE*) v);
+    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -609,27 +609,27 @@ value_double(const VALUE* v)
         double d;
     } ret;
 
-    switch(value_type(v)) {
-        case VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (double) ret.i32;
-        case VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (double) ret.u32;
-        case VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (double) ret.i64;
-        case VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (double) ret.u64;
-        case VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return (double) ret.f;
-        case VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ret.d;
+    switch(json_value_type(v)) {
+        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (double) ret.i32;
+        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (double) ret.u32;
+        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (double) ret.i64;
+        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (double) ret.u64;
+        case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return (double) ret.f;
+        case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ret.d;
         default:            return -1.0;    /* FIXME: NaN would be likely better but we do not include <math.h> */
     }
 }
 
 const char*
-value_string(const VALUE* v)
+json_value_string(const JSON_VALUE* v)
 {
     uint8_t* payload;
     size_t off = 0;
 
-    if(value_type(v) != VALUE_STRING)
+    if(json_value_type(v) != JSON_VALUE_STRING)
         return NULL;
 
-    payload = value_payload((VALUE*) v);
+    payload = json_value_payload((JSON_VALUE*) v);
     while(payload[off] & 0x80)
         off++;
     off++;
@@ -638,17 +638,17 @@ value_string(const VALUE* v)
 }
 
 size_t
-value_string_length(const VALUE* v)
+json_value_string_length(const JSON_VALUE* v)
 {
     uint8_t* payload;
     size_t off = 0;
     size_t len = 0;
     unsigned shift = 0;
 
-    if(value_type(v) != VALUE_STRING)
+    if(json_value_type(v) != JSON_VALUE_STRING)
         return 0;
 
-    payload = value_payload((VALUE*) v);
+    payload = json_value_payload((JSON_VALUE*) v);
     while(payload[off] & 0x80) {
         len |= (payload[off] & 0x7f) << shift;
         shift += 7;
@@ -661,58 +661,58 @@ value_string_length(const VALUE* v)
 
 
 /*******************
- *** VALUE_ARRAY ***
+ *** JSON_VALUE_ARRAY ***
  *******************/
 
 static ARRAY*
-value_array_payload(VALUE* v)
+json_value_array_payload(JSON_VALUE* v)
 {
-    if(value_type(v) != VALUE_ARRAY)
+    if(json_value_type(v) != JSON_VALUE_ARRAY)
         return NULL;
 
-    return (ARRAY*) value_payload_ex(v, sizeof(void*));
+    return (ARRAY*) json_value_payload_ex(v, sizeof(void*));
 }
 
 static int
-value_array_realloc(ARRAY* a, size_t alloc)
+json_value_array_realloc(ARRAY* a, size_t alloc)
 {
-    VALUE* value_buf;
+    JSON_VALUE* json_value_buf;
 
-    value_buf = (VALUE*) realloc(a->value_buf, alloc * sizeof(VALUE));
-    if(value_buf == NULL)
+    json_value_buf = (JSON_VALUE*) realloc(a->json_value_buf, alloc * sizeof(JSON_VALUE));
+    if(json_value_buf == NULL)
         return -1;
 
-    a->value_buf = value_buf;
+    a->json_value_buf = json_value_buf;
     a->alloc = alloc;
     return 0;
 }
 
-VALUE*
-value_array_get(const VALUE* v, size_t index)
+JSON_VALUE*
+json_value_array_get(const JSON_VALUE* v, size_t index)
 {
-    ARRAY* a = value_array_payload((VALUE*) v);
+    ARRAY* a = json_value_array_payload((JSON_VALUE*) v);
 
     if(a != NULL  &&  index < a->size)
-        return &a->value_buf[index];
+        return &a->json_value_buf[index];
     else
         return NULL;
 }
 
-VALUE*
-value_array_get_all(const VALUE* v)
+JSON_VALUE*
+json_value_array_get_all(const JSON_VALUE* v)
 {
-    ARRAY* a = value_array_payload((VALUE*) v);
+    ARRAY* a = json_value_array_payload((JSON_VALUE*) v);
 
     if(a != NULL)
-        return a->value_buf;
+        return a->json_value_buf;
     else
         return NULL;
 }
 
 size_t
-value_array_size(const VALUE* v)
+json_value_array_size(const JSON_VALUE* v)
 {
-    ARRAY* a = value_array_payload((VALUE*) v);
+    ARRAY* a = json_value_array_payload((JSON_VALUE*) v);
 
     if(a != NULL)
         return a->size;
@@ -720,83 +720,83 @@ value_array_size(const VALUE* v)
         return 0;
 }
 
-VALUE*
-value_array_append(VALUE* v)
+JSON_VALUE*
+json_value_array_append(JSON_VALUE* v)
 {
-    return value_array_insert(v, value_array_size(v));
+    return json_value_array_insert(v, json_value_array_size(v));
 }
 
-VALUE*
-value_array_insert(VALUE* v, size_t index)
+JSON_VALUE*
+json_value_array_insert(JSON_VALUE* v, size_t index)
 {
-    ARRAY* a = value_array_payload(v);
+    ARRAY* a = json_value_array_payload(v);
 
     if(a == NULL  ||  index > a->size)
         return NULL;
 
     if(a->size >= a->alloc) {
-        if(value_array_realloc(a, (a->alloc > 0) ? a->alloc * 2 : 1) != 0)
+        if(json_value_array_realloc(a, (a->alloc > 0) ? a->alloc * 2 : 1) != 0)
             return NULL;
     }
 
     if(index < a->size) {
-        memmove(a->value_buf + index + 1, a->value_buf + index,
-                (a->size - index) * sizeof(VALUE));
+        memmove(a->json_value_buf + index + 1, a->json_value_buf + index,
+                (a->size - index) * sizeof(JSON_VALUE));
     }
-    value_init_new(&a->value_buf[index]);
+    json_value_init_new(&a->json_value_buf[index]);
     a->size++;
-    return &a->value_buf[index];
+    return &a->json_value_buf[index];
 }
 
 int
-value_array_remove(VALUE* v, size_t index)
+json_value_array_remove(JSON_VALUE* v, size_t index)
 {
-    return value_array_remove_range(v, index, 1);
+    return json_value_array_remove_range(v, index, 1);
 }
 
 int
-value_array_remove_range(VALUE* v, size_t index, size_t count)
+json_value_array_remove_range(JSON_VALUE* v, size_t index, size_t count)
 {
-    ARRAY* a = value_array_payload(v);
+    ARRAY* a = json_value_array_payload(v);
     size_t i;
 
     if(a == NULL  ||  index + count > a->size)
         return -1;
 
     for(i = index; i < index + count; i++)
-        value_fini(&a->value_buf[i]);
+        json_value_fini(&a->json_value_buf[i]);
 
     if(index + count < a->size) {
-        memmove(a->value_buf + index, a->value_buf + index + count,
-                (a->size - (index + count)) * sizeof(VALUE));
+        memmove(a->json_value_buf + index, a->json_value_buf + index + count,
+                (a->size - (index + count)) * sizeof(JSON_VALUE));
     }
     a->size -= count;
 
     if(4 * a->size < a->alloc)
-        value_array_realloc(a, a->alloc / 2);
+        json_value_array_realloc(a, a->alloc / 2);
 
     return 0;
 }
 
 void
-value_array_clean(VALUE* v)
+json_value_array_clean(JSON_VALUE* v)
 {
-    ARRAY* a = value_array_payload(v);
+    ARRAY* a = json_value_array_payload(v);
     size_t i;
 
     if(a == NULL)
         return;
 
     for(i = 0; i < a->size; i++)
-        value_fini(&a->value_buf[i]);
+        json_value_fini(&a->json_value_buf[i]);
 
-    free(a->value_buf);
+    free(a->json_value_buf);
     memset(a, 0, sizeof(ARRAY));
 }
 
 
 /******************
- *** VALUE_DICT ***
+ *** JSON_VALUE_DICT ***
  ******************/
 
 #define MAKE_RED(node)      do { (node)->key.data.data_bytes[0] |= HAS_REDCOLOR; } while(0)
@@ -806,19 +806,19 @@ value_array_clean(VALUE* v)
 #define IS_BLACK(node)      (!IS_RED(node))
 
 static DICT*
-value_dict_payload(VALUE* v)
+json_value_dict_payload(JSON_VALUE* v)
 {
-    if(value_type(v) != VALUE_DICT)
+    if(json_value_type(v) != JSON_VALUE_DICT)
         return NULL;
 
-    return (DICT*) value_payload_ex(v, sizeof(void*));
+    return (DICT*) json_value_payload_ex(v, sizeof(void*));
 }
 
 static int
-value_dict_default_cmp(const char* key1, size_t len1, const char* key2, size_t len2)
+json_value_dict_default_cmp(const char* key1, size_t len1, const char* key2, size_t len2)
 {
     /* Comparing lengths 1st might be in general especially if the keys are
-     * long, but it would break value_dict_walk_sorted().
+     * long, but it would break json_value_dict_walk_sorted().
      *
      * In most apps keys are short and ASCII. It is nice to follow
      * lexicographic order at least in such cases as that's what most
@@ -837,17 +837,17 @@ value_dict_default_cmp(const char* key1, size_t len1, const char* key2, size_t l
 }
 
 static int
-value_dict_cmp(const VALUE* v, const DICT* d,
+json_value_dict_cmp(const JSON_VALUE* v, const DICT* d,
                const char* key1, size_t len1, const char* key2, size_t len2)
 {
     if(!(v->data.data_bytes[0] & HAS_CUSTOMCMP))
-        return value_dict_default_cmp(key1, len1, key2, len2);
+        return json_value_dict_default_cmp(key1, len1, key2, len2);
     else
         return d->cmp_func(key1, len1, key2, len2);
 }
 
 static int
-value_dict_leftmost_path(RBTREE** path, RBTREE* node)
+json_value_dict_leftmost_path(RBTREE** path, RBTREE* node)
 {
     int n = 0;
 
@@ -860,21 +860,21 @@ value_dict_leftmost_path(RBTREE** path, RBTREE* node)
 }
 
 unsigned
-value_dict_flags(const VALUE* v)
+json_value_dict_flags(const JSON_VALUE* v)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     unsigned flags = 0;
 
     if(d != NULL  &&  (v->data.data_bytes[0] & HAS_ORDERLIST))
-        flags |= VALUE_DICT_MAINTAINORDER;
+        flags |= JSON_VALUE_DICT_MAINTAINORDER;
 
     return flags;
 }
 
 size_t
-value_dict_size(const VALUE* v)
+json_value_dict_size(const JSON_VALUE* v)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
 
     if(d != NULL)
         return d->size;
@@ -883,9 +883,9 @@ value_dict_size(const VALUE* v)
 }
 
 size_t
-value_dict_keys_sorted(const VALUE* v, const VALUE** buffer, size_t buffer_size)
+json_value_dict_keys_sorted(const JSON_VALUE* v, const JSON_VALUE** buffer, size_t buffer_size)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* stack[RBTREE_MAX_HEIGHT];
     int stack_size = 0;
     RBTREE* node;
@@ -894,21 +894,21 @@ value_dict_keys_sorted(const VALUE* v, const VALUE** buffer, size_t buffer_size)
     if(d == NULL)
         return 0;
 
-    stack_size = value_dict_leftmost_path(stack, d->root);
+    stack_size = json_value_dict_leftmost_path(stack, d->root);
 
     while(stack_size > 0  &&  n < buffer_size) {
         node = stack[--stack_size];
         buffer[n++] = &node->key;
-        stack_size += value_dict_leftmost_path(stack + stack_size, node->right);
+        stack_size += json_value_dict_leftmost_path(stack + stack_size, node->right);
     }
 
     return n;
 }
 
 size_t
-value_dict_keys_ordered(const VALUE* v, const VALUE** buffer, size_t buffer_size)
+json_value_dict_keys_ordered(const JSON_VALUE* v, const JSON_VALUE** buffer, size_t buffer_size)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node;
     size_t n = 0;
 
@@ -924,35 +924,35 @@ value_dict_keys_ordered(const VALUE* v, const VALUE** buffer, size_t buffer_size
     return n;
 }
 
-VALUE*
-value_dict_get_(const VALUE* v, const char* key, size_t key_len)
+JSON_VALUE*
+json_value_dict_get_(const JSON_VALUE* v, const char* key, size_t key_len)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
     int cmp;
 
     while(node != NULL) {
-        cmp = value_dict_cmp(v, d, key, key_len, value_string(&node->key), value_string_length(&node->key));
+        cmp = json_value_dict_cmp(v, d, key, key_len, json_value_string(&node->key), json_value_string_length(&node->key));
 
         if(cmp < 0)
             node = node->left;
         else if(cmp > 0)
             node = node->right;
         else
-            return &node->value;
+            return &node->json_value;
     }
 
     return NULL;
 }
 
-VALUE*
-value_dict_get(const VALUE* v, const char* key)
+JSON_VALUE*
+json_value_dict_get(const JSON_VALUE* v, const char* key)
 {
-    return value_dict_get_(v, key, (key != NULL) ? strlen(key) : 0);
+    return json_value_dict_get_(v, key, (key != NULL) ? strlen(key) : 0);
 }
 
 static void
-value_dict_rotate_left(DICT* d, RBTREE* parent, RBTREE* node)
+json_value_dict_rotate_left(DICT* d, RBTREE* parent, RBTREE* node)
 {
     RBTREE* tmp = node->right;
     node->right = tmp->left;
@@ -969,7 +969,7 @@ value_dict_rotate_left(DICT* d, RBTREE* parent, RBTREE* node)
 }
 
 static void
-value_dict_rotate_right(DICT* d, RBTREE* parent, RBTREE* node)
+json_value_dict_rotate_right(DICT* d, RBTREE* parent, RBTREE* node)
 {
     RBTREE* tmp = node->left;
     node->left = tmp->right;
@@ -987,7 +987,7 @@ value_dict_rotate_right(DICT* d, RBTREE* parent, RBTREE* node)
 
 /* Fixes the tree after inserting (red) node path[path_len-1]. */
 static void
-value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
+json_value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
 {
     RBTREE* node;
     RBTREE* parent;
@@ -1018,18 +1018,18 @@ value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
             /* Black uncle. */
             grandgrandparent = (path_len > 3) ? path[path_len-4] : NULL;
             if(grandparent->left != NULL  &&  grandparent->left->right == node) {
-                value_dict_rotate_left(d, grandparent, parent);
+                json_value_dict_rotate_left(d, grandparent, parent);
                 parent = node;
                 node = node->left;
             } else if(grandparent->right != NULL  &&  grandparent->right->left == node) {
-                value_dict_rotate_right(d, grandparent, parent);
+                json_value_dict_rotate_right(d, grandparent, parent);
                 parent = node;
                 node = node->right;
             }
             if(parent->left == node)
-                value_dict_rotate_right(d, grandgrandparent, grandparent);
+                json_value_dict_rotate_right(d, grandgrandparent, grandparent);
             else
-                value_dict_rotate_left(d, grandgrandparent, grandparent);
+                json_value_dict_rotate_left(d, grandgrandparent, grandparent);
 
             /* Note that `parent` now,  after the rotations, points to where
              * the grand-parent was originally in the tree hierarchy, and
@@ -1054,24 +1054,24 @@ value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
     }
 }
 
-VALUE*
-value_dict_add_(VALUE* v, const char* key, size_t key_len)
+JSON_VALUE*
+json_value_dict_add_(JSON_VALUE* v, const char* key, size_t key_len)
 {
-    VALUE* res;
+    JSON_VALUE* res;
 
-    res = value_dict_get_or_add_(v, key, key_len);
-    return (value_is_new(res) ? res : NULL);
+    res = json_value_dict_get_or_add_(v, key, key_len);
+    return (json_value_is_new(res) ? res : NULL);
 }
 
-VALUE* value_dict_add(VALUE* v, const char* key)
+JSON_VALUE* json_value_dict_add(JSON_VALUE* v, const char* key)
 {
-    return value_dict_add_(v, key, strlen(key));
+    return json_value_dict_add_(v, key, strlen(key));
 }
 
-VALUE*
-value_dict_get_or_add_(VALUE* v, const char* key, size_t key_len)
+JSON_VALUE*
+json_value_dict_get_or_add_(JSON_VALUE* v, const char* key, size_t key_len)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
     RBTREE* path[RBTREE_MAX_HEIGHT];
     int path_len = 0;
@@ -1081,8 +1081,8 @@ value_dict_get_or_add_(VALUE* v, const char* key, size_t key_len)
         return NULL;
 
     while(node != NULL) {
-        cmp = value_dict_cmp(v, d, key, key_len,
-                value_string(&node->key), value_string_length(&node->key));
+        cmp = json_value_dict_cmp(v, d, key, key_len,
+                json_value_string(&node->key), json_value_string_length(&node->key));
 
         path[path_len++] = node;
 
@@ -1091,7 +1091,7 @@ value_dict_get_or_add_(VALUE* v, const char* key, size_t key_len)
         else if(cmp > 0)
             node = node->right;
         else
-            return &node->value;
+            return &node->json_value;
     }
 
     /* Add new node into the tree. */
@@ -1099,11 +1099,11 @@ value_dict_get_or_add_(VALUE* v, const char* key, size_t key_len)
                 sizeof(RBTREE) : OFFSETOF(RBTREE, order_prev));
     if(node == NULL)
         return NULL;
-    if(value_init_string_(&node->key, key, key_len) != 0) {
+    if(json_value_init_string_(&node->key, key, key_len) != 0) {
         free(node);
         return NULL;
     }
-    value_init_new(&node->value);
+    json_value_init_new(&node->json_value);
     node->left = NULL;
     node->right = NULL;
     MAKE_RED(node);
@@ -1132,23 +1132,23 @@ value_dict_get_or_add_(VALUE* v, const char* key, size_t key_len)
 
     /* Re-balance. */
     path[path_len++] = node;
-    value_dict_fix_after_insert(d, path, path_len);
+    json_value_dict_fix_after_insert(d, path, path_len);
 
     d->size++;
 
-    return &node->value;
+    return &node->json_value;
 }
 
-VALUE*
-value_dict_get_or_add(VALUE* v, const char* key)
+JSON_VALUE*
+json_value_dict_get_or_add(JSON_VALUE* v, const char* key)
 {
-    return value_dict_get_or_add_(v, key, (key != NULL) ? strlen(key) : 0);
+    return json_value_dict_get_or_add_(v, key, (key != NULL) ? strlen(key) : 0);
 }
 
 /* Fixes the tree after making the given path one black node shorter.
  * (Note that that the path may end with NULL if the removed node had no child.) */
 static void
-value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
+json_value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
 {
     RBTREE* node;
     RBTREE* parent;
@@ -1173,9 +1173,9 @@ value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
         if(IS_RED(sibling)) {
             /* Red sibling: Convert to black sibling case. */
             if(parent->left == node)
-                value_dict_rotate_left(d, grandparent, parent);
+                json_value_dict_rotate_left(d, grandparent, parent);
             else
-                value_dict_rotate_right(d, grandparent, parent);
+                json_value_dict_rotate_right(d, grandparent, parent);
 
             MAKE_BLACK(sibling);
             MAKE_RED(parent);
@@ -1191,12 +1191,12 @@ value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
             if(node == parent->left && (sibling->right == NULL || IS_BLACK(sibling->right))) {
                 MAKE_RED(sibling);
                 MAKE_BLACK(sibling->left);
-                value_dict_rotate_right(d, parent, sibling);
+                json_value_dict_rotate_right(d, parent, sibling);
                 sibling = parent->right;
             } else if(node == parent->right && (sibling->left == NULL || IS_BLACK(sibling->left))) {
                 MAKE_RED(sibling);
                 MAKE_BLACK(sibling->right);
-                value_dict_rotate_left(d, parent, sibling);
+                json_value_dict_rotate_left(d, parent, sibling);
                 sibling = parent->left;
             }
 
@@ -1205,10 +1205,10 @@ value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
             MAKE_BLACK(parent);
             if(node == parent->left) {
                 MAKE_BLACK(sibling->right);
-                value_dict_rotate_left(d, grandparent, parent);
+                json_value_dict_rotate_left(d, grandparent, parent);
             } else {
                 MAKE_BLACK(sibling->left);
-                value_dict_rotate_right(d, grandparent, parent);
+                json_value_dict_rotate_right(d, grandparent, parent);
             }
             break;
         }
@@ -1229,9 +1229,9 @@ value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
 }
 
 int
-value_dict_remove_(VALUE* v, const char* key, size_t key_len)
+json_value_dict_remove_(JSON_VALUE* v, const char* key, size_t key_len)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
     RBTREE* single_child;
     RBTREE* path[RBTREE_MAX_HEIGHT];
@@ -1240,8 +1240,8 @@ value_dict_remove_(VALUE* v, const char* key, size_t key_len)
 
     /* Find the node to remove. */
     while(node != NULL) {
-        cmp = value_dict_cmp(v, d, key, key_len,
-                value_string(&node->key), value_string_length(&node->key));
+        cmp = json_value_dict_cmp(v, d, key, key_len,
+                json_value_string(&node->key), json_value_string_length(&node->key));
 
         path[path_len++] = node;
 
@@ -1258,7 +1258,7 @@ value_dict_remove_(VALUE* v, const char* key, size_t key_len)
     /* It is far more easier to remove a node at the bottom of the tree, if it
      * has at most one child. Therefore, if we are not at the bottom, we switch
      * our place with another node, which is our direct successor; i.e. with
-     * the minimal value of the right subtree. */
+     * the minimal json_value of the right subtree. */
     if(node->right != NULL) {
         RBTREE* successor;
         int node_index = path_len-1;
@@ -1266,7 +1266,7 @@ value_dict_remove_(VALUE* v, const char* key, size_t key_len)
         if(node->right->left != NULL) {
             RBTREE* tmp;
 
-            path_len += value_dict_leftmost_path(path + path_len, node->right);
+            path_len += json_value_dict_leftmost_path(path + path_len, node->right);
             successor = path[path_len-1];
 
             tmp = successor->right;
@@ -1333,7 +1333,7 @@ value_dict_remove_(VALUE* v, const char* key, size_t key_len)
     /* Node is now successfully disconnected. But the tree may need
      * re-balancing if we have removed black node. */
     if(IS_BLACK(node))
-        value_dict_fix_after_remove(d, path, path_len);
+        json_value_dict_fix_after_remove(d, path, path_len);
 
     /* Kill the node */
     if(v->data.data_bytes[0] & HAS_ORDERLIST) {
@@ -1347,8 +1347,8 @@ value_dict_remove_(VALUE* v, const char* key, size_t key_len)
         else
             d->order_tail = node->order_prev;
     }
-    value_fini(&node->key);
-    value_fini(&node->value);
+    json_value_fini(&node->key);
+    json_value_fini(&node->json_value);
     free(node);
     d->size--;
 
@@ -1356,15 +1356,15 @@ value_dict_remove_(VALUE* v, const char* key, size_t key_len)
 }
 
 int
-value_dict_remove(VALUE* v, const char* key)
+json_value_dict_remove(JSON_VALUE* v, const char* key)
 {
-    return value_dict_remove_(v, key, (key != NULL) ? strlen(key) : 0);
+    return json_value_dict_remove_(v, key, (key != NULL) ? strlen(key) : 0);
 }
 
 int
-value_dict_walk_ordered(const VALUE* v, int (*visit_func)(const VALUE*, VALUE*, void*), void* ctx)
+json_value_dict_walk_ordered(const JSON_VALUE* v, int (*visit_func)(const JSON_VALUE*, JSON_VALUE*, void*), void* ctx)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node;
     int ret;
 
@@ -1373,7 +1373,7 @@ value_dict_walk_ordered(const VALUE* v, int (*visit_func)(const VALUE*, VALUE*, 
 
     node = d->order_head;
     while(node != NULL) {
-        ret = visit_func(&node->key, &node->value, ctx);
+        ret = visit_func(&node->key, &node->json_value, ctx);
         if(ret < 0)
             return ret;
         node = node->order_next;
@@ -1383,9 +1383,9 @@ value_dict_walk_ordered(const VALUE* v, int (*visit_func)(const VALUE*, VALUE*, 
 }
 
 int
-value_dict_walk_sorted(const VALUE* v, int (*visit_func)(const VALUE*, VALUE*, void*), void* ctx)
+json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VALUE*, JSON_VALUE*, void*), void* ctx)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* stack[RBTREE_MAX_HEIGHT];
     int stack_size = 0;
     RBTREE* node;
@@ -1394,23 +1394,23 @@ value_dict_walk_sorted(const VALUE* v, int (*visit_func)(const VALUE*, VALUE*, v
     if(d == NULL)
         return -1;
 
-    stack_size = value_dict_leftmost_path(stack, d->root);
+    stack_size = json_value_dict_leftmost_path(stack, d->root);
 
     while(stack_size > 0) {
         node = stack[--stack_size];
-        ret = visit_func(&node->key, &node->value, ctx);
+        ret = visit_func(&node->key, &node->json_value, ctx);
         if(ret < 0)
             return ret;
-        stack_size += value_dict_leftmost_path(stack + stack_size, node->right);
+        stack_size += json_value_dict_leftmost_path(stack + stack_size, node->right);
     }
 
     return 0;
 }
 
 void
-value_dict_clean(VALUE* v)
+json_value_dict_clean(JSON_VALUE* v)
 {
-    DICT* d = value_dict_payload((VALUE*) v);
+    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* stack[RBTREE_MAX_HEIGHT];
     int stack_size;
     RBTREE* node;
@@ -1419,17 +1419,17 @@ value_dict_clean(VALUE* v)
     if(d == NULL)
         return;
 
-    stack_size = value_dict_leftmost_path(stack, d->root);
+    stack_size = json_value_dict_leftmost_path(stack, d->root);
 
     while(stack_size > 0) {
         node = stack[--stack_size];
         right = node->right;
 
-        value_fini(&node->key);
-        value_fini(&node->value);
+        json_value_fini(&node->key);
+        json_value_fini(&node->json_value);
         free(node);
 
-        stack_size += value_dict_leftmost_path(stack + stack_size, right);
+        stack_size += json_value_dict_leftmost_path(stack + stack_size, right);
     }
 
     if(v->data.data_bytes[0] & HAS_ORDERLIST)
@@ -1445,7 +1445,7 @@ value_dict_clean(VALUE* v)
 
 /* Returns black height of the tree, or -1 on an error. */
 static int
-value_dict_verify_recurse(RBTREE* node)
+json_value_dict_verify_recurse(RBTREE* node)
 {
     int left_black_height;
     int right_black_height;
@@ -1455,7 +1455,7 @@ value_dict_verify_recurse(RBTREE* node)
         if(IS_RED(node) && IS_RED(node->left))
             return -1;
 
-        left_black_height = value_dict_verify_recurse(node->left);
+        left_black_height = json_value_dict_verify_recurse(node->left);
         if(left_black_height < 0)
             return left_black_height;
     } else {
@@ -1466,7 +1466,7 @@ value_dict_verify_recurse(RBTREE* node)
         if(IS_RED(node) && IS_RED(node->right))
             return -1;
 
-        right_black_height = value_dict_verify_recurse(node->right);
+        right_black_height = json_value_dict_verify_recurse(node->right);
         if(right_black_height < 0)
             return right_black_height;
     } else {
@@ -1484,9 +1484,9 @@ value_dict_verify_recurse(RBTREE* node)
 
 /* Returns 0 if ok, or -1 on an error. */
 int
-value_dict_verify(VALUE* v)
+json_value_dict_verify(JSON_VALUE* v)
 {
-    DICT* d = value_dict_payload(v);
+    DICT* d = json_value_dict_payload(v);
     if(d == NULL)
         return -1;
 
@@ -1496,7 +1496,7 @@ value_dict_verify(VALUE* v)
     if(IS_RED(d->root))
         return -1;
 
-    return (value_dict_verify_recurse(d->root) > 0) ? 0 : -1;
+    return (json_value_dict_verify_recurse(d->root) > 0) ? 0 : -1;
 }
 
 #endif  /* #ifdef CRE_TEST */

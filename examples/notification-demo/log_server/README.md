@@ -64,7 +64,7 @@ make
 ./log_server
 
 # or if using the notification daemon, optionally provide an alternate address for it, e.g.:
-./log_server --kv-string notification-dest-addr=10.0.4.4
+./log_server --kv-string notification-server-addr=10.0.4.4
 
 # start the notification daemon in another terminal (see examples/notification-demo/udp_to_dbus)
 ./udp_to_dbus
@@ -90,5 +90,4 @@ curl --cert ./certs/server-cert.pem --key ./certs/server-key.pem --cacert ./cert
 
 # Role-based authorization failure example
 curl --cert ./certs/server-cert.pem --key ./certs/server-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/reset-log
-
 ```

@@ -19,3 +19,6 @@ tests/test_*
 .build_params
 .tested
 wolfsentry_options.h
+
+examples/notification-demo/log_server/log_server
+examples/notification-demo/udp_to_dbus/udp_to_dbus

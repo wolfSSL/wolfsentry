@@ -168,7 +168,7 @@ static const char* wolfsentry_config_data =
 "    ],\n"
 "    \"user-values\" : {\n"
 "        \"notification-listen-addr\" : \"0.0.0.0\",\n"
-"        \"notification-server-addr\" : \"1@_udp://10.0.4.4\",\n"
+"        \"notification-server-addr\" : \"127.0.0.1\",\n"
 "        \"notification-dest-port\" : 55555,\n"
 "        \"admin-listen-addr\" : \"0.0.0.0\",\n"
 "        \"admin-listen-port\" : 10443,\n"

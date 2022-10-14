@@ -1,6 +1,10 @@
 # UDP to DBUS Notification example
 
-This is a demonstration application daemon uses `../../tests/test-config.json` to show wolfSentry notifications with the `log_server`.
+This is a demonstration application daemon that relays wolfSentry notifications,
+received from the `log_server`, to the desktop DBUS facility, according to the
+configuration in `../notify-config.json`.
+
+For more information, see [`../log_server/README.md`](../log_server/README.md).
 
 ## Building the demo
 
@@ -12,15 +16,14 @@ make
 make install
 ```
 
-2) Build udp_to_dbus
+2) Build `udp_to_dbus`:
 
 ```
 make
 ```
 
-## Testing the demo
+## Run the demo:
 
 ```sh
-# Supply the IP address on the interface to listen to notifications
-./udp_to_dbus --kv-string notification-dest-addr=[IPADDR]
+./udp_to_dbus
 ```

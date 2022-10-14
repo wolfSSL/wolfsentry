@@ -1681,11 +1681,11 @@ int main(int argc, char **argv) {
     retry = 0;
 #endif
     for (;;) {
-        if (http_buf_size == http_buf_len) {
+        if (http_buf_len >= http_buf_size - 1) {
             fprintf(stderr, "overlong client payload\n");
             goto ssl_shutdown;
         }
-        ret = wolfSSL_read(ssl, http_buf + http_buf_len, http_buf_size - http_buf_len);
+        ret = wolfSSL_read(ssl, http_buf + http_buf_len, http_buf_size - http_buf_len - 1);
         if (ret < 0) {
         #ifdef DEBUG_HTTP
             fprintf(stderr,"\nL%d\n%.*s\n",__LINE__,(int)http_buf_len, http_buf);
@@ -1714,6 +1714,9 @@ int main(int argc, char **argv) {
                 break;
         }
     }
+
+    /* add null string termination to make string calls inherently safe. */
+    http_buf[http_buf_len] = 0;
 
     if (ret < 0) {
         fprintf(stderr, "ERROR: failed to read: %s\n", wolfSSL_ERR_reason_error_string(ret));
@@ -1750,7 +1753,7 @@ int main(int argc, char **argv) {
 
     *url_end = 0;
 
-    if (! strcmp(url, "/reset-log")) {
+    if (strcmp(url, "/reset-log") == 0) {
 
         if (! app_data->issuer_cert->can_issue_admin_certs) {
             (void)http_write_header(ssl, http_buf, http_buf_size, 403, 0, NULL, NULL);
@@ -1769,7 +1772,8 @@ int main(int argc, char **argv) {
     }
 
 #if 0
-    if (! strncmp(url, "/reset-host", strlen("/reset-host"))) {
+    /* not yet implemented */
+    if (strncmp(url, "/reset-host", strlen("/reset-host"))) {
         const char *host_to_reset = url + strlen("/reset-host");
 
         if (! app_data->issuer_cert->can_issue_admin_certs) {
@@ -1777,17 +1781,25 @@ int main(int argc, char **argv) {
             goto ssl_shutdown;
         }
 
+        /* get the host to clear from the URL-encoded args, parse it, and call
+         * wolfsentry_route_delete().  note this requires an exact match with
+         * the rule inserted dynamically by sentry.c:handle_derogatory().
+         */
+
         transaction_successful = 1;
     }
 #endif
 
-    if (strncmp(url, "/show-log", strlen("/show-log")) == 0) {
+    if ((strncmp(url, "/show-log", strlen("/show-log")) == 0) &&
+        ((url[strlen("/show-log")] == 0) ||
+         (url[strlen("/show-log")] == '?')))
+    {
         int resp_len;
         struct circlog_message *msg_i = NULL;
         size_t total_msg_len;
         char *show_log_args = url + strlen("/show-log");
 
-        (void)show_log_args;
+        (void)show_log_args; /* arg processing not yet implemented. */
 
         total_msg_len = 2; /* "[\n" */
         for (ret = circlog_iterate(&msg_i); ret >= 0; ret = circlog_iterate(&msg_i)) {

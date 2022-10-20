@@ -147,7 +147,7 @@ struct wolfsentry_json_process_state {
 
     enum { O_U_C_NONE = 0, O_U_C_SKIPLEVEL, O_U_C_ROUTE, O_U_C_EVENT, O_U_C_ACTION, O_U_C_USER_VALUE } object_under_construction;
 
-    enum { S_U_C_NONE = 0, S_U_C_EVENTCONFIG, S_U_C_FLAGS, S_U_C_ACTION_LIST, S_U_C_REMOTE_ENDPOINT, S_U_C_LOCAL_ENDPOINT, S_U_C_ROUTE_METADATA } section_under_construction;
+    enum { S_U_C_NONE = 0, S_U_C_EVENTCONFIG, S_U_C_FLAGS, S_U_C_ACTION_LIST, S_U_C_REMOTE_ENDPOINT, S_U_C_LOCAL_ENDPOINT, S_U_C_ROUTE_METADATA, S_U_C_USER_VALUE_JSON } section_under_construction;
 
     int cur_depth;
     char cur_keyname[WOLFSENTRY_MAX_LABEL_BYTES];
@@ -164,6 +164,10 @@ struct wolfsentry_json_process_state {
 
     JSON_PARSER parser;
     struct wolfsentry_context *wolfsentry_actual, *wolfsentry;
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    unsigned int dom_parser_flags;
+    JSON_DOM_PARSER dom_parser; /* has a duplicate JSON_PARSER in it that is not used, except for its .wolfsentry_context member. */
+#endif
 
     union {
         struct {
@@ -1069,6 +1073,48 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
         }
     }
 
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    if ((jps->object_under_construction == O_U_C_USER_VALUE) && (jps->section_under_construction != S_U_C_USER_VALUE_JSON) && (! strcmp(jps->cur_keyname, "json"))) {
+        jps->section_under_construction = S_U_C_USER_VALUE_JSON;
+        ret = json_dom_init_1(wolfsentry_get_allocator(jps->wolfsentry), &jps->dom_parser, jps->dom_parser_flags);
+        if (ret < 0)
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
+    }
+
+    if ((jps->cur_depth >= 3) && (jps->object_under_construction == O_U_C_USER_VALUE) && (jps->section_under_construction == S_U_C_USER_VALUE_JSON)) {
+
+        ret = json_dom_process(json_type, data, data_size, (void *)&jps->dom_parser);
+
+        if (ret < 0) {
+            memcpy(&jps->parser.err_pos, &jps->parser.value_pos, sizeof jps->parser.err_pos);
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
+        }
+
+        if (jps->cur_depth == 3) {
+            JSON_VALUE jv;
+
+            ret = json_dom_fini_aux(&jps->dom_parser, &jv);
+            if (ret != 0)
+                WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
+
+            ret = wolfsentry_user_value_store_json(
+                jps->wolfsentry,
+                jps->o_u_c.user_value.label,
+                jps->o_u_c.user_value.label_len,
+                &jv,
+                0 /* overwrite_p */);
+
+            if (ret < 0) {
+                json_value_fini(wolfsentry_get_allocator(jps->wolfsentry), &jv);
+                WOLFSENTRY_ERROR_RERETURN(ret);
+            }
+
+            jps->section_under_construction = S_U_C_NONE;
+        }
+        WOLFSENTRY_RETURN_OK;
+    }
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
     if ((jps->cur_depth == 3) && (jps->object_under_construction == O_U_C_USER_VALUE)) {
         wolfsentry_kv_type_t ws_type;
 
@@ -1148,10 +1194,12 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
                 (int)data_size,
                 0));
 
+        case WOLFSENTRY_KV_JSON:
         case WOLFSENTRY_KV_NONE:
         case WOLFSENTRY_KV_NULL:
         case WOLFSENTRY_KV_TRUE:
         case WOLFSENTRY_KV_FALSE:
+        case WOLFSENTRY_KV_FLAG_READONLY:
             WOLFSENTRY_ERROR_RETURN(CONFIG_UNEXPECTED);
         }
 
@@ -1180,6 +1228,14 @@ static wolfsentry_errcode_t json_process(
 #endif
 
     if (type == JSON_KEY) {
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+        if (jps->section_under_construction == S_U_C_USER_VALUE_JSON) {
+            ret = handle_user_value_clause(jps, type, data, data_size);
+            goto out;
+        }
+#endif
+
         memcpy(&jps->key_pos, &jps->parser.pos, sizeof jps->key_pos);
         jps->key_pos.column_number -= (unsigned)(data_size + 2U); /* kludge to move the pointer back to the start of the key */
         if (data_size >= sizeof jps->cur_keyname)
@@ -1349,8 +1405,7 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
         .max_string_len = WOLFSENTRY_MAX_LABEL_BYTES,
         .max_key_len = WOLFSENTRY_MAX_LABEL_BYTES,
         .max_nesting_level = 10,
-        .flags = JSON_NOSCALARROOT,
-        .wolfsentry_context = wolfsentry
+        .flags = JSON_NOSCALARROOT
     };
 
     if (wolfsentry == NULL)
@@ -1363,6 +1418,36 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memset(*jps, 0, sizeof **jps);
     (*jps)->load_flags = load_flags;
+
+    if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_ABORT)) {
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+        (*jps)->dom_parser_flags |= JSON_DOM_DUPKEY_ABORT;
+#else
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+#endif
+    }
+    if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USEFIRST)) {
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+        (*jps)->dom_parser_flags |= JSON_DOM_DUPKEY_USEFIRST;
+#else
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+#endif
+    }
+    if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USELAST)) {
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+        (*jps)->dom_parser_flags |= JSON_DOM_DUPKEY_USELAST;
+#else
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+#endif
+    }
+    if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_MAINTAINDICTORDER)) {
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+        (*jps)->dom_parser_flags |= JSON_DOM_MAINTAINDICTORDER;
+#else
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+#endif
+    }
+
     (*jps)->wolfsentry_actual = wolfsentry;
     if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT))
         (*jps)->wolfsentry = wolfsentry;
@@ -1380,15 +1465,13 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
             goto out;
     }
 
-    ret = json_init(&(*jps)->parser,
+    ret = json_init(wolfsentry_get_allocator((*jps)->wolfsentry),
+                    &(*jps)->parser,
                     &json_callbacks,
                     &json_config,
                     *jps);
     if (ret < 0) {
-        if (ret == JSON_ERR_OUTOFMEMORY)
-            ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
-        else if (WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(ret) == 0)
-            ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
+        ret = wolfsentry_centijson_errcode_translate(ret);
         goto out;
     }
 
@@ -1444,10 +1527,7 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
             else
                 snprintf(err_buf, err_buf_size, "json_feed failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
         }
-        if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-            WOLFSENTRY_ERROR_RETURN(CONFIG_PARSER);
-        else
-            WOLFSENTRY_ERROR_RERETURN(jps->fini_ret);
+        WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(jps->fini_ret));
     }
     WOLFSENTRY_RETURN_OK;
 }
@@ -1485,7 +1565,7 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
             if (err_buf != NULL)
                 snprintf(err_buf, err_buf_size, "json_fini failed at offset " SIZET_FMT ", L%u, col %u, with code %d: %s.",
                          json_pos.offset,json_pos.line_number, json_pos.column_number, (*jps)->fini_ret, json_error_str((*jps)->fini_ret));
-            ret = WOLFSENTRY_ERROR_ENCODE(CONFIG_PARSER);
+            ret = wolfsentry_centijson_errcode_translate((*jps)->fini_ret);
             goto out;
         }
     }

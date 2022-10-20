@@ -26,11 +26,8 @@
 #ifndef CENTIJSON_SAX_H
 #define CENTIJSON_SAX_H
 
-#ifdef WOLFSENTRY
-#include "wolfsentry.h"
-#endif
-#ifndef WOLFSENTRY_API
-#define WOLFSENTRY_API
+#if !defined(WOLFSENTRY) && !defined(WOLFSENTRY_API)
+    #define WOLFSENTRY_API
 #endif
 
 #ifdef __cplusplus
@@ -116,9 +113,6 @@ typedef struct JSON_CONFIG {
     size_t max_key_len;         /* zero means no limit; default: 512 */
     unsigned max_nesting_level; /* zero means no limit; default: 512 */
     unsigned flags;             /* default: 0 */
-#ifdef WOLFSENTRY
-    struct wolfsentry_context *wolfsentry_context;
-#endif
 } JSON_CONFIG;
 
 
@@ -159,6 +153,9 @@ typedef struct JSON_CALLBACKS {
 /* Internal parser state. Use pointer to this structure as an opaque handle.
  */
 typedef struct JSON_PARSER {
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator;
+#endif
     JSON_CALLBACKS callbacks;
     JSON_CONFIG config;
     void* user_data;
@@ -200,7 +197,11 @@ WOLFSENTRY_API void json_default_config(JSON_CONFIG* config);
  *
  * If `config` is NULL, default values are used.
  */
-WOLFSENTRY_API int json_init(JSON_PARSER* parser,
+WOLFSENTRY_API int json_init(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+              JSON_PARSER* parser,
               const JSON_CALLBACKS* callbacks,
               const JSON_CONFIG* config,
               void* user_data);
@@ -236,7 +237,11 @@ WOLFSENTRY_API int json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos);
 /* Simple wrapper function for json_init() + json_feed() + json_fini(), usable
  * when the provided input contains complete JSON document.
  */
-WOLFSENTRY_API int json_parse(const char* input, size_t size,
+WOLFSENTRY_API int json_parse(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+               const char* input, size_t size,
                const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,
                void* user_data, JSON_INPUT_POS* p_pos);
 

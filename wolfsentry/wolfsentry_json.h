@@ -34,6 +34,8 @@
 #endif
 #include "centijson_sax.h"
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_centijson_errcode_translate(wolfsentry_errcode_t centijson_errcode);
+
 typedef enumint_t wolfsentry_config_load_flags_t;
 enum {
     WOLFSENTRY_CONFIG_LOAD_FLAG_NONE             = 0U,
@@ -41,6 +43,10 @@ enum {
     WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN          = 1U << 1U,
     WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT = 1U << 2U,
     WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS = 1U << 3U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_ABORT = 1U << 4U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USEFIRST = 1U << 5U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USELAST = 1U << 6U,
+    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_MAINTAINDICTORDER = 1U << 7U,
     WOLFSENTRY_CONFIG_LOAD_FLAG_FINI             = 1U << 30U
 };
 

@@ -95,7 +95,7 @@ endif
 ifeq "$(NO_JSON)" "1"
     CFLAGS += -DWOLFSENTRY_NO_JSON
 else
-    SRCS += json/centijson_sax.c json/load_config.c
+    SRCS += json/centijson_sax.c json/json_util.c json/load_config.c
     ifneq "$(NO_JSON_DOM)" "1"
         CFLAGS += -DWOLFSENTRY_HAVE_JSON_DOM
         SRCS += json/centijson_dom.c json/centijson_value.c
@@ -218,7 +218,11 @@ UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules te
 
 ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json
-    TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
+    ifneq "$(NO_JSON_DOM)" "1"
+        TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
+    else
+        TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-dom.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
+    endif
     $(BUILD_TOP)/tests/test_json: override CFLAGS+=$(TEST_JSON_CFLAGS)
 endif
 

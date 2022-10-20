@@ -208,7 +208,6 @@
         "user-float2" : { "float" : 1.0 },
         "user-string2" : { "string" : "hello" },
         "user-base64" : { "base64" : "aGVsbG8=" },
-        "user-json" : { "json" : { "jsdhfgjkld" : [ "aGVsbG8", "sfgghsd", "vxbnvxbn", 4567346, null, true, false, { "sdfgsdg" : "123", "8796578" : "opuyi" } ] } },
 
         "notification-dest-addr" : "127.0.0.1",
         "notification-dest-port" : 55555,

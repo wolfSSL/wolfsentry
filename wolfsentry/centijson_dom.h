@@ -70,11 +70,28 @@ typedef struct JSON_DOM_PARSER {
 } JSON_DOM_PARSER;
 
 
+/* Used internally by load_config.c:handle_user_value_clause() */
+int json_dom_init_1(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_DOM_PARSER* dom_parser, unsigned dom_flags);
+
+/* Used internally by load_config.c:handle_user_value_clause() */
+int json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_data);
+
+/* Used internally by load_config.c:handle_user_value_clause() */
+int json_dom_fini_aux(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root);
+
 /* Initialize the DOM parser structure.
  *
  * The parameter `config` is propagated into json_init().
  */
-WOLFSENTRY_API int json_dom_init(JSON_DOM_PARSER* dom_parser, const JSON_CONFIG* config, unsigned dom_flags);
+WOLFSENTRY_API int json_dom_init(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_DOM_PARSER* dom_parser, const JSON_CONFIG* config, unsigned dom_flags);
 
 /* Feed the parser with more input.
  */
@@ -97,7 +114,11 @@ WOLFSENTRY_API int json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_dom,
 /* Simple wrapper for json_dom_init() + json_dom_feed() + json_dom_fini(),
  * usable when the provided input contains complete JSON document.
  */
-WOLFSENTRY_API int json_dom_parse(const char* input, size_t size, const JSON_CONFIG* config,
+WOLFSENTRY_API int json_dom_parse(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+                   const char* input, size_t size, const JSON_CONFIG* config,
                    unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos);
 
 
@@ -116,7 +137,11 @@ WOLFSENTRY_API int json_dom_parse(const char* input, size_t size, const JSON_CON
 #define JSON_DOM_DUMP_INDENTWITHSPACES  0x0004  /* Indent with `tab_width` spaces instead of with '\t'. */
 #define JSON_DOM_DUMP_PREFERDICTORDER   0x0008  /* Prefer original dictionary order, if available. */
 
-WOLFSENTRY_API int json_dom_dump(const JSON_VALUE* root,
+WOLFSENTRY_API int json_dom_dump(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+                  const JSON_VALUE* root,
                   JSON_DUMP_CALLBACK write_func, void* user_data,
                   unsigned tab_width, unsigned flags);
 

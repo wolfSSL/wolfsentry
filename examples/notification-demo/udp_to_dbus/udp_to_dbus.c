@@ -56,7 +56,7 @@ static int notnormal = 0;
     (ptr) += _len;                                                      \
 }
 
-static int notify(JSON_CONFIG *centijson_config, const char *json_message,
+static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_config, const char *json_message,
     size_t json_message_len)
 {
     JSON_VALUE p_root;
@@ -86,7 +86,9 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message,
     gboolean retval;
     int ret;
 
-    if ((ret = json_dom_parse(json_message, json_message_len, centijson_config,
+    struct wolfsentry_allocator *allocator = wolfsentry_get_allocator(wolfsentry);
+
+    if ((ret = json_dom_parse(allocator, json_message, json_message_len, centijson_config,
                               0 /* dom_flags */, &p_root, &json_pos) < 0)) {
         if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
             fprintf(stderr,
@@ -160,7 +162,7 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message,
                 continue;
             SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "%s%s", i>0 ? "," : "",
                 decision_string);
-            json_value_fini(decision_string_v);
+            json_value_fini(allocator, decision_string_v);
             decision_string_v = NULL;
         }
 
@@ -187,18 +189,18 @@ static int notify(JSON_CONFIG *centijson_config, const char *json_message,
                                NULL);
     } while(0);
 
-    json_value_fini(action_v);
-    json_value_fini(rule_id_v);
-    json_value_fini(rule_hitcount_v);
-    json_value_fini(af_v);
-    json_value_fini(proto_v);
-    json_value_fini(remote_addr_v);
-    json_value_fini(remote_port_v);
-    json_value_fini(local_addr_v);
-    json_value_fini(local_port_v);
-    json_value_fini(decision_array_v);
+    json_value_fini(allocator, action_v);
+    json_value_fini(allocator, rule_id_v);
+    json_value_fini(allocator, rule_hitcount_v);
+    json_value_fini(allocator, af_v);
+    json_value_fini(allocator, proto_v);
+    json_value_fini(allocator, remote_addr_v);
+    json_value_fini(allocator, remote_port_v);
+    json_value_fini(allocator, local_addr_v);
+    json_value_fini(allocator, local_port_v);
+    json_value_fini(allocator, decision_array_v);
 
-    json_value_fini(&p_root);
+    json_value_fini(allocator, &p_root);
 
     if (notify == NULL)
         return -1;
@@ -492,8 +494,6 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    centijson_config.wolfsentry_context = wolfsentry;
-
     if (setjmp(interrupt_jmp_buf))
         goto done;
 
@@ -522,7 +522,7 @@ int main(int argc, char **argv) {
             perror("recv");
             break;
         }
-        if (notify(&centijson_config,buf,recv_ret) < 0)
+        if (notify(wolfsentry, &centijson_config, buf, recv_ret) < 0)
             notnormal = 1;
     }
 

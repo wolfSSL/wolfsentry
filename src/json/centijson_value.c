@@ -23,7 +23,43 @@
  * IN THE SOFTWARE.
  */
 
-#include "wolfsentry/centijson_value.h"
+#ifdef WOLFSENTRY
+    #ifndef WOLFSENTRY_HAVE_JSON_DOM
+        #error building centijson_value.c with WOLFSENTRY_HAVE_JSON_DOM unset
+    #endif
+    #include "wolfsentry/wolfsentry_json.h"
+#else
+    #include "wolfsentry/centijson_value.h"
+#endif
+
+#ifdef WOLFSENTRY
+
+static void *json_malloc(struct wolfsentry_allocator *allocator, size_t size) {
+    if (allocator)
+        return allocator->malloc(allocator->context, size);
+    else
+        return malloc(size);
+}
+#define malloc(size) json_malloc(allocator, size)
+static void json_free(struct wolfsentry_allocator *allocator, void *ptr) {
+    if (allocator)
+        allocator->free(allocator->context, ptr);
+    else
+        free(ptr);
+    WOLFSENTRY_RETURN_VOID;
+}
+#define free(ptr) json_free(allocator, ptr)
+static void *json_realloc(struct wolfsentry_allocator *allocator, void *ptr, size_t size) {
+    if (ptr == NULL)
+        return json_malloc(allocator, size);
+    if (allocator)
+        return allocator->realloc(allocator->context, ptr, size);
+    else
+        return realloc(ptr, size);
+}
+#define realloc(ptr, size) json_realloc(allocator, ptr, size)
+
+#endif
 
 #define TYPE_MASK       0x0f
 #define IS_NEW          0x10    /* only for JSON_VALUE_NULL */
@@ -93,7 +129,11 @@ struct DICT_tag {
 
 
 static void*
-json_value_init_ex(JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size, size_t align)
+json_value_init_ex(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size, size_t align)
 {
     v->data.data_bytes[0] = (uint8_t) type;
 
@@ -115,17 +155,33 @@ json_value_init_ex(JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size, size_t alig
 }
 
 static void*
-json_value_init(JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size)
+json_value_init(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size)
 {
-    return json_value_init_ex(v, type, size, 1);
+    return json_value_init_ex(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, type, size, 1);
 }
 
 static int
-json_value_init_simple(JSON_VALUE* v, JSON_VALUE_TYPE type, const void* data, size_t size)
+json_value_init_simple(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, JSON_VALUE_TYPE type, const void* data, size_t size)
 {
     void* payload;
 
-    payload = json_value_init(v, type, size);
+    payload = json_value_init(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, type, size);
     if(payload == NULL)
         return -1;
 
@@ -296,61 +352,113 @@ json_value_init_bool(JSON_VALUE* v, int b)
 }
 
 int
-json_value_init_int32(JSON_VALUE* v, int32_t i32)
+json_value_init_int32(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, int32_t i32)
 {
     if(v == NULL)
         return -1;
 
-    return json_value_init_simple(v, JSON_VALUE_INT32, &i32, sizeof(int32_t));
+    return json_value_init_simple(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_INT32, &i32, sizeof(int32_t));
 }
 
 int
-json_value_init_uint32(JSON_VALUE* v, uint32_t u32)
+json_value_init_uint32(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, uint32_t u32)
 {
     if(v == NULL)
         return -1;
 
-    return json_value_init_simple(v, JSON_VALUE_UINT32, &u32, sizeof(uint32_t));
+    return json_value_init_simple(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_UINT32, &u32, sizeof(uint32_t));
 }
 
 int
-json_value_init_int64(JSON_VALUE* v, int64_t i64)
+json_value_init_int64(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, int64_t i64)
 {
     if(v == NULL)
         return -1;
 
-    return json_value_init_simple(v, JSON_VALUE_INT64, &i64, sizeof(int64_t));
+    return json_value_init_simple(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_INT64, &i64, sizeof(int64_t));
 }
 
 int
-json_value_init_uint64(JSON_VALUE* v, uint64_t u64)
+json_value_init_uint64(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, uint64_t u64)
 {
     if(v == NULL)
         return -1;
 
-    return json_value_init_simple(v, JSON_VALUE_UINT64, &u64, sizeof(uint64_t));
+    return json_value_init_simple(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_UINT64, &u64, sizeof(uint64_t));
 }
 
 int
-json_value_init_float(JSON_VALUE* v, float f)
+json_value_init_float(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, float f)
 {
     if(v == NULL)
         return -1;
 
-    return json_value_init_simple(v, JSON_VALUE_FLOAT, &f, sizeof(float));
+    return json_value_init_simple(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_FLOAT, &f, sizeof(float));
 }
 
 int
-json_value_init_double(JSON_VALUE* v, double d)
+json_value_init_double(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, double d)
 {
     if(v == NULL)
         return -1;
 
-    return json_value_init_simple(v, JSON_VALUE_DOUBLE, &d, sizeof(double));
+    return json_value_init_simple(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_DOUBLE, &d, sizeof(double));
 }
 
 int
-json_value_init_string_(JSON_VALUE* v, const char* str, size_t len)
+json_value_init_string_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* str, size_t len)
 {
     uint8_t* payload;
     size_t tmplen;
@@ -367,7 +475,11 @@ json_value_init_string_(JSON_VALUE* v, const char* str, size_t len)
     }
     off++;
 
-    payload = json_value_init(v, JSON_VALUE_STRING, off + len + 1);
+    payload = json_value_init(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_STRING, off + len + 1);
     if(payload == NULL)
         return -1;
 
@@ -385,20 +497,36 @@ json_value_init_string_(JSON_VALUE* v, const char* str, size_t len)
 }
 
 int
-json_value_init_string(JSON_VALUE* v, const char* str)
+json_value_init_string(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* str)
 {
-    return json_value_init_string_(v, str, (str != NULL) ? strlen(str) : 0);
+    return json_value_init_string_(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, str, (str != NULL) ? strlen(str) : 0);
 }
 
 int
-json_value_init_array(JSON_VALUE* v)
+json_value_init_array(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v)
 {
     uint8_t* payload;
 
     if(v == NULL)
         return -1;
 
-    payload = json_value_init_ex(v, JSON_VALUE_ARRAY, sizeof(ARRAY), sizeof(void*));
+    payload = json_value_init_ex(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_ARRAY, sizeof(ARRAY), sizeof(void*));
     if(payload == NULL)
         return -1;
     memset(payload, 0, sizeof(ARRAY));
@@ -407,13 +535,25 @@ json_value_init_array(JSON_VALUE* v)
 }
 
 int
-json_value_init_dict(JSON_VALUE* v)
+json_value_init_dict(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v)
 {
-    return json_value_init_dict_ex(v, NULL, 0);
+    return json_value_init_dict_ex(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, NULL, 0);
 }
 
 int
-json_value_init_dict_ex(JSON_VALUE* v,
+json_value_init_dict_ex(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+                   JSON_VALUE* v,
                    int (*custom_cmp_func)(const char*, size_t, const char*, size_t),
                    unsigned flags)
 {
@@ -428,7 +568,11 @@ json_value_init_dict_ex(JSON_VALUE* v,
     else
         payload_size = OFFSETOF(DICT, order_head);
 
-    payload = json_value_init_ex(v, JSON_VALUE_DICT, payload_size, sizeof(void*));
+    payload = json_value_init_ex(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, JSON_VALUE_DICT, payload_size, sizeof(void*));
     if(payload == NULL)
         return -1;
     memset(payload, 0, payload_size);
@@ -445,16 +589,28 @@ json_value_init_dict_ex(JSON_VALUE* v,
 }
 
 void
-json_value_fini(JSON_VALUE* v)
+json_value_fini(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v)
 {
     if(v == NULL)
         return;
 
     if(json_value_type(v) == JSON_VALUE_ARRAY)
-        json_value_array_clean(v);
+        json_value_array_clean(
+#ifdef WOLFSENTRY
+            allocator,
+#endif
+            v);
 
     if(json_value_type(v) == JSON_VALUE_DICT)
-        json_value_dict_clean(v);
+        json_value_dict_clean(
+#ifdef WOLFSENTRY
+            allocator,
+#endif
+            v);
 
     if(v->data.data_bytes[0] & 0x80)
         free(json_value_payload(v));
@@ -674,7 +830,11 @@ json_value_array_payload(JSON_VALUE* v)
 }
 
 static int
-json_value_array_realloc(ARRAY* a, size_t alloc)
+json_value_array_realloc(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    ARRAY* a, size_t alloc)
 {
     JSON_VALUE* json_value_buf;
 
@@ -721,13 +881,25 @@ json_value_array_size(const JSON_VALUE* v)
 }
 
 JSON_VALUE*
-json_value_array_append(JSON_VALUE* v)
+json_value_array_append(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v)
 {
-    return json_value_array_insert(v, json_value_array_size(v));
+    return json_value_array_insert(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, json_value_array_size(v));
 }
 
 JSON_VALUE*
-json_value_array_insert(JSON_VALUE* v, size_t index)
+json_value_array_insert(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, size_t index)
 {
     ARRAY* a = json_value_array_payload(v);
 
@@ -735,7 +907,11 @@ json_value_array_insert(JSON_VALUE* v, size_t index)
         return NULL;
 
     if(a->size >= a->alloc) {
-        if(json_value_array_realloc(a, (a->alloc > 0) ? a->alloc * 2 : 1) != 0)
+        if(json_value_array_realloc(
+#ifdef WOLFSENTRY
+               allocator,
+#endif
+               a, (a->alloc > 0) ? a->alloc * 2 : 1) != 0)
             return NULL;
     }
 
@@ -749,13 +925,25 @@ json_value_array_insert(JSON_VALUE* v, size_t index)
 }
 
 int
-json_value_array_remove(JSON_VALUE* v, size_t index)
+json_value_array_remove(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, size_t index)
 {
-    return json_value_array_remove_range(v, index, 1);
+    return json_value_array_remove_range(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, index, 1);
 }
 
 int
-json_value_array_remove_range(JSON_VALUE* v, size_t index, size_t count)
+json_value_array_remove_range(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, size_t index, size_t count)
 {
     ARRAY* a = json_value_array_payload(v);
     size_t i;
@@ -764,7 +952,11 @@ json_value_array_remove_range(JSON_VALUE* v, size_t index, size_t count)
         return -1;
 
     for(i = index; i < index + count; i++)
-        json_value_fini(&a->json_value_buf[i]);
+        json_value_fini(
+#ifdef WOLFSENTRY
+            allocator,
+#endif
+            &a->json_value_buf[i]);
 
     if(index + count < a->size) {
         memmove(a->json_value_buf + index, a->json_value_buf + index + count,
@@ -773,13 +965,21 @@ json_value_array_remove_range(JSON_VALUE* v, size_t index, size_t count)
     a->size -= count;
 
     if(4 * a->size < a->alloc)
-        json_value_array_realloc(a, a->alloc / 2);
+        json_value_array_realloc(
+#ifdef WOLFSENTRY
+            allocator,
+#endif
+            a, a->alloc / 2);
 
     return 0;
 }
 
 void
-json_value_array_clean(JSON_VALUE* v)
+json_value_array_clean(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v)
 {
     ARRAY* a = json_value_array_payload(v);
     size_t i;
@@ -788,7 +988,11 @@ json_value_array_clean(JSON_VALUE* v)
         return;
 
     for(i = 0; i < a->size; i++)
-        json_value_fini(&a->json_value_buf[i]);
+        json_value_fini(
+#ifdef WOLFSENTRY
+            allocator,
+#endif
+            &a->json_value_buf[i]);
 
     free(a->json_value_buf);
     memset(a, 0, sizeof(ARRAY));
@@ -1055,21 +1259,41 @@ json_value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
 }
 
 JSON_VALUE*
-json_value_dict_add_(JSON_VALUE* v, const char* key, size_t key_len)
+json_value_dict_add_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key, size_t key_len)
 {
     JSON_VALUE* res;
 
-    res = json_value_dict_get_or_add_(v, key, key_len);
+    res = json_value_dict_get_or_add_(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, key, key_len);
     return (json_value_is_new(res) ? res : NULL);
 }
 
-JSON_VALUE* json_value_dict_add(JSON_VALUE* v, const char* key)
+JSON_VALUE* json_value_dict_add(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key)
 {
-    return json_value_dict_add_(v, key, strlen(key));
+    return json_value_dict_add_(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, key, strlen(key));
 }
 
 JSON_VALUE*
-json_value_dict_get_or_add_(JSON_VALUE* v, const char* key, size_t key_len)
+json_value_dict_get_or_add_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key, size_t key_len)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
@@ -1099,7 +1323,11 @@ json_value_dict_get_or_add_(JSON_VALUE* v, const char* key, size_t key_len)
                 sizeof(RBTREE) : OFFSETOF(RBTREE, order_prev));
     if(node == NULL)
         return NULL;
-    if(json_value_init_string_(&node->key, key, key_len) != 0) {
+    if(json_value_init_string_(
+#ifdef WOLFSENTRY
+           allocator,
+#endif
+           &node->key, key, key_len) != 0) {
         free(node);
         return NULL;
     }
@@ -1140,9 +1368,17 @@ json_value_dict_get_or_add_(JSON_VALUE* v, const char* key, size_t key_len)
 }
 
 JSON_VALUE*
-json_value_dict_get_or_add(JSON_VALUE* v, const char* key)
+json_value_dict_get_or_add(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key)
 {
-    return json_value_dict_get_or_add_(v, key, (key != NULL) ? strlen(key) : 0);
+    return json_value_dict_get_or_add_(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, key, (key != NULL) ? strlen(key) : 0);
 }
 
 /* Fixes the tree after making the given path one black node shorter.
@@ -1229,7 +1465,11 @@ json_value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
 }
 
 int
-json_value_dict_remove_(JSON_VALUE* v, const char* key, size_t key_len)
+json_value_dict_remove_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key, size_t key_len)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
@@ -1347,8 +1587,16 @@ json_value_dict_remove_(JSON_VALUE* v, const char* key, size_t key_len)
         else
             d->order_tail = node->order_prev;
     }
-    json_value_fini(&node->key);
-    json_value_fini(&node->json_value);
+    json_value_fini(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        &node->key);
+    json_value_fini(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        &node->json_value);
     free(node);
     d->size--;
 
@@ -1356,9 +1604,17 @@ json_value_dict_remove_(JSON_VALUE* v, const char* key, size_t key_len)
 }
 
 int
-json_value_dict_remove(JSON_VALUE* v, const char* key)
+json_value_dict_remove(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key)
 {
-    return json_value_dict_remove_(v, key, (key != NULL) ? strlen(key) : 0);
+    return json_value_dict_remove_(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        v, key, (key != NULL) ? strlen(key) : 0);
 }
 
 int
@@ -1408,7 +1664,11 @@ json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VA
 }
 
 void
-json_value_dict_clean(JSON_VALUE* v)
+json_value_dict_clean(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* stack[RBTREE_MAX_HEIGHT];
@@ -1425,8 +1685,16 @@ json_value_dict_clean(JSON_VALUE* v)
         node = stack[--stack_size];
         right = node->right;
 
-        json_value_fini(&node->key);
-        json_value_fini(&node->json_value);
+        json_value_fini(
+#ifdef WOLFSENTRY
+            allocator,
+#endif
+            &node->key);
+        json_value_fini(
+#ifdef WOLFSENTRY
+            allocator,
+#endif
+            &node->json_value);
         free(node);
 
         stack_size += json_value_dict_leftmost_path(stack + stack_size, right);

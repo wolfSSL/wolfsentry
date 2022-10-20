@@ -75,7 +75,11 @@ typedef enum JSON_VALUE_TYPE {
 /* Free any resources the value holds.
  * For ARRAY and DICT it is recursive.
  */
-WOLFSENTRY_API void json_value_fini(JSON_VALUE* v);
+WOLFSENTRY_API void json_value_fini(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v);
 
 /* Get value type.
  */
@@ -212,12 +216,36 @@ WOLFSENTRY_API int json_value_bool(const JSON_VALUE* v);
 
 /* Initializers.
  */
-WOLFSENTRY_API int json_value_init_int32(JSON_VALUE* v, int32_t i32);
-WOLFSENTRY_API int json_value_init_uint32(JSON_VALUE* v, uint32_t u32);
-WOLFSENTRY_API int json_value_init_int64(JSON_VALUE* v, int64_t i64);
-WOLFSENTRY_API int json_value_init_uint64(JSON_VALUE* v, uint64_t u64);
-WOLFSENTRY_API int json_value_init_float(JSON_VALUE* v, float f);
-WOLFSENTRY_API int json_value_init_double(JSON_VALUE* v, double d);
+WOLFSENTRY_API int json_value_init_int32(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, int32_t i32);
+WOLFSENTRY_API int json_value_init_uint32(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, uint32_t u32);
+WOLFSENTRY_API int json_value_init_int64(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, int64_t i64);
+WOLFSENTRY_API int json_value_init_uint64(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, uint64_t u64);
+WOLFSENTRY_API int json_value_init_float(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, float f);
+WOLFSENTRY_API int json_value_init_double(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, double d);
 
 /* Getters.
  *
@@ -256,8 +284,16 @@ WOLFSENTRY_API double json_value_double(const JSON_VALUE* v);
  * The parameter str is allowed to be NULL (then the functions behave the same
  * way as if it is points to an empty string).
  */
-WOLFSENTRY_API int json_value_init_string_(JSON_VALUE* v, const char* str, size_t len);
-WOLFSENTRY_API int json_value_init_string(JSON_VALUE* v, const char* str);
+WOLFSENTRY_API int json_value_init_string_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* str, size_t len);
+WOLFSENTRY_API int json_value_init_string(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* str);
 
 /* Get pointer to the internal buffer holding the string. The caller may assume
  * the returned string is always zero-terminated.
@@ -287,7 +323,11 @@ WOLFSENTRY_API size_t json_value_string_length(const JSON_VALUE* v);
  * That includes the return values of json_value_array_get(), json_value_array_get_all(),
  * but also preceding calls of json_value_array_append() and json_value_array_insert().
  */
-WOLFSENTRY_API int json_value_init_array(JSON_VALUE* v);
+WOLFSENTRY_API int json_value_init_array(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v);
 
 /* Get count of items in the array.
  */
@@ -303,17 +343,37 @@ WOLFSENTRY_API JSON_VALUE* json_value_array_get_all(const JSON_VALUE* v);
 
 /* Append/insert new item.
  */
-WOLFSENTRY_API JSON_VALUE* json_value_array_append(JSON_VALUE* v);
-WOLFSENTRY_API JSON_VALUE* json_value_array_insert(JSON_VALUE* v, size_t index);
+WOLFSENTRY_API JSON_VALUE* json_value_array_append(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v);
+WOLFSENTRY_API JSON_VALUE* json_value_array_insert(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, size_t index);
 
 /* Remove an item (or range of items).
  */
-WOLFSENTRY_API int json_value_array_remove(JSON_VALUE* v, size_t index);
-WOLFSENTRY_API int json_value_array_remove_range(JSON_VALUE* v, size_t index, size_t count);
+WOLFSENTRY_API int json_value_array_remove(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, size_t index);
+WOLFSENTRY_API int json_value_array_remove_range(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, size_t index, size_t count);
 
 /* Remove and destroy all members (recursively).
  */
-WOLFSENTRY_API void json_value_array_clean(JSON_VALUE* v);
+WOLFSENTRY_API void json_value_array_clean(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v);
 
 
 /******************
@@ -345,8 +405,16 @@ WOLFSENTRY_API void json_value_array_clean(JSON_VALUE* v);
  * json_value_init_dict_ex() allows to specify custom comparer function (may be NULL)
  * or flags changing the default behavior of the dictionary.
  */
-WOLFSENTRY_API int json_value_init_dict(JSON_VALUE* v);
-WOLFSENTRY_API int json_value_init_dict_ex(JSON_VALUE* v,
+WOLFSENTRY_API int json_value_init_dict(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v);
+WOLFSENTRY_API int json_value_init_dict_ex(
+#ifdef WOLFSENTRY
+                       struct wolfsentry_allocator *allocator,
+#endif
+                       JSON_VALUE* v,
                        int (*custom_cmp_func)(const char* /*key1*/, size_t /*len1*/,
                                               const char* /*key2*/, size_t /*len2*/),
                        unsigned flags);
@@ -378,8 +446,16 @@ WOLFSENTRY_API JSON_VALUE* json_value_dict_get(const JSON_VALUE* v, const char* 
  *
  * Returns NULL if the key is already used.
  */
-WOLFSENTRY_API JSON_VALUE* json_value_dict_add_(JSON_VALUE* v, const char* key, size_t key_len);
-WOLFSENTRY_API JSON_VALUE* json_value_dict_add(JSON_VALUE* v, const char* key);
+WOLFSENTRY_API JSON_VALUE* json_value_dict_add_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key, size_t key_len);
+WOLFSENTRY_API JSON_VALUE* json_value_dict_add(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key);
 
 /* This is combined operation of json_value_dict_get() and json_value_dict_add().
  *
@@ -388,13 +464,29 @@ WOLFSENTRY_API JSON_VALUE* json_value_dict_add(JSON_VALUE* v, const char* key);
  *
  * NULL is returned only in an out-of-memory situation.
  */
-WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add_(JSON_VALUE* v, const char* key, size_t key_len);
-WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add(JSON_VALUE* v, const char* key);
+WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key, size_t key_len);
+WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key);
 
 /* Remove and destroy (recursively) the given item from the dictionary.
  */
-WOLFSENTRY_API int json_value_dict_remove_(JSON_VALUE* v, const char* key, size_t key_len);
-WOLFSENTRY_API int json_value_dict_remove(JSON_VALUE* v, const char* key);
+WOLFSENTRY_API int json_value_dict_remove_(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key, size_t key_len);
+WOLFSENTRY_API int json_value_dict_remove(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v, const char* key);
 
 /* Walking over all items in the dictionary. The callback function is called
  * for every item in the dictionary, providing key and value and propagating
@@ -411,7 +503,11 @@ WOLFSENTRY_API int json_value_dict_walk_sorted(const JSON_VALUE* v,
 
 /* Remove and destroy all members (recursively).
  */
-WOLFSENTRY_API void json_value_dict_clean(JSON_VALUE* v);
+WOLFSENTRY_API void json_value_dict_clean(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_VALUE* v);
 
 
 #ifdef __cplusplus

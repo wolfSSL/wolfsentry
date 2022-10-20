@@ -62,6 +62,8 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
         return "addr_families.c";
     case WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C:
         return "json/load_config.c";
+    case WOLFSENTRY_SOURCE_ID_JSON_JSON_UTIL_C:
+        return "json/json_util.c";
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
         break;
     }
@@ -3495,14 +3497,22 @@ wolfsentry_errcode_t wolfsentry_defaultconfig_get(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_eventconfig *config)
 {
-    WOLFSENTRY_RETURN_VALUE(wolfsentry_eventconfig_get_1(&wolfsentry->config, config));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_eventconfig_get_1(&wolfsentry->config, config));
 }
 
 wolfsentry_errcode_t wolfsentry_defaultconfig_update(
     struct wolfsentry_context *wolfsentry,
     const struct wolfsentry_eventconfig *config)
 {
-    WOLFSENTRY_RETURN_VALUE(wolfsentry_eventconfig_update_1(config, &wolfsentry->config));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_eventconfig_update_1(config, &wolfsentry->config));
+}
+
+struct wolfsentry_allocator *wolfsentry_get_allocator(struct wolfsentry_context *wolfsentry) {
+    WOLFSENTRY_RETURN_VALUE(&wolfsentry->allocator);
+}
+
+WOLFSENTRY_API struct wolfsentry_timecbs *wolfsentry_get_timecbs(struct wolfsentry_context *wolfsentry) {
+    WOLFSENTRY_RETURN_VALUE(&wolfsentry->timecbs);
 }
 
 static void wolfsentry_context_free_1(

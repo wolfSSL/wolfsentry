@@ -235,6 +235,12 @@ typedef uint32_t enumint_t;
 
 #include <wolfsentry/wolfsentry_errcodes.h>
 
+struct wolfsentry_allocator;
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+#include <wolfsentry/centijson_dom.h>
+#endif
+
 struct wolfsentry_context;
 
 typedef enum {
@@ -575,6 +581,9 @@ struct wolfsentry_host_platform_interface {
     struct wolfsentry_allocator *allocator;
     struct wolfsentry_timecbs *timecbs;
 };
+
+WOLFSENTRY_API struct wolfsentry_allocator *wolfsentry_get_allocator(struct wolfsentry_context *wolfsentry);
+WOLFSENTRY_API struct wolfsentry_timecbs *wolfsentry_get_timecbs(struct wolfsentry_context *wolfsentry);
 
 /* must return _BUFFER_TOO_SMALL and set *addr_internal_bits to an
  * accurate value when supplied with a NULL output buf ptr.
@@ -1275,8 +1284,12 @@ typedef enum {
     WOLFSENTRY_KV_SINT,
     WOLFSENTRY_KV_FLOAT,
     WOLFSENTRY_KV_STRING,
-    WOLFSENTRY_KV_BYTES
+    WOLFSENTRY_KV_BYTES,
+    WOLFSENTRY_KV_JSON,
+    WOLFSENTRY_KV_FLAG_READONLY = 1<<30
 } wolfsentry_kv_type_t;
+
+#define WOLFSENTRY_KV_FLAG_MASK (WOLFSENTRY_KV_FLAG_READONLY)
 
 struct wolfsentry_kv_pair {
     int key_len;
@@ -1287,6 +1300,9 @@ struct wolfsentry_kv_pair {
         double v_float;
         size_t string_len;
         size_t bytes_len;
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+        JSON_VALUE v_json; /* 16 bytes */
+#endif
     } a;
     byte b[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE]; /* the key, and for strings and bytes, the data. */
 };
@@ -1297,7 +1313,7 @@ struct wolfsentry_kv_pair {
 
 #define WOLFSENTRY_KV_KEY_LEN(kv) ((kv)->key_len)
 #define WOLFSENTRY_KV_KEY(kv) ((char *)((kv)->b))
-#define WOLFSENTRY_KV_TYPE(kv) ((kv)->v_type)
+#define WOLFSENTRY_KV_TYPE(kv) ((enumint_t)(kv)->v_type & ~(enumint_t)WOLFSENTRY_KV_FLAG_MASK)
 #define WOLFSENTRY_KV_V_UINT(kv) ((kv)->a.v_uint)
 #define WOLFSENTRY_KV_V_SINT(kv) ((kv)->a.v_sint)
 #define WOLFSENTRY_KV_V_FLOAT(kv) ((kv)->a.v_float)
@@ -1305,6 +1321,9 @@ struct wolfsentry_kv_pair {
 #define WOLFSENTRY_KV_V_STRING(kv) ((char *)((kv)->b + (kv)->key_len + 1))
 #define WOLFSENTRY_KV_V_BYTES_LEN(kv) ((kv)->a.bytes_len)
 #define WOLFSENTRY_KV_V_BYTES(kv) ((kv)->b + (kv)->key_len + 1)
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+#define WOLFSENTRY_KV_V_JSON(kv) (&(kv)->a.v_json)
+#endif
 
 typedef wolfsentry_errcode_t (*wolfsentry_kv_validator_t)(
     struct wolfsentry_context *wolfsentry,
@@ -1314,6 +1333,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_set_validator(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_kv_validator_t validator,
     wolfsentry_action_res_t *action_results);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_set_mutability(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    int mutable);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_mutability(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    int *mutable);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_type(
     struct wolfsentry_context *wolfsentry,
@@ -1426,6 +1457,22 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_bytes(
     int *value_len,
     struct wolfsentry_kv_pair_internal **user_value_record);
 
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_json(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    JSON_VALUE *value,
+    int overwrite_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_json(
+    struct wolfsentry_context *wolfsentry,
+    const char *key,
+    int key_len,
+    JSON_VALUE **value,
+    struct wolfsentry_kv_pair_internal **user_value_record);
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_release_record(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_kv_pair_internal **user_value_record);
@@ -1441,6 +1488,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_type_to_string(
 
 #ifndef WOLFSENTRY_NO_STDIO
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
+    struct wolfsentry_context *wolfsentry,
     const struct wolfsentry_kv_pair *kv,
     char *out,
     int *out_len);

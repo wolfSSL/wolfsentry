@@ -613,6 +613,17 @@ wolfsentry_errcode_t wolfsentry_kv_drop_reference(
     struct wolfsentry_kv_pair_internal *kv,
     wolfsentry_action_res_t *action_results);
 
+wolfsentry_errcode_t wolfsentry_kv_set_mutability(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    struct wolfsentry_kv_pair_internal *kv,
+    int mutable);
+
+int wolfsentry_kv_get_mutability(
+    struct wolfsentry_context *wolfsentry,
+    struct wolfsentry_kv_table *kv_table,
+    const struct wolfsentry_kv_pair_internal *kv);
+
 wolfsentry_errcode_t wolfsentry_kv_insert(
     struct wolfsentry_context *wolfsentry,
     struct wolfsentry_kv_table *kv_table,

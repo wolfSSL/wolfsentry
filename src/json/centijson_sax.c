@@ -57,9 +57,6 @@ static const JSON_CONFIG json_defaults = {
     512,                    /* max_key_len */
     512,                    /* max_nesting_level */
     0                       /* flags */
-#ifdef WOLFSENTRY
-    , NULL                  /* wolfsentry_context */
-#endif
 };
 
 
@@ -68,35 +65,29 @@ static const JSON_CONFIG json_defaults = {
 #ifdef WOLFSENTRY
 
 static void *json_malloc(JSON_PARSER *parser, size_t size) {
-    if (parser->config.wolfsentry_context)
-        return wolfsentry_malloc(parser->config.wolfsentry_context, size);
+    if (parser->allocator)
+        return parser->allocator->malloc(parser->allocator->context, size);
     else
         return malloc(size);
 }
-#define JSON_MALLOC(size) json_malloc(parser, size)
+#define malloc(size) json_malloc(parser, size)
 static void json_free(JSON_PARSER *parser, void *ptr) {
-    if (parser->config.wolfsentry_context)
-        wolfsentry_free(parser->config.wolfsentry_context, ptr);
+    if (parser->allocator)
+        parser->allocator->free(parser->allocator->context, ptr);
     else
         free(ptr);
     WOLFSENTRY_RETURN_VOID;
 }
-#define JSON_FREE(ptr) json_free(parser, ptr)
+#define free(ptr) json_free(parser, ptr)
 static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
     if (ptr == NULL)
-        return JSON_MALLOC(size);
-    if (parser->config.wolfsentry_context)
-        return wolfsentry_realloc(parser->config.wolfsentry_context, ptr, size);
+        return json_malloc(parser, size);
+    if (parser->allocator)
+        return parser->allocator->realloc(parser->allocator->context, ptr, size);
     else
         return realloc(ptr, size);
 }
-#define JSON_REALLOC(ptr, size) json_realloc(parser, ptr, size)
-
-#else
-
-#define JSON_MALLOC(size) malloc(size)
-#define JSON_FREE(ptr) free(ptr)
-#define JSON_REALLOC(ptr, size) realloc(ptr, size)
+#define realloc(ptr, size) json_realloc(parser, ptr, size)
 
 #endif
 
@@ -112,6 +103,7 @@ json_default_config(JSON_CONFIG* cfg)
 #define FIRST_COLUMN_NUMBER     1
 
 /* Bits for JSON_PARSER::state. */
+#define PARSER_STATE_UNINITED   0
 #define CAN_SEE_VALUE           0x0001
 #define CAN_SEE_KEY             0x0002
 #define CAN_SEE_CLOSER          0x0004
@@ -130,7 +122,11 @@ json_default_config(JSON_CONFIG* cfg)
 
 
 int
-json_init(JSON_PARSER* parser, const JSON_CALLBACKS* callbacks,
+json_init(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+    JSON_PARSER* parser, const JSON_CALLBACKS* callbacks,
               const JSON_CONFIG* config, void* user_data)
 {
     if(config == NULL)
@@ -140,6 +136,9 @@ json_init(JSON_PARSER* parser, const JSON_CALLBACKS* callbacks,
 
     memcpy(&parser->callbacks, callbacks, sizeof(JSON_CALLBACKS));
     memcpy(&parser->config, config, sizeof(JSON_CONFIG));
+#ifdef WOLFSENTRY
+    parser->allocator = allocator;
+#endif
 
     parser->user_data = user_data;
 
@@ -294,7 +293,7 @@ json_buf_append(JSON_PARSER* parser, const char* data, size_t size)
         char* new_buf;
         size_t new_alloced = (parser->buf_used + size) * 2;
 
-        new_buf = (char *) JSON_REALLOC(parser->buf, new_alloced);
+        new_buf = (char *)realloc(parser->buf, new_alloced);
         if(new_buf == NULL) {
             json_raise(parser, JSON_ERR_OUTOFMEMORY);
             WOLFSENTRY_RETURN_VALUE(-1);
@@ -873,7 +872,7 @@ json_feed(JSON_PARSER* parser, const char* input, size_t size)
 
                 if(new_nesting_stack_size == 0)
                     new_nesting_stack_size = 32;
-                new_nesting_stack = (char*) JSON_REALLOC(parser->nesting_stack, new_nesting_stack_size);
+                new_nesting_stack = (char *)realloc(parser->nesting_stack, new_nesting_stack_size);
                 if(new_nesting_stack == NULL) {
                     json_raise(parser, JSON_ERR_OUTOFMEMORY);
                     break;
@@ -933,6 +932,9 @@ json_feed(JSON_PARSER* parser, const char* input, size_t size)
 int
 json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
 {
+    if (parser->state == PARSER_STATE_UNINITED)
+        WOLFSENTRY_RETURN_VALUE(JSON_ERR_NOT_INITED);
+
     /* Some automaton may need some flushing. */
     if(parser->errcode >= 0) {
         if(parser->automaton != AUTOMATON_MAIN) {
@@ -951,20 +953,29 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
                 sizeof(JSON_INPUT_POS));
     }
 
-    JSON_FREE(parser->nesting_stack);
-    JSON_FREE(parser->buf);
+    free(parser->nesting_stack);
+    free(parser->buf);
+    parser->state = PARSER_STATE_UNINITED;
     WOLFSENTRY_RETURN_VALUE(parser->errcode);
 }
 
 int
-json_parse(const char* input, size_t size,
+json_parse(
+#ifdef WOLFSENTRY
+    struct wolfsentry_allocator *allocator,
+#endif
+           const char* input, size_t size,
            const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,
            void* user_data, JSON_INPUT_POS* p_pos)
 {
     JSON_PARSER parser;
     int ret;
 
-    ret = json_init(&parser, callbacks, config, user_data);
+    ret = json_init(
+#ifdef WOLFSENTRY
+        allocator,
+#endif
+        &parser, callbacks, config, user_data);
     if(ret < 0)
         WOLFSENTRY_RETURN_VALUE(ret);
 

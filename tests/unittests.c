@@ -1880,6 +1880,8 @@ static int test_user_values (void) {
         static const char test_string[] = "abc123";
         const char *value = NULL;
         int value_len = -1;
+        int mutable = -1;
+        wolfsentry_errcode_t ret;
 
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_user_value_store_string(
@@ -1889,6 +1891,40 @@ static int test_user_values (void) {
                 test_string,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 0));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_mutability(
+                wolfsentry,
+                "test_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &mutable));
+
+        WOLFSENTRY_EXIT_ON_FALSE(mutable == 1);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_set_mutability(
+                wolfsentry,
+                "test_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                0));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_mutability(
+                wolfsentry,
+                "test_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &mutable));
+
+        WOLFSENTRY_EXIT_ON_FALSE(mutable == 0);
+
+        WOLFSENTRY_EXIT_ON_SUCCESS(
+            ret = wolfsentry_user_value_delete(
+                wolfsentry,
+                "test_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_ERROR_CODE_IS(ret, NOT_PERMITTED));
 
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_user_value_get_string(
@@ -1980,7 +2016,7 @@ static int test_user_values (void) {
             val_buf_space = sizeof val_buf;
             if (wolfsentry_kv_type_to_string(WOLFSENTRY_KV_TYPE(kv_exports), &val_type) < 0)
                 val_type = "?";
-            if (wolfsentry_kv_render_value(kv_exports, val_buf, &val_buf_space) < 0)
+            if (wolfsentry_kv_render_value(wolfsentry, kv_exports, val_buf, &val_buf_space) < 0)
                 strcpy(val_buf,"?");
             printf("{ \"%.*s\" : { \"type\" : \"%s\", \"value\" : %s } }\n",
                    (int)WOLFSENTRY_KV_KEY_LEN(kv_exports),
@@ -2326,7 +2362,6 @@ static int test_user_addr_families (void) {
 #include "wolfsentry/wolfsentry_json.h"
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
 #include <wolfsentry/centijson_dom.h>
-#include <wolfsentry/centijson_value.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -2600,7 +2635,7 @@ static int test_json(const char *fname) {
         struct wolfsentry_cursor *cursor;
         const struct wolfsentry_kv_pair *kv_exports;
         const char *val_type;
-        char val_buf[256];
+        char val_buf[1024];
         int val_buf_space;
         wolfsentry_hitcount_t n_seen = 0;
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(wolfsentry, &cursor));
@@ -2611,7 +2646,7 @@ static int test_json(const char *fname) {
             val_buf_space = sizeof val_buf;
             if (wolfsentry_kv_type_to_string(WOLFSENTRY_KV_TYPE(kv_exports), &val_type) < 0)
                 val_type = "?";
-            if (wolfsentry_kv_render_value(kv_exports, val_buf, &val_buf_space) < 0) {
+            if (wolfsentry_kv_render_value(wolfsentry, kv_exports, val_buf, &val_buf_space) < 0) {
                 if (WOLFSENTRY_KV_TYPE(kv_exports) == WOLFSENTRY_KV_BYTES)
                     snprintf(val_buf, sizeof val_buf, "\"%.*s\"", (int)WOLFSENTRY_KV_V_BYTES_LEN(kv_exports), WOLFSENTRY_KV_V_BYTES(kv_exports));
                 else
@@ -2664,8 +2699,8 @@ static int test_json(const char *fname) {
     {
         char *test_json = NULL;
         int fd = -1;
-        VALUE p_root = {};
-        VALUE *v1 = NULL, *v2 = NULL, *v3 = NULL;
+        JSON_VALUE p_root = {};
+        JSON_VALUE *v1 = NULL, *v2 = NULL, *v3 = NULL;
         struct stat st;
         static const JSON_CONFIG centijson_config = {
             65536,  /* max_total_len */
@@ -2685,7 +2720,7 @@ static int test_json(const char *fname) {
         WOLFSENTRY_EXIT_ON_SYSFALSE((test_json = (char *)malloc((size_t)st.st_size)) != NULL);
         WOLFSENTRY_EXIT_ON_SYSFALSE(read(fd, test_json, (size_t)st.st_size) == st.st_size);
 
-        if ((ret = json_dom_parse(test_json, (size_t)st.st_size, &centijson_config,
+        if ((ret = json_dom_parse(wolfsentry_get_allocator(wolfsentry), test_json, (size_t)st.st_size, &centijson_config,
                                   0 /* dom_flags */, &p_root, &json_pos)) < 0) {
             void *p = memchr(test_json + json_pos.offset, '\n', (size_t)st.st_size - json_pos.offset);
             int linelen = p ? ((int)((char *)p - (test_json + json_pos.offset)) + (int)json_pos.column_number - 1) :
@@ -2698,45 +2733,45 @@ static int test_json(const char *fname) {
             exit(1);
         }
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "wolfsentry-config-version")) == NULL);
-        WOLFSENTRY_EXIT_ON_FALSE(value_uint32(v1) == 1U);
-        value_fini(v1);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "wolfsentry-config-version")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_uint32(v1) == 1U);
+        json_value_fini(wolfsentry_get_allocator(wolfsentry), v1);
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "default-policies")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((v2 = value_path(v1, "default-policy")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((s = value_string(v2)) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "default-policies")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-policy")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(strcmp(s, "reject") == 0);
-        value_fini(v2);
+        json_value_fini(wolfsentry_get_allocator(wolfsentry), v2);
 
-        WOLFSENTRY_EXIT_ON_TRUE((v2 = value_path(v1, "default-event")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((s = value_string(v2)) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-event")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(strcmp(s, "static-route-parent") == 0);
-        value_fini(v2);
+        json_value_fini(wolfsentry_get_allocator(wolfsentry), v2);
         v2 = NULL;
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "static-routes-insert")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((alen = value_array_size(v1)) <= 0);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "static-routes-insert")) == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((alen = json_value_array_size(v1)) <= 0);
         for (i = 0; i < alen; ++i) {
-            WOLFSENTRY_EXIT_ON_TRUE((v2 = value_array_get(v1, i)) == NULL);
-            WOLFSENTRY_EXIT_ON_TRUE((v3 = value_path(v2, "family")) == NULL);
-            WOLFSENTRY_EXIT_ON_TRUE((value_string(v3) == NULL) && (value_int32(v3) <= 0));
-            value_fini(v3);
+            WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_array_get(v1, i)) == NULL);
+            WOLFSENTRY_EXIT_ON_TRUE((v3 = json_value_path(v2, "family")) == NULL);
+            WOLFSENTRY_EXIT_ON_TRUE((json_value_string(v3) == NULL) && (json_value_int32(v3) <= 0));
+            json_value_fini(wolfsentry_get_allocator(wolfsentry), v3);
             v3 = NULL;
-            value_fini(v2);
+            json_value_fini(wolfsentry_get_allocator(wolfsentry), v2);
             v2 = NULL;
         }
-        value_fini(v1);
+        json_value_fini(wolfsentry_get_allocator(wolfsentry), v1);
 
-        WOLFSENTRY_EXIT_ON_TRUE((v1 = value_path(&p_root, "user-values/user-null")) == NULL);
-        WOLFSENTRY_EXIT_ON_FALSE(value_type(v1) == VALUE_NULL);
+        WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "user-values/user-null")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_type(v1) == JSON_VALUE_NULL);
 
         if (v3)
-            value_fini(v3);
+            json_value_fini(wolfsentry_get_allocator(wolfsentry), v3);
         if (v2)
-            value_fini(v2);
+            json_value_fini(wolfsentry_get_allocator(wolfsentry), v2);
         if (v1)
-            value_fini(v1);
-        value_fini(&p_root);
+            json_value_fini(wolfsentry_get_allocator(wolfsentry), v1);
+        json_value_fini(wolfsentry_get_allocator(wolfsentry), &p_root);
         if (test_json != NULL)
             free(test_json);
         if (fd != -1)

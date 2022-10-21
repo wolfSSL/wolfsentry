@@ -82,11 +82,17 @@ curl --cert ./certs/client-ecc384-cert.pem --key ./certs/client-ecc384-key.pem -
 # Connect from `curl` and reset the logs
 curl --cert ./certs/client-ecc384-cert.pem --key ./certs/client-ecc384-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/reset-log
 
-# Failed mutual auth example
-curl --cert ./certs/entity-no-ca-bool-cert.pem --key ./certs/entity-no-ca-bool-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/show-log
+# Failed mutual auth example -- self-signed client cert:
+curl --cert ./certs/client-cert-ext.pem --key ./certs/client-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/show-log
+
+# Failed mutual auth example -- valid issuer but invalid use -- "Ext Key Use server/client auth not set":
+curl --cert ./certs/server-ecc384-cert.pem --key ./certs/server-ecc384-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/show-log
 
 # Connect from `curl` and show logs with readonly authorization:
 curl --cert ./certs/server-cert.pem --key ./certs/server-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/show-log
+
+# Use a different valid cert issued by the readonly CA to connect from `curl` and show logs:
+curl --cert ./certs/entity-no-ca-bool-cert.pem --key ./certs/entity-no-ca-bool-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/show-log
 
 # Role-based authorization failure example
 curl --cert ./certs/server-cert.pem --key ./certs/server-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/reset-log

@@ -78,7 +78,7 @@
             "delete-event" : "event-on-delete"
         },
         {
-            "label" : "call-in-from-echo"
+            "label" : "call-in-from-log-server"
         }
     ],
     "default-policies" : {

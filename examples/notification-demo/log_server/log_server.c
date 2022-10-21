@@ -32,14 +32,6 @@
 #error must set HAVE_POLL, HAVE_SELECT, or NO_IO_TIMEOUTS
 #endif
 
-#ifdef BUILD_FOR_FREERTOS_LWIP
-#include "cmsis_os.h"
-#include "lwip/debug.h"
-#include "lwip/tcp.h"
-#include "lwip/prot/tcp.h"
-#include "lwip/stats.h"
-#endif /* BUILD_FOR_FREERTOS_LWIP */
-
 #include "sentry.h"
 #include "log_server.h"
 
@@ -61,15 +53,6 @@
 
 static WOLFSSL_CTX* wolf_ctx = NULL;
 static int log_server_data_index = -1;
-
-#ifdef BUILD_FOR_FREERTOS_LWIP
-QueueHandle_t connQueue;
-
-struct thread_data {
-        WOLFSSL *ssl;
-        struct tcp_pcb *pcb;
-};
-#endif
 
 #ifdef SERVER_SECP384R1
 
@@ -818,7 +801,7 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
 #endif /* NO_IO_TIMEOUTS */
 
 /* Init the TCP listener */
-int echo_ssl_init()
+static int ssl_init()
 {
     int ret;
     struct ca_cert *ca_certs_i;
@@ -930,139 +913,11 @@ int echo_ssl_init()
 }
 
 
-#ifdef BUILD_FOR_FREERTOS_LWIP
-
-/* Called by echo_msgrecv() when it effectively gets an EOF */
-void echo_msgclose(struct tcp_pcb *pcb)
-{
-    printf("Closing connection from: %s\n", ipaddr_ntoa(&(pcb->remote_ip)));
-
-#if 0
-    /* Tell sentry_action() that this is a disconnect event which decrements
-     * the connection count */
-    sentry_action(&pcb->local_ip, &pcb->remote_ip, pcb->local_port,
-        pcb->remote_port, SENTRY_ACTION_DISCONNECT);
-#endif
-
-    /* Remove all the callbacks and shutdown the connection */
-    tcp_arg(pcb, NULL);
-    tcp_sent(pcb, NULL);
-    tcp_recv(pcb, NULL);
-    tcp_close(pcb);
-}
-
-/* TCP error callback handler */
-static void echo_msgerr(void *arg, err_t err)
-{
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_msgerr: %s (%i)\n", lwip_strerr(err), err));
-    printf("Err: %s\n", lwip_strerr(err));
-}
-
-/* TCP accept connection callback handler */
-static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
-{
-    WOLFSSL *ssl;
-    struct thread_data tdata;
-
-    /* Accepted new connection */
-    LWIP_PLATFORM_DIAG(("echo_msgaccept called\n"));
-
-    printf("Connect from: %s port: %d\n", ipaddr_ntoa(&(pcb->remote_ip)), pcb->remote_port);
-
-#if 0
-    /* The below is an alternative hook to check for incoming connections. The
-     * down side of this is that it will only trigger after the initial SYN/ACK
-     */
-    if (sentry_action(pcb, SENTRY_ACTION_CONNECT) != 0)
-    {
-        printf("Sentry rejected connection\n");
-        tcp_abort(pcb);
-        return ERR_ABRT;
-    }
-#endif
-
-#if 0
-    /* Set an arbitrary pointer for callbacks. We don't use this right now */
-    tcp_arg(pcb, esm);
-#endif
-
-    tdata.pcb = pcb;
-    /* Create a WOLFSSL object */
-    if ((ssl = wolfSSL_new(wolf_ctx)) == NULL) {
-        fprintf(stderr, "ERROR: failed to create WOLFSSL object\n");
-        tcp_abort(pcb);
-        return ERR_ABRT;
-    }
-    tdata.ssl = ssl;
-    wolfSSL_SetIO_LwIP(ssl, pcb, NULL, NULL, NULL);
-    if( xQueueSendFromISR( connQueue, ( void * ) &tdata,0 ) != pdPASS )
-    {
-        fprintf(stderr, "Error adding to queue\r\n");
-        tcp_abort(pcb);
-        return ERR_ABRT;
-    }
-
-    return ERR_OK;
-}
-
-int echo_init()
-{
-    int r;
-    struct tcp_pcb *pcb;
-
-    /* Create lwIP TCP instance */
-    pcb = tcp_new();
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %x\n", pcb));
-    if (pcb == NULL)
-        return -1;
-    r = tcp_bind(pcb, IP_ADDR_ANY, 8080);
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: tcp_bind: %d\n", r));
-    if (r < 0)
-        return -1;
-    /* Enable listening */
-    tcp_arg(pcb, NULL);
-    pcb = tcp_listen(pcb);
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %x\n", pcb));
-    if (pcb == NULL)
-        return -1;
-    /* Set accept connection callback */
-    tcp_accept(pcb, echo_msgaccept);
-    fprintf(stderr, "Accept ready!\n");
-    return 0;
-}
-
-/* Hook to incoming TCP packet. We catch incoming connections here because the
- * tcp_accept() hook is triggered after the first ACK
- */
-int sentry_tcp_inpkt(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint16_t optlen,
-        uint16_t opt1len, uint8_t *opt2, struct pbuf *p)
-{
-    /* First incoming packet is in a LISTEN state */
-    if (pcb->state == LISTEN)
-    {
-        /* The tcp_pcb struct does is not filled in with the IP/port details
-         * yet, that happens immediately after this callback, so we get these
-         * details from other sources. The same sources that are about to fill
-         * in the details into the struct */
-        //fprintf(stderr, "Incoming connection from: %s\n",
-        //        ipaddr_ntoa(ip_current_src_addr()));
-
-        if (sentry_action(ip_current_dest_addr(), ip_current_src_addr(),
-                    pcb->local_port, hdr->src , SENTRY_ACTION_CONNECT) != 0)
-        {
-            fprintf(stderr, "Sentry rejected connection from: %s\n",
-                    ipaddr_ntoa(ip_current_src_addr()));
-            return ERR_ABRT;
-        }
-    }
-    return ERR_OK;
-}
-
-#elif defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
+#if defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
 
 static int inbound_fd = -1;
 
-int echo_init() {
+int log_server_init() {
     int ret;
 
     const char *admin_listen_addr;
@@ -1226,7 +1081,7 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
 #ifndef NO_FILESYSTEM
 /* reads file size, allocates buffer, reads into buffer, returns buffer */
 #include <stdio.h>
-static int load_file(const char* fname, char** buf, size_t* bufLen)
+static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
 {
     int ret;
     long int fileSz;
@@ -1252,7 +1107,7 @@ static int load_file(const char* fname, char** buf, size_t* bufLen)
     rewind(lFile);
     if (fileSz  > 0) {
         *bufLen = (size_t)fileSz;
-        *buf = (char*)malloc(*bufLen);
+        *buf = (unsigned char*)malloc(*bufLen);
         if (*buf == NULL) {
             ret = MEMORY_E;
             fprintf(stderr,
@@ -1287,7 +1142,7 @@ int main(int argc, char **argv) {
     const char *wolfsentry_configfile = "../notify-config.json";
     uint64_t circlog_size_uint64;
 #ifndef NO_FILESYSTEM
-    char* wolfsentry_config_data = NULL;
+    unsigned char* wolfsentry_config_data = NULL;
     size_t wolfsentry_config_data_sz = 0;
 #endif
 
@@ -1299,9 +1154,9 @@ int main(int argc, char **argv) {
     }
 
 #ifdef DEBUG_TLS
-    printf("Echo SSL init\n");
+    printf("log_server SSL init\n");
 #endif
-    if (echo_ssl_init() < 0)
+    if (ssl_init() < 0)
         exit(1);
 
 #ifdef DEBUG_HTTP
@@ -1403,14 +1258,14 @@ int main(int argc, char **argv) {
         }
         else if (! strcmp(argv[i],"--greenlist")) {
             char *cp = strchr(argv[i+1], '/');
-            char json_buf[512];
+            unsigned char json_buf[512];
             int json_len;
             char err_buf[1024];
             if (cp == NULL) {
                 fprintf(stderr,"%s: missing '/' (prefix length introducer) in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
-            json_len = snprintf(json_buf, sizeof(json_buf),
+            json_len = snprintf((char *)json_buf, sizeof(json_buf),
                 "{\n"
                 "  \"wolfsentry-config-version\" : 1,\n"
                 "  \"static-routes-insert\" : [\n"
@@ -1447,14 +1302,14 @@ int main(int argc, char **argv) {
         }
         else if (! strcmp(argv[i],"--redlist")) {
             char *cp = strchr(argv[i+1], '/');
-            char json_buf[512];
+            unsigned char json_buf[512];
             int json_len;
             char err_buf[1024];
             if (cp == NULL) {
                 fprintf(stderr,"%s: missing '/' (prefix length introducer) in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
-            json_len = snprintf(json_buf, sizeof json_buf,
+            json_len = snprintf((char *)json_buf, sizeof json_buf,
                 "{\n"
                 "  \"wolfsentry-config-version\" : 1,\n"
                 "  \"static-routes-insert\" : [\n"
@@ -1569,7 +1424,7 @@ int main(int argc, char **argv) {
 #endif /* CIRCLOG_UNIT_TEST */
 
 
-  echo_init();
+  log_server_init();
 
   /* Infinite loop */
   for (;;) {
@@ -2001,6 +1856,6 @@ ssl_shutdown:
 
 #else
 
-#error only know how to build for FreeRTOS-LWIP and Linux
+#error only know how to build for Linux and MacOSX
 
 #endif

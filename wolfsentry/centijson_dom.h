@@ -45,18 +45,18 @@ extern "C" {
  */
 
 /* Policy how to deal if the JSON contains object with duplicate key: */
-#define JSON_DOM_DUPKEY_ABORT           0x0000
-#define JSON_DOM_DUPKEY_USEFIRST        0x0001
-#define JSON_DOM_DUPKEY_USELAST         0x0002
+#define JSON_DOM_DUPKEY_ABORT           0x0000U
+#define JSON_DOM_DUPKEY_USEFIRST        0x0001U
+#define JSON_DOM_DUPKEY_USELAST         0x0002U
 
 #define JSON_DOM_DUPKEY_MASK                                            \
             (JSON_DOM_DUPKEY_ABORT | JSON_DOM_DUPKEY_USEFIRST | JSON_DOM_DUPKEY_USELAST)
 
 /* When creating JSON_VALUE_DICT (for JSON_OBJECT), use flag JSON_VALUE_DICT_MAINTAINORDER. */
-#define JSON_DOM_MAINTAINDICTORDER      0x0010
+#define JSON_DOM_MAINTAINDICTORDER      0x0010U
 
 /* Internal use */
-#define JSON_DOM_FLAG_INITED            0x8000
+#define JSON_DOM_FLAG_INITED            0x8000U
 
 /* Structure holding parsing state. Do not access it directly.
  */
@@ -80,7 +80,7 @@ int json_dom_init_1(
     JSON_DOM_PARSER* dom_parser, unsigned dom_flags);
 
 /* Used internally by load_config.c:handle_user_value_clause() */
-int json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_data);
+int json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, void* user_data);
 
 /* Used internally by load_config.c:handle_user_value_clause() */
 int json_dom_fini_aux(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root);
@@ -99,7 +99,7 @@ WOLFSENTRY_API int json_dom_init(
 
 /* Feed the parser with more input.
  */
-WOLFSENTRY_API int json_dom_feed(JSON_DOM_PARSER* dom_parser, const char* input, size_t size);
+WOLFSENTRY_API int json_dom_feed(JSON_DOM_PARSER* dom_parser, const unsigned char* input, size_t size);
 
 /* Finish the parsing and free any resources associated with the parser.
  *
@@ -122,7 +122,7 @@ WOLFSENTRY_API int json_dom_parse(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-                   const char* input, size_t size, const JSON_CONFIG* config,
+                   const unsigned char* input, size_t size, const JSON_CONFIG* config,
                    unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos);
 
 

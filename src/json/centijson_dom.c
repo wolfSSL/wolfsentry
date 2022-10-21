@@ -29,8 +29,11 @@
     #endif
     #include "wolfsentry/wolfsentry_json.h"
 #else
-    #include "wolfsentry/centijson_sax.h"
+    #include <string.h>
+    #include "wolfsentry/centijson_dom.h"
 #endif
+
+#include <stdlib.h>
 
 #ifdef WOLFSENTRY
 
@@ -66,7 +69,7 @@ init_number(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* data, size_t data_size)
+    JSON_VALUE* v, const unsigned char* data, size_t data_size)
 {
     int is_int32_compatible;
     int is_uint32_compatible;
@@ -116,7 +119,7 @@ init_number(
 }
 
 int
-json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* user_data)
+json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, void* user_data)
 {
     JSON_DOM_PARSER* dom_parser = (JSON_DOM_PARSER*) user_data;
     JSON_VALUE* new_json_value;
@@ -300,7 +303,7 @@ json_dom_init(
 }
 
 int
-json_dom_feed(JSON_DOM_PARSER* dom_parser, const char* input, size_t size)
+json_dom_feed(JSON_DOM_PARSER* dom_parser, const unsigned char* input, size_t size)
 {
     return json_feed(&dom_parser->parser, input, size);
 }
@@ -368,7 +371,7 @@ json_dom_parse(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-               const char* input, size_t size, const JSON_CONFIG* config,
+               const unsigned char* input, size_t size, const JSON_CONFIG* config,
                unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
 {
     JSON_DOM_PARSER dom_parser;
@@ -422,7 +425,7 @@ json_dom_dump_indent(unsigned nest_level, JSON_DOM_DUMP_PARAMS* params)
     }
 
     for(i = 0; i < n; i += run) {
-        int ret = params->write_func(str, (run > n - i) ? n - i : run, params->user_data);
+        int ret = params->write_func((const unsigned char *)str, (run > n - i) ? n - i : run, params->user_data);
         if(ret < 0)
             return ret;
     }
@@ -437,9 +440,9 @@ json_dom_dump_newline(JSON_DOM_DUMP_PARAMS* params)
         return 0;
 
     if(params->flags & JSON_DOM_DUMP_FORCECLRF)
-        return params->write_func("\r\n", 2, params->user_data);
+        return params->write_func((const unsigned char *)"\r\n", 2, params->user_data);
     else
-        return params->write_func("\n", 1, params->user_data);
+        return params->write_func((const unsigned char *)"\n", 1, params->user_data);
 }
 
 static int
@@ -453,7 +456,7 @@ json_dom_dump_helper(
     int ret;
 
     if(nest_level >= 0) {
-        ret = json_dom_dump_indent(nest_level, params);
+        ret = json_dom_dump_indent((unsigned int)nest_level, params);
         if(ret < 0)
             return ret;
     } else {
@@ -462,14 +465,14 @@ json_dom_dump_helper(
 
     switch(json_value_type(node)) {
         case JSON_VALUE_NULL:
-            ret = params->write_func("null", 4, params->user_data);
+            ret = params->write_func((const unsigned char *)"null", 4, params->user_data);
             break;
 
         case JSON_VALUE_BOOL:
             if(json_value_bool(node))
-                ret = params->write_func("true", 4, params->user_data);
+                ret = params->write_func((const unsigned char *)"true", 4, params->user_data);
             else
-                ret = params->write_func("false", 5, params->user_data);
+                ret = params->write_func((const unsigned char *)"false", 5, params->user_data);
             break;
 
         case JSON_VALUE_INT32:
@@ -508,7 +511,7 @@ json_dom_dump_helper(
             const JSON_VALUE* json_values;
             size_t i, n;
 
-            ret = params->write_func("[", 1, params->user_data);
+            ret = params->write_func((const unsigned char *)"[", 1, params->user_data);
             if(ret < 0)
                 return ret;
 
@@ -528,7 +531,7 @@ json_dom_dump_helper(
                     return ret;
 
                 if(i < n - 1) {
-                    ret = params->write_func(",", 1, params->user_data);
+                    ret = params->write_func((const unsigned char *)",", 1, params->user_data);
                     if(ret < 0)
                         return ret;
                 }
@@ -538,11 +541,11 @@ json_dom_dump_helper(
                     return ret;
             }
 
-            ret = json_dom_dump_indent(nest_level, params);
+            ret = json_dom_dump_indent((unsigned int)nest_level, params);
             if(ret < 0)
                 return ret;
 
-            ret = params->write_func("]", 1, params->user_data);
+            ret = params->write_func((const unsigned char *)"]", 1, params->user_data);
             break;
         }
 
@@ -551,7 +554,7 @@ json_dom_dump_helper(
             const JSON_VALUE** keys;
             size_t i, n;
 
-            ret = params->write_func("{", 1, params->user_data);
+            ret = params->write_func((const unsigned char *)"{", 1, params->user_data);
             if(ret < 0)
                 return ret;
 
@@ -586,7 +589,7 @@ json_dom_dump_helper(
                     if(ret < 0)
                         break;
 
-                    ret = params->write_func(": ",
+                    ret = params->write_func((const unsigned char *)": ",
                             (params->flags & JSON_DOM_DUMP_MINIMIZE) ? 1 : 2,
                             params->user_data);
                     if(ret < 0)
@@ -602,7 +605,7 @@ json_dom_dump_helper(
                         break;
 
                     if(i < n - 1) {
-                        ret = params->write_func(",", 1, params->user_data);
+                        ret = params->write_func((const unsigned char *)",", 1, params->user_data);
                         if(ret < 0)
                             break;
                     }
@@ -621,11 +624,11 @@ json_dom_dump_helper(
                     return ret;
             }
 
-            ret = json_dom_dump_indent(nest_level, params);
+            ret = json_dom_dump_indent((unsigned int)nest_level, params);
             if(ret < 0)
                 return ret;
 
-            ret = params->write_func("}", 1, params->user_data);
+            ret = params->write_func((const unsigned char *)"}", 1, params->user_data);
             break;
         }
     }

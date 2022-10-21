@@ -30,14 +30,15 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
-#include <stdlib.h>
-
 #ifdef WOLFSENTRY
 #include "wolfsentry.h"
 #endif
 #ifndef WOLFSENTRY_API
 #define WOLFSENTRY_API
+#endif
+
+#ifndef WOLFSENTRY
+#include <stdint.h>
 #endif
 
 /* The value structure.
@@ -124,7 +125,7 @@ WOLFSENTRY_API int json_value_is_new(const JSON_VALUE* v);
  *  -- '[' ']' enclose array indexes (for distinguishing from numbered
  *     dictionary keys). Note that negative indexes are supported here;
  *     '[-1]' refers to the last element in the array, '[-2]' to the element
-*       before the last element etc.
+ *     before the last element etc.
  *  -- '\0' terminates the whole path (as is normal with C strings).
  *
  * Examples:
@@ -288,17 +289,17 @@ WOLFSENTRY_API int json_value_init_string_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* str, size_t len);
+    JSON_VALUE* v, const unsigned char* str, size_t len);
 WOLFSENTRY_API int json_value_init_string(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* str);
+    JSON_VALUE* v, const unsigned char* str);
 
 /* Get pointer to the internal buffer holding the string. The caller may assume
  * the returned string is always zero-terminated.
  */
-WOLFSENTRY_API const char* json_value_string(const JSON_VALUE* v);
+WOLFSENTRY_API const unsigned char* json_value_string(const JSON_VALUE* v);
 
 /* Get length of the string. (The implicit zero terminator does not count.)
  */
@@ -415,8 +416,8 @@ WOLFSENTRY_API int json_value_init_dict_ex(
                        struct wolfsentry_allocator *allocator,
 #endif
                        JSON_VALUE* v,
-                       int (*custom_cmp_func)(const char* /*key1*/, size_t /*len1*/,
-                                              const char* /*key2*/, size_t /*len2*/),
+                       int (*custom_cmp_func)(const unsigned char* /*key1*/, size_t /*len1*/,
+                                              const unsigned char* /*key2*/, size_t /*len2*/),
                        unsigned flags);
 
 /* Get flags of the dictionary.
@@ -439,8 +440,8 @@ WOLFSENTRY_API size_t json_value_dict_keys_ordered(const JSON_VALUE* v, const JS
 
 /* Find an item with the given key, or return NULL of no such item exists.
  */
-WOLFSENTRY_API JSON_VALUE* json_value_dict_get_(const JSON_VALUE* v, const char* key, size_t key_len);
-WOLFSENTRY_API JSON_VALUE* json_value_dict_get(const JSON_VALUE* v, const char* key);
+WOLFSENTRY_API JSON_VALUE* json_value_dict_get_(const JSON_VALUE* v, const unsigned char* key, size_t key_len);
+WOLFSENTRY_API JSON_VALUE* json_value_dict_get(const JSON_VALUE* v, const unsigned char* key);
 
 /* Add new item with the given key of type JSON_VALUE_NULL.
  *
@@ -450,12 +451,12 @@ WOLFSENTRY_API JSON_VALUE* json_value_dict_add_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key, size_t key_len);
+    JSON_VALUE* v, const unsigned char* key, size_t key_len);
 WOLFSENTRY_API JSON_VALUE* json_value_dict_add(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key);
+    JSON_VALUE* v, const unsigned char* key);
 
 /* This is combined operation of json_value_dict_get() and json_value_dict_add().
  *
@@ -468,12 +469,12 @@ WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key, size_t key_len);
+    JSON_VALUE* v, const unsigned char* key, size_t key_len);
 WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key);
+    JSON_VALUE* v, const unsigned char* key);
 
 /* Remove and destroy (recursively) the given item from the dictionary.
  */
@@ -481,12 +482,12 @@ WOLFSENTRY_API int json_value_dict_remove_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key, size_t key_len);
+    JSON_VALUE* v, const unsigned char* key, size_t key_len);
 WOLFSENTRY_API int json_value_dict_remove(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key);
+    JSON_VALUE* v, const unsigned char* key);
 
 /* Walking over all items in the dictionary. The callback function is called
  * for every item in the dictionary, providing key and value and propagating

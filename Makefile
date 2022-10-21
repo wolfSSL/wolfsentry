@@ -84,8 +84,8 @@ VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
 DYNAMIC_CFLAGS := -fpic
 DYNAMIC_LDFLAGS := -shared
 
-$(BUILD_TOP)/src/json/centijson_%.o: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
-$(BUILD_TOP)/src/json/centijson_%.So: CFLAGS+=-DWOLFSENTRY -Wno-conversion -Wno-sign-conversion -Wno-sign-compare
+$(BUILD_TOP)/src/json/centijson_%.o: CFLAGS+=-DWOLFSENTRY
+$(BUILD_TOP)/src/json/centijson_%.So: CFLAGS+=-DWOLFSENTRY
 
 ifeq "$(NO_STDIO)" "1"
     CFLAGS += -DWOLFSENTRY_NO_STDIO

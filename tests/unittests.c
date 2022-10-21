@@ -2417,7 +2417,8 @@ static wolfsentry_errcode_t json_feed_file(struct wolfsentry_context *wolfsentry
     wolfsentry_errcode_t ret;
     struct wolfsentry_json_process_state *jps;
     FILE *f;
-    char buf[512], err_buf[512];
+    unsigned char buf[512];
+    char err_buf[512];
     int json_inited = 0;
 
     if (strcmp(fname,"-"))
@@ -2697,7 +2698,7 @@ static int test_json(const char *fname) {
 
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
     {
-        char *test_json = NULL;
+        unsigned char *test_json_document = NULL;
         int fd = -1;
         JSON_VALUE p_root = {};
         JSON_VALUE *v1 = NULL, *v2 = NULL, *v3 = NULL;
@@ -2712,24 +2713,24 @@ static int test_json(const char *fname) {
             JSON_NOSCALARROOT   /* flags */
         };
         JSON_INPUT_POS json_pos;
-        const char *s;
+        const unsigned char *s;
         size_t alen, i;
 
         WOLFSENTRY_EXIT_ON_SYSFAILURE(fd = open(fname, O_RDONLY));
         WOLFSENTRY_EXIT_ON_SYSFAILURE(fstat(fd, &st));
-        WOLFSENTRY_EXIT_ON_SYSFALSE((test_json = (char *)malloc((size_t)st.st_size)) != NULL);
-        WOLFSENTRY_EXIT_ON_SYSFALSE(read(fd, test_json, (size_t)st.st_size) == st.st_size);
+        WOLFSENTRY_EXIT_ON_SYSFALSE((test_json_document = (unsigned char *)malloc((size_t)st.st_size)) != NULL);
+        WOLFSENTRY_EXIT_ON_SYSFALSE(read(fd, test_json_document, (size_t)st.st_size) == st.st_size);
 
-        if ((ret = json_dom_parse(wolfsentry_get_allocator(wolfsentry), test_json, (size_t)st.st_size, &centijson_config,
+        if ((ret = json_dom_parse(wolfsentry_get_allocator(wolfsentry), test_json_document, (size_t)st.st_size, &centijson_config,
                                   0 /* dom_flags */, &p_root, &json_pos)) < 0) {
-            void *p = memchr(test_json + json_pos.offset, '\n', (size_t)st.st_size - json_pos.offset);
-            int linelen = p ? ((int)((char *)p - (test_json + json_pos.offset)) + (int)json_pos.column_number - 1) :
+            void *p = memchr((const char *)(test_json_document + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
+            int linelen = p ? ((int)((unsigned char *)p - (test_json_document + json_pos.offset)) + (int)json_pos.column_number - 1) :
                 ((int)((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
                 fprintf(stderr, "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
             else
                 fprintf(stderr, "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT "\n", json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
-            fprintf(stderr,"%.*s\n", linelen, test_json + json_pos.offset - json_pos.column_number + 1);
+            fprintf(stderr,"%.*s\n", linelen, test_json_document + json_pos.offset - json_pos.column_number + 1);
             exit(1);
         }
 
@@ -2740,12 +2741,12 @@ static int test_json(const char *fname) {
         WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "default-policies")) == NULL);
         WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-policy")) == NULL);
         WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
-        WOLFSENTRY_EXIT_ON_FALSE(strcmp(s, "reject") == 0);
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp((const char *)s, "reject") == 0);
         json_value_fini(wolfsentry_get_allocator(wolfsentry), v2);
 
         WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-event")) == NULL);
         WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
-        WOLFSENTRY_EXIT_ON_FALSE(strcmp(s, "static-route-parent") == 0);
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp((const char *)s, "static-route-parent") == 0);
         json_value_fini(wolfsentry_get_allocator(wolfsentry), v2);
         v2 = NULL;
 
@@ -2772,8 +2773,8 @@ static int test_json(const char *fname) {
         if (v1)
             json_value_fini(wolfsentry_get_allocator(wolfsentry), v1);
         json_value_fini(wolfsentry_get_allocator(wolfsentry), &p_root);
-        if (test_json != NULL)
-            free(test_json);
+        if (test_json_document != NULL)
+            free(test_json_document);
         if (fd != -1)
             (void)close(fd);
     }

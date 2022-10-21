@@ -71,7 +71,7 @@ AR_VERSION := $(shell $(AR) --version 2>&1 | sed "s/'/'\\\\''/g")
 AR_IS_GNU_AR := $(shell if echo '$(AR_VERSION)' | grep -q 'GNU'; then echo 1; else echo 0; fi)
 
 ifndef C_WARNFLAGS
-    C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-missing-field-initializers -Wno-bad-function-cast -Wno-type-limits
+    C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-type-limits
     ifeq "$(CC_IS_GCC)" "1"
         C_WARNFLAGS += -Wjump-misses-init -Wlogical-op
     endif

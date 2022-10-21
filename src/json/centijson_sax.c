@@ -103,6 +103,7 @@ json_default_config(JSON_CONFIG* cfg)
 #define FIRST_COLUMN_NUMBER     1
 
 /* Bits for JSON_PARSER::state. */
+#define PARSER_STATE_UNINITED   0
 #define CAN_SEE_VALUE           0x0001
 #define CAN_SEE_KEY             0x0002
 #define CAN_SEE_CLOSER          0x0004
@@ -931,6 +932,9 @@ json_feed(JSON_PARSER* parser, const char* input, size_t size)
 int
 json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
 {
+    if (parser->state == PARSER_STATE_UNINITED)
+        WOLFSENTRY_RETURN_VALUE(JSON_ERR_NOT_INITED);
+
     /* Some automaton may need some flushing. */
     if(parser->errcode >= 0) {
         if(parser->automaton != AUTOMATON_MAIN) {
@@ -951,6 +955,7 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
 
     free(parser->nesting_stack);
     free(parser->buf);
+    parser->state = PARSER_STATE_UNINITED;
     WOLFSENTRY_RETURN_VALUE(parser->errcode);
 }
 

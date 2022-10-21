@@ -55,6 +55,8 @@ extern "C" {
 /* When creating JSON_VALUE_DICT (for JSON_OBJECT), use flag JSON_VALUE_DICT_MAINTAINORDER. */
 #define JSON_DOM_MAINTAINDICTORDER      0x0010
 
+/* Internal use */
+#define JSON_DOM_FLAG_INITED            0x8000
 
 /* Structure holding parsing state. Do not access it directly.
  */
@@ -82,6 +84,8 @@ int json_dom_process(JSON_TYPE type, const char* data, size_t data_size, void* u
 
 /* Used internally by load_config.c:handle_user_value_clause() */
 int json_dom_fini_aux(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root);
+
+int json_dom_clean(JSON_DOM_PARSER* dom_parser);
 
 /* Initialize the DOM parser structure.
  *

@@ -266,7 +266,7 @@ json_dom_init_1(
     dom_parser->path_alloc = 0;
     json_value_init_null(&dom_parser->root);
     json_value_init_null(&dom_parser->key);
-    dom_parser->flags = dom_flags;
+    dom_parser->flags = dom_flags | JSON_DOM_FLAG_INITED;
     dom_parser->dict_flags = (dom_flags & JSON_DOM_MAINTAINDICTORDER) ? JSON_VALUE_DICT_MAINTAINORDER : 0;
 #ifdef WOLFSENTRY
     dom_parser->parser.allocator = allocator;
@@ -305,23 +305,15 @@ json_dom_feed(JSON_DOM_PARSER* dom_parser, const char* input, size_t size)
     return json_feed(&dom_parser->parser, input, size);
 }
 
-int
-json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
-{
-    int ret;
+int json_dom_clean(JSON_DOM_PARSER* dom_parser) {
+    if (! (dom_parser->flags & JSON_DOM_FLAG_INITED))
+        return JSON_ERR_NOT_INITED;
 
-    ret = json_fini(&dom_parser->parser, p_pos);
-
-    if(ret >= 0) {
-        memcpy(p_root, &dom_parser->root, sizeof(JSON_VALUE));
-    } else {
-        json_value_init_null(p_root);
-        json_value_fini(
+    json_value_fini(
 #ifdef WOLFSENTRY
-            dom_parser->parser.allocator,
+        dom_parser->parser.allocator,
 #endif
-            &dom_parser->root);
-    }
+        &dom_parser->root);
 
     json_value_fini(
 #ifdef WOLFSENTRY
@@ -329,6 +321,31 @@ json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root, JSON_INPUT_POS* p
 #endif
         &dom_parser->key);
     free(dom_parser->path);
+    dom_parser->path = NULL;
+
+    dom_parser->flags &= ~JSON_DOM_FLAG_INITED;
+
+    return 0;
+}
+
+int
+json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
+{
+    int ret;
+
+    if (! (dom_parser->flags & JSON_DOM_FLAG_INITED))
+        return JSON_ERR_NOT_INITED;
+
+    ret = json_fini(&dom_parser->parser, p_pos);
+
+    if(ret >= 0) {
+        memcpy(p_root, &dom_parser->root, sizeof(JSON_VALUE));
+        json_value_init_null(&dom_parser->root);
+    } else {
+        json_value_init_null(p_root);
+    }
+
+    (void)json_dom_clean(dom_parser);
 
     return ret;
 }
@@ -337,15 +354,13 @@ json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root, JSON_INPUT_POS* p
 int
 json_dom_fini_aux(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root)
 {
-    memcpy(p_root, &dom_parser->root, sizeof(JSON_VALUE));
-    json_value_fini(
-#ifdef WOLFSENTRY
-        dom_parser->parser.allocator,
-#endif
-        &dom_parser->key);
-    free(dom_parser->path);
+    if (! (dom_parser->flags & JSON_DOM_FLAG_INITED))
+        return JSON_ERR_NOT_INITED;
 
-    return 0;
+    memcpy(p_root, &dom_parser->root, sizeof(JSON_VALUE));
+    json_value_init_null(&dom_parser->root);
+
+    return json_dom_clean(dom_parser);
 }
 
 int

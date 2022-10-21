@@ -79,6 +79,7 @@ typedef enum JSON_TYPE {
 #define JSON_ERR_UNESCAPEDCONTROL       (-21)   /* Unescaped control character (in a string) */
 #define JSON_ERR_INVALIDESCAPE          (-22)   /* Invalid/unknown escape sequence (in a string) */
 #define JSON_ERR_INVALIDUTF8            (-23)   /* Invalid UTF-8 (in a string) */
+#define JSON_ERR_NOT_INITED             (-24)   /* Attempt to access an uninited JSON_PARSER or JSON_DOM_PARSER. */
 
 
 /* Bits for JSON_CONFIG::flags.

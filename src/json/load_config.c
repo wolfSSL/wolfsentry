@@ -1615,6 +1615,10 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
 
   out:
 
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    (void)json_dom_clean(&(*jps)->dom_parser);
+#endif
+
     if ((*jps)->wolfsentry && ((*jps)->wolfsentry != (*jps)->wolfsentry_actual))
         (void)wolfsentry_context_free(&(*jps)->wolfsentry);
 

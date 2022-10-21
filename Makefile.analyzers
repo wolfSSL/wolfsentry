@@ -165,6 +165,10 @@ sanitize-all-clang: clang-version-test
 analyze-all: valgrind-all-gcc sanitize-all-gcc sanitize-all-clang
 	@echo "analyzers found no defects."
 
+.PHONY: analyze-all-but-valgrind
+analyze-all-but-valgrind: sanitize-all-gcc sanitize-all-clang
+	@echo "sanitizers found no defects."
+
 .PHONY: c99-test-gcc
 c99-test-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
@@ -263,6 +267,10 @@ dist-check:
 
 .PHONY: check
 check: analyze-all dynamic-build-test c99-test-gcc c99-test-clang m32-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check lock-error-checking-test
+	@echo "all checks passed."
+
+.PHONY: check-no-valgrind
+check-no-valgrind: analyze-all-but-valgrind dynamic-build-test c99-test-gcc c99-test-clang m32-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test dist-check lock-error-checking-test
 	@echo "all checks passed."
 
 # recipe to run the pre-push hook on the commit head, without actually pushing:

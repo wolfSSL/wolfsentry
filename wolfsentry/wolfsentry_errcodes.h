@@ -43,7 +43,7 @@ typedef int32_t wolfsentry_errcode_t;
            | ((__LINE__ & WOLFSENTRY_LINE_NUMBER_MAX) << 8)                  \
            | ((WOLFSENTRY_SOURCE_ID & WOLFSENTRY_SOURCE_ID_MAX) << 24))))
 
-#if defined(__GNUC__) && defined(static_assert)
+#if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
 #define WOLFSENTRY_ERROR_ENCODE_1(x) ({                                      \
     static_assert(((x) >= 0) && ((x) <= WOLFSENTRY_ERROR_ID_MAX),            \
                   "error code must be 0-" _q(WOLFSENTRY_ERROR_ID_MAX) );     \

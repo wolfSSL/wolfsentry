@@ -39,22 +39,22 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define WOLFSENTRY_EXIT_ON_FAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { WOLFSENTRY_WARN(#__VA_ARGS__ ": " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(_retval)); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_ON_FAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { WOLFSENTRY_WARN("%s: " WOLFSENTRY_ERROR_FMT "\n", #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFAILURE(...) do { int _retval = (__VA_ARGS__); if (_retval < 0) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFALSE(...) do { if (! (__VA_ARGS__)) { perror(#__VA_ARGS__); exit(1); }} while(0)
-#define WOLFSENTRY_EXIT_ON_SUCCESS(...) do { if ((__VA_ARGS__) == 0) { WOLFSENTRY_WARN(#__VA_ARGS__ " should have failed, but succeeded.\n"); exit(1); }} while(0)
-#define WOLFSENTRY_EXIT_ON_FALSE(...) do { if (! (__VA_ARGS__)) { WOLFSENTRY_WARN(#__VA_ARGS__ " should have been true, but was false.\n"); exit(1); }} while(0)
-#define WOLFSENTRY_EXIT_ON_TRUE(...) do { if (__VA_ARGS__) { WOLFSENTRY_WARN(#__VA_ARGS__ " should have been false, but was true.\n"); exit(1); }} while(0)
-#define WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(...) do { int _pthread_ret; if ((_pthread_ret = (__VA_ARGS__)) != 0) { WOLFSENTRY_WARN(#__VA_ARGS__ ": %s\n", strerror(_pthread_ret)); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_ON_SUCCESS(...) do { if ((__VA_ARGS__) == 0) { WOLFSENTRY_WARN("%s should have failed, but succeeded.\n", #__VA_ARGS__); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_ON_FALSE(...) do { if (! (__VA_ARGS__)) { WOLFSENTRY_WARN("%s should have been true, but was false.\n", #__VA_ARGS__); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_ON_TRUE(...) do { if (__VA_ARGS__) { WOLFSENTRY_WARN("%s should have been false, but was true.\n", #__VA_ARGS__); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(...) do { int _pthread_ret; if ((_pthread_ret = (__VA_ARGS__)) != 0) { WOLFSENTRY_WARN("%s: %s\n", #__VA_ARGS__, strerror(_pthread_ret)); exit(1); }} while(0)
 
 #else /* !WOLFSENTRY_THREADSAFE */
 
-#define WOLFSENTRY_EXIT_ON_FAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { WOLFSENTRY_WARN(#__VA_ARGS__ ": " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
+#define WOLFSENTRY_EXIT_ON_FAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { WOLFSENTRY_WARN("%s: " WOLFSENTRY_ERROR_FMT "\n", #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFALSE(...) do { if (! (__VA_ARGS__)) { perror(#__VA_ARGS__); exit(1); }} while(0)
-#define WOLFSENTRY_EXIT_ON_SUCCESS(...) do { if ((__VA_ARGS__) == 0) { WOLFSENTRY_WARN(#__VA_ARGS__ " should have failed, but succeeded.\n"); return 1; }} while(0)
-#define WOLFSENTRY_EXIT_ON_FALSE(...) do { if (! (__VA_ARGS__)) { WOLFSENTRY_WARN(#__VA_ARGS__ " should have been true, but was false.\n"); return 1; }} while(0)
-#define WOLFSENTRY_EXIT_ON_TRUE(...) do { if (__VA_ARGS__) { WOLFSENTRY_WARN(#__VA_ARGS__ " should have been false, but was true.\n"); return 1; }} while(0)
+#define WOLFSENTRY_EXIT_ON_SUCCESS(...) do { if ((__VA_ARGS__) == 0) { WOLFSENTRY_WARN("%s should have failed, but succeeded.\n", #__VA_ARGS__); return 1; }} while(0)
+#define WOLFSENTRY_EXIT_ON_FALSE(...) do { if (! (__VA_ARGS__)) { WOLFSENTRY_WARN("%s should have been true, but was false.\n", #__VA_ARGS__); return 1; }} while(0)
+#define WOLFSENTRY_EXIT_ON_TRUE(...) do { if (__VA_ARGS__) { WOLFSENTRY_WARN("%s should have been false, but was true.\n", #__VA_ARGS__); return 1; }} while(0)
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
@@ -199,21 +199,21 @@ static int test_rw_locks (void) {
 
     (void)alarm(1);
 
+#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
+#define test_rw_locks_WOLFSENTRY_INIT_FLAGS WOLFSENTRY_INIT_FLAG_LOCK_ERROR_CHECKING
+#define test_rw_locks_WOLFSENTRY_LOCK_FLAGS WOLFSENTRY_LOCK_FLAG_ERROR_CHECKING
+#else
+#define test_rw_locks_WOLFSENTRY_INIT_FLAGS WOLFSENTRY_INIT_FLAG_NONE
+#define test_rw_locks_WOLFSENTRY_LOCK_FLAGS WOLFSENTRY_LOCK_FLAG_NONE
+#endif
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(WOLFSENTRY_TEST_HPI,
                                                   &config,
                                                   &wolfsentry,
-#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
-                                                  WOLFSENTRY_INIT_FLAG_LOCK_ERROR_CHECKING
-#else
-                                                  WOLFSENTRY_INIT_FLAG_NONE
-#endif
+                                                  test_rw_locks_WOLFSENTRY_INIT_FLAGS
                                    ));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_alloc(wolfsentry, &lock,
-#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
-                                                     WOLFSENTRY_LOCK_FLAG_ERROR_CHECKING
-#else
-                                                     WOLFSENTRY_LOCK_FLAG_NONE
-#endif
+                                                     test_rw_locks_WOLFSENTRY_LOCK_FLAGS
                                    ));
 
     volatile int measured_sequence[8], measured_sequence_i = 0;
@@ -2397,13 +2397,13 @@ static wolfsentry_errcode_t test_action(
     (void)action_results;
 
     if (rule_route == NULL) {
-        printf("null rule_route, target_route=%p\n",target_route);
+        printf("null rule_route, target_route=%p\n", (void *)target_route);
         WOLFSENTRY_RETURN_OK;
     }
 
     parent_event = wolfsentry_route_parent_event(rule_route);
     printf("action callback: target_route=%p  a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
-           target_route,
+           (void *)target_route,
            wolfsentry_action_get_label(action),
            wolfsentry_event_get_label(parent_event),
            wolfsentry_event_get_label(trigger_event),
@@ -2700,7 +2700,7 @@ static int test_json(const char *fname) {
     {
         unsigned char *test_json_document = NULL;
         int fd = -1;
-        JSON_VALUE p_root = {};
+        JSON_VALUE p_root;
         JSON_VALUE *v1 = NULL, *v2 = NULL, *v3 = NULL;
         struct stat st;
         static const JSON_CONFIG centijson_config = {

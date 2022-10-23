@@ -325,19 +325,19 @@ json_buf_append_codepoint(JSON_PARSER* parser, uint32_t codepoint)
         tmp[0] = (unsigned char)codepoint;
         n = 1;
     } else if(codepoint <= 0x7ff) {
-        tmp[0] = 0xc0 | ((codepoint >> 6) & 0x1f);
-        tmp[1] = 0x80 | ((codepoint >> 0) & 0x3f);
+        tmp[0] = (unsigned char)(0xc0 | ((codepoint >> 6) & 0x1f));
+        tmp[1] = (unsigned char)(0x80 | ((codepoint >> 0) & 0x3f));
         n = 2;
     } else if(codepoint <= 0xffff) {
-        tmp[0] = 0xe0 | ((codepoint >> 12) & 0x0f);
-        tmp[1] = 0x80 | ((codepoint >> 6) & 0x3f);
-        tmp[2] = 0x80 | ((codepoint >> 0) & 0x3f);
+        tmp[0] = (unsigned char)(0xe0 | ((codepoint >> 12) & 0x0f));
+        tmp[1] = (unsigned char)(0x80 | ((codepoint >> 6) & 0x3f));
+        tmp[2] = (unsigned char)(0x80 | ((codepoint >> 0) & 0x3f));
         n = 3;
     } else {
-        tmp[0] = 0xf0 | ((codepoint >> 18) & 0x07);
-        tmp[1] = 0x80 | ((codepoint >> 12) & 0x3f);
-        tmp[2] = 0x80 | ((codepoint >> 6) & 0x3f);
-        tmp[3] = 0x80 | ((codepoint >> 0) & 0x3f);
+        tmp[0] = (unsigned char)(0xf0 | ((codepoint >> 18) & 0x07));
+        tmp[1] = (unsigned char)(0x80 | ((codepoint >> 12) & 0x3f));
+        tmp[2] = (unsigned char)(0x80 | ((codepoint >> 6) & 0x3f));
+        tmp[3] = (unsigned char)(0x80 | ((codepoint >> 0) & 0x3f));
         n = 4;
     }
 
@@ -479,11 +479,11 @@ static inline unsigned
 json_resolve_xdigit(unsigned char ch)
 {
     if(IS_DIGIT(ch))
-        return ch - '0';
+        return (unsigned)ch - (unsigned)'0';
     else if(IS_IN(ch, 'a', 'f'))
-        return ch - 'a' + 10;
+        return (unsigned)ch - (unsigned)'a' + 10U;
     else
-        return ch - 'A' + 10;
+        return (unsigned)ch - (unsigned)'A' + 10U;
 }
 
 /* U+fffd (Unicode replacement character), encoded in UTF-8.
@@ -1146,7 +1146,7 @@ json_number_to_uint64(const unsigned char* num, size_t num_size)
 
     while(off < num_size  &&  IS_DIGIT(num[off])) {
         val *= 10;
-        val += num[off++] - '0';
+        val += num[off++] - (unsigned)'0';
     }
 
     return val;

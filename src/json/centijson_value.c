@@ -306,7 +306,7 @@ json_value_path(JSON_VALUE* root, const char* path)
 
             token_beg++;
             while('0' <= *token_beg  &&  *token_beg <= '9') {
-                index = index * 10 + (*token_beg - '0');
+                index = index * 10U + (*token_beg - (unsigned)'0');
                 token_beg++;
             }
             if(*token_beg != ']')
@@ -492,7 +492,7 @@ json_value_init_string_(
     tmplen = len;
     off = 0;
     while(tmplen >= 128) {
-        payload[off++] = 0x80 | (tmplen & 0x7f);
+        payload[off++] = (uint8_t)(0x80 | (tmplen & 0x7f));
         tmplen = tmplen >> 7;
     }
     payload[off++] = tmplen & 0x7f;

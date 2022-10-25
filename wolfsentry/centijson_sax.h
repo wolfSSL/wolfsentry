@@ -30,6 +30,11 @@
     #define WOLFSENTRY_API
 #endif
 
+#ifndef WOLFSENTRY
+#include <stdint.h>
+#include <sys/types.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -84,21 +89,21 @@ typedef enum JSON_TYPE {
 
 /* Bits for JSON_CONFIG::flags.
  */
-#define JSON_NONULLASROOT           0x0001  /* Disallow null to be root value */
-#define JSON_NOBOOLASROOT           0x0002  /* Disallow false or true to be root value */
-#define JSON_NONUMBERASROOT         0x0004  /* Disallow number to be root value */
-#define JSON_NOSTRINGASROOT         0x0008  /* Disallow string to be root value */
-#define JSON_NOARRAYASROOT          0x0010  /* Disallow array to be root value */
-#define JSON_NOOBJECTASROOT         0x0020  /* Disallow object  to be root value */
+#define JSON_NONULLASROOT           0x0001U  /* Disallow null to be root value */
+#define JSON_NOBOOLASROOT           0x0002U  /* Disallow false or true to be root value */
+#define JSON_NONUMBERASROOT         0x0004U  /* Disallow number to be root value */
+#define JSON_NOSTRINGASROOT         0x0008U  /* Disallow string to be root value */
+#define JSON_NOARRAYASROOT          0x0010U  /* Disallow array to be root value */
+#define JSON_NOOBJECTASROOT         0x0020U  /* Disallow object  to be root value */
 
 #define JSON_NOSCALARROOT           (JSON_NONULLASROOT | JSON_NOBOOLASROOT |  \
                                      JSON_NONUMBERASROOT | JSON_NOSTRINGASROOT)
 #define JSON_NOVECTORROOT           (JSON_NOARRAYASROOT | JSON_NOOBJECTASROOT)
 
-#define JSON_IGNOREILLUTF8KEY       0x0100  /* Ignore ill-formed UTF-8 (for keys). */
-#define JSON_FIXILLUTF8KEY          0x0200  /* Replace ill-formed UTF-8 char with replacement char (for keys). */
-#define JSON_IGNOREILLUTF8VALUE     0x0400  /* Ignore ill-formed UTF-8 (for string values). */
-#define JSON_FIXILLUTF8VALUE        0x0800  /* Replace ill-formed UTF-8 char with replacement char (for string values). */
+#define JSON_IGNOREILLUTF8KEY       0x0100U  /* Ignore ill-formed UTF-8 (for keys). */
+#define JSON_FIXILLUTF8KEY          0x0200U  /* Replace ill-formed UTF-8 char with replacement char (for keys). */
+#define JSON_IGNOREILLUTF8VALUE     0x0400U  /* Ignore ill-formed UTF-8 (for string values). */
+#define JSON_FIXILLUTF8VALUE        0x0800U  /* Replace ill-formed UTF-8 char with replacement char (for string values). */
 
 
 
@@ -146,7 +151,7 @@ typedef struct JSON_CALLBACKS {
      * Note the non-zero return value of the callback is propagated to
      * json_feed() and json_fini().
      */
-    int (*process)(JSON_TYPE /*type*/, const char* /*data*/,
+    int (*process)(JSON_TYPE /*type*/, const unsigned char* /*data*/,
                    size_t /*data_size*/, void* /*user_data*/);
 } JSON_CALLBACKS;
 
@@ -179,7 +184,7 @@ typedef struct JSON_PARSER {
 
     uint32_t codepoint[2];
 
-    char* buf;
+    unsigned char* buf;
     size_t buf_used;
     size_t buf_alloced;
 
@@ -215,7 +220,7 @@ WOLFSENTRY_API int json_init(
  * again shall just fail with the same error code. Note the application should
  * still  call json_fini() to release all resources allocated by the parser.
  */
-WOLFSENTRY_API int json_feed(JSON_PARSER* parser, const char* input, size_t size);
+WOLFSENTRY_API int json_feed(JSON_PARSER* parser, const unsigned char* input, size_t size);
 
 /* Finish parsing of the document (note it can still call some callbacks); and
  * release any resources held by the parser.
@@ -242,7 +247,7 @@ WOLFSENTRY_API int json_parse(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-               const char* input, size_t size,
+               const unsigned char* input, size_t size,
                const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,
                void* user_data, JSON_INPUT_POS* p_pos);
 
@@ -268,7 +273,7 @@ WOLFSENTRY_API const char* json_type_str(JSON_TYPE type);
  * (Note it says "no" in cases the number string contains any fraction or
  * exponent part.)
  */
-WOLFSENTRY_API void json_analyze_number(const char* num, size_t num_size,
+WOLFSENTRY_API void json_analyze_number(const unsigned char* num, size_t num_size,
                          int* p_is_int32_compatible,
                          int* p_is_uint32_compatible,
                          int* p_is_int64_compatible,
@@ -282,14 +287,14 @@ WOLFSENTRY_API void json_analyze_number(const char* num, size_t num_size,
  * Also note that json_number_to_double() can fail with JSON_ERR_OUTOFMEMORY.
  * Hence its prototype differs.
  */
-WOLFSENTRY_API int32_t json_number_to_int32(const char* num, size_t num_size);
-WOLFSENTRY_API uint32_t json_number_to_uint32(const char* num, size_t num_size);
-WOLFSENTRY_API int64_t json_number_to_int64(const char* num, size_t num_size);
-WOLFSENTRY_API uint64_t json_number_to_uint64(const char* num, size_t num_size);
-WOLFSENTRY_API int json_number_to_double(const char* num, size_t num_size, double* p_result);
+WOLFSENTRY_API int32_t json_number_to_int32(const unsigned char* num, size_t num_size);
+WOLFSENTRY_API uint32_t json_number_to_uint32(const unsigned char* num, size_t num_size);
+WOLFSENTRY_API int64_t json_number_to_int64(const unsigned char* num, size_t num_size);
+WOLFSENTRY_API uint64_t json_number_to_uint64(const unsigned char* num, size_t num_size);
+WOLFSENTRY_API int json_number_to_double(const unsigned char* num, size_t num_size, double* p_result);
 
 
-typedef int (*JSON_DUMP_CALLBACK)(const char* /*str*/, size_t /*size*/, void* /*user_data*/);
+typedef int (*JSON_DUMP_CALLBACK)(const unsigned char* /*str*/, size_t /*size*/, void* /*user_data*/);
 
 /* Helpers for writing numbers and strings in JSON-compatible format.
  *
@@ -312,7 +317,7 @@ WOLFSENTRY_API int json_dump_uint32(uint32_t u32, JSON_DUMP_CALLBACK write_func,
 WOLFSENTRY_API int json_dump_int64(int64_t i64, JSON_DUMP_CALLBACK write_func, void* user_data);
 WOLFSENTRY_API int json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data);
 WOLFSENTRY_API int json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data);
-WOLFSENTRY_API int json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, void* user_data);
+WOLFSENTRY_API int json_dump_string(const unsigned char* str, size_t size, JSON_DUMP_CALLBACK write_func, void* user_data);
 
 
 #ifdef __cplusplus

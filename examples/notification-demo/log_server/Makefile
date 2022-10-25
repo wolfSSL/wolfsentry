@@ -20,8 +20,14 @@ WOLFSENTRY_LIBDIR := $(WOLFSENTRY_ROOT)/lib
 WOLFSSL_INCLUDEDIR := $(WOLFSSL_ROOT)/include
 WOLFSSL_LIBDIR := $(WOLFSSL_ROOT)/lib
 
+ifndef DIAGFLAGS
+  DIAGFLAGS := -Wall -Wextra -ggdb
+endif
+
+CFLAGS += $(DIAGFLAGS)
+
 ifndef OPTFLAGS
-  OPTFLAGS := -Wall -Wextra -O2 -g
+  OPTFLAGS := -O3
 endif
 
 CFLAGS += $(OPTFLAGS)

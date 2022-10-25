@@ -49,14 +49,14 @@ static int notnormal = 0;
 
 #define SNPRINTF_MSGPTR(ptr, ptr_len_left, fmt, args...) {              \
     int _len = snprintf((ptr), (size_t)(ptr_len_left), (fmt), ## args); \
-    if ((_len < 0) || ((size_t)_len >= (ptr_len_left))) {               \
+    if ((_len < 0) || ((ssize_t)_len >= (ptr_len_left))) {              \
         (ptr_len_left) = -1;                                            \
         break;                                                          \
     }                                                                   \
     (ptr) += _len;                                                      \
 }
 
-static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_config, const char *json_message,
+static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_config, const unsigned char *json_message,
     size_t json_message_len)
 {
     JSON_VALUE p_root;
@@ -74,8 +74,8 @@ static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_
     JSON_INPUT_POS json_pos;
 
     NotifyNotification *notify = NULL;
-    const char *summary = NULL;
-    const char *body = NULL;
+    const unsigned char *summary = NULL;
+    const unsigned char *body = NULL;
     const char *type = NULL;
     const char *app_name = NULL;
     const char *icon_str = NULL;
@@ -111,8 +111,9 @@ static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_
     }
 
     do {
-        const char *action, *af, *remote_addr, *local_addr;
-        char msgbuf[1024], *msgbuf_ptr = msgbuf;
+        const unsigned char *action, *af, *remote_addr, *local_addr;
+        unsigned char msgbuf[1024];
+        char *msgbuf_ptr = (char *)msgbuf;
         ssize_t msgbuf_len_left = sizeof msgbuf;
         int proto, remote_port, local_port;
         uint32_t rule_id, rule_hitcount;
@@ -152,8 +153,8 @@ static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_
                         rule_id,
                         rule_hitcount);
 
-        for (int i = 0; i < n_decisions; ++i) {
-            const char *decision_string;
+        for (unsigned int i = 0; i < n_decisions; ++i) {
+            const unsigned char *decision_string;
             decision_string_v = json_value_array_get(decision_array_v, i);
             if (decision_string_v == NULL)
                 continue;
@@ -299,8 +300,8 @@ int main(int argc, char **argv) {
     wolfsentry_errcode_t ret;
     int wolfsentry_config_fd = -1;
     struct stat wolfsentry_config_st;
-    const char *wolfsentry_config_map = MAP_FAILED;
-    char buf[1024];
+    const unsigned char *wolfsentry_config_map = MAP_FAILED;
+    unsigned char buf[1024];
     const char *wolfsentry_configfile = "../notify-config.json";
     const char *notification_dest_addr;
     int notification_dest_addr_len;
@@ -390,7 +391,7 @@ int main(int argc, char **argv) {
             wolfsentry_config_map,
             wolfsentry_config_st.st_size,
             WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS,
-            buf,
+            (char *)buf,
             sizeof buf) < 0) {
         fprintf(stderr,"%s\n",buf);
         exit(1);
@@ -512,7 +513,7 @@ int main(int argc, char **argv) {
 
     for (;;) {
         recv_ret = recv(inbound_fd, buf, sizeof buf, MSG_TRUNC);
-        if (recv_ret > sizeof buf) {
+        if (recv_ret > (ssize_t)sizeof buf) {
             notnormal = 1;
             fprintf(stderr,"received overlong packet %zd (max %zu)\n", recv_ret, sizeof buf);
             continue;

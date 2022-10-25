@@ -29,8 +29,11 @@
     #endif
     #include "wolfsentry/wolfsentry_json.h"
 #else
+    #include <string.h>
     #include "wolfsentry/centijson_value.h"
 #endif
+
+#include <stdlib.h>
 
 #ifdef WOLFSENTRY
 
@@ -104,7 +107,7 @@ struct DICT_tag {
      * custom_cmp_func is used. */
     RBTREE* order_head;
     RBTREE* order_tail;
-    int (*cmp_func)(const char*, size_t, const char*, size_t);
+    int (*cmp_func)(const unsigned char*, size_t, const unsigned char*, size_t);
 };
 
 
@@ -283,11 +286,14 @@ json_value_is_new(const JSON_VALUE* v)
     return (v != NULL  &&  json_value_type(v) == JSON_VALUE_NULL  &&  (v->data.data_bytes[0] & IS_NEW));
 }
 
+/* note path is technically UTF-8, but arg is signed char to streamline the
+ * common case of caller code passing string literals as the path.
+ */
 JSON_VALUE*
 json_value_path(JSON_VALUE* root, const char* path)
 {
-    const char* token_beg = path;
-    const char* token_end;
+    const unsigned char* token_beg = (const unsigned char *)path;
+    const unsigned char* token_end;
     JSON_VALUE* v = root;
 
     while(1) {
@@ -300,7 +306,7 @@ json_value_path(JSON_VALUE* root, const char* path)
 
             token_beg++;
             while('0' <= *token_beg  &&  *token_beg <= '9') {
-                index = index * 10 + (*token_beg - '0');
+                index = index * 10U + (*token_beg - (unsigned)'0');
                 token_beg++;
             }
             if(*token_beg != ']')
@@ -308,7 +314,7 @@ json_value_path(JSON_VALUE* root, const char* path)
 
             v = json_value_array_get(v, index);
         } else if(token_end - token_beg > 0) {
-            v = json_value_dict_get_(v, token_beg, token_end - token_beg);
+            v = json_value_dict_get_(v, token_beg, (size_t)(token_end - token_beg));
         }
 
         if(v == NULL)
@@ -458,7 +464,7 @@ json_value_init_string_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* str, size_t len)
+    JSON_VALUE* v, const unsigned char* str, size_t len)
 {
     uint8_t* payload;
     size_t tmplen;
@@ -486,7 +492,7 @@ json_value_init_string_(
     tmplen = len;
     off = 0;
     while(tmplen >= 128) {
-        payload[off++] = 0x80 | (tmplen & 0x7f);
+        payload[off++] = (uint8_t)(0x80 | (tmplen & 0x7f));
         tmplen = tmplen >> 7;
     }
     payload[off++] = tmplen & 0x7f;
@@ -501,13 +507,13 @@ json_value_init_string(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* str)
+    JSON_VALUE* v, const unsigned char* str)
 {
     return json_value_init_string_(
 #ifdef WOLFSENTRY
         allocator,
 #endif
-        v, str, (str != NULL) ? strlen(str) : 0);
+        v, str, (str != NULL) ? strlen((const char *)str) : 0);
 }
 
 int
@@ -554,7 +560,7 @@ json_value_init_dict_ex(
     struct wolfsentry_allocator *allocator,
 #endif
                    JSON_VALUE* v,
-                   int (*custom_cmp_func)(const char*, size_t, const char*, size_t),
+                   int (*custom_cmp_func)(const unsigned char*, size_t, const unsigned char*, size_t),
                    unsigned flags)
 {
     void* payload;
@@ -776,7 +782,7 @@ json_value_double(const JSON_VALUE* v)
     }
 }
 
-const char*
+const unsigned char*
 json_value_string(const JSON_VALUE* v)
 {
     uint8_t* payload;
@@ -790,7 +796,7 @@ json_value_string(const JSON_VALUE* v)
         off++;
     off++;
 
-    return (char*) payload + off;
+    return (unsigned char*) payload + off;
 }
 
 size_t
@@ -806,11 +812,11 @@ json_value_string_length(const JSON_VALUE* v)
 
     payload = json_value_payload((JSON_VALUE*) v);
     while(payload[off] & 0x80) {
-        len |= (payload[off] & 0x7f) << shift;
+        len |= (size_t)(payload[off] & 0x7f) << shift;
         shift += 7;
         off++;
     }
-    len |= payload[off] << shift;
+    len |= (size_t)payload[off] << shift;
 
     return len;
 }
@@ -1004,7 +1010,8 @@ json_value_array_clean(
  ******************/
 
 #define MAKE_RED(node)      do { (node)->key.data.data_bytes[0] |= HAS_REDCOLOR; } while(0)
-#define MAKE_BLACK(node)    do { (node)->key.data.data_bytes[0] &= ~HAS_REDCOLOR; } while(0)
+//#define MAKE_BLACK(node)    do { (node)->key.data.data_bytes[0] &= ~HAS_REDCOLOR; } while(0)
+#define MAKE_BLACK(node)    do { (node)->key.data.data_bytes[0] = (uint8_t)((node)->key.data.data_bytes[0] & ~HAS_REDCOLOR); } while(0)
 #define TOGGLE_COLOR(node)  do { (node)->key.data.data_bytes[0] ^= HAS_REDCOLOR; } while(0)
 #define IS_RED(node)        ((node)->key.data.data_bytes[0] & HAS_REDCOLOR)
 #define IS_BLACK(node)      (!IS_RED(node))
@@ -1019,7 +1026,7 @@ json_value_dict_payload(JSON_VALUE* v)
 }
 
 static int
-json_value_dict_default_cmp(const char* key1, size_t len1, const char* key2, size_t len2)
+json_value_dict_default_cmp(const unsigned char* key1, size_t len1, const unsigned char* key2, size_t len2)
 {
     /* Comparing lengths 1st might be in general especially if the keys are
      * long, but it would break json_value_dict_walk_sorted().
@@ -1042,7 +1049,7 @@ json_value_dict_default_cmp(const char* key1, size_t len1, const char* key2, siz
 
 static int
 json_value_dict_cmp(const JSON_VALUE* v, const DICT* d,
-               const char* key1, size_t len1, const char* key2, size_t len2)
+               const unsigned char* key1, size_t len1, const unsigned char* key2, size_t len2)
 {
     if(!(v->data.data_bytes[0] & HAS_CUSTOMCMP))
         return json_value_dict_default_cmp(key1, len1, key2, len2);
@@ -1129,7 +1136,7 @@ json_value_dict_keys_ordered(const JSON_VALUE* v, const JSON_VALUE** buffer, siz
 }
 
 JSON_VALUE*
-json_value_dict_get_(const JSON_VALUE* v, const char* key, size_t key_len)
+json_value_dict_get_(const JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
@@ -1150,9 +1157,9 @@ json_value_dict_get_(const JSON_VALUE* v, const char* key, size_t key_len)
 }
 
 JSON_VALUE*
-json_value_dict_get(const JSON_VALUE* v, const char* key)
+json_value_dict_get(const JSON_VALUE* v, const unsigned char* key)
 {
-    return json_value_dict_get_(v, key, (key != NULL) ? strlen(key) : 0);
+    return json_value_dict_get_(v, key, (key != NULL) ? strlen((const char *)key) : 0);
 }
 
 static void
@@ -1263,7 +1270,7 @@ json_value_dict_add_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key, size_t key_len)
+    JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
     JSON_VALUE* res;
 
@@ -1279,13 +1286,13 @@ JSON_VALUE* json_value_dict_add(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key)
+    JSON_VALUE* v, const unsigned char* key)
 {
     return json_value_dict_add_(
 #ifdef WOLFSENTRY
         allocator,
 #endif
-        v, key, strlen(key));
+        v, key, strlen((const char *)key));
 }
 
 JSON_VALUE*
@@ -1293,7 +1300,7 @@ json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key, size_t key_len)
+    JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
@@ -1372,13 +1379,13 @@ json_value_dict_get_or_add(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key)
+    JSON_VALUE* v, const unsigned char* key)
 {
     return json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
         allocator,
 #endif
-        v, key, (key != NULL) ? strlen(key) : 0);
+        v, key, (key != NULL) ? strlen((const char *)key) : 0);
 }
 
 /* Fixes the tree after making the given path one black node shorter.
@@ -1469,7 +1476,7 @@ json_value_dict_remove_(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key, size_t key_len)
+    JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
@@ -1608,13 +1615,13 @@ json_value_dict_remove(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-    JSON_VALUE* v, const char* key)
+    JSON_VALUE* v, const unsigned char* key)
 {
     return json_value_dict_remove_(
 #ifdef WOLFSENTRY
         allocator,
 #endif
-        v, key, (key != NULL) ? strlen(key) : 0);
+        v, key, (key != NULL) ? strlen((const char *)key) : 0);
 }
 
 int

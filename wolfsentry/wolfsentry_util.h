@@ -185,7 +185,7 @@ do {                                                                    \
         if (((x) > MAX_UINT_OF(i)) || ((MAX_UINT_OF(i) - (i) < (x))))   \
             (out) = 0U;                                                 \
         else                                                            \
-            (out) = ((i)+=(__typeof__(i))(x));                          \
+            (out) = (i) = (__typeof__(i))((i) + (x));                   \
     } while (0)
 
 #define WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(i, out)      \
@@ -196,7 +196,7 @@ do {                                                                    \
         if (((x) > MAX_UINT_OF(i)) || ((i) < (x)))                      \
             (out) = MAX_UINT_OF(i);                                     \
         else                                                            \
-            (out) = ((i) -= (__typeof__(i))(x));                        \
+            (out) = (i) = (__typeof__(i))((i) - (x));                   \
     } while (0)
 
 #define WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY_BY_ONE(i, out)      \

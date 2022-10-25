@@ -91,6 +91,13 @@ static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
 
 #endif
 
+#ifndef WOLFSENTRY
+
+#define WOLFSENTRY_RETURN_VALUE(x) return(x)
+#define WOLFSENTRY_RETURN_VOID return
+
+#endif
+
 void
 json_default_config(JSON_CONFIG* cfg)
 {
@@ -207,7 +214,7 @@ json_switch_automaton(JSON_PARSER* parser, unsigned automaton)
 }
 
 static inline void
-json_process(JSON_PARSER* parser, JSON_TYPE type, const char* data, size_t size)
+json_process(JSON_PARSER* parser, JSON_TYPE type, const unsigned char* data, size_t size)
 {
     if(parser->errcode < 0)
         WOLFSENTRY_RETURN_VOID;
@@ -287,13 +294,13 @@ json_process(JSON_PARSER* parser, JSON_TYPE type, const char* data, size_t size)
 }
 
 static int
-json_buf_append(JSON_PARSER* parser, const char* data, size_t size)
+json_buf_append(JSON_PARSER* parser, const unsigned char* data, size_t size)
 {
     if(parser->buf_used + size > parser->buf_alloced) {
-        char* new_buf;
+        unsigned char* new_buf;
         size_t new_alloced = (parser->buf_used + size) * 2;
 
-        new_buf = (char *)realloc(parser->buf, new_alloced);
+        new_buf = (unsigned char *)realloc(parser->buf, new_alloced);
         if(new_buf == NULL) {
             json_raise(parser, JSON_ERR_OUTOFMEMORY);
             WOLFSENTRY_RETURN_VALUE(-1);
@@ -311,26 +318,26 @@ json_buf_append(JSON_PARSER* parser, const char* data, size_t size)
 static int
 json_buf_append_codepoint(JSON_PARSER* parser, uint32_t codepoint)
 {
-    char tmp[4];
+    unsigned char tmp[4];
     size_t n;
 
     if(codepoint <= 0x7f) {
-        tmp[0] = codepoint;
+        tmp[0] = (unsigned char)codepoint;
         n = 1;
     } else if(codepoint <= 0x7ff) {
-        tmp[0] = 0xc0 | ((codepoint >> 6) & 0x1f);
-        tmp[1] = 0x80 | ((codepoint >> 0) & 0x3f);
+        tmp[0] = (unsigned char)(0xc0 | ((codepoint >> 6) & 0x1f));
+        tmp[1] = (unsigned char)(0x80 | ((codepoint >> 0) & 0x3f));
         n = 2;
     } else if(codepoint <= 0xffff) {
-        tmp[0] = 0xe0 | ((codepoint >> 12) & 0x0f);
-        tmp[1] = 0x80 | ((codepoint >> 6) & 0x3f);
-        tmp[2] = 0x80 | ((codepoint >> 0) & 0x3f);
+        tmp[0] = (unsigned char)(0xe0 | ((codepoint >> 12) & 0x0f));
+        tmp[1] = (unsigned char)(0x80 | ((codepoint >> 6) & 0x3f));
+        tmp[2] = (unsigned char)(0x80 | ((codepoint >> 0) & 0x3f));
         n = 3;
     } else {
-        tmp[0] = 0xf0 | ((codepoint >> 18) & 0x07);
-        tmp[1] = 0x80 | ((codepoint >> 12) & 0x3f);
-        tmp[2] = 0x80 | ((codepoint >> 6) & 0x3f);
-        tmp[3] = 0x80 | ((codepoint >> 0) & 0x3f);
+        tmp[0] = (unsigned char)(0xf0 | ((codepoint >> 18) & 0x07));
+        tmp[1] = (unsigned char)(0x80 | ((codepoint >> 12) & 0x3f));
+        tmp[2] = (unsigned char)(0x80 | ((codepoint >> 6) & 0x3f));
+        tmp[3] = (unsigned char)(0x80 | ((codepoint >> 0) & 0x3f));
         n = 4;
     }
 
@@ -353,7 +360,7 @@ json_buf_append_codepoint(JSON_PARSER* parser, uint32_t codepoint)
 
 
 static size_t
-json_literal_automaton(JSON_PARSER* parser, const char* input, size_t size,
+json_literal_automaton(JSON_PARSER* parser, const unsigned char* input, size_t size,
                        JSON_TYPE type, const char* literal, size_t literal_size)
 {
     size_t off = 0;
@@ -387,7 +394,7 @@ json_literal_automaton(JSON_PARSER* parser, const char* input, size_t size,
 }
 
 static size_t
-json_number_automaton(JSON_PARSER* parser, const char* input, size_t size)
+json_number_automaton(JSON_PARSER* parser, const unsigned char* input, size_t size)
 {
     static const unsigned can_see_m_sign        = 0x0001;   /* Mantissa */
     static const unsigned can_see_m_first_digit = 0x0002;
@@ -469,14 +476,14 @@ json_number_automaton(JSON_PARSER* parser, const char* input, size_t size)
 }
 
 static inline unsigned
-json_resolve_xdigit(char ch)
+json_resolve_xdigit(unsigned char ch)
 {
     if(IS_DIGIT(ch))
-        return ch - '0';
+        return (unsigned)ch - (unsigned)'0';
     else if(IS_IN(ch, 'a', 'f'))
-        return ch - 'a' + 10;
+        return (unsigned)ch - (unsigned)'a' + 10U;
     else
-        return ch - 'A' + 10;
+        return (unsigned)ch - (unsigned)'A' + 10U;
 }
 
 /* U+fffd (Unicode replacement character), encoded in UTF-8.
@@ -490,7 +497,7 @@ json_resolve_xdigit(char ch)
  * U+fffd. The two trailing bytes, who cannot really follow in well-formed
  * UTF-8, then are replaced with U+fffd each too.)
  */
-static const char fffd[9] = { '\xef', '\xbf', '\xbd', '\xef', '\xbf', '\xbd', '\xef', '\xbf', '\xbd' };
+static const unsigned char fffd[9] = { 0xef, 0xbf, 0xbd, 0xef, 0xbf, 0xbd, 0xef, 0xbf, 0xbd };
 static const size_t fffd_size = 3;
 
 static int
@@ -507,7 +514,7 @@ json_handle_ill_surrogate(JSON_PARSER* parser, uint32_t codepoint, int ignore, i
 }
 
 static size_t
-json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
+json_string_automaton(JSON_PARSER* parser, const unsigned char* input, size_t size,
                       JSON_TYPE type)
 {
     int ignore_ill_utf8;
@@ -532,7 +539,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
         size = max_len - (parser->pos.offset - parser->value_pos.offset) + 1;
 
     while(off < size) {
-        char ch = input[off];
+        unsigned char ch = input[off];
 
         if(parser->substate == 0) {
             if(ch == '\"') {
@@ -566,7 +573,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                  * Then we can just process it without using temp. buffer. */
                 if(parser->buf_used + off == 0  &&  off2 < size  &&  input[off2] == '\"') {
                     parser->pos.offset += off2 + 1;
-                    parser->pos.column_number += off2 + 1;
+                    parser->pos.column_number += (unsigned)(off2 + 1);
                     off = off2 + 1;
                     json_process(parser, type, input, off2);
                     break;
@@ -575,7 +582,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
                 if(json_buf_append(parser, input + off, off2 - off) < 0)
                     break;
                 parser->pos.offset += off2 - off;
-                parser->pos.column_number += off2 - off;
+                parser->pos.column_number += (unsigned)(off2 - off);
                 off = off2;
                 continue;
             } else {
@@ -794,7 +801,7 @@ json_string_automaton(JSON_PARSER* parser, const char* input, size_t size,
 }
 
 static size_t
-json_dispatch(JSON_PARSER* parser, const char* input, size_t size)
+json_dispatch(JSON_PARSER* parser, const unsigned char* input, size_t size)
 {
     switch(parser->automaton) {
         case AUTOMATON_NULL:    return json_literal_automaton(parser, input, size, JSON_NULL, "null", 4);
@@ -810,7 +817,7 @@ json_dispatch(JSON_PARSER* parser, const char* input, size_t size)
 }
 
 static void
-json_handle_new_line(JSON_PARSER* parser, char ch)
+json_handle_new_line(JSON_PARSER* parser, unsigned char ch)
 {
     if(ch == '\r') {
         parser->last_cl_offset = parser->pos.offset;
@@ -824,10 +831,10 @@ json_handle_new_line(JSON_PARSER* parser, char ch)
 }
 
 int
-json_feed(JSON_PARSER* parser, const char* input, size_t size)
+json_feed(JSON_PARSER* parser, const unsigned char* input, size_t size)
 {
     size_t off = 0;
-    char ch;
+    unsigned char ch;
 
     if(parser->config.max_total_len != 0  &&
        parser->pos.offset + size > parser->config.max_total_len)
@@ -964,7 +971,7 @@ json_parse(
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator,
 #endif
-           const char* input, size_t size,
+           const unsigned char* input, size_t size,
            const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,
            void* user_data, JSON_INPUT_POS* p_pos)
 {
@@ -993,23 +1000,23 @@ json_parse(
 
 /* Compare numerically strings composed of positive integers. */
 static inline int
-intstrncmp_pos(const char* str1, size_t size1, const char* str2, size_t size2)
+intstrncmp_pos(const unsigned char* str1, size_t size1, const unsigned char* str2, size_t size2)
 {
     if(size1 != size2)
         return (size1 < size2) ? -1 : +1;
 
-    return strncmp(str1, str2, size1);
+    return strncmp((const char *)str1, (const char *)str2, size1);
 }
 
 /* Compare numerically strings composed of negative integers. */
 static inline int
-intstrncmp_neg(const char* str1, size_t size1, const char* str2, size_t size2)
+intstrncmp_neg(const unsigned char* str1, size_t size1, const unsigned char* str2, size_t size2)
 {
     return -intstrncmp_pos(str1 + 1, size1 - 1, str2 + 1, size2 - 1);
 }
 
 static int
-intstrncmp(const char* str1, size_t size1, const char* str2, size_t size2)
+intstrncmp(const unsigned char* str1, size_t size1, const unsigned char* str2, size_t size2)
 {
     int is_positive1 = (str1[0] != '-');
     int is_positive2 = (str2[0] != '-');
@@ -1028,16 +1035,16 @@ intstrncmp(const char* str1, size_t size1, const char* str2, size_t size2)
 }
 
 static int
-intstr_is_between(const char* val_str, size_t val_size,
+intstr_is_between(const unsigned char* val_str, size_t val_size,
                   const char* min_str, size_t min_size,
                   const char* max_str, size_t max_size)
 {
-    return (intstrncmp(min_str, min_size, val_str, val_size) <= 0  &&
-            intstrncmp(val_str, val_size, max_str, max_size) <= 0);
+    return (intstrncmp((unsigned char *)min_str, min_size, val_str, val_size) <= 0  &&
+            intstrncmp(val_str, val_size, (unsigned char *)max_str, max_size) <= 0);
 }
 
 void
-json_analyze_number(const char* num, size_t num_size,
+json_analyze_number(const unsigned char* num, size_t num_size,
                     int* p_is_int32_compatible,
                     int* p_is_uint32_compatible,
                     int* p_is_int64_compatible,
@@ -1098,19 +1105,19 @@ json_analyze_number(const char* num, size_t num_size,
 }
 
 int32_t
-json_number_to_int32(const char* num, size_t num_size)
+json_number_to_int32(const unsigned char* num, size_t num_size)
 {
     return (int32_t) json_number_to_int64(num, num_size);
 }
 
 uint32_t
-json_number_to_uint32(const char* num, size_t num_size)
+json_number_to_uint32(const unsigned char* num, size_t num_size)
 {
     return (uint32_t) json_number_to_uint64(num, num_size);
 }
 
 int64_t
-json_number_to_int64(const char* num, size_t num_size)
+json_number_to_int64(const unsigned char* num, size_t num_size)
 {
     size_t off = 0;
     int is_neg = 0;
@@ -1132,27 +1139,27 @@ json_number_to_int64(const char* num, size_t num_size)
 }
 
 uint64_t
-json_number_to_uint64(const char* num, size_t num_size)
+json_number_to_uint64(const unsigned char* num, size_t num_size)
 {
     size_t off = 0;
     uint64_t val = 0;
 
     while(off < num_size  &&  IS_DIGIT(num[off])) {
         val *= 10;
-        val += num[off++] - '0';
+        val += num[off++] - (unsigned)'0';
     }
 
     return val;
 }
 
 int
-json_number_to_double(const char* num, size_t num_size, double* p_result)
+json_number_to_double(const unsigned char* num, size_t num_size, double* p_result)
 {
 #ifdef CENTIJSON_USE_LOCALE
     struct lconv* locale_info;
 #endif
-    char local_buffer[64];
-    char* buffer;
+    unsigned char local_buffer[64];
+    unsigned char* buffer;
 
     /* Unfortunately, AFAIK, there is no reasonably easy portable way how to
      * construct float or double by hand.
@@ -1188,7 +1195,7 @@ json_number_to_double(const char* num, size_t num_size, double* p_result)
 #ifdef WOLFSENTRY
             return JSON_ERR_OUTOFMEMORY;
 #else        
-        buffer = (char*) malloc(num_size + 1);
+        buffer = (unsigned char*) malloc(num_size + 1);
         if(buffer == NULL)
             return JSON_ERR_OUTOFMEMORY;
 #endif
@@ -1202,7 +1209,7 @@ json_number_to_double(const char* num, size_t num_size, double* p_result)
     /* Make sure we use the locale-dependent decimal point. */
     locale_info = localeconv();
     if(locale_info->decimal_point[0] != '.') {
-        char* fp;
+        unsigned char* fp;
 
         fp = strchr(buffer, '.');
         if(fp != NULL)
@@ -1210,7 +1217,7 @@ json_number_to_double(const char* num, size_t num_size, double* p_result)
     }
 #endif
 
-    *p_result = strtod(buffer, NULL);
+    *p_result = strtod((const char *)buffer, NULL);
 
 #ifndef WOLFSENTRY
     if(buffer != local_buffer)
@@ -1241,7 +1248,7 @@ json_dump_int64(int64_t i64, JSON_DUMP_CALLBACK write_func, void* user_data)
 
     if(i64 != 0) {
         while(i64 != 0) {
-            buffer[--off] = '0' + ABS(i64 % 10);
+            buffer[--off] = (char)('0' + ABS(i64 % 10));
             i64 /= 10;
         }
 
@@ -1251,7 +1258,7 @@ json_dump_int64(int64_t i64, JSON_DUMP_CALLBACK write_func, void* user_data)
         buffer[--off] = '0';
     }
 
-    return write_func(buffer + off, sizeof(buffer) - off, user_data);
+    return write_func((const unsigned char *)buffer + off, sizeof(buffer) - off, user_data);
 }
 
 int
@@ -1262,14 +1269,14 @@ json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data)
 
     if(u64 != 0) {
         while(u64 != 0) {
-            buffer[--off] = '0' + (u64 % 10);
+            buffer[--off] = (char)('0' + (u64 % 10));
             u64 /= 10;
         }
     } else {
         buffer[--off] = '0';
     }
 
-    return write_func(buffer + off, sizeof(buffer) - off, user_data);
+    return write_func((const unsigned char *)buffer + off, sizeof(buffer) - off, user_data);
 }
 
 int
@@ -1329,7 +1336,7 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
     if(locale_info->thousands_sep != NULL  &&  locale_info->thousands_sep[0]) {
         char* sep = locale_info->thousands_sep;
         size_t sep_len = strlen(sep);
-        char* ptr = buffer;
+        unsigned char* ptr = buffer;
 
         while(1) {
             ptr = strstr(ptr, sep);
@@ -1367,7 +1374,7 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
         n += 2;
     }
 
-    ret = write_func(buffer, n, user_data);
+    ret = write_func((const unsigned char *)buffer, (size_t)n, user_data);
 
 #ifndef WOLFSENTRY
     if(buffer != local_buffer)
@@ -1390,17 +1397,17 @@ json_control_to_hex(char* buf, uint8_t ch)
 }
 
 int
-json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, void* user_data)
+json_dump_string(const unsigned char* str, size_t size, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     size_t off = 0;
     int ret;
 
-    ret = write_func("\"", 1, user_data);
+    ret = write_func((const unsigned char *)"\"", 1, user_data);
     if(ret < 0)
         return ret;
 
     while(off < size) {
-        char ch = str[off];
+        unsigned char ch = str[off];
 
         if(IS_CONTROL(ch)  ||  ch == '\"'  ||  ch == '\\') {
             char esc_buffer[8];
@@ -1423,7 +1430,7 @@ json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, vo
                     break;
             }
 
-            ret = write_func(esc, esc_size, user_data);
+            ret = write_func((const unsigned char *)esc, esc_size, user_data);
             if(ret < 0)
                 return ret;
 
@@ -1443,7 +1450,7 @@ json_dump_string(const char* str, size_t size, JSON_DUMP_CALLBACK write_func, vo
         }
     }
 
-    ret = write_func("\"", 1, user_data);
+    ret = write_func((const unsigned char *)"\"", 1, user_data);
     if(ret < 0)
         return ret;
 

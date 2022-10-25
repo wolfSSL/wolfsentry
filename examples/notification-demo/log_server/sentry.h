@@ -47,7 +47,7 @@ typedef enum {
 int sentry_init(
     WOLFSSL_CTX *wolfssl_ctx,
     struct wolfsentry_host_platform_interface *hpi,
-    const char *json_config);
+    const unsigned char *json_config);
 
 extern struct wolfsentry_context *wolfsentry;
 

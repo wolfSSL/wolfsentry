@@ -63,7 +63,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
     struct wolfsentry_json_process_state *jps,
-    const char *json_in,
+    const unsigned char *json_in,
     size_t json_in_len,
     char *err_buf,
     size_t err_buf_size);
@@ -77,7 +77,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     struct wolfsentry_context *wolfsentry,
-    const char *json_in,
+    const unsigned char *json_in,
     size_t json_in_len,
     wolfsentry_config_load_flags_t load_flags,
     char *err_buf,

@@ -73,14 +73,11 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
     } remote, local;
-#ifdef BUILD_FOR_FREERTOS_LWIP
-    u32_t remoteip = remote_ip->addr;
-    u32_t localip = local_ip->addr;
-#elif defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
+#if defined(BUILD_FOR_LINUX) || defined(BUILD_FOR_MACOSX)
     u32_t remoteip = remote_ip->s_addr;
     u32_t localip = local_ip->s_addr;
 #else
-#error only know how to build for FreeRTOS-LWIP, Linux, and MacOSX
+#error only know how to build for Linux and MacOSX
 #endif
 
     /* Connect will increment the connection count in wolfSentry, disconnect
@@ -121,8 +118,8 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
             &remote.sa,
             &local.sa,
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
-            "call-in-from-echo",
-            strlen("call-in-from-echo"),
+            "call-in-from-log-server",
+            strlen("call-in-from-log-server"),
             NULL,
             NULL,
             NULL,
@@ -824,7 +821,7 @@ static wolfsentry_errcode_t my_addr_family_formatter(
 int sentry_init(
     WOLFSSL_CTX *wolfssl_ctx,
     struct wolfsentry_host_platform_interface *hpi,
-    const char *json_config)
+    const unsigned char *json_config)
 {
     wolfsentry_errcode_t ret;
     static const struct wolfsentry_eventconfig ws_init_config = { .route_private_data_size = 32, .route_private_data_alignment = 16 };
@@ -1003,7 +1000,7 @@ int sentry_init(
     ret = wolfsentry_config_json_oneshot(
         wolfsentry,
         json_config,
-        strlen(json_config),
+        strlen((const char *)json_config),
         WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
         err_buf,
         sizeof err_buf);
@@ -1038,95 +1035,3 @@ out:
 
     return ret;
 }
-
-
-
-
-#ifdef BUILD_FOR_FREERTOS_LWIP
-
-/* Check / validate ICMP traffic */
-int sentry_action_ping(const ip_addr_t *addr, u8_t type)
-{
-    wolfsentry_errcode_t ret;
-    wolfsentry_action_res_t action_results;
-    /* As above, pad the struct to make addr 4 bytes */
-    struct {
-        struct wolfsentry_sockaddr sa;
-        byte addr_buf[4];
-    } remote;
-
-    /* ICMP protocol check. The ICMP packet type is the port number for this
-     * check */
-    remote.sa.sa_family = WOLFSENTRY_AF_INET;
-    remote.sa.sa_proto = IPPROTO_ICMP;
-    remote.sa.sa_port = type;
-    remote.sa.addr_len = 32;
-    remote.sa.interface = 0;
-    memcpy(remote.sa.addr, &addr->addr, 4);
-
-    ret = wolfsentry_route_event_dispatch(
-            wolfsentry,
-            &remote.sa,
-            &remote.sa, // Reuse for now
-            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
-            "call-in-from-echo",
-            strlen("call-in-from-echo"),
-            NULL,
-            NULL,
-            NULL,
-            &action_results);
-    printf("PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
-                WOLFSENTRY_ERROR_FMT_ARGS(ret));
-    fflush(stdout);
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-/* Check MAC address */
-int sentry_action_mac(struct eth_addr *addr)
-{
-    wolfsentry_errcode_t ret;
-    wolfsentry_action_res_t action_results;
-    /* Pad addr to 6 bytes for the hardware address */
-    struct {
-        struct wolfsentry_sockaddr sa;
-        byte addr_buf[6];
-    } remote;
-
-    /* We only really care about the data and length, the family is AF_LINK */
-    remote.sa.sa_family = WOLFSENTRY_AF_LINK;
-    remote.sa.addr_len = 48;
-    remote.sa.interface = 0;
-    // MAC addresses are 6 bytes (48 bits)
-    memcpy(remote.sa.addr, &addr->addr, 6);
-
-    ret = wolfsentry_route_event_dispatch(
-            wolfsentry,
-            &remote.sa,
-            &remote.sa, // Reuse for now
-            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
-            "call-in-from-echo",
-            strlen("call-in-from-echo"),
-            NULL,
-            NULL,
-            NULL,
-            &action_results);
-
-    printf("MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
-                WOLFSENTRY_ERROR_FMT_ARGS(ret));
-    fflush(stdout);
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
-            return -1;
-        }
-    }
-
-    return 0;
-}
-
-#endif /* BUILD_FOR_FREERTOS_LWIP */

@@ -497,7 +497,7 @@ static int darwin_sem_init(sem_t *sem, int pshared, unsigned int value)
         errno = EINVAL;
         WOLFSENTRY_RETURN_VALUE(-1);
     }
-    new_sem = dispatch_semaphore_create(value);
+    new_sem = dispatch_semaphore_create((intptr_t)value);
     if (new_sem == NULL) {
         errno = ENOMEM;
         WOLFSENTRY_RETURN_VALUE(-1);

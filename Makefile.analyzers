@@ -251,7 +251,7 @@ no-protocol-names-test:
 	@echo "no-protocol-names build test passed."
 
 .PHONY: no-stdio-build-test
-no-stdio-test:
+no-stdio-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds NO_STDIO=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds clean
@@ -287,7 +287,7 @@ dist-check:
 	@echo $@ 'passed.'
 
 .PHONY: check-common
-check-common: dynamic-build-test c99-test-gcc c99-test-clang singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-test minimal-build-test
+check-common: dynamic-build-test c99-test-gcc c99-test-clang singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-build-test minimal-build-test
 
 .PHONY: check
 check: analyze-all check-common m32-test dist-check lock-error-checking-test

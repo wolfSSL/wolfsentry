@@ -52,7 +52,7 @@ endif
 
 CC_V := $(shell $(CC) -v 2>&1 | sed "s/'/'\\\\''/g")
 
-CC_IS_GCC := $(shell if echo '$(CC_V)' | grep -q -i 'gcc version'; then echo 1; else echo 0; fi)
+CC_IS_GCC := $(shell if [[ '$(CC_V)' =~ 'gcc version' ]]; then echo 1; else echo 0; fi)
 
 ifndef GCC
     ifeq "$(CC_IS_GCC)" "1"
@@ -68,7 +68,7 @@ endif
 
 AR_VERSION := $(shell $(AR) --version 2>&1 | sed "s/'/'\\\\''/g")
 
-AR_IS_GNU_AR := $(shell if echo '$(AR_VERSION)' | grep -q 'GNU'; then echo 1; else echo 0; fi)
+AR_IS_GNU_AR := $(shell if [[ '$(AR_VERSION)' =~ 'GNU' ]]; then echo 1; else echo 0; fi)
 
 ifndef C_WARNFLAGS
     C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-type-limits
@@ -157,9 +157,9 @@ $(BUILD_TOP)/.build_params: force
 	@cd $(SRC_TOP) && [ -d .git ] || exit 0 && ([ -d .git/hooks ] || mkdir .git/hooks) && ([ -e .git/hooks/pre-push ] || ln -s ../../scripts/pre-push.sh .git/hooks/pre-push 2>/dev/null || exit 0)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifdef VERY_QUIET
-	@$(BUILD_PARAMS) | cmp -s - $@ 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi; exit 0
+	@{ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi; exit 0
 else
-	@$(BUILD_PARAMS) | cmp -s - $@ 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
+	@{ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
 endif
 
 $(BUILD_TOP)/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentry_options_h.awk $(BUILD_TOP)/.build_params

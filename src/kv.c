@@ -871,6 +871,8 @@ wolfsentry_errcode_t wolfsentry_user_value_store_string(
     struct wolfsentry_kv_pair_internal *kv;
     if (value_len < 0)
         value_len = (int)strlen(value);
+    if (value_len > WOLFSENTRY_KV_MAX_VALUE_BYTES)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     if ((ret = wolfsentry_kv_new(wolfsentry, key, key_len, value_len + 1, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     kv->kv.v_type = WOLFSENTRY_KV_STRING;

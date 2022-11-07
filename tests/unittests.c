@@ -2533,6 +2533,53 @@ static int test_json(const char *fname) {
                 &kv_ref));
     }
 
+    {
+        static const char user_cert_string[] =
+            "-----BEGIN CERTIFICATE-----\n"
+            "MIIDnzCCAyWgAwIBAgICEAEwCgYIKoZIzj0EAwMwgZcxCzAJBgNVBAYTAlVTMRMw\n"
+            "EQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxlMRAwDgYDVQQKDAd3\n"
+            "b2xmU1NMMRQwEgYDVQQLDAtEZXZlbG9wbWVudDEYMBYGA1UEAwwPd3d3LndvbGZz\n"
+            "c2wuY29tMR8wHQYJKoZIhvcNAQkBFhBpbmZvQHdvbGZzc2wuY29tMCAXDTIyMDIx\n"
+            "NTEyNTAyNFoYDzIwNTIwMjA4MTI1MDI0WjCBlTELMAkGA1UEBhMCVVMxEzARBgNV\n"
+            "BAgMCldhc2hpbmd0b24xEDAOBgNVBAcMB1NlYXR0bGUxEDAOBgNVBAoMB0VsaXB0\n"
+            "aWMxEjAQBgNVBAsMCUVDQzM4NFNydjEYMBYGA1UEAwwPd3d3LndvbGZzc2wuY29t\n"
+            "MR8wHQYJKoZIhvcNAQkBFhBpbmZvQHdvbGZzc2wuY29tMHYwEAYHKoZIzj0CAQYF\n"
+            "K4EEACIDYgAE6s+TTywJuzkUD1Zkw0C03w5jruVxSwDMBJf/4ek4lrtfkbJqzLU5\n"
+            "X49wWfEB9lorAWxoC89VJa9tmEgKqHTJqRegDMP70yNo/gQ8Y1CIO7lPfGc09zup\n"
+            "c+cbw1FeIhjso4IBQDCCATwwCQYDVR0TBAIwADARBglghkgBhvhCAQEEBAMCBkAw\n"
+            "HQYDVR0OBBYEFII78mUv87QAxrwG/XlCdUtl0c68MIHXBgNVHSMEgc8wgcyAFKvg\n"
+            "wyZMGNRyu9KEjJwKBZKAElNSoYGdpIGaMIGXMQswCQYDVQQGEwJVUzETMBEGA1UE\n"
+            "CAwKV2FzaGluZ3RvbjEQMA4GA1UEBwwHU2VhdHRsZTEQMA4GA1UECgwHd29sZlNT\n"
+            "TDEUMBIGA1UECwwLRGV2ZWxvcG1lbnQxGDAWBgNVBAMMD3d3dy53b2xmc3NsLmNv\n"
+            "bTEfMB0GCSqGSIb3DQEJARYQaW5mb0B3b2xmc3NsLmNvbYIUaiYbTQIaM//CRxT5\n"
+            "51VgWi5/ESkwDgYDVR0PAQH/BAQDAgOoMBMGA1UdJQQMMAoGCCsGAQUFBwMBMAoG\n"
+            "CCqGSM49BAMDA2gAMGUCMQCEPZBU/y/EetTYGOKzLbtCN0CmHwmD3rwEeoLcVRdC\n"
+            "XBeqB0LcyPZQzRS3Bhk5HyQCMBNiS5/JoIzSac8WToa9nik4ROlKOmOgZjiV4n3j\n"
+            "F+yUIbg9aV7K5ISc2mF9G1G/0Q==\n"
+            "-----END CERTIFICATE-----\n";
+        const char *value = NULL;
+        int value_len = -1;
+        struct wolfsentry_kv_pair_internal *kv_ref;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_string(
+                wolfsentry,
+                "user-cert-string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value,
+                &value_len,
+                &kv_ref));
+
+        WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)strlen(user_cert_string));
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(value, user_cert_string) == 0);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_release_record(
+                wolfsentry,
+                &kv_ref));
+    }
+
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
                                    wolfsentry,
                                    "handle-insert",
@@ -2707,7 +2754,7 @@ static int test_json(const char *fname) {
             65536,  /* max_total_len */
             1000,  /* max_total_values */
             20,  /* max_number_len */
-            255,  /* max_string_len */
+            WOLFSENTRY_KV_MAX_VALUE_BYTES,  /* max_string_len */
             WOLFSENTRY_MAX_LABEL_BYTES,  /* max_key_len */
             10,  /* max_nesting_level */
             JSON_NOSCALARROOT   /* flags */

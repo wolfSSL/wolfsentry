@@ -1308,7 +1308,7 @@ struct wolfsentry_kv_pair {
 };
 
 #ifndef WOLFSENTRY_KV_MAX_VALUE_BYTES
-#define WOLFSENTRY_KV_MAX_VALUE_BYTES 256
+#define WOLFSENTRY_KV_MAX_VALUE_BYTES 16384
 #endif
 
 #define WOLFSENTRY_KV_KEY_LEN(kv) ((kv)->key_len)

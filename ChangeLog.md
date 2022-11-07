@@ -1,3 +1,110 @@
+# wolfSentry Release 0.7.0 (Nov 7, 2022)
+
+Preview Release 0.7.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:
+
+## New Features
+
+### Support for freeform user-defined JSON objects in the "user-values" (key-value pair) section of the config package.
+
+* Uses syntax `"key" : { "json" : x }` where `x` is any valid standalone JSON
+  expression.
+
+* Key length limited to `WOLFSENTRY_MAX_LABEL_BYTES` by default.
+
+* String length limited to `WOLFSENTRY_KV_MAX_VALUE_BYTES` by default.
+
+* JSON tree depth limited to `WOLFSENTRY_MAX_JSON_NESTING` by default.
+
+* All default limits subject to caller runtime override using the `json_config`
+  arg to the new APIs `wolfsentry_config_json_init_ex()` and
+  `wolfsentry_config_json_oneshot_ex()`, accepting a `JSON_CONFIG *` (accepted as
+  `const`).
+
+#### New APIs for JSON KVs
+
+* `wolfsentry_user_value_store_json()`
+* `wolfsentry_user_value_get_json()`
+* `WOLFSENTRY_KV_V_JSON()`
+* `wolfsentry_config_json_init_ex()`
+* `wolfsentry_config_json_oneshot_ex()`
+
+#### New config load flags controlling JSON KV parsing
+
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_ABORT`
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USEFIRST`
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USELAST`
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_MAINTAINDICTORDER`
+
+### Support for setting a user KV as read-only.
+
+* Read-only KVs can't be deleted or overwritten without first setting them
+  read-write.
+
+* Mechanism can be used to protect user-configured data from dynamic changes by
+  JSON configuration package -- JSON cannot change or override the read-only
+  bit.
+
+#### KV mutabulity APIs:
+
+* `wolfsentry_user_value_set_mutability()`
+* `wolfsentry_user_value_get_mutability()`
+
+
+## Updated Examples
+
+### examples/notification-demo
+
+* Update and clean up `udp_to_dbus`, and add `--kv-string` and `--kv-int`
+  command line args for runtime ad hoc config overrides.
+
+* Rename config node controlling the `udp_to_dbus` listen address from
+  "notification-dest-addr" to "notification-listen-addr".
+
+#### Added examples/notification-demo/log_server
+
+* Toy embedded web server demonstrating HTTPS with dynamic insertion of
+  limited-lifespan wolfSentry rules blocking (penalty boxing) abusive peers.
+
+* Demonstrates mutual authentication using TLS, and role-based authorizations
+  pivoting on client certificate issuer (certificate authority).
+
+
+## Noteworthy Changes and Additions
+
+* JSON strings (natively UTF-8) are now consistently passed in and out with
+  `unsigned char` pointers.
+
+* `wolfsentry_kv_render_value()` now has a `struct wolfsentry_context *` as
+  its first argument (necessitated by addition of freeform JSON rendering).
+
+* Added new API routine `wolfsentry_centijson_errcode_translate()`, allowing
+  conversion of all CentiJSON return codes (e.g. from `json_dom_parse()`,
+  `json_value_path()`, and `json_value_build_path()`) from native CentiJSON to
+  roughly-corresponding native wolfSentry codes.
+
+### Cleanup of JSON DOM implementation
+
+* Added `json_` prefix to all JSON functions and types.
+
+* CentiJSON now uses wolfSentry configured allocator for all heap operations.
+
+### New utility APIs
+
+* `wolfsentry_get_allocator()`
+* `wolfsentry_get_timecbs()`
+
+## Bug Fixes
+
+* Fix error-path memory leak in JSON KV handling.
+
+* Fix "echo: write error: Broken pipe" condition in recipe for rule "force"
+
+* Various minor portability fixes.
+
+* Enlarged scope for build-time pedantic warnings -- now includes all of
+  CentiJSON.
+
+
 # wolfSentry Release 0.6.0 (Sep 30, 2022)
 
 Preview Release 0.6.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:

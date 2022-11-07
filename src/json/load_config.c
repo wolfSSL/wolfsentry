@@ -1388,9 +1388,10 @@ static wolfsentry_errcode_t json_process(
         WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_config_json_init(
+wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_config_load_flags_t load_flags,
+    const JSON_CONFIG *json_config,
     struct wolfsentry_json_process_state **jps)
 {
     wolfsentry_errcode_t ret;
@@ -1398,15 +1399,18 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
         .process = (int (*)(JSON_TYPE,  const unsigned char *, size_t,  void *))json_process
     };
 
-    const JSON_CONFIG json_config = {
+    static const JSON_CONFIG default_json_config = {
         .max_total_len = 0,
         .max_total_values = 0,
         .max_number_len = 20,
-        .max_string_len = WOLFSENTRY_MAX_LABEL_BYTES,
+        .max_string_len = WOLFSENTRY_KV_MAX_VALUE_BYTES,
         .max_key_len = WOLFSENTRY_MAX_LABEL_BYTES,
-        .max_nesting_level = 10,
+        .max_nesting_level = WOLFSENTRY_MAX_JSON_NESTING,
         .flags = JSON_NOSCALARROOT
     };
+
+    if (json_config == NULL)
+        json_config = &default_json_config;
 
     if (wolfsentry == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -1468,7 +1472,7 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
     ret = json_init(wolfsentry_get_allocator((*jps)->wolfsentry),
                     &(*jps)->parser,
                     &json_callbacks,
-                    &json_config,
+                    json_config,
                     *jps);
     if (ret < 0) {
         ret = wolfsentry_centijson_errcode_translate(ret);
@@ -1491,6 +1495,19 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
         WOLFSENTRY_ERROR_RERETURN(ret);
     } else
         WOLFSENTRY_RETURN_OK;
+}
+
+wolfsentry_errcode_t wolfsentry_config_json_init(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_config_load_flags_t load_flags,
+    struct wolfsentry_json_process_state **jps)
+{
+    WOLFSENTRY_ERROR_RERETURN(
+        wolfsentry_config_json_init_ex(
+            wolfsentry,
+            load_flags,
+            NULL,
+            jps));
 }
 
 /* use this to initialize configuration with nonzero route_private_data_size and
@@ -1632,6 +1649,26 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
         WOLFSENTRY_RETURN_OK;
 }
 
+wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
+    struct wolfsentry_context *wolfsentry,
+    const unsigned char *json_in,
+    size_t json_in_len,
+    wolfsentry_config_load_flags_t load_flags,
+    const JSON_CONFIG *json_config,
+    char *err_buf,
+    size_t err_buf_size)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_json_process_state *jps;
+    if ((ret = wolfsentry_config_json_init_ex(wolfsentry, load_flags, json_config, &jps)) < 0)
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    if ((ret = wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size)) < 0) {
+        (void)wolfsentry_config_json_fini(&jps, NULL, 0);
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_config_json_fini(&jps, err_buf, err_buf_size));
+}
+
 wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     struct wolfsentry_context *wolfsentry,
     const unsigned char *json_in,
@@ -1640,13 +1677,13 @@ wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     char *err_buf,
     size_t err_buf_size)
 {
-    wolfsentry_errcode_t ret;
-    struct wolfsentry_json_process_state *jps;
-    if ((ret = wolfsentry_config_json_init(wolfsentry, load_flags, &jps)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
-    if ((ret = wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size)) < 0) {
-        (void)wolfsentry_config_json_fini(&jps, NULL, 0);
-        WOLFSENTRY_ERROR_RERETURN(ret);
-    }
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_config_json_fini(&jps, err_buf, err_buf_size));
+    WOLFSENTRY_ERROR_RERETURN(
+        wolfsentry_config_json_oneshot_ex(
+            wolfsentry,
+            json_in,
+            json_in_len,
+            load_flags,
+            NULL,
+            err_buf,
+            err_buf_size));
 }

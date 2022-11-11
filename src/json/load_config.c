@@ -153,6 +153,9 @@ struct wolfsentry_json_process_state {
     char cur_keyname[WOLFSENTRY_MAX_LABEL_BYTES];
     int cur_keydepth;
     JSON_INPUT_POS key_pos;
+#if defined(WOLFSENTRY_HAVE_JSON_DOM) && defined(WOLFSENTRY_JSON_VALUE_MAX_BYTES)
+    JSON_INPUT_POS json_value_start_pos;
+#endif
 
     wolfsentry_errcode_t fini_ret;
 
@@ -1075,6 +1078,9 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
 
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
     if ((jps->object_under_construction == O_U_C_USER_VALUE) && (jps->section_under_construction != S_U_C_USER_VALUE_JSON) && (! strcmp(jps->cur_keyname, "json"))) {
+#ifdef WOLFSENTRY_JSON_VALUE_MAX_BYTES
+        jps->json_value_start_pos = jps->parser.pos;
+#endif
         jps->section_under_construction = S_U_C_USER_VALUE_JSON;
         ret = json_dom_init_1(wolfsentry_get_allocator(jps->wolfsentry), &jps->dom_parser, jps->dom_parser_flags);
         if (ret < 0)
@@ -1082,6 +1088,13 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
     }
 
     if ((jps->cur_depth >= 3) && (jps->object_under_construction == O_U_C_USER_VALUE) && (jps->section_under_construction == S_U_C_USER_VALUE_JSON)) {
+
+#ifdef WOLFSENTRY_JSON_VALUE_MAX_BYTES
+        if (jps->parser.pos.offset - jps->json_value_start_pos.offset > WOLFSENTRY_JSON_VALUE_MAX_BYTES) {
+            memcpy(&jps->parser.err_pos, &jps->parser.pos, sizeof jps->parser.err_pos);
+            WOLFSENTRY_ERROR_RETURN(CONFIG_JSON_VALUE_SIZE);
+        }
+#endif
 
         ret = json_dom_process(json_type, data, data_size, (void *)&jps->dom_parser);
 

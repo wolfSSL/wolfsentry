@@ -154,6 +154,8 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Configuration parsing failed";
     case WOLFSENTRY_ERROR_ID_CONFIG_MISSING_HANDLER:
         return "Configuration processing failed due to missing handler";
+    case WOLFSENTRY_ERROR_ID_CONFIG_JSON_VALUE_SIZE:
+        return "Configuration contains an overlong JSON value";
     case WOLFSENTRY_ERROR_ID_OP_NOT_SUPP_FOR_PROTO:
         return "Operation not supported for protocol";
     case WOLFSENTRY_ERROR_ID_WRONG_TYPE:
@@ -241,6 +243,8 @@ const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
         return "CONFIG_PARSER";
     case WOLFSENTRY_ERROR_ID_CONFIG_MISSING_HANDLER:
         return "CONFIG_MISSING_HANDLER";
+    case WOLFSENTRY_ERROR_ID_CONFIG_JSON_VALUE_SIZE:
+        return "CONFIG_JSON_VALUE_SIZE";
     case WOLFSENTRY_ERROR_ID_OP_NOT_SUPP_FOR_PROTO:
         return "OP_NOT_SUPP_FOR_PROTO";
     case WOLFSENTRY_ERROR_ID_WRONG_TYPE:

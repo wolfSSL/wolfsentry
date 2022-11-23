@@ -44,7 +44,7 @@ Preview Release 0.7.0 of the wolfSentry embedded firewall/IDPS has bug fixes and
   JSON configuration package -- JSON cannot change or override the read-only
   bit.
 
-#### KV mutabulity APIs:
+#### KV mutability APIs:
 
 * `wolfsentry_user_value_set_mutability()`
 * `wolfsentry_user_value_get_mutability()`

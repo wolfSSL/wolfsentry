@@ -459,7 +459,7 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
          ca_certs_i < &ca_certs[sizeof(ca_certs) / sizeof(ca_certs[0])];
          ++ca_certs_i)
     {
-        if ((issuerHash == ca_certs_i->subjectHash) &&
+        if ( /* (issuerHash == ca_certs_i->subjectHash) && */
                 (!strncmp(issuerName, ca_certs_i->subject, WC_ASN_NAME_MAX))) {
             app_data->issuer_cert = ca_certs_i;
             break;

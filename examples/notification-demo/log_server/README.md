@@ -67,14 +67,12 @@ make
 ./log_server --kv-string notification-server-addr=10.0.4.4
 
 # start the notification daemon in another terminal (see examples/notification-demo/udp_to_dbus)
+# (change working directory to examples/notification-demo/udp_to_dbus)
 ./udp_to_dbus
 
-# For the below client invocations, change working directory to the top of the wolfSSL source tree.
+# For the below client invocations, change working directory to examples/notification-demo/log_server.
 
-# Connect from wolfSSL and start a TLS client connection
-./examples/client/client -v 4 -c ./certs/client-ecc384-cert.pem -k ./certs/client-ecc384-key.pem -A ./certs/ca-ecc-cert.pem -g
-
-# (the server will reply with "Requested path not recognized." -- this is normal.)
+# Note these examples assume a modern curl.  If necessary, build and install it -- see https://curl.se/
 
 # Connect from `curl` and dump the logs
 curl --cert ./certs/client-ecc384-cert.pem --key ./certs/client-ecc384-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve www.wolfssl.com:10443:127.0.0.1 https://www.wolfssl.com:10443/show-log

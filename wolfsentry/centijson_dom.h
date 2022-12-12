@@ -75,7 +75,7 @@ typedef struct JSON_DOM_PARSER {
 /* Used internally by load_config.c:handle_user_value_clause() */
 int json_dom_init_1(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_DOM_PARSER* dom_parser, unsigned dom_flags);
 
@@ -93,7 +93,7 @@ int json_dom_clean(JSON_DOM_PARSER* dom_parser);
  */
 WOLFSENTRY_API int json_dom_init(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_DOM_PARSER* dom_parser, const JSON_CONFIG* config, unsigned dom_flags);
 
@@ -120,7 +120,7 @@ WOLFSENTRY_API int json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_dom,
  */
 WOLFSENTRY_API int json_dom_parse(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                    const unsigned char* input, size_t size, const JSON_CONFIG* config,
                    unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos);
@@ -143,7 +143,7 @@ WOLFSENTRY_API int json_dom_parse(
 
 WOLFSENTRY_API int json_dom_dump(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                   const JSON_VALUE* root,
                   JSON_DUMP_CALLBACK write_func, void* user_data,

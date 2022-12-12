@@ -161,6 +161,9 @@ typedef struct JSON_CALLBACKS {
 typedef struct JSON_PARSER {
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator;
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread;
+#endif
 #endif
     JSON_CALLBACKS callbacks;
     JSON_CONFIG config;
@@ -205,7 +208,7 @@ WOLFSENTRY_API void json_default_config(JSON_CONFIG* config);
  */
 WOLFSENTRY_API int json_init(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
               JSON_PARSER* parser,
               const JSON_CALLBACKS* callbacks,
@@ -245,7 +248,7 @@ WOLFSENTRY_API int json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos);
  */
 WOLFSENTRY_API int json_parse(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                const unsigned char* input, size_t size,
                const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,

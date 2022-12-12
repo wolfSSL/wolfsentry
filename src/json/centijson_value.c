@@ -37,30 +37,30 @@
 
 #ifdef WOLFSENTRY
 
-static void *json_malloc(struct wolfsentry_allocator *allocator, size_t size) {
+static void *json_malloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), size_t size) {
     if (allocator)
-        return allocator->malloc(allocator->context, size);
+        return allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), size);
     else
         return malloc(size);
 }
-#define malloc(size) json_malloc(allocator, size)
-static void json_free(struct wolfsentry_allocator *allocator, void *ptr) {
+#define malloc(size) json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), size)
+static void json_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), void *ptr) {
     if (allocator)
-        allocator->free(allocator->context, ptr);
+        allocator->free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr);
     else
         free(ptr);
     WOLFSENTRY_RETURN_VOID;
 }
-#define free(ptr) json_free(allocator, ptr)
-static void *json_realloc(struct wolfsentry_allocator *allocator, void *ptr, size_t size) {
+#define free(ptr) json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), ptr)
+static void *json_realloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), void *ptr, size_t size) {
     if (ptr == NULL)
-        return json_malloc(allocator, size);
+        return json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), size);
     if (allocator)
-        return allocator->realloc(allocator->context, ptr, size);
+        return allocator->realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr, size);
     else
         return realloc(ptr, size);
 }
-#define realloc(ptr, size) json_realloc(allocator, ptr, size)
+#define realloc(ptr, size) json_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), ptr, size)
 
 #endif
 
@@ -134,7 +134,7 @@ struct DICT_tag {
 static void*
 json_value_init_ex(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size, size_t align)
 {
@@ -160,13 +160,13 @@ json_value_init_ex(
 static void*
 json_value_init(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, JSON_VALUE_TYPE type, size_t size)
 {
     return json_value_init_ex(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, type, size, 1);
 }
@@ -174,7 +174,7 @@ json_value_init(
 static int
 json_value_init_simple(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, JSON_VALUE_TYPE type, const void* data, size_t size)
 {
@@ -182,7 +182,7 @@ json_value_init_simple(
 
     payload = json_value_init(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, type, size);
     if(payload == NULL)
@@ -360,7 +360,7 @@ json_value_init_bool(JSON_VALUE* v, int b)
 int
 json_value_init_int32(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, int32_t i32)
 {
@@ -369,7 +369,7 @@ json_value_init_int32(
 
     return json_value_init_simple(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_INT32, &i32, sizeof(int32_t));
 }
@@ -377,7 +377,7 @@ json_value_init_int32(
 int
 json_value_init_uint32(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, uint32_t u32)
 {
@@ -386,7 +386,7 @@ json_value_init_uint32(
 
     return json_value_init_simple(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_UINT32, &u32, sizeof(uint32_t));
 }
@@ -394,7 +394,7 @@ json_value_init_uint32(
 int
 json_value_init_int64(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, int64_t i64)
 {
@@ -403,7 +403,7 @@ json_value_init_int64(
 
     return json_value_init_simple(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_INT64, &i64, sizeof(int64_t));
 }
@@ -411,7 +411,7 @@ json_value_init_int64(
 int
 json_value_init_uint64(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, uint64_t u64)
 {
@@ -420,7 +420,7 @@ json_value_init_uint64(
 
     return json_value_init_simple(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_UINT64, &u64, sizeof(uint64_t));
 }
@@ -428,7 +428,7 @@ json_value_init_uint64(
 int
 json_value_init_float(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, float f)
 {
@@ -437,7 +437,7 @@ json_value_init_float(
 
     return json_value_init_simple(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_FLOAT, &f, sizeof(float));
 }
@@ -445,7 +445,7 @@ json_value_init_float(
 int
 json_value_init_double(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, double d)
 {
@@ -454,7 +454,7 @@ json_value_init_double(
 
     return json_value_init_simple(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_DOUBLE, &d, sizeof(double));
 }
@@ -462,7 +462,7 @@ json_value_init_double(
 int
 json_value_init_string_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* str, size_t len)
 {
@@ -483,7 +483,7 @@ json_value_init_string_(
 
     payload = json_value_init(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_STRING, off + len + 1);
     if(payload == NULL)
@@ -505,13 +505,13 @@ json_value_init_string_(
 int
 json_value_init_string(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* str)
 {
     return json_value_init_string_(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, str, (str != NULL) ? strlen((const char *)str) : 0);
 }
@@ -519,7 +519,7 @@ json_value_init_string(
 int
 json_value_init_array(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v)
 {
@@ -530,7 +530,7 @@ json_value_init_array(
 
     payload = json_value_init_ex(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_ARRAY, sizeof(ARRAY), sizeof(void*));
     if(payload == NULL)
@@ -543,13 +543,13 @@ json_value_init_array(
 int
 json_value_init_dict(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v)
 {
     return json_value_init_dict_ex(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, NULL, 0);
 }
@@ -557,7 +557,7 @@ json_value_init_dict(
 int
 json_value_init_dict_ex(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                    JSON_VALUE* v,
                    int (*custom_cmp_func)(const unsigned char*, size_t, const unsigned char*, size_t),
@@ -576,7 +576,7 @@ json_value_init_dict_ex(
 
     payload = json_value_init_ex(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, JSON_VALUE_DICT, payload_size, sizeof(void*));
     if(payload == NULL)
@@ -597,7 +597,7 @@ json_value_init_dict_ex(
 void
 json_value_fini(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v)
 {
@@ -607,14 +607,14 @@ json_value_fini(
     if(json_value_type(v) == JSON_VALUE_ARRAY)
         json_value_array_clean(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v);
 
     if(json_value_type(v) == JSON_VALUE_DICT)
         json_value_dict_clean(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v);
 
@@ -838,7 +838,7 @@ json_value_array_payload(JSON_VALUE* v)
 static int
 json_value_array_realloc(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     ARRAY* a, size_t alloc)
 {
@@ -889,13 +889,13 @@ json_value_array_size(const JSON_VALUE* v)
 JSON_VALUE*
 json_value_array_append(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v)
 {
     return json_value_array_insert(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, json_value_array_size(v));
 }
@@ -903,7 +903,7 @@ json_value_array_append(
 JSON_VALUE*
 json_value_array_insert(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, size_t index)
 {
@@ -915,7 +915,7 @@ json_value_array_insert(
     if(a->size >= a->alloc) {
         if(json_value_array_realloc(
 #ifdef WOLFSENTRY
-               allocator,
+               WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
                a, (a->alloc > 0) ? a->alloc * 2 : 1) != 0)
             return NULL;
@@ -933,13 +933,13 @@ json_value_array_insert(
 int
 json_value_array_remove(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, size_t index)
 {
     return json_value_array_remove_range(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, index, 1);
 }
@@ -947,7 +947,7 @@ json_value_array_remove(
 int
 json_value_array_remove_range(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, size_t index, size_t count)
 {
@@ -960,7 +960,7 @@ json_value_array_remove_range(
     for(i = index; i < index + count; i++)
         json_value_fini(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &a->json_value_buf[i]);
 
@@ -973,7 +973,7 @@ json_value_array_remove_range(
     if(4 * a->size < a->alloc)
         json_value_array_realloc(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             a, a->alloc / 2);
 
@@ -983,7 +983,7 @@ json_value_array_remove_range(
 void
 json_value_array_clean(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v)
 {
@@ -996,7 +996,7 @@ json_value_array_clean(
     for(i = 0; i < a->size; i++)
         json_value_fini(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &a->json_value_buf[i]);
 
@@ -1268,7 +1268,7 @@ json_value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
 JSON_VALUE*
 json_value_dict_add_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
@@ -1276,7 +1276,7 @@ json_value_dict_add_(
 
     res = json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, key, key_len);
     return (json_value_is_new(res) ? res : NULL);
@@ -1284,13 +1284,13 @@ json_value_dict_add_(
 
 JSON_VALUE* json_value_dict_add(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key)
 {
     return json_value_dict_add_(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, key, strlen((const char *)key));
 }
@@ -1298,7 +1298,7 @@ JSON_VALUE* json_value_dict_add(
 JSON_VALUE*
 json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
@@ -1332,7 +1332,7 @@ json_value_dict_get_or_add_(
         return NULL;
     if(json_value_init_string_(
 #ifdef WOLFSENTRY
-           allocator,
+           WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
            &node->key, key, key_len) != 0) {
         free(node);
@@ -1377,13 +1377,13 @@ json_value_dict_get_or_add_(
 JSON_VALUE*
 json_value_dict_get_or_add(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key)
 {
     return json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, key, (key != NULL) ? strlen((const char *)key) : 0);
 }
@@ -1474,7 +1474,7 @@ json_value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
 int
 json_value_dict_remove_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
@@ -1596,12 +1596,12 @@ json_value_dict_remove_(
     }
     json_value_fini(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->key);
     json_value_fini(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->json_value);
     free(node);
@@ -1613,13 +1613,13 @@ json_value_dict_remove_(
 int
 json_value_dict_remove(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key)
 {
     return json_value_dict_remove_(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         v, key, (key != NULL) ? strlen((const char *)key) : 0);
 }
@@ -1673,7 +1673,7 @@ json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VA
 void
 json_value_dict_clean(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v)
 {
@@ -1694,12 +1694,12 @@ json_value_dict_clean(
 
         json_value_fini(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->key);
         json_value_fini(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->json_value);
         free(node);

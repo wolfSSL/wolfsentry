@@ -132,7 +132,7 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry_options.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry_options.h
 
 all: $(BUILD_TOP)/$(LIB_NAME)
 
@@ -181,6 +181,7 @@ endif
 	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 endif
 
+$(BUILD_TOP)/$(LIB_NAME): $(BUILD_TOP)/wolfsentry_options.h
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
 ifdef VERY_QUIET
 	@rm -f $@
@@ -206,6 +207,7 @@ endif
 	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
 endif
 
+$(BUILD_TOP)/$(DYNLIB_NAME): $(BUILD_TOP)/wolfsentry_options.h
 $(BUILD_TOP)/$(DYNLIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So))
 ifdef VERY_QUIET
 	@$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
@@ -230,12 +232,12 @@ $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basen
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
 endif
 
 
@@ -245,12 +247,12 @@ UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
 endif
 
 ifdef BUILD_DYNAMIC
@@ -338,18 +340,19 @@ endif
 	fi
 
 dist-test: dist
-	@[ -d $(BUILD_TOP)/dist-test ] || mkdir -p $(BUILD_TOP)/dist-test
+	@rm -rf $(BUILD_TOP)/dist-test
+	@mkdir -p $(BUILD_TOP)/dist-test
 ifdef VERY_QUIET
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && ln -s ../wolfsentry_options.h wolfsentry/wolfsentry_options.h && $(MAKE) --quiet test
 else
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) test
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && ln -s ../wolfsentry_options.h wolfsentry/wolfsentry_options.h && $(MAKE) test
 endif
 
 dist-test-clean:
 	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $(SRC_TOP)/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $(SRC_TOP)/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
 	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
 
-CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
+CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
 .PHONY: release
 release:

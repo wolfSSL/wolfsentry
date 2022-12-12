@@ -66,14 +66,14 @@ static const JSON_CONFIG json_defaults = {
 
 static void *json_malloc(JSON_PARSER *parser, size_t size) {
     if (parser->allocator)
-        return parser->allocator->malloc(parser->allocator->context, size);
+        return parser->allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(parser, allocator->context), size);
     else
         return malloc(size);
 }
 #define malloc(size) json_malloc(parser, size)
 static void json_free(JSON_PARSER *parser, void *ptr) {
     if (parser->allocator)
-        parser->allocator->free(parser->allocator->context, ptr);
+        parser->allocator->free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(parser, allocator->context), ptr);
     else
         free(ptr);
     WOLFSENTRY_RETURN_VOID;
@@ -83,7 +83,7 @@ static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
     if (ptr == NULL)
         return json_malloc(parser, size);
     if (parser->allocator)
-        return parser->allocator->realloc(parser->allocator->context, ptr, size);
+        return parser->allocator->realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(parser, allocator->context), ptr, size);
     else
         return realloc(ptr, size);
 }
@@ -131,7 +131,7 @@ json_default_config(JSON_CONFIG* cfg)
 int
 json_init(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_PARSER* parser, const JSON_CALLBACKS* callbacks,
               const JSON_CONFIG* config, void* user_data)
@@ -145,6 +145,9 @@ json_init(
     memcpy(&parser->config, config, sizeof(JSON_CONFIG));
 #ifdef WOLFSENTRY
     parser->allocator = allocator;
+#ifdef WOLFSENTRY_THREADSAFE
+    parser->thread = thread;
+#endif
 #endif
 
     parser->user_data = user_data;
@@ -969,7 +972,7 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
 int
 json_parse(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
            const unsigned char* input, size_t size,
            const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,
@@ -980,7 +983,7 @@ json_parse(
 
     ret = json_init(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &parser, callbacks, config, user_data);
     if(ret < 0)

@@ -66,30 +66,7 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
-#ifdef WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING
-
-struct wolfsentry_shared_locker_list_ent {
-    struct wolfsentry_list_ent_header header;
-    wolfsentry_thread_id_t thread;
-    enum { WOLFSENTRY_LOCK_HAVE_NONE = (1 << 0),
-           WOLFSENTRY_LOCK_HAVE_READ = (1 << 1),
-           WOLFSENTRY_LOCK_WAIT_READ = (1 << 2),
-           WOLFSENTRY_LOCK_WAIT_WRITE = (1 << 3),
-           WOLFSENTRY_LOCK_WAIT_R2W_REDEMPTION = (1 << 4)
-    } thread_state;
-    int held_lock_count; /* exceeds 1 only when !WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED. */
-};
-
-struct wolfsentry_shared_locker_list {
-    struct wolfsentry_list_header header;
-#ifdef WOLFSENTRY_LOCK_DEBUGGING
-    int incoherency_expected;
-#endif
-};
-
 #define WOLFSENTRY_THREAD_ID_SENT ~0UL /* lock handoff not yet implemented. */
-
-#endif /* WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING */
 
 struct wolfsentry_rwlock {
     const struct wolfsentry_host_platform_interface *hpi;
@@ -114,10 +91,6 @@ struct wolfsentry_rwlock {
     } state;
     volatile int promoted_at_count;
     wolfsentry_lock_flags_t flags;
-#ifdef WOLFSENTRY_LOCK_SHARED_ERROR_CHECKING
-    struct wolfsentry_shared_locker_list shared_locker_list;
-    struct wolfsentry_shared_locker_list_ent *shared_locker_list_ent;
-#endif
 };
 
 struct wolfsentry_thread_context {

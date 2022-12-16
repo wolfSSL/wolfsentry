@@ -629,7 +629,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
     WOLFSENTRY_SET_BITS(route_to_insert->flags, WOLFSENTRY_ROUTE_FLAG_IN_TABLE);
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_to_insert->header, &route_table->header, 1 /* unique_p */)) < 0) {
         WOLFSENTRY_CLEAR_BITS(route_to_insert->flags, WOLFSENTRY_ROUTE_FLAG_IN_TABLE);
-        wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_to_insert->header);
+        (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_to_insert->header);
         route_to_insert->header.id = WOLFSENTRY_ENT_ID_NONE;
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
@@ -719,15 +719,18 @@ wolfsentry_errcode_t wolfsentry_route_insert_into_table(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *event = NULL;
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
     WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     ret = wolfsentry_route_insert_2(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, route_table, remote, local, flags, event, id, NULL /* route */, action_results);
     if (event != NULL)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_route_insert(
@@ -769,15 +772,18 @@ wolfsentry_errcode_t wolfsentry_route_insert_into_table_and_check_out(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *event = NULL;
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
     WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     ret = wolfsentry_route_insert_2(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, route_table, remote, local, flags, event, NULL /* id */, route, action_results);
     if (event != NULL)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_route_insert_and_check_out(
@@ -1117,9 +1123,12 @@ wolfsentry_errcode_t wolfsentry_route_delete_from_table(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *event = NULL;
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
 
     WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
@@ -1127,7 +1136,7 @@ wolfsentry_errcode_t wolfsentry_route_delete_from_table(
     ret = wolfsentry_route_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, caller_arg, remote, local, flags, event, action_results, n_deleted);
     if (event)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_route_delete(
@@ -1167,9 +1176,11 @@ wolfsentry_errcode_t wolfsentry_route_delete_by_id(
     struct wolfsentry_event *event = NULL;
     struct wolfsentry_route *route;
 
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
     WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
 
@@ -1189,7 +1200,7 @@ wolfsentry_errcode_t wolfsentry_route_delete_by_id(
   out:
     if (event)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(

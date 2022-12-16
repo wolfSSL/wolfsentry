@@ -151,7 +151,7 @@ static wolfsentry_errcode_t wolfsentry_kv_insert_1(
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header, &kv_table->header, 1 /* unique_p */)) < 0)
-        wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header);
+        (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header);
 
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -168,7 +168,8 @@ wolfsentry_errcode_t wolfsentry_kv_insert(
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
-    return wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv);
+    WOLFSENTRY_MUTEX_OR_RETURN();
+    WOLFSENTRY_ERROR_RERETURN_AND_UNLOCK(wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv));
 }
 
 static inline int wolfsentry_kv_value_eq_1(struct wolfsentry_kv_pair *a, struct wolfsentry_kv_pair *b) {
@@ -220,25 +221,27 @@ wolfsentry_errcode_t wolfsentry_kv_set(
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     old = kv;
 
     if (wolfsentry_table_ent_get(&kv_table->header, (struct wolfsentry_table_ent_header **)&old) >= 0) {
         if (old->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY)
-            WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
+            WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(NOT_PERMITTED);
         if (wolfsentry_kv_value_eq_1(&kv->kv, &old->kv)) {
-            ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL);
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL);
+            WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+            WOLFSENTRY_UNLOCK_AND_RETURN_OK;
         }
         if (((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0) ||
             ((ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL)) < 0))
         {
-            (void)wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL);
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
         }
     }
 
     ret = wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv);
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 static wolfsentry_errcode_t wolfsentry_kv_get_1(
@@ -499,15 +502,18 @@ wolfsentry_errcode_t wolfsentry_kv_delete(
     wolfsentry_errcode_t ret;
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     ret = wolfsentry_kv_get_1(kv_table, kv_template, &old);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     if (old->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY)
-        WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(NOT_PERMITTED);
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL);
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 struct apply_validator_context {

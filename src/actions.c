@@ -123,7 +123,7 @@ wolfsentry_errcode_t wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_IN, const 
     struct wolfsentry_action *new = NULL;
     wolfsentry_errcode_t ret;
 
-    WOLFSENTRY_MUTEX_OR_RETURN(&wolfsentry->lock);
+    WOLFSENTRY_MUTEX_OR_RETURN();
 
     if ((ret = wolfsentry_action_new_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, flags, handler, handler_arg, &new)) < 0)
         goto out;
@@ -132,7 +132,7 @@ wolfsentry_errcode_t wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_IN, const 
     if (id)
         *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header, &wolfsentry->actions->header, 1 /* unique_p */)) < 0) {
-        wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header);
+        (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header);
         ret = WOLFSENTRY_ERROR_RECODE(ret);
         goto out;
     }
@@ -145,7 +145,7 @@ out:
             WOLFSENTRY_FREE(new);
     }
 
-    WOLFSENTRY_UNLOCK_AND_RETURN(&wolfsentry->lock, ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, wolfsentry_action_res_t *action_results) {
@@ -170,7 +170,7 @@ wolfsentry_errcode_t wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_IN, const 
     ret = wolfsentry_action_init_1(label, label_len, WOLFSENTRY_ACTION_FLAG_NONE, NULL, NULL, &target.action, sizeof target);
     WOLFSENTRY_RERETURN_IF_ERROR(ret); // GCOV_EXCL_LINE
 
-    WOLFSENTRY_MUTEX_OR_RETURN(&wolfsentry->lock);
+    WOLFSENTRY_MUTEX_OR_RETURN();
 
     target.action.header.parent_table = &wolfsentry->actions->header;
 
@@ -181,7 +181,7 @@ wolfsentry_errcode_t wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_IN, const 
 
 out:
 
-    WOLFSENTRY_UNLOCK_AND_RETURN(&wolfsentry->lock, ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_flush_all(WOLFSENTRY_CONTEXT_ARGS_IN) {
@@ -256,8 +256,7 @@ static inline int wolfsentry_action_list_find_1(
     struct wolfsentry_action_list_ent **action_list_ent)
 {
     struct wolfsentry_action_list_ent *i;
-    (void)wolfsentry;
-    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
     for (wolfsentry_list_ent_get_first(&action_list->header, (struct wolfsentry_list_ent_header **)&i);
          i;
          wolfsentry_list_ent_get_next(&action_list->header, (struct wolfsentry_list_ent_header **)&i)) {
@@ -381,7 +380,7 @@ wolfsentry_errcode_t wolfsentry_action_list_insert_after(
 }
 
 wolfsentry_errcode_t wolfsentry_action_list_clone(
-    struct wolfsentry_context *src_context,
+    struct wolfsentry_context *wolfsentry,
 #ifdef WOLFSENTRY_THREADSAFE
     struct wolfsentry_thread_context *thread,
 #endif
@@ -393,7 +392,8 @@ wolfsentry_errcode_t wolfsentry_action_list_clone(
     wolfsentry_errcode_t ret;
     struct wolfsentry_action_list_ent *ale_i;
 
-    (void)src_context;
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     (void)flags;
 
     for (wolfsentry_list_ent_get_first(&src_action_list->header, (struct wolfsentry_list_ent_header **)&ale_i);
@@ -413,22 +413,17 @@ wolfsentry_errcode_t wolfsentry_action_list_clone(
 
         new_ale->action = new_action;
         WOLFSENTRY_REFCOUNT_INCREMENT(new_action->header.refcount, ret);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
         wolfsentry_list_ent_append(&dest_action_list->header, &new_ale->header);
     }
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
   out:
 
-    if (ret < 0) {
-#ifdef WOLFSENTRY_THREADSAFE
-        (void)wolfsentry_action_list_delete_all(dest_context, thread, dest_action_list);
-#else
-        (void)wolfsentry_action_list_delete_all(dest_context, dest_action_list);
-#endif
-    }
+    if (ret < 0)
+        (void)wolfsentry_action_list_delete_all(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(dest_context), dest_action_list);
 
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_action_list_delete(

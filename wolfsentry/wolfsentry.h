@@ -158,8 +158,9 @@ typedef enum {
     struct wolfsentry_thread_context *thread =                          \
         (struct wolfsentry_thread_context *)&thread_buffer;             \
     wolfsentry_errcode_t _init_thread_context_ret =                     \
-        wolfsentry_init_thread_context(thread, flags, NULL /* user_context */);
+        wolfsentry_init_thread_context(thread, flags, NULL /* user_context */)
 #define WOLFSENTRY_THREAD_GET_ERROR _init_thread_context_ret
+#define WOLFSENTRY_THREAD_TAILER(flags) wolfsentry_destroy_thread_context(thread, flags)
 
 typedef enum {
     WOLFSENTRY_LOCK_FLAG_NONE = 0,
@@ -170,17 +171,19 @@ typedef enum {
     WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO = 1<<4,
     WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO = 1<<5,
     WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO = 1<<6,
-    WOLFSENTRY_LOCK_FLAG_READONLY = 1<<7
+    WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE = 1<<7,
+    WOLFSENTRY_LOCK_FLAG_READONLY = 1<<8
 } wolfsentry_lock_flags_t;
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t thread_flags);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t thread_flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, int usecs);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, long epoch_secs, long epoch_nsecs);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfsentry_thread_context *thread_context);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfsentry_thread_context *thread_context);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context);
 
 struct wolfsentry_rwlock;
 
@@ -227,6 +230,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwloc
 
 #define WOLFSENTRY_THREAD_HEADER(flags) do {} while (0)
 #define WOLFSENTRY_THREAD_GET_ERROR 0
+#define WOLFSENTRY_THREAD_TAILER(flags) 0
 
 #define wolfsentry_lock_init(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_alloc(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
@@ -582,6 +586,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed(
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared(
+    WOLFSENTRY_CONTEXT_ARGS_IN);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_abstimed(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct timespec *abs_timeout);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_with_reservation_abstimed(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct timespec *abs_timeout);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_time_t max_wait);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(
     WOLFSENTRY_CONTEXT_ARGS_IN);
 
@@ -590,6 +605,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(
 #define wolfsentry_context_lock_mutex(x) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_context_lock_mutex_abstimed(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_context_lock_mutex_timed(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_context_lock_shared(x) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_context_lock_shared_abstimed(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_context_lock_shared_with_reservation_abstimed(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
+#define wolfsentry_context_lock_shared_timed(x, y) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_context_unlock(x) WOLFSENTRY_ERROR_ENCODE(OK)
 
 #endif /* WOLFSENTRY_THREADSAFE */

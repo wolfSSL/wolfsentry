@@ -1443,6 +1443,11 @@ wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT))
+        WOLFSENTRY_MUTEX_OR_RETURN();
+    else
+        WOLFSENTRY_PROMOTABLE_OR_RETURN();
+
     if ((*jps = (struct wolfsentry_json_process_state *)wolfsentry_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT, sizeof **jps)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memset(*jps, 0, sizeof **jps);
@@ -1481,9 +1486,9 @@ wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 #ifdef WOLFSENTRY_THREADSAFE
     (*jps)->thread = thread;
 #endif
-    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT))
+    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
         (*jps)->wolfsentry = wolfsentry;
-    else {
+    } else {
         ret = wolfsentry_context_clone(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             &(*jps)->wolfsentry,
@@ -1507,7 +1512,7 @@ wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         goto out;
     }
 
-    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
+    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
         if ((ret = wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_OUT)) < 0)
             goto out;
     }
@@ -1520,9 +1525,9 @@ wolfsentry_errcode_t wolfsentry_config_json_init_ex(
             (void)wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT);
         wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_OUT, *jps);
         *jps = NULL;
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     } else
-        WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_RETURN_OK; /* keeping lock! */
 }
 
 wolfsentry_errcode_t wolfsentry_config_json_init(
@@ -1665,7 +1670,11 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
 #endif
 
     if ((*jps)->wolfsentry && ((*jps)->wolfsentry != (*jps)->wolfsentry_actual))
-        (void)wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+#ifdef WOLFSENTRY_THREADSAFE
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_unlock((*jps)->wolfsentry_actual, (*jps)->thread));
+#endif
 
     wolfsentry_free(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, *jps);
 

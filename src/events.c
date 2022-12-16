@@ -244,24 +244,26 @@ wolfsentry_errcode_t wolfsentry_event_insert(
     struct wolfsentry_event *new;
     wolfsentry_errcode_t ret;
 
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     (void)flags; /* for now */
 
     ret = wolfsentry_event_new_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, priority, config, &new);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
 
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header)) < 0) {
         wolfsentry_event_free(WOLFSENTRY_CONTEXT_ARGS_OUT, new);
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
     if (id)
         *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header, &wolfsentry->events->header, 1 /* unique_p */)) < 0) {
-        wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header);
+        (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header);
         wolfsentry_event_free(WOLFSENTRY_CONTEXT_ARGS_OUT, new);
-        WOLFSENTRY_ERROR_RETURN_RECODED(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_RECODED(ret);
     }
 
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 const char *wolfsentry_event_get_label(const struct wolfsentry_event *event)

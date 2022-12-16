@@ -77,7 +77,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(SRC_TOP) -I$(BUILD_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
@@ -228,7 +228,12 @@ ifneq "$(NO_JSON)" "1"
     $(BUILD_TOP)/tests/test_json: override CFLAGS+=$(TEST_JSON_CFLAGS)
 endif
 
+$(BUILD_TOP)/wolfsentry/wolfsentry_options.h:
+	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
+	@[ -e $(BUILD_TOP)/wolfsentry/options.h ] || ln -s ../wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
+
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
@@ -343,9 +348,9 @@ dist-test: dist
 	@rm -rf $(BUILD_TOP)/dist-test
 	@mkdir -p $(BUILD_TOP)/dist-test
 ifdef VERY_QUIET
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && ln -s ../wolfsentry_options.h wolfsentry/wolfsentry_options.h && $(MAKE) --quiet test
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
 else
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && ln -s ../wolfsentry_options.h wolfsentry/wolfsentry_options.h && $(MAKE) test
+	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) test
 endif
 
 dist-test-clean:

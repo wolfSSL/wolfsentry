@@ -90,6 +90,8 @@ static wolfsentry_errcode_t test_init (void) {
     ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry));
     printf("wolfsentry_shutdown() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
@@ -131,6 +133,7 @@ static void *rd_routine(struct rwlock_args *args) {
     INCREMENT_PHASE(args);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     return 0;
 }
 
@@ -151,6 +154,7 @@ static void *wr_routine(struct rwlock_args *args) {
     INCREMENT_PHASE(args);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     return 0;
 }
 
@@ -174,6 +178,7 @@ static void *rd2wr_routine(struct rwlock_args *args) {
     args->measured_sequence[i] = args->thread_id + 4;
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     return 0;
 }
 
@@ -201,6 +206,7 @@ static void *rd2wr_reserved_routine(struct rwlock_args *args) {
     args->measured_sequence[i] = args->thread_id + 4;
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(args->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     return 0;
 }
 
@@ -309,6 +315,9 @@ usleep(10000);
     // GCOV_EXCL_STOP
     }
 
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_destroy(lock, thread, test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_init(wolfsentry_get_hpi(wolfsentry), thread, lock,
+                                                    test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
 
     /* now a scenario with shared2mutex and mutex2shared in the mix: */
 
@@ -349,9 +358,10 @@ usleep(10000);
 
     /* take the opportunity to test expected failures of the _timed() variants. */
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
 
     /* this unlock allows thread2 to finally get its mutex. */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
@@ -389,6 +399,10 @@ usleep(10000);
 
     /* again, using shared2mutex reservation: */
 
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_destroy(lock, thread, test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_init(wolfsentry_get_hpi(wolfsentry), thread, lock,
+                                                    test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
+
     thread1_args.thread_phase = thread2_args.thread_phase = thread3_args.thread_phase = thread4_args.thread_phase = 0;
 
     measured_sequence_i = 0;
@@ -399,7 +413,6 @@ usleep(10000);
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_reserve(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_abandon(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), INCOMPATIBLE_STATE));
-
 
     thread1_args.max_wait = MAX_WAIT; /* builtin wolfsentry_time_t is microseconds, same as usleep(). */
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread1, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread1_args));
@@ -433,11 +446,10 @@ usleep(10000);
 
     /* take the opportunity to test expected failures of the _timed() variants. */
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
-
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), LACKING_MUTEX));
 
@@ -473,8 +485,12 @@ usleep(10000);
     // GCOV_EXCL_STOP
     }
 
-
     /* cursory exercise of compound reservation calls. */
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_destroy(lock, thread, test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_init(wolfsentry_get_hpi(wolfsentry), thread, lock,
+                                                    test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex2shared(lock, thread, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
@@ -493,6 +509,10 @@ usleep(10000);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry, thread));
 
     (void)alarm(0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    printf("test_rwlocks succeeded.\n");
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -1192,6 +1212,8 @@ static int test_static_routes (void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -1643,6 +1665,8 @@ int wolfsentry_event_set_subevent(
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -2088,6 +2112,8 @@ static int test_user_values (void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -2375,6 +2401,8 @@ static int test_user_addr_families (void) {
     }
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -2858,6 +2886,8 @@ static int test_json(const char *fname) {
             (void)close(fd);
     }
 #endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 }

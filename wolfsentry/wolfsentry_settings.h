@@ -160,11 +160,11 @@ typedef uint32_t enumint_t;
     #ifndef WOLFSENTRY_THREAD_NO_ID
         #define WOLFSENTRY_THREAD_NO_ID 0
     #endif
-    #if !defined(WOLFSENTRY_THREAD_GET_ID)
+    #if !defined(WOLFSENTRY_THREAD_GET_ID_HANDLER)
         #if !defined(WOLFSENTRY_USE_NONPOSIX_SEMAPHORES)
-            #define WOLFSENTRY_THREAD_GET_ID pthread_self()
+            #define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self()
         #else
-            #error Must supply WOLFSENTRY_THREAD_GET_ID for WOLFSENTRY_THREADSAFE on non-POSIX targets.
+            #error Must supply WOLFSENTRY_THREAD_GET_ID_HANDLER for WOLFSENTRY_THREADSAFE on non-POSIX targets.
         #endif
     #endif
 

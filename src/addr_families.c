@@ -136,6 +136,8 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
     byname->header.refcount = 1;
 #endif
 
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header)) < 0)
         goto out;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -159,19 +161,19 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
     if (ret < 0) {
         if (bynumber != NULL) {
             if (bynumber->header.id != WOLFSENTRY_ENT_ID_NONE)
-                wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header);
+                (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header);
             WOLFSENTRY_FREE(bynumber);
         }
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
         if (byname != NULL) {
             if (byname->header.id != WOLFSENTRY_ENT_ID_NONE)
-                wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &byname->header);
+                (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &byname->header);
             WOLFSENTRY_FREE(byname);
         }
 #endif
     }
 
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 static wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber_1(
@@ -388,18 +390,20 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_bynumber(
     wolfsentry_errcode_t ret;
     struct wolfsentry_addr_family_bynumber *old;
 
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if ((ret = wolfsentry_addr_family_get_bynumber_1(bynumber_table, family_bynumber, &old)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->byname_ent->header)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 #endif
 
     ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, action_results);
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -413,18 +417,20 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_byname(
     wolfsentry_errcode_t ret;
     struct wolfsentry_addr_family_bynumber *old;
 
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if ((ret = wolfsentry_addr_family_get_byname_1(byname_table, family_byname, family_byname_len, &old)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->byname_ent->header)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 #endif
 
     ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, action_results);
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 #endif
 

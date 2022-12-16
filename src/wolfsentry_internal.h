@@ -105,7 +105,7 @@ struct wolfsentry_rwlock {
     } holder_count;
     volatile int read_waiter_count;
     volatile int write_waiter_count;
-    volatile int read2write_reserver_count;
+    volatile int read2write_waiter_read_count; /* the recursion depth of the shared lock held by read2write_reservation_holder */
     volatile enum {
         WOLFSENTRY_LOCK_UNINITED = 0,
         WOLFSENTRY_LOCK_UNLOCKED,
@@ -125,21 +125,20 @@ struct wolfsentry_thread_context {
     void *user_context;
     struct timespec deadline;
     wolfsentry_thread_flags_t current_thread_flags;
-    union {
-        struct wolfsentry_rwlock *outermost_shared_lock; /* only if _THREAD_FLAG_READONLY */
-        struct wolfsentry_rwlock *current_shared_lock; /* only if !_THREAD_FLAG_READONLY.
-                                                        * locker can have shared lock(s) only
-                                                        * for this lock.  if another shared lock is
-                                                        * obtained, first this one will be
-                                                        * promoted.  a currently held lock can
-                                                        * be demoted only if it matches
-                                                        * current_shared_lock.
-                                                        */
-    } tracked_lock;
-    int recursion_of_shared_lock; /* recursion count for outermost_shared_lock/current_shared_lock -- 1 if locked only once. */
+    struct wolfsentry_rwlock *tracked_shared_lock; /* if !_THREAD_FLAG_READONLY,
+                                            * locker can have shared lock(s) only
+                                            * for this lock.  if another shared lock is
+                                            * obtained, first this one will be
+                                            * promoted.  a currently held lock can
+                                            * be demoted only if it matches
+                                            * current_shared_lock, or current_shared_lock is null.
+                                            */
+    int recursion_of_tracked_lock; /* recursion count for outermost_shared_lock/current_shared_lock -- 1 if locked only once. */
     int shared_count; /* total count of shared locks held */
     int mutex_and_reservation_count;
 };
+
+#define WOLFSENTRY_THREAD_GET_ID (thread ? thread->id : WOLFSENTRY_THREAD_GET_ID_HANDLER)
 
 #if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
 static_assert(sizeof(struct wolfsentry_thread_context_public) >= sizeof(struct wolfsentry_thread_context), "wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
@@ -148,47 +147,39 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 
 #define WOLFSENTRY_DEADLINE_NEVER (-1)
 #define WOLFSENTRY_DEADLINE_NOW (-2)
-#define WOLFSENTRY_CONTEXT_DEADLINE ((thread && (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE)) ? &thread->deadline : NULL)
-#define WOLFSENTRY_INTERNAL_LOCK_FLAGS WOLFSENTRY_LOCK_FLAG_NONE
 
-/* prefabbed code patterns for simple locking scenarios: */
-
-#define WOLFSENTRY_MUTEX_OR_RETURN(lock) do {                   \
-        wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = wolfsentry_lock_mutex_abstimed(        \
-                 lock,                                          \
-                 thread,                                        \
-                 WOLFSENTRY_CONTEXT_DEADLINE,                   \
-                 WOLFSENTRY_INTERNAL_LOCK_FLAGS)) < 0) {        \
-            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
-        }                                                       \
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() do {                  \
+        wolfsentry_errcode_t _lock_ret =                        \
+          wolfsentry_lock_have_mutex(                           \
+            &wolfsentry->lock,                                  \
+            thread,                                             \
+            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
 
-#define WOLFSENTRY_SHARED_OR_RETURN(lock) do {                  \
-        wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = wolfsentry_lock_mutex_abstimed(        \
-                 lock,                                          \
-                 thread,                                        \
-                 WOLFSENTRY_CONTEXT_DEADLINE,                   \
-                 WOLFSENTRY_INTERNAL_LOCK_FLAGS)) < 0) {        \
-            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
-        }                                                       \
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() do {                 \
+        wolfsentry_errcode_t _lock_ret =                        \
+          wolfsentry_lock_have_shared(                          \
+            &wolfsentry->lock,                                  \
+            thread,                                             \
+            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
 
-#define WOLFSENTRY_UNLOCK_AND_RETURN(lock, ret) do {            \
-        wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = wolfsentry_lock_unlock(                \
-                 lock,                                          \
-                 thread,                                        \
-                 WOLFSENTRY_INTERNAL_LOCK_FLAGS)) < 0) {        \
-            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
-        } else {                                                \
-            WOLFSENTRY_ERROR_RERETURN(ret);                     \
-        }                                                       \
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() do {                 \
+        wolfsentry_errcode_t _lock_ret =                        \
+          wolfsentry_lock_have_either(                          \
+            &wolfsentry->lock,                                  \
+            thread,                                             \
+            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
 
 #else /* !WOLFSENTRY_THREADSAFE */
 
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() do {} while (0)
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() do {} while (0)
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() do {} while (0)
 #define WOLFSENTRY_MUTEX_OR_RETURN(lock) do {} while (0)
 #define WOLFSENTRY_SHARED_OR_RETURN(lock) do {} while (0)
 #define WOLFSENTRY_UNLOCK_AND_RETURN(lock, ret) WOLFSENTRY_ERROR_RERETURN(ret)
@@ -583,7 +574,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, s
 
 wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
-void wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
+wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
 
 wolfsentry_errcode_t wolfsentry_table_clone(

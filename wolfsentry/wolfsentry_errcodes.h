@@ -103,8 +103,60 @@ typedef int32_t wolfsentry_errcode_t;
     #define WOLFSENTRY_RETURN_VOID return
 #endif
 
+#ifdef WOLFSENTRY_THREADSAFE
+
+    #define WOLFSENTRY_UNLOCK_FOR_RETURN() do {                 \
+        wolfsentry_errcode_t _lock_ret;                         \
+        if ((_lock_ret = wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT)) < 0) { \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        }                                                       \
+    } while (0)
+
+    #define WOLFSENTRY_MUTEX_OR_RETURN() do {                   \
+        wolfsentry_errcode_t _lock_ret;                         \
+        if ((_lock_ret = wolfsentry_context_lock_mutex_abstimed(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL)) < 0) { \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        }                                                       \
+    } while (0)
+
+    #define WOLFSENTRY_SHARED_OR_RETURN() do {                  \
+        wolfsentry_errcode_t _lock_ret;                         \
+        if ((_lock_ret = wolfsentry_context_lock_shared_abstimed( \
+                 WOLFSENTRY_CONTEXT_ARGS_OUT,                  \
+                 NULL)) < 0) {             \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        }                                                       \
+    } while (0)
+
+    #define WOLFSENTRY_PROMOTABLE_OR_RETURN() do {              \
+        wolfsentry_errcode_t _lock_ret;                         \
+        if ((_lock_ret = wolfsentry_context_lock_shared_with_reservation_abstimed( \
+                 WOLFSENTRY_CONTEXT_ARGS_OUT,                  \
+                 NULL)) < 0) {             \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        }                                                       \
+    } while (0)
+
+    #define WOLFSENTRY_UNLOCK_AND_RETURN(ret) do {              \
+        WOLFSENTRY_UNLOCK_FOR_RETURN();                         \
+        WOLFSENTRY_ERROR_RERETURN(ret);                         \
+    } while (0)
+
+#else
+    #define WOLFSENTRY_UNLOCK_FOR_RETURN() do {} while (0)
+#endif
+
+#define WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RETURN(x); } while (0)
+#define WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_RECODED(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RETURN_RECODED(x); } while (0)
+#define WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RERETURN(x); } while (0)
+#define WOLFSENTRY_ERROR_RERETURN_AND_UNLOCK(y) do { wolfsentry_errcode_t _yret = (y); WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RERETURN(_yret); } while (0)
+#define WOLFSENTRY_UNLOCK_AND_RETURN_VALUE(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_RETURN_VALUE(x); } while (0)
+#define WOLFSENTRY_UNLOCK_AND_RETURN_VOID do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_RETURN_VOID; } while (0)
+
 #define WOLFSENTRY_RETURN_OK WOLFSENTRY_ERROR_RETURN(OK)
-#define WOLFSENTRY_RERETURN_IF_ERROR(x) if (x < 0) WOLFSENTRY_ERROR_RERETURN(x)
+#define WOLFSENTRY_UNLOCK_AND_RETURN_OK do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RETURN(OK); } while (0)
+#define WOLFSENTRY_RERETURN_IF_ERROR(y) do { wolfsentry_errcode_t _yret = (y); if (_yret < 0) WOLFSENTRY_ERROR_RERETURN(_yret); } while (0)
+#define WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(y) do { wolfsentry_errcode_t _yret = (y); if (_yret < 0) { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RERETURN(_yret); } } while (0)
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
 WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e);

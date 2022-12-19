@@ -150,12 +150,9 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 
 #else /* !WOLFSENTRY_THREADSAFE */
 
-#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() do {} while (0)
-#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() do {} while (0)
-#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() do {} while (0)
-#define WOLFSENTRY_MUTEX_OR_RETURN(lock) do {} while (0)
-#define WOLFSENTRY_SHARED_OR_RETURN(lock) do {} while (0)
-#define WOLFSENTRY_UNLOCK_AND_RETURN(lock, ret) WOLFSENTRY_ERROR_RERETURN(ret)
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() (void)wolfsentry
 
 #endif /* WOLFSENTRY_THREADSAFE */
 

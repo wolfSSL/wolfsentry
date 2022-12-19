@@ -167,7 +167,7 @@ typedef enum {
     WOLFSENTRY_LOCK_FLAG_PSHARED = 1<<0,
     WOLFSENTRY_LOCK_FLAG_SHARED_ERROR_CHECKING = 1<<1,
     WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_MUTEX = 1<<2,
-    WOLFSENTRY_LOCK_FLAG_RECURSIVE_SHARED = 1<<3,
+    WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED = 1<<3,
     WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO = 1<<4,
     WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO = 1<<5,
     WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO = 1<<6,
@@ -598,6 +598,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(
+    WOLFSENTRY_CONTEXT_ARGS_IN);
+wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reservation(
     WOLFSENTRY_CONTEXT_ARGS_IN);
 
 #else /* !WOLFSENTRY_THREADSAFE */

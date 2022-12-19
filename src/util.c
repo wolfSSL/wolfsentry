@@ -78,15 +78,27 @@ const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t e)
 }
 
 static const char *user_defined_errors[WOLFSENTRY_ERROR_ID_MAX - WOLFSENTRY_ERROR_ID_USER_BASE + 1] = {0};
+static const char *user_defined_successes[WOLFSENTRY_ERROR_ID_MAX + WOLFSENTRY_SUCCESS_ID_USER_BASE + 1] = {0};
 
 wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *error_string) {
-    if ((wolfsentry_error_id < WOLFSENTRY_ERROR_ID_USER_BASE) || (wolfsentry_error_id > WOLFSENTRY_ERROR_ID_MAX))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    else if (user_defined_errors[wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE] != NULL)
-        WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
-    else {
-        user_defined_errors[wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE] = error_string;
-        WOLFSENTRY_RETURN_OK;
+    if (wolfsentry_error_id < 0) {
+        if ((wolfsentry_error_id > WOLFSENTRY_ERROR_ID_USER_BASE) || (wolfsentry_error_id < -WOLFSENTRY_ERROR_ID_MAX))
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        else if (user_defined_errors[-(wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE)] != NULL)
+            WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
+        else {
+            user_defined_errors[-(wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE)] = error_string;
+            WOLFSENTRY_RETURN_OK;
+        }
+    } else {
+        if ((wolfsentry_error_id < WOLFSENTRY_SUCCESS_ID_USER_BASE) || (wolfsentry_error_id > WOLFSENTRY_ERROR_ID_MAX))
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        else if (user_defined_successes[wolfsentry_error_id - WOLFSENTRY_SUCCESS_ID_USER_BASE] != NULL)
+            WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
+        else {
+            user_defined_successes[wolfsentry_error_id - WOLFSENTRY_SUCCESS_ID_USER_BASE] = error_string;
+            WOLFSENTRY_RETURN_OK;
+        }
     }
 }
 
@@ -114,7 +126,7 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
     case WOLFSENTRY_ERROR_ID_INVALID_ARG:
         return "Supplied argument was invalid";
     case WOLFSENTRY_ERROR_ID_BUSY:
-        return "A resource required to fulfill the request was unavailable because busy";
+        return "A prerequisite condition was unmet because a resource was busy";
     case WOLFSENTRY_ERROR_ID_INTERRUPTED:
         return "Operation was interrupted by a signal";
     case WOLFSENTRY_ERROR_ID_NUMERIC_ARG_TOO_BIG:
@@ -175,15 +187,27 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
         return "Library or plugin version mismatch";
     case WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH:
         return "Library built configuration is incompatible with caller";
+
+    case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
+        return "Lock request succeeded and reserved promotion";
+
     case WOLFSENTRY_ERROR_ID_USER_BASE:
+    case WOLFSENTRY_SUCCESS_ID_USER_BASE:
         break;
     }
-    if (i >= WOLFSENTRY_ERROR_ID_USER_BASE) {
-        if (user_defined_errors[i - WOLFSENTRY_ERROR_ID_USER_BASE])
-            return user_defined_errors[i - WOLFSENTRY_ERROR_ID_USER_BASE];
+    if (i <= WOLFSENTRY_ERROR_ID_USER_BASE) {
+        if (user_defined_errors[-(i - WOLFSENTRY_ERROR_ID_USER_BASE)])
+            return user_defined_errors[-(i - WOLFSENTRY_ERROR_ID_USER_BASE)];
         else
             return "user defined error code";
-    } else
+    } else if (i >= WOLFSENTRY_SUCCESS_ID_USER_BASE) {
+        if (user_defined_successes[i - WOLFSENTRY_SUCCESS_ID_USER_BASE])
+            return user_defined_errors[i - WOLFSENTRY_SUCCESS_ID_USER_BASE];
+        else
+            return "user defined success code";
+    } else if (i >= 0)
+        return "unknown success code";
+    else
         return "unknown error code";
 }
 
@@ -272,6 +296,11 @@ const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
         return "LIB_MISMATCH";
     case WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH:
         return "LIBCONFIG_MISMATCH";
+
+    case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
+        return "LOCK_OK_AND_GOT_RESV";
+
+    case WOLFSENTRY_SUCCESS_ID_USER_BASE:
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
     }
@@ -1226,7 +1255,7 @@ wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock, str
         (sem_trywait(&lock->sem_write_waiters) == 0) ||
         (sem_trywait(&lock->sem_read2write_waiters) == 0))
     {
-        WOLFSENTRY_WARN("attempt to destroy lock with nonzero semaphore count(s) (internal inconsistency)\n");
+        WOLFSENTRY_WARN("%s", "attempt to destroy lock with nonzero semaphore count(s) (internal inconsistency)\n");
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     }
 
@@ -1272,7 +1301,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *l
         WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(lock, thread, abs_timeout, flags));
 
     /* opportunistic error checking. */
-    if ((! (flags & WOLFSENTRY_LOCK_FLAG_RECURSIVE_SHARED)) && (thread->tracked_shared_lock == lock))
+    if ((flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED) && (thread->tracked_shared_lock == lock))
         WOLFSENTRY_ERROR_RETURN(ALREADY);
 
     if ((abs_timeout == NULL) &&
@@ -1281,10 +1310,11 @@ wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *l
         abs_timeout = &thread->deadline;
     }
 
+
     /* if shared lock recursion is enabled, and the caller already holds some
      * other lock in shared mode, it must first be promoted.
      */
-    if ((flags & WOLFSENTRY_LOCK_FLAG_RECURSIVE_SHARED)
+    if ((! (flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED))
         && (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY))
         && thread->tracked_shared_lock
         && (thread->tracked_shared_lock != lock))
@@ -1323,20 +1353,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *l
      * lock->write_waiter_count, otherwise we'd need to return DEADLOCK_AVERTED
      * and the caller would have to unwind its transaction.
      */
-    if ((flags & WOLFSENTRY_LOCK_FLAG_RECURSIVE_SHARED) &&
-        (thread->tracked_shared_lock == lock))
-    {
-        ++lock->holder_count.read;
-        ++lock->read2write_waiter_read_count;
-        ++thread->recursion_of_tracked_lock;
-        ++thread->shared_count;
-        if (sem_post(&lock->sem) < 0)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-        else
-            WOLFSENTRY_RETURN_OK;
-    }
-
-    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || (lock->write_waiter_count > 0)) {
+    if ((lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) || ((lock->write_waiter_count > 0) && (thread->tracked_shared_lock != lock))) {
         if (abs_timeout == &timespec_deadline_now) {
             if (sem_post(&lock->sem) < 0)
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -1432,11 +1449,13 @@ wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *l
                         WOLFSENTRY_RETURN_OK;
                 } else
                     WOLFSENTRY_ERROR_RERETURN(ret);
-            }
+            } else
+                WOLFSENTRY_SUCCESS_RETURN(LOCK_OK_AND_GOT_RESV);
         }
 
         WOLFSENTRY_RETURN_OK;
-    } else if ((lock->state == WOLFSENTRY_LOCK_UNLOCKED) ||
+    }
+    else if ((lock->state == WOLFSENTRY_LOCK_UNLOCKED) ||
                (lock->state == WOLFSENTRY_LOCK_SHARED))
     {
         int store_reservation = 0;
@@ -1471,17 +1490,25 @@ wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *l
             ++thread->recursion_of_tracked_lock;
 
         if (store_reservation) {
+
             WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_GET_ID);
             lock->holder_count.read += 2; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
             lock->read2write_waiter_read_count = thread->recursion_of_tracked_lock;
             ++thread->mutex_and_reservation_count;
-        } else
-            ++lock->holder_count.read;
+        } else {
 
+            ++lock->holder_count.read;
+            if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_GET_ID)
+                ++lock->read2write_waiter_read_count;
+        }
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
 
-        WOLFSENTRY_RETURN_OK;
+
+        if (store_reservation)
+            WOLFSENTRY_SUCCESS_RETURN(LOCK_OK_AND_GOT_RESV);
+        else
+            WOLFSENTRY_RETURN_OK;
     } else
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
 }
@@ -1512,6 +1539,7 @@ wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_rwlock *lo
 
     if (thread && (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY))
         WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
+
 
     switch (WOLFSENTRY_ATOMIC_LOAD(lock->state)) {
     case WOLFSENTRY_LOCK_EXCLUSIVE:
@@ -1704,10 +1732,6 @@ wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock
     if (thread == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if ((flags & WOLFSENTRY_LOCK_FLAG_RECURSIVE_SHARED) &&
-        (! (lock->flags & WOLFSENTRY_LOCK_FLAG_SHARED_ERROR_CHECKING)))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-
     if (lock->state == WOLFSENTRY_LOCK_SHARED)
         WOLFSENTRY_ERROR_RETURN(ALREADY);
 
@@ -1739,7 +1763,7 @@ wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock
     }
 
     if ((lock->holder_count.write > 1) &&
-        (! (flags & WOLFSENTRY_LOCK_FLAG_RECURSIVE_SHARED)))
+        (flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED))
     {
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -2218,6 +2242,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
     }
 
     WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_GET_ID);
+    ++thread->mutex_and_reservation_count;
     if (thread->tracked_shared_lock == lock)
         lock->read2write_waiter_read_count = thread->recursion_of_tracked_lock;
     else
@@ -2268,12 +2293,12 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
             lock->write_lock_holder = WOLFSENTRY_THREAD_GET_ID;
             if (thread->tracked_shared_lock == lock) {
-                thread->mutex_and_reservation_count += thread->recursion_of_tracked_lock;
+                thread->mutex_and_reservation_count += thread->recursion_of_tracked_lock - 1; /* -1 for reservation */
                 thread->shared_count -= thread->recursion_of_tracked_lock;
                 thread->recursion_of_tracked_lock = 0;
                 thread->tracked_shared_lock = NULL;
             } else {
-                ++thread->mutex_and_reservation_count;
+                /* reservation count stays in thread->recursion_of_tracked_lock */
                 --thread->shared_count;
             }
             WOLFSENTRY_RETURN_OK;
@@ -2281,6 +2306,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
 
         WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_NO_ID);
         --lock->write_waiter_count;
+        --thread->mutex_and_reservation_count;
 
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -2292,12 +2318,12 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
     WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_NO_ID);
 
     if (thread->tracked_shared_lock == lock) {
-        thread->mutex_and_reservation_count += thread->recursion_of_tracked_lock;
+        thread->mutex_and_reservation_count += thread->recursion_of_tracked_lock - 1; /* -1 for reservation */
         thread->shared_count -= thread->recursion_of_tracked_lock;
         thread->recursion_of_tracked_lock = 0;
         thread->tracked_shared_lock = NULL;
     } else {
-        ++thread->mutex_and_reservation_count;
+        /* reservation count stays in thread->recursion_of_tracked_lock */
         --thread->shared_count;
     }
 
@@ -2392,13 +2418,15 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
         if (--lock->holder_count.read == 0)
             WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_UNLOCKED);
         else if ((lock->holder_count.read == lock->read2write_waiter_read_count)
-                 && (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID))
+                 && (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID)
+                 && (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_GET_ID))
         {
             lock->promoted_at_count = lock->holder_count.read;
             /* read count becomes write count. */
             --lock->write_waiter_count;
             lock->read2write_waiter_read_count = 0;
             WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_EXCLUSIVE);
+            lock->write_lock_holder = lock->read2write_reservation_holder;
             if (sem_post(&lock->sem_read2write_waiters) < 0)
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
             else {
@@ -2408,7 +2436,6 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
         }
         else if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_GET_ID) {
             --lock->read2write_waiter_read_count;
-            --thread->mutex_and_reservation_count;
         }
     } else if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) {
         if (lock->write_lock_holder != WOLFSENTRY_THREAD_GET_ID) {
@@ -2440,7 +2467,9 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
                         thread->shared_count += lock->holder_count.read;
                         thread->tracked_shared_lock = lock;
                         thread->recursion_of_tracked_lock = lock->holder_count.read;
-                    }
+                        ret = WOLFSENTRY_SUCCESS_ENCODE(LOCK_OK_AND_GOT_RESV);
+                    } else
+                        ret = WOLFSENTRY_ERROR_ENCODE(OK);
                     /* fall through to waiter notification phase. */
                 } else {
                     ret = WOLFSENTRY_ERROR_ENCODE(OK);
@@ -2480,8 +2509,6 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
         }
     }
 
-    ret = WOLFSENTRY_ERROR_ENCODE(OK);
-
   out:
 
     if (sem_post(&lock->sem) < 0)
@@ -2496,6 +2523,7 @@ wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock,
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     (void)flags;
+
     if (lock_state != WOLFSENTRY_LOCK_SHARED) {
         if (lock_state == WOLFSENTRY_LOCK_UNINITED)
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -2525,6 +2553,7 @@ wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock, 
     enumint_t lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
 
     (void)flags;
+
     if (lock_state == WOLFSENTRY_LOCK_EXCLUSIVE) {
         if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID)
             WOLFSENTRY_RETURN_OK;
@@ -2615,6 +2644,13 @@ wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
 wolfsentry_errcode_t wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_IN) {
     return wolfsentry_lock_unlock(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
 }
+
+wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reservation(
+    WOLFSENTRY_CONTEXT_ARGS_IN)
+{
+    return wolfsentry_lock_unlock(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO);
+}
+
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
@@ -3320,10 +3356,10 @@ wolfsentry_errcode_t wolfsentry_context_clone(
         if (clone_is_locked)
             (void)wolfsentry_context_unlock(*clone, thread);
 #endif
-        (void)wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone)));
     }
 
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_context *wolfsentry2) {

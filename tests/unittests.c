@@ -360,8 +360,9 @@ usleep(10000);
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, NULL /* thread */, 0, WOLFSENTRY_LOCK_FLAG_NONE), INVALID_ARG));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
 
     /* this unlock allows thread2 to finally get its mutex. */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
@@ -448,8 +449,8 @@ usleep(10000);
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), LACKING_MUTEX));
 
@@ -2472,7 +2473,7 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
     FILE *f;
     unsigned char buf[512];
     char err_buf[512];
-    int json_inited = 0;
+    int fini_ret;
 
     if (strcmp(fname,"-"))
         f = fopen(fname, "r");
@@ -2485,13 +2486,10 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
     // GCOV_EXCL_STOP
     }
 
-    ret = wolfsentry_config_json_init(
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_init(
         WOLFSENTRY_CONTEXT_ARGS_OUT,
         flags,
-        &jps);
-    if (ret < 0)
-        goto out;
-    json_inited = 1;
+        &jps));
 
     for (;;) {
         size_t n = fread(buf, 1, sizeof buf, f);
@@ -2516,18 +2514,17 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
 
   out:
 
-    if (json_inited) {
-        int fini_ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
-        if (fini_ret < 0) {
-            // GCOV_EXCL_START
-            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-            // GCOV_EXCL_STOP
-        }
-        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
-            ret = fini_ret;
-        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
-            ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    fini_ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
+    if (fini_ret < 0) {
+        // GCOV_EXCL_START
+        fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+        WOLFSENTRY_EXIT_ON_FAILURE(fini_ret);
+        // GCOV_EXCL_STOP
     }
+    if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
+        ret = fini_ret;
+    if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
     if (f != stdin)
         fclose(f);
@@ -2887,9 +2884,11 @@ static int test_json(const char *fname) {
     }
 #endif /* WOLFSENTRY_HAVE_JSON_DOM */
 
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_RETURN_OK;
 }
 
 #endif /* TEST_JSON */

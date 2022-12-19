@@ -230,34 +230,33 @@ endif
 
 $(BUILD_TOP)/wolfsentry/wolfsentry_options.h:
 	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
-	@[ -e $(BUILD_TOP)/wolfsentry/options.h ] || ln -s ../wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
+	@[ -e $(BUILD_TOP)/wolfsentry/wolfsentry_options.h ] || ln -s ../wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
 endif
 
 
 UNITTEST_LIST_SHARED=test_all_shared
 UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]')) $(TEST_JSON_CFLAGS)
 
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME)
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
 endif
 
 ifdef BUILD_DYNAMIC

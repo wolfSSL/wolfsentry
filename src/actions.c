@@ -380,10 +380,7 @@ wolfsentry_errcode_t wolfsentry_action_list_insert_after(
 }
 
 wolfsentry_errcode_t wolfsentry_action_list_clone(
-    struct wolfsentry_context *wolfsentry,
-#ifdef WOLFSENTRY_THREADSAFE
-    struct wolfsentry_thread_context *thread,
-#endif
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *src_action_list,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_action_list *dest_action_list,

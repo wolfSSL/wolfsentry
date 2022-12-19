@@ -1445,6 +1445,8 @@ wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 
     if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT))
         WOLFSENTRY_MUTEX_OR_RETURN();
+    else if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN))
+        WOLFSENTRY_SHARED_OR_RETURN();
     else
         WOLFSENTRY_PROMOTABLE_OR_RETURN();
 
@@ -1522,7 +1524,9 @@ wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     if (ret < 0) {
         if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT) &&
             ((*jps)->wolfsentry != NULL))
+        {
             (void)wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT);
+        }
         wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_OUT, *jps);
         *jps = NULL;
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);

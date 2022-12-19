@@ -110,6 +110,10 @@ wolfsentry_errcode_t wolfsentry_table_clone(
     struct wolfsentry_table_ent_header *prev = NULL, *new = NULL, *i;
 
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
+#ifdef WOLFSENTRY_THREADSAFE
+    ret = wolfsentry_lock_have_mutex(&dest_context->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+#endif
 
     if ((wolfsentry == dest_context) || (src_table == dest_table))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);

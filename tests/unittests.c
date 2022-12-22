@@ -40,6 +40,8 @@
 #include <pthread.h>
 
 #define WOLFSENTRY_EXIT_ON_FAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { WOLFSENTRY_WARN("%s: " WOLFSENTRY_ERROR_FMT "\n", #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(expected, ...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (! WOLFSENTRY_ERROR_CODE_IS(_retval, expected)) { WOLFSENTRY_WARN("%s: expected %s but got: " WOLFSENTRY_ERROR_FMT "\n", #__VA_ARGS__, #expected, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(expected, ...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (! WOLFSENTRY_SUCCESS_CODE_IS(_retval, expected)) { WOLFSENTRY_WARN("%s: expected %s but got: " WOLFSENTRY_ERROR_FMT "\n", #__VA_ARGS__, #expected, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFAILURE(...) do { int _retval = (__VA_ARGS__); if (_retval < 0) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFALSE(...) do { if (! (__VA_ARGS__)) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SUCCESS(...) do { if ((__VA_ARGS__) == 0) { WOLFSENTRY_WARN("%s should have failed, but succeeded.\n", #__VA_ARGS__); exit(1); }} while(0)
@@ -50,6 +52,8 @@
 #else /* !WOLFSENTRY_THREADSAFE */
 
 #define WOLFSENTRY_EXIT_ON_FAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { WOLFSENTRY_WARN("%s: " WOLFSENTRY_ERROR_FMT "\n", #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
+#define WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(expected, ...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (! WOLFSENTRY_ERROR_CODE_IS(_retval, expected)) { WOLFSENTRY_WARN("%s: expected %s but got: " WOLFSENTRY_ERROR_FMT "\n", #expected, #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
+#define WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(expected, ...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (! WOLFSENTRY_SUCCESS_CODE_IS(_retval, expected)) { WOLFSENTRY_WARN("%s: expected %s but got: " WOLFSENTRY_ERROR_FMT "\n", #expected, #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFALSE(...) do { if (! (__VA_ARGS__)) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SUCCESS(...) do { if ((__VA_ARGS__) == 0) { WOLFSENTRY_WARN("%s should have failed, but succeeded.\n", #__VA_ARGS__); return 1; }} while(0)
@@ -354,15 +358,15 @@ usleep(10000);
     WAIT_FOR_PHASE(thread3_args, 1);
 
     /* this one must fail, because at this point thread2 must be in shared2mutex wait. */
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUSY, wolfsentry_lock_shared2mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
     /* take the opportunity to test expected failures of the _timed() variants. */
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, NULL /* thread */, 0, WOLFSENTRY_LOCK_FLAG_NONE), INVALID_ARG));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUSY, wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUSY, wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(TIMED_OUT, wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_lock_shared_timed(lock, NULL /* thread */, 0, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ALREADY, wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ALREADY, wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED));
 
     /* this unlock allows thread2 to finally get its mutex. */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
@@ -410,10 +414,10 @@ usleep(10000);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), OK));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_reserve(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), ALREADY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex_abandon(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), INCOMPATIBLE_STATE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ALREADY, wolfsentry_lock_shared2mutex_reserve(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ALREADY, wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INCOMPATIBLE_STATE, wolfsentry_lock_shared2mutex_abandon(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
     thread1_args.max_wait = MAX_WAIT; /* builtin wolfsentry_time_t is microseconds, same as usleep(). */
     WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&thread1, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&thread1_args));
@@ -443,16 +447,16 @@ usleep(10000);
     WAIT_FOR_PHASE(thread3_args, 1);
 
     /* this one must fail, because at this point thread2 must be in shared2mutex wait. */
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared2mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUSY, wolfsentry_lock_shared2mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
     /* take the opportunity to test expected failures of the _timed() variants. */
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE), BUSY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE), TIMED_OUT));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED), ALREADY));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), OK));
-    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE), LACKING_MUTEX));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUSY, wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUSY, wolfsentry_lock_mutex_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(TIMED_OUT, wolfsentry_lock_mutex_timed(lock, NULL /* thread */, 1000, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ALREADY, wolfsentry_lock_shared_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ALREADY, wolfsentry_lock_shared_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_have_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(LACKING_MUTEX, wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
     /* this unlock allows thread2 to finally get its mutex. */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
@@ -1000,6 +1004,7 @@ static int test_static_routes (void) {
         struct wolfsentry_route *route;
         struct wolfsentry_route_exports route_exports;
         wolfsentry_hitcount_t n_seen = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
         for (ret = wolfsentry_route_table_iterate_current(main_routes, cursor, &route);
              ret >= 0;
@@ -1009,6 +1014,7 @@ static int test_static_routes (void) {
             ++n_seen;
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes->header.n_ents);
     }
 #endif
@@ -1127,23 +1133,21 @@ static int test_static_routes (void) {
         WOLFSENTRY_EXIT_ON_FALSE(new_derogatory_count == 123);
     }
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_route_increment_derogatory_count(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                route_ref,
-                -124,
-                NULL),
-            OVERFLOW_AVERTED));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        OVERFLOW_AVERTED,
+        wolfsentry_route_increment_derogatory_count(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route_ref,
+            -124,
+            NULL));
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_route_increment_derogatory_count(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                route_ref,
-                65536 - 123,
-                NULL),
-            OVERFLOW_AVERTED));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        OVERFLOW_AVERTED,
+        wolfsentry_route_increment_derogatory_count(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route_ref,
+            65536 - 123,
+            NULL));
 
     {
         int new_derogatory_count;
@@ -1174,23 +1178,21 @@ static int test_static_routes (void) {
         WOLFSENTRY_EXIT_ON_FALSE(new_commendable_count == 123);
     }
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_route_increment_commendable_count(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                route_ref,
-                -124,
-                NULL),
-            OVERFLOW_AVERTED));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        OVERFLOW_AVERTED,
+        wolfsentry_route_increment_commendable_count(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route_ref,
+            -124,
+            NULL));
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_route_increment_commendable_count(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                route_ref,
-                65536 - 123,
-                NULL),
-            OVERFLOW_AVERTED));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        OVERFLOW_AVERTED,
+        wolfsentry_route_increment_commendable_count(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route_ref,
+            65536 - 123,
+            NULL));
 
     {
         int new_commendable_count;
@@ -1419,93 +1421,103 @@ int wolfsentry_event_set_subevent(
 
         too_long_label[sizeof too_long_label - 1] = 0;
 
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_insert(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         too_long_label,
-                                         -1 /* label_len */,
-                                         WOLFSENTRY_ACTION_FLAG_NONE,
-                                         wolfsentry_action_dummy_callback,
-                                         NULL /* handler_context */,
-                                         &id), STRING_ARG_TOO_LONG));
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_insert(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         too_long_label,
-                                         sizeof too_long_label - 1,
-                                         WOLFSENTRY_ACTION_FLAG_NONE,
-                                         wolfsentry_action_dummy_callback,
-                                         NULL /* handler_context */,
-                                         &id), STRING_ARG_TOO_LONG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            STRING_ARG_TOO_LONG,
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                -1 /* label_len */,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                wolfsentry_action_dummy_callback,
+                NULL /* handler_context */,
+                &id));
 
-        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
-                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                       too_long_label,
-                                       sizeof too_long_label - 2,
-                                       WOLFSENTRY_ACTION_FLAG_NONE,
-                                       wolfsentry_action_dummy_callback,
-                                       NULL /* handler_context */,
-                                       &id));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            STRING_ARG_TOO_LONG,
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                sizeof too_long_label - 1,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                wolfsentry_action_dummy_callback,
+                NULL /* handler_context */,
+                &id));
 
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                sizeof too_long_label - 2,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                wolfsentry_action_dummy_callback,
+                NULL /* handler_context */,
+                &id));
 
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_delete(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         too_long_label,
-                                         sizeof too_long_label - 1,
-                                         NULL /* action_results */), STRING_ARG_TOO_LONG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            STRING_ARG_TOO_LONG,
+            wolfsentry_action_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                sizeof too_long_label - 1,
+                NULL /* action_results */));
 
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_delete(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         too_long_label,
-                                         -1,
-                                         NULL /* action_results */), STRING_ARG_TOO_LONG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            STRING_ARG_TOO_LONG,
+            wolfsentry_action_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                -1,
+                NULL /* action_results */));
 
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_delete(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         NULL,
-                                         -1,
-                                         NULL /* action_results */), INVALID_ARG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            INVALID_ARG,
+            wolfsentry_action_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL,
+                -1,
+                NULL /* action_results */));
 
         too_long_label[sizeof too_long_label - 2] = 0;
 
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_insert(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         too_long_label,
-                                         -1 /* label_len */,
-                                         WOLFSENTRY_ACTION_FLAG_NONE,
-                                         wolfsentry_action_dummy_callback,
-                                         NULL /* handler_context */,
-                                         &id), ITEM_ALREADY_PRESENT));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_ALREADY_PRESENT,
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                -1 /* label_len */,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                wolfsentry_action_dummy_callback,
+                NULL /* handler_context */,
+                &id));
 
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_insert(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         NULL,
-                                         -1 /* label_len */,
-                                         WOLFSENTRY_ACTION_FLAG_NONE,
-                                         wolfsentry_action_dummy_callback,
-                                         NULL /* handler_context */,
-                                         &id), INVALID_ARG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            INVALID_ARG,
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL,
+                -1 /* label_len */,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                wolfsentry_action_dummy_callback,
+                NULL /* handler_context */,
+                &id));
 
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(
-                                     wolfsentry_action_insert(
-                                         WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                         too_long_label,
-                                         0 /* label_len */,
-                                         WOLFSENTRY_ACTION_FLAG_NONE,
-                                         wolfsentry_action_dummy_callback,
-                                         NULL /* handler_context */,
-                                         &id), INVALID_ARG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            INVALID_ARG,
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                0 /* label_len */,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                wolfsentry_action_dummy_callback,
+                NULL /* handler_context */,
+                &id));
 
-        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_delete(
-                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                       too_long_label,
-                                       -1 /* label_len */,
-                                       NULL /* action_results */));
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                too_long_label,
+                -1 /* label_len */,
+                NULL /* action_results */));
     }
 
     WOLFSENTRY_EXIT_ON_FAILURE(
@@ -1562,32 +1574,29 @@ int wolfsentry_event_set_subevent(
         struct wolfsentry_action *action;
         wolfsentry_action_flags_t flags;
 
-        WOLFSENTRY_EXIT_ON_FALSE(
-            WOLFSENTRY_ERROR_CODE_IS(
-                wolfsentry_action_get_reference(
-                    WOLFSENTRY_CONTEXT_ARGS_OUT,
-                    "checXXXounts",
-                    -1 /* label_len */,
-                    &action),
-                ITEM_NOT_FOUND));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            wolfsentry_action_get_reference(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "checXXXounts",
+                -1 /* label_len */,
+                &action));
 
-        WOLFSENTRY_EXIT_ON_FALSE(
-            WOLFSENTRY_ERROR_CODE_IS(
-                wolfsentry_action_get_reference(
-                    WOLFSENTRY_CONTEXT_ARGS_OUT,
-                    "checXXXounts",
-                    0 /* label_len */,
-                    &action),
-                INVALID_ARG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            INVALID_ARG,
+            wolfsentry_action_get_reference(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "checXXXounts",
+                0 /* label_len */,
+                &action));
 
-        WOLFSENTRY_EXIT_ON_FALSE(
-            WOLFSENTRY_ERROR_CODE_IS(
-                wolfsentry_action_get_reference(
-                    WOLFSENTRY_CONTEXT_ARGS_OUT,
-                    "checXXXounts",
-                    WOLFSENTRY_MAX_LABEL_BYTES + 1 /* label_len */,
-                    &action),
-                STRING_ARG_TOO_LONG));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            STRING_ARG_TOO_LONG,
+            wolfsentry_action_get_reference(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "checXXXounts",
+                WOLFSENTRY_MAX_LABEL_BYTES + 1 /* label_len */,
+                &action));
 
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_action_get_reference(
@@ -1787,15 +1796,14 @@ static int test_user_values (void) {
 
     WOLFSENTRY_EXIT_ON_FALSE(kv_type == WOLFSENTRY_KV_FALSE);
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_user_value_store_bool(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                "test_bool",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                WOLFSENTRY_KV_NONE,
-                1),
-            WRONG_TYPE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        WRONG_TYPE,
+        wolfsentry_user_value_store_bool(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_KV_NONE,
+            1));
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_user_value_get_type(
@@ -1821,14 +1829,13 @@ static int test_user_values (void) {
             "test_bool",
             WOLFSENTRY_LENGTH_NULL_TERMINATED));
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_user_value_get_type(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                "test_bool",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                &kv_type),
-            ITEM_NOT_FOUND));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        ITEM_NOT_FOUND,
+        wolfsentry_user_value_get_type(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "test_bool",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &kv_type));
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_user_value_store_uint(
@@ -1850,15 +1857,14 @@ static int test_user_values (void) {
         WOLFSENTRY_EXIT_ON_FALSE(value == 123UL);
     }
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_user_value_store_uint(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                "bad_uint",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                12345678UL,
-                0),
-            BAD_VALUE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        BAD_VALUE,
+        wolfsentry_user_value_store_uint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "bad_uint",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            12345678UL,
+            0));
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_user_value_store_sint(
@@ -1880,15 +1886,14 @@ static int test_user_values (void) {
         WOLFSENTRY_EXIT_ON_FALSE(value == -123L);
     }
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_user_value_store_sint(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                "bad_sint",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                -12345678L,
-                0),
-            BAD_VALUE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        BAD_VALUE,
+        wolfsentry_user_value_store_sint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "bad_sint",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            -12345678L,
+            0));
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_user_value_store_double(
@@ -1910,15 +1915,14 @@ static int test_user_values (void) {
         WOLFSENTRY_EXIT_ON_FALSE(fabs(value - 1.234) < 0.000001);
     }
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_user_value_store_double(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                "bad_float",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                123.45678,
-                0),
-            BAD_VALUE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        BAD_VALUE,
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "bad_float",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            123.45678,
+            0));
 
     {
         static const char test_string[] = "abc123";
@@ -1967,8 +1971,7 @@ static int test_user_values (void) {
                 "test_string",
                 WOLFSENTRY_LENGTH_NULL_TERMINATED));
 
-        WOLFSENTRY_EXIT_ON_FALSE(
-            WOLFSENTRY_ERROR_CODE_IS(ret, NOT_PERMITTED));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NOT_PERMITTED, ret);
 
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_user_value_get_string(
@@ -1989,16 +1992,15 @@ static int test_user_values (void) {
 
     }
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_user_value_store_string(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                "bad_string",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                "deadbeef",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                0),
-            BAD_VALUE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        BAD_VALUE,
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "bad_string",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "deadbeef",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
 
     {
         static const byte test_bytes[] = { 0, 1, 2, 3, 4 };
@@ -2032,16 +2034,15 @@ static int test_user_values (void) {
                 &kv_ref));
     }
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        WOLFSENTRY_ERROR_CODE_IS(
-            wolfsentry_user_value_store_bytes(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                "bad_bytes",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                (const byte *)"abcdefghij",
-                10,
-                0),
-            BAD_VALUE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        BAD_VALUE,
+        wolfsentry_user_value_store_bytes(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "bad_bytes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            (const byte *)"abcdefghij",
+            10,
+            0));
 
 #ifndef WOLFSENTRY_NO_STDIO
     {
@@ -2052,6 +2053,7 @@ static int test_user_values (void) {
         char val_buf[256];
         int val_buf_space;
         wolfsentry_hitcount_t n_seen = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
         for (ret = wolfsentry_user_values_iterate_current(WOLFSENTRY_CONTEXT_ARGS_OUT, cursor, &kv_ref);
              ret >= 0;
@@ -2070,6 +2072,7 @@ static int test_user_values (void) {
             ++n_seen;
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values->header.n_ents);
         WOLFSENTRY_EXIT_ON_FALSE(n_seen == 6);
     }
@@ -2192,9 +2195,6 @@ static int test_user_addr_families (void) {
 
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
-#ifdef WOLFSENTRY_PROTOCOL_NAMES
-    wolfsentry_errcode_t ret;
-#endif
 
     WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
@@ -2345,36 +2345,37 @@ static int test_user_addr_families (void) {
             my_addr_family_formatter,
             24 /* max_addr_bits */));
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        (wolfsentry_addr_family_pton(
+    {
+        wolfsentry_addr_family_t family_number;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_pton(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "my_AF",
             WOLFSENTRY_LENGTH_NULL_TERMINATED,
-            &ret)
-         == WOLFSENTRY_AF_USER_OFFSET)
-        && WOLFSENTRY_ERROR_CODE_IS(ret, OK));
+            &family_number));
+    WOLFSENTRY_EXIT_ON_FALSE(family_number == WOLFSENTRY_AF_USER_OFFSET);
 
-    WOLFSENTRY_EXIT_ON_FALSE(
-        (wolfsentry_addr_family_pton(
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        ITEM_NOT_FOUND,
+        wolfsentry_addr_family_pton(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "no_such_AF",
-            WOLFSENTRY_LENGTH_NULL_TERMINATED, &ret)
-         == WOLFSENTRY_AF_UNSPEC)
-        && WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND));
+            WOLFSENTRY_LENGTH_NULL_TERMINATED, &family_number));
+    }
 
     {
         struct wolfsentry_addr_family_bynumber *addr_family = NULL;
         const char *family_name;
 
-        WOLFSENTRY_EXIT_ON_FALSE(
-            ((family_name = wolfsentry_addr_family_ntop(
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            (wolfsentry_addr_family_ntop(
                   WOLFSENTRY_CONTEXT_ARGS_OUT,
                   WOLFSENTRY_AF_USER_OFFSET,
                   &addr_family,
-                  &ret)) != NULL)
-            && WOLFSENTRY_ERROR_CODE_IS(ret, OK)
-            && (addr_family != NULL) &&
-            (! strcmp(family_name,"my_AF")));
+                  &family_name)));
+        WOLFSENTRY_EXIT_ON_FALSE((family_name != NULL) &&
+                                 (! strcmp(family_name,"my_AF")));
 
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, &action_results));
         WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED));
@@ -2724,6 +2725,7 @@ static int test_json(const char *fname) {
         struct wolfsentry_route_exports route_exports;
         struct wolfsentry_route_table *main_routes;
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
         for (ret = wolfsentry_route_table_iterate_current(main_routes, cursor, &route);
              ret >= 0;
@@ -2732,6 +2734,7 @@ static int test_json(const char *fname) {
             WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_exports_render(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_exports, stdout));
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
     }
 
 #ifndef WOLFSENTRY_NO_STDIO
@@ -2743,6 +2746,7 @@ static int test_json(const char *fname) {
         char val_buf[1024];
         int val_buf_space;
         wolfsentry_hitcount_t n_seen = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
         for (ret = wolfsentry_user_values_iterate_current(WOLFSENTRY_CONTEXT_ARGS_OUT, cursor, &kv_ref);
              ret >= 0;
@@ -2765,6 +2769,7 @@ static int test_json(const char *fname) {
             ++n_seen;
         }
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->user_values->header.n_ents);
     }
 #endif

@@ -121,37 +121,43 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 #define WOLFSENTRY_DEADLINE_NEVER (-1)
 #define WOLFSENTRY_DEADLINE_NOW (-2)
 
-#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() do {                  \
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) do {            \
         wolfsentry_errcode_t _lock_ret =                        \
           wolfsentry_lock_have_mutex(                           \
-            &wolfsentry->lock,                                  \
+            &(ctx)->lock,                                       \
             thread,                                             \
             WOLFSENTRY_LOCK_FLAG_NONE);                         \
         WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(wolfsentry)
 
-#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() do {                 \
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(ctx) do {           \
         wolfsentry_errcode_t _lock_ret =                        \
           wolfsentry_lock_have_shared(                          \
-            &wolfsentry->lock,                                  \
+            &(ctx)->lock,                                       \
             thread,                                             \
             WOLFSENTRY_LOCK_FLAG_NONE);                         \
         WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(wolfsentry)
 
-#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() do {                 \
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(ctx) do {           \
         wolfsentry_errcode_t _lock_ret =                        \
           wolfsentry_lock_have_either(                          \
-            &wolfsentry->lock,                                  \
+            &(ctx)->lock,                                       \
             thread,                                             \
             WOLFSENTRY_LOCK_FLAG_NONE);                         \
         WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(wolfsentry)
 
 #else /* !WOLFSENTRY_THREADSAFE */
 
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) (void)(ctx)
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(ctx) (void)(ctx)
 #define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(ctx) (void)(ctx)
 #define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() (void)wolfsentry
 
 #endif /* WOLFSENTRY_THREADSAFE */
@@ -537,7 +543,7 @@ wolfsentry_errcode_t wolfsentry_addr_family_table_clone_headers(
 #endif
 
 wolfsentry_errcode_t wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_header *table, int unique_p);
-wolfsentry_errcode_t wolfsentry_table_ent_get(struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent);
+wolfsentry_errcode_t wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent);
 wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header **ent);
 wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
 wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);

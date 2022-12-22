@@ -112,19 +112,21 @@ wolfsentry_errcode_t wolfsentry_kv_set_mutability(
     struct wolfsentry_kv_pair_internal *kv,
     int mutable)
 {
-    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
     (void)kv_table;
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     switch (mutable) {
     case 0:
         if ((kv->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY) == 0)
             kv->kv.v_type |= WOLFSENTRY_KV_FLAG_READONLY;
-        WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_UNLOCK_AND_RETURN_OK;
     case 1:
         if ((kv->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY) != 0)
             kv->kv.v_type &= (enumint_t)~WOLFSENTRY_KV_FLAG_READONLY;
-        WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_UNLOCK_AND_RETURN_OK;
     default:
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(INVALID_ARG);
     }
 }
 
@@ -225,7 +227,7 @@ wolfsentry_errcode_t wolfsentry_kv_set(
 
     old = kv;
 
-    if (wolfsentry_table_ent_get(&kv_table->header, (struct wolfsentry_table_ent_header **)&old) >= 0) {
+    if (wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_table->header, (struct wolfsentry_table_ent_header **)&old) >= 0) {
         if (old->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY)
             WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(NOT_PERMITTED);
         if (wolfsentry_kv_value_eq_1(&kv->kv, &old->kv)) {
@@ -245,14 +247,16 @@ wolfsentry_errcode_t wolfsentry_kv_set(
 }
 
 static wolfsentry_errcode_t wolfsentry_kv_get_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const struct wolfsentry_kv_pair_internal *kv_template,
     struct wolfsentry_kv_pair_internal **kv)
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_kv_pair_internal *ret_kv = (struct wolfsentry_kv_pair_internal *)kv_template;
-    if ((ret = wolfsentry_table_ent_get(&kv_table->header, (struct wolfsentry_table_ent_header **)&ret_kv)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_SHARED_OR_RETURN();
+    if ((ret = wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_table->header, (struct wolfsentry_table_ent_header **)&ret_kv)) < 0)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     /* special-case request for uint with object sint that is >= 0. */
     if ((WOLFSENTRY_KV_TYPE(&kv_template->kv) == WOLFSENTRY_KV_UINT) &&
         (WOLFSENTRY_KV_TYPE(&ret_kv->kv) == WOLFSENTRY_KV_SINT) &&
@@ -260,9 +264,9 @@ static wolfsentry_errcode_t wolfsentry_kv_get_1(
         ;
     else if ((WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_NONE) &&
         (WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_TYPE(&ret_kv->kv)))
-        WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(WRONG_TYPE);
     *kv = ret_kv;
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
 static wolfsentry_errcode_t wolfsentry_kv_get_2(
@@ -278,17 +282,18 @@ static wolfsentry_errcode_t wolfsentry_kv_get_2(
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     kv_template->kv.v_type = type;
-    ret = wolfsentry_kv_get_1(kv_table, kv_template, kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
     (void)wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL);
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 static wolfsentry_errcode_t wolfsentry_kv_get_reference_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const struct wolfsentry_kv_pair_internal *kv_template,
     struct wolfsentry_kv_pair_internal **kv)
 {
-    wolfsentry_errcode_t ret = wolfsentry_kv_get_1(kv_table, kv_template, kv);
+    wolfsentry_errcode_t ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     WOLFSENTRY_REFCOUNT_INCREMENT((*kv)->header.refcount, ret);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
@@ -306,9 +311,9 @@ wolfsentry_errcode_t wolfsentry_kv_get_reference(
     struct wolfsentry_kv_pair_internal *kv_template;
     wolfsentry_errcode_t ret;
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     kv_template->kv.v_type = type;
-    ret = wolfsentry_kv_get_reference_1(kv_table, kv_template, kv);
+    ret = wolfsentry_kv_get_reference_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
     (void)wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL);
 
     WOLFSENTRY_ERROR_RERETURN(ret);
@@ -326,7 +331,7 @@ wolfsentry_errcode_t wolfsentry_kv_get_type(
     struct wolfsentry_kv_pair_internal *kv = NULL;
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    ret = wolfsentry_kv_get_1(kv_table, kv_template, &kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &kv);
     (void)wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *type = WOLFSENTRY_KV_TYPE(&kv->kv);
@@ -399,7 +404,6 @@ wolfsentry_errcode_t wolfsentry_kv_render_value(
     int *out_len)
 {
     size_t out_space;
-    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (*out_len < 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     out_space = (size_t)*out_len;
@@ -505,7 +509,7 @@ wolfsentry_errcode_t wolfsentry_kv_delete(
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
-    ret = wolfsentry_kv_get_1(kv_table, kv_template, &old);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &old);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     if (old->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY)
@@ -539,6 +543,7 @@ wolfsentry_errcode_t wolfsentry_kv_set_validator(
     wolfsentry_kv_validator_t validator,
     wolfsentry_action_res_t *action_results)
 {
+    WOLFSENTRY_MUTEX_OR_RETURN();
     if (validator) {
         struct apply_validator_context context = { wolfsentry,
 #ifdef WOLFSENTRY_THREADSAFE
@@ -546,10 +551,10 @@ wolfsentry_errcode_t wolfsentry_kv_set_validator(
 #endif
                                                    validator };
         wolfsentry_errcode_t ret = wolfsentry_table_map(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_table->header, (wolfsentry_map_function_t)apply_validator, (void *)&context, action_results);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
     wolfsentry->user_values->validator = validator;
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
 wolfsentry_errcode_t wolfsentry_kv_pair_export(
@@ -1055,6 +1060,7 @@ wolfsentry_errcode_t wolfsentry_user_values_iterate_start(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_cursor **cursor)
 {
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor));
 }
 
@@ -1062,6 +1068,7 @@ wolfsentry_errcode_t wolfsentry_user_values_iterate_seek_to_head(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_cursor *cursor)
 {
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_seek_to_head(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor));
 }
 
@@ -1069,6 +1076,7 @@ wolfsentry_errcode_t wolfsentry_user_values_iterate_seek_to_tail(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_cursor *cursor)
 {
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_seek_to_tail(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor));
 }
 
@@ -1077,6 +1085,7 @@ wolfsentry_errcode_t wolfsentry_user_values_iterate_current(
     struct wolfsentry_cursor *cursor,
     struct wolfsentry_kv_pair_internal **kv)
 {
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_current(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor, kv));
 }
 
@@ -1085,6 +1094,7 @@ wolfsentry_errcode_t wolfsentry_user_values_iterate_prev(
     struct wolfsentry_cursor *cursor,
     struct wolfsentry_kv_pair_internal **kv)
 {
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_prev(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor, kv));
 }
 
@@ -1093,6 +1103,7 @@ wolfsentry_errcode_t wolfsentry_user_values_iterate_next(
     struct wolfsentry_cursor *cursor,
     struct wolfsentry_kv_pair_internal **kv)
 {
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_next(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor, kv));
 }
 
@@ -1100,6 +1111,7 @@ wolfsentry_errcode_t wolfsentry_user_values_iterate_end(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_cursor **cursor)
 {
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor));
 }
 

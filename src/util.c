@@ -3187,25 +3187,25 @@ wolfsentry_errcode_t wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_IN) {
     wolfsentry_action_res_t action_results;
 
     action_results = WOLFSENTRY_ACTION_RES_NONE;
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
     if ((ret = wolfsentry_route_flush_table(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->routes, &action_results)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
     if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->events->header)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
     if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->user_values->header)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
 wolfsentry_errcode_t wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_context **wolfsentry)) {
     wolfsentry_errcode_t ret;
 
-#ifdef WOLFSENTRY_THREADSAFE
-    ret = wolfsentry_lock_have_mutex(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-#endif
+    WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(*wolfsentry);
 
     if ((*wolfsentry)->routes != NULL) {
         if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->routes->header)) < 0)
@@ -3236,14 +3236,15 @@ wolfsentry_errcode_t wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struc
 
 wolfsentry_errcode_t wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_context **wolfsentry)) {
 #ifdef WOLFSENTRY_THREADSAFE
-    wolfsentry_errcode_t ret = wolfsentry_lock_mutex(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+
+    wolfsentry_errcode_t ret = WOLFSENTRY_MUTEX_EX(*wolfsentry);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if ((*wolfsentry)->lock.holder_count.write != 1)
-        WOLFSENTRY_ERROR_RETURN(BUSY);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
     if ((*wolfsentry)->lock.read_waiter_count != 0)
-        WOLFSENTRY_ERROR_RETURN(BUSY);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
     if ((*wolfsentry)->lock.write_waiter_count != 0)
-        WOLFSENTRY_ERROR_RETURN(BUSY);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
 #endif
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT));
 }

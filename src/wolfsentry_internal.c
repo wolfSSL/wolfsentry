@@ -210,6 +210,10 @@ wolfsentry_errcode_t wolfsentry_coupled_table_clone(
     struct wolfsentry_table_ent_header *prev = NULL, *new1 = NULL, *new2 = NULL, *i;
 
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
+#ifdef WOLFSENTRY_THREADSAFE
+    ret = wolfsentry_lock_have_mutex(&dest_context->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+#endif
 
     if ((wolfsentry == dest_context) ||
         (src_table1 == src_table2) ||
@@ -412,8 +416,11 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_I
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_get(struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent) {
+wolfsentry_errcode_t wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i = table->head;
+
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
+
     while (i) {
         int c = table->cmp_fn(i, *ent);
         if (c >= 0) {
@@ -482,6 +489,9 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_IN, str
 wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results) {
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
+
+    /* note no lock needed -- refcount uses threadsafe atomic ops. */
+
     if (ent->refcount <= 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if (action_results)
@@ -617,7 +627,7 @@ wolfsentry_errcode_t wolfsentry_table_map(
     wolfsentry_errcode_t ret = WOLFSENTRY_ERROR_ENCODE(OK);
     struct wolfsentry_table_ent_header *i, *i_next;
 
-    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
 
     for (i = table->head; i; i = i_next) {
         i_next = i->next;

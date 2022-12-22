@@ -527,17 +527,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_handler_remove_byname
     int family_byname_len,
     wolfsentry_action_res_t *action_results);
 
-WOLFSENTRY_API wolfsentry_addr_family_t wolfsentry_addr_family_pton(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *family_name,
     int family_name_len,
-    wolfsentry_errcode_t *errcode);
+    wolfsentry_addr_family_t *family_number);
 
-WOLFSENTRY_API const char *wolfsentry_addr_family_ntop(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_ntop(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family,
     struct wolfsentry_addr_family_bynumber **addr_family,
-    wolfsentry_errcode_t *errcode);
+    const char **family_name);
 
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 

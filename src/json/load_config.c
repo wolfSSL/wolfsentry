@@ -714,7 +714,9 @@ static wolfsentry_errcode_t handle_route_family_clause(struct wolfsentry_json_pr
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     else if (type == JSON_STRING) {
         wolfsentry_errcode_t ret;
-        jps->o_u_c.route.remote.sa_family = jps->o_u_c.route.local.sa_family = wolfsentry_addr_family_pton(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, (const char *)data, (int)data_size, &ret);
+        ret = wolfsentry_addr_family_pton(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, (const char *)data, (int)data_size, &jps->o_u_c.route.local.sa_family);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        jps->o_u_c.route.remote.sa_family = jps->o_u_c.route.local.sa_family;
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
 #endif

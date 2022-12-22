@@ -118,36 +118,37 @@ typedef int32_t wolfsentry_errcode_t;
 
 #ifdef WOLFSENTRY_THREADSAFE
 
-    #define WOLFSENTRY_UNLOCK_FOR_RETURN() do {                 \
+    #define WOLFSENTRY_UNLOCK_FOR_RETURN_EX(ctx) do {           \
         wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT)) < 0) { \
+        if ((_lock_ret = wolfsentry_context_unlock(ctx, thread)) < 0) { \
             WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
         }                                                       \
     } while (0)
+
+    #define WOLFSENTRY_UNLOCK_FOR_RETURN() WOLFSENTRY_UNLOCK_FOR_RETURN_EX(wolfsentry)
+
+    #define WOLFSENTRY_MUTEX_EX(ctx) wolfsentry_context_lock_mutex_abstimed(ctx, thread, NULL)
 
     #define WOLFSENTRY_MUTEX_OR_RETURN() do {                   \
         wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = wolfsentry_context_lock_mutex_abstimed(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL)) < 0) { \
+        if ((_lock_ret = WOLFSENTRY_MUTEX_EX(wolfsentry)) < 0)  \
             WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
-        }                                                       \
     } while (0)
+
+    #define WOLFSENTRY_SHARED_EX(ctx) wolfsentry_context_lock_shared_abstimed(ctx, thread, NULL)
 
     #define WOLFSENTRY_SHARED_OR_RETURN() do {                  \
         wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = wolfsentry_context_lock_shared_abstimed( \
-                 WOLFSENTRY_CONTEXT_ARGS_OUT,                  \
-                 NULL)) < 0) {             \
+        if ((_lock_ret = WOLFSENTRY_SHARED_EX(wolfsentry)) < 0) \
             WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
-        }                                                       \
     } while (0)
+
+    #define WOLFSENTRY_PROMOTABLE_EX(ctx) wolfsentry_context_lock_shared_with_reservation_abstimed(ctx, thread, NULL)
 
     #define WOLFSENTRY_PROMOTABLE_OR_RETURN() do {              \
         wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = wolfsentry_context_lock_shared_with_reservation_abstimed( \
-                 WOLFSENTRY_CONTEXT_ARGS_OUT,                  \
-                 NULL)) < 0) {             \
+        if ((_lock_ret = WOLFSENTRY_PROMOTABLE_EX(wolfsentry)) < 0) \
             WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
-        }                                                       \
     } while (0)
 
     #define WOLFSENTRY_UNLOCK_AND_RETURN(ret) do {              \
@@ -157,14 +158,20 @@ typedef int32_t wolfsentry_errcode_t;
 
 #else
     #define WOLFSENTRY_UNLOCK_FOR_RETURN() do {} while (0)
+    #define WOLFSENTRY_UNLOCK_FOR_RETURN_EX(ctx) do {} while (0)
+    #define WOLFSENTRY_MUTEX_EX(ctx) ((void)(ctx), WOLFSENTRY_ERROR_ENCODE(OK))
     #define WOLFSENTRY_MUTEX_OR_RETURN() (void)wolfsentry
+    #define WOLFSENTRY_SHARED_EX(ctx) (void)(ctx)
     #define WOLFSENTRY_SHARED_OR_RETURN() (void)wolfsentry
-#define WOLFSENTRY_PROMOTABLE_OR_RETURN() (void)wolfsentry
+    #define WOLFSENTRY_PROMOTABLE_EX(ctx) (void)(ctx)
+    #define WOLFSENTRY_PROMOTABLE_OR_RETURN() (void)wolfsentry
     #define WOLFSENTRY_UNLOCK_AND_RETURN(lock, ret) WOLFSENTRY_ERROR_RERETURN(ret)
 #endif
 
 #define WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RETURN(x); } while (0)
 #define WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_RECODED(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RETURN_RECODED(x); } while (0)
+#define WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(ctx, x) do { WOLFSENTRY_UNLOCK_FOR_RETURN_EX(ctx); WOLFSENTRY_ERROR_RETURN(x); } while (0)
+#define WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_RECODED_EX(ctx, x) do { WOLFSENTRY_UNLOCK_FOR_RETURN_EX(ctx); WOLFSENTRY_ERROR_RETURN_RECODED(x); } while (0)
 #define WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RERETURN(x); } while (0)
 #define WOLFSENTRY_ERROR_RERETURN_AND_UNLOCK(y) do { wolfsentry_errcode_t _yret = (y); WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_ERROR_RERETURN(_yret); } while (0)
 

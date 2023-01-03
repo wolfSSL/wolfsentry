@@ -190,6 +190,10 @@ const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t e)
 
     case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
         return "Lock request succeeded and reserved promotion";
+    case WOLFSENTRY_SUCCESS_ID_HAVE_MUTEX:
+        return "Caller owns a mutex on the designated lock";
+    case WOLFSENTRY_SUCCESS_ID_HAVE_READ_LOCK:
+        return "Caller shares the designated lock";
 
     case WOLFSENTRY_ERROR_ID_USER_BASE:
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
@@ -299,6 +303,10 @@ const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 
     case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
         return "LOCK_OK_AND_GOT_RESV";
+    case WOLFSENTRY_SUCCESS_ID_HAVE_MUTEX:
+        return "HAVE_MUTEX";
+    case WOLFSENTRY_SUCCESS_ID_HAVE_READ_LOCK:
+        return "HAVE_READ_LOCK";
 
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
     case WOLFSENTRY_ERROR_ID_USER_BASE:
@@ -418,18 +426,18 @@ const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned i
 
 #endif /* WOLFSENTRY_ERROR_STRINGS */
 
-uint64_t wolfsentry_get_build_settings(void) {
+struct wolfsentry_build_settings wolfsentry_get_build_settings(void) {
     return wolfsentry_build_settings;
 }
 
-wolfsentry_errcode_t wolfsentry_build_settings_compatible(uint64_t caller_build_settings) {
-    if (caller_build_settings == 0)
+wolfsentry_errcode_t wolfsentry_build_settings_compatible(struct wolfsentry_build_settings caller_build_settings) {
+    if (caller_build_settings.version == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if ((caller_build_settings >> WOLFSENTRY_CONFIG_VERSION_OFFSET) > (uint64_t)WOLFSENTRY_VERSION)
+    if (caller_build_settings.version > WOLFSENTRY_VERSION)
         WOLFSENTRY_ERROR_RETURN(LIB_MISMATCH);
-    if (~(((WOLFSENTRY_CONFIG_FLAG_MAX << (uint64_t)1UL) - (uint64_t)1UL) | ((uint64_t)0xffffffffUL << (uint64_t)WOLFSENTRY_CONFIG_VERSION_OFFSET)) & caller_build_settings)
+    if (~((WOLFSENTRY_CONFIG_FLAG_MAX << 1UL) - 1UL) & caller_build_settings.config)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-#define CHECK_CONFIG_MATCHES(x) if (! ((caller_build_settings & WOLFSENTRY_CONFIG_FLAG_ ## x) == (wolfsentry_build_settings & WOLFSENTRY_CONFIG_FLAG_ ## x))) WOLFSENTRY_ERROR_RETURN(LIBCONFIG_MISMATCH)
+#define CHECK_CONFIG_MATCHES(x) if (! ((caller_build_settings.config & WOLFSENTRY_CONFIG_FLAG_ ## x) == (wolfsentry_build_settings.config & WOLFSENTRY_CONFIG_FLAG_ ## x))) WOLFSENTRY_ERROR_RETURN(LIBCONFIG_MISMATCH)
     CHECK_CONFIG_MATCHES(USER_DEFINED_TYPES);
     CHECK_CONFIG_MATCHES(THREADSAFE);
     CHECK_CONFIG_MATCHES(HAVE_JSON_DOM);
@@ -2357,6 +2365,9 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    if ((thread == NULL) && (flags & WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     /* unlocking a recursive mutex, like recursively locking one, can be done lock-free. */
     if ((WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID) &&
         (lock->holder_count.write > 1))
@@ -2444,7 +2455,8 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
         }
 
         --lock->holder_count.write;
-        --thread->mutex_and_reservation_count;
+        if (thread)
+            --thread->mutex_and_reservation_count;
         if (lock->holder_count.write < 0) {
             ret = WOLFSENTRY_ERROR_ENCODE(INTERNAL_CHECK_FATAL);
             goto out;
@@ -2532,7 +2544,7 @@ wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock,
     } else {
         if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY) {
             if (thread->tracked_shared_lock == lock)
-                WOLFSENTRY_RETURN_OK;
+                WOLFSENTRY_SUCCESS_RETURN(HAVE_READ_LOCK);
             else if (thread->shared_count > 0)
                 WOLFSENTRY_RETURN_OK; /* this is garbage information that tells the
                                        * caller that someone, maybe the caller, had a
@@ -2542,7 +2554,7 @@ wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock,
                 WOLFSENTRY_ERROR_RETURN(LACKING_READ_LOCK);
         } else {
             if (thread->tracked_shared_lock == lock)
-                WOLFSENTRY_RETURN_OK;
+                WOLFSENTRY_SUCCESS_RETURN(HAVE_READ_LOCK);
             else
                 WOLFSENTRY_ERROR_RETURN(LACKING_READ_LOCK);
         }
@@ -2556,7 +2568,7 @@ wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock, 
 
     if (lock_state == WOLFSENTRY_LOCK_EXCLUSIVE) {
         if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID)
-            WOLFSENTRY_RETURN_OK;
+            WOLFSENTRY_SUCCESS_RETURN(HAVE_MUTEX);
         else
             WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
     } else {
@@ -2570,15 +2582,14 @@ wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock, 
 wolfsentry_errcode_t wolfsentry_lock_have_either(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
     if (thread) {
-        ret = wolfsentry_lock_have_mutex(lock, thread, flags);
-        if (! WOLFSENTRY_ERROR_CODE_IS(ret, LACKING_MUTEX))
+        ret = wolfsentry_lock_have_shared(lock, thread, flags);
+        if (! WOLFSENTRY_ERROR_CODE_IS(ret, LACKING_READ_LOCK))
             WOLFSENTRY_ERROR_RERETURN(ret);
     }
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_have_shared(lock, thread, flags));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_have_mutex(lock, thread, flags));
 }
 
 wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservation(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    (void)thread;
     (void)flags;
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -3071,7 +3082,7 @@ static wolfsentry_errcode_t wolfsentry_context_alloc_1(
 }
 
 wolfsentry_errcode_t wolfsentry_init_ex(
-    uint64_t caller_build_settings,
+    struct wolfsentry_build_settings caller_build_settings,
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(const struct wolfsentry_host_platform_interface *user_hpi),
     const struct wolfsentry_eventconfig *config,
     struct wolfsentry_context **wolfsentry,
@@ -3086,10 +3097,21 @@ wolfsentry_errcode_t wolfsentry_init_ex(
     ret = wolfsentry_build_settings_compatible(caller_build_settings);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
+    if (user_hpi &&
+        ((user_hpi->caller_build_settings.version != 0) ||
+         (user_hpi->caller_build_settings.config != 0)) &&
+        ((user_hpi->caller_build_settings.version != caller_build_settings.version) ||
+         (user_hpi->caller_build_settings.config != caller_build_settings.config)))
+    {
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+
     ret = wolfsentry_eventconfig_check(config);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     memset(&hpi, 0, sizeof hpi);
+
+    hpi.caller_build_settings = caller_build_settings;
 
     if ((user_hpi == NULL) || (user_hpi->allocator.malloc == NULL)) {
 #ifndef WOLFSENTRY_MALLOC_BUILTINS
@@ -3141,8 +3163,6 @@ wolfsentry_errcode_t wolfsentry_init_ex(
         WOLFSENTRY_ERROR_RERETURN(ret);
 #endif
 
-    (*wolfsentry)->caller_build_settings = caller_build_settings;
-
     if ((ret = wolfsentry_eventconfig_load(config, &(*wolfsentry)->config)) < 0)
         goto out;
 
@@ -3168,7 +3188,7 @@ wolfsentry_errcode_t wolfsentry_init_ex(
 }
 
 wolfsentry_errcode_t wolfsentry_init(
-    uint64_t caller_build_settings,
+    struct wolfsentry_build_settings caller_build_settings,
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(const struct wolfsentry_host_platform_interface *hpi),
     const struct wolfsentry_eventconfig *config,
     struct wolfsentry_context **wolfsentry)
@@ -3250,8 +3270,8 @@ wolfsentry_errcode_t wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wo
 }
 
 wolfsentry_errcode_t wolfsentry_context_inhibit_actions(WOLFSENTRY_CONTEXT_ARGS_IN) {
-    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     wolfsentry_eventconfig_flags_t flags_before, flags_after;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
         wolfsentry->config.config.flags,
         (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS,

@@ -120,7 +120,7 @@ struct wolfsentry_semcbs {
 #endif /* WOLFSENTRY_THREADSAFE */
 
 struct wolfsentry_host_platform_interface {
-    uint64_t wolfsentry_config_signature;
+    struct wolfsentry_build_settings caller_build_settings;
     struct wolfsentry_allocator allocator;
     struct wolfsentry_timecbs timecbs;
 #ifdef WOLFSENTRY_THREADSAFE
@@ -128,9 +128,8 @@ struct wolfsentry_host_platform_interface {
 #endif
 };
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_hpi_init_1(uint64_t wolfsentry_config_signature, struct wolfsentry_host_platform_interface *hpi);
-WOLFSENTRY_API uint64_t wolfsentry_get_build_settings(void);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_build_settings_compatible(uint64_t caller_build_settings);
+WOLFSENTRY_API struct wolfsentry_build_settings wolfsentry_get_build_settings(void);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_build_settings_compatible(struct wolfsentry_build_settings caller_build_settings);
 
 #ifdef WOLFSENTRY_THREADSAFE
 
@@ -438,11 +437,11 @@ struct wolfsentry_sockaddr WOLFSENTRY_SOCKADDR_MEMBERS(WOLFSENTRY_FLEXIBLE_ARRAY
 
 #define WOLFSENTRY_SOCKADDR(n) struct WOLFSENTRY_SOCKADDR_MEMBERS(WOLFSENTRY_BITS_TO_BYTES(n))
 
-wolfsentry_errcode_t wolfsentry_time_now_plus_delta(struct wolfsentry_context *wolfsentry, wolfsentry_time_t td, wolfsentry_time_t *res);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_now_plus_delta(struct wolfsentry_context *wolfsentry, wolfsentry_time_t td, wolfsentry_time_t *res);
 
 #ifdef WOLFSENTRY_THREADSAFE
-wolfsentry_errcode_t wolfsentry_time_to_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t t, struct timespec *ts);
-wolfsentry_errcode_t wolfsentry_time_now_plus_delta_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t td, struct timespec *ts);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_to_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t t, struct timespec *ts);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_now_plus_delta_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t td, struct timespec *ts);
 #endif
 
 typedef wolfsentry_errcode_t (*wolfsentry_make_id_cb_t)(void *context, wolfsentry_ent_id_t *id);
@@ -547,13 +546,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_init(
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
     const struct wolfsentry_eventconfig *config);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
-    uint64_t caller_build_settings,
+    struct wolfsentry_build_settings caller_build_settings,
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(const struct wolfsentry_host_platform_interface *hpi),
     const struct wolfsentry_eventconfig *config,
     struct wolfsentry_context **wolfsentry,
     wolfsentry_init_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init(
-    uint64_t caller_build_settings,
+    struct wolfsentry_build_settings caller_build_settings,
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(const struct wolfsentry_host_platform_interface *hpi),
     const struct wolfsentry_eventconfig *config,
     struct wolfsentry_context **wolfsentry);
@@ -599,7 +598,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
     wolfsentry_time_t max_wait);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(
     WOLFSENTRY_CONTEXT_ARGS_IN);
-wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reservation(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reservation(
     WOLFSENTRY_CONTEXT_ARGS_IN);
 
 #else /* !WOLFSENTRY_THREADSAFE */
@@ -643,7 +642,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert(
     wolfsentry_ent_id_t *id,
     wolfsentry_action_res_t *action_results);
 
-wolfsentry_errcode_t wolfsentry_route_insert_into_table_and_check_out(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_into_table_and_check_out(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table *route_table,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
@@ -816,7 +815,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch(
     wolfsentry_route_flags_t *inexact_matches,
     wolfsentry_action_res_t *action_results);
 
-wolfsentry_errcode_t wolfsentry_route_event_dispatch_with_table_with_inited_result(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_with_table_with_inited_result(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table *route_table,
     const struct wolfsentry_sockaddr *remote,

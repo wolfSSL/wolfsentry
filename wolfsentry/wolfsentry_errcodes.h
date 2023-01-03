@@ -139,16 +139,22 @@ typedef int32_t wolfsentry_errcode_t;
 
     #define WOLFSENTRY_SHARED_OR_RETURN() do {                  \
         wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = WOLFSENTRY_SHARED_EX(wolfsentry)) < 0) \
-            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        if (thread == NULL)                                     \
+            _lock_ret = WOLFSENTRY_MUTEX_EX(wolfsentry);        \
+        else                                                    \
+            _lock_ret = WOLFSENTRY_SHARED_EX(wolfsentry);       \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
 
     #define WOLFSENTRY_PROMOTABLE_EX(ctx) wolfsentry_context_lock_shared_with_reservation_abstimed(ctx, thread, NULL)
 
     #define WOLFSENTRY_PROMOTABLE_OR_RETURN() do {              \
         wolfsentry_errcode_t _lock_ret;                         \
-        if ((_lock_ret = WOLFSENTRY_PROMOTABLE_EX(wolfsentry)) < 0) \
-            WOLFSENTRY_ERROR_RERETURN(_lock_ret);               \
+        if (thread == NULL)                                     \
+            _lock_ret = WOLFSENTRY_MUTEX_EX(wolfsentry);        \
+        else                                                    \
+            _lock_ret = WOLFSENTRY_PROMOTABLE_EX(wolfsentry);   \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
 
     #define WOLFSENTRY_UNLOCK_AND_RETURN(ret) do {              \
@@ -281,6 +287,8 @@ enum wolfsentry_error_id {
 
     WOLFSENTRY_SUCCESS_ID_OK                   =    0,
     WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV =    1,
+    WOLFSENTRY_SUCCESS_ID_HAVE_MUTEX           =    2,
+    WOLFSENTRY_SUCCESS_ID_HAVE_READ_LOCK       =    3,
     WOLFSENTRY_SUCCESS_ID_USER_BASE            =  128
 };
 

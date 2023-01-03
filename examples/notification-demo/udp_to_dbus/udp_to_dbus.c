@@ -56,7 +56,7 @@ static int notnormal = 0;
     (ptr) += _len;                                                      \
 }
 
-static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_config, const unsigned char *json_message,
+static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, const unsigned char *json_message,
     size_t json_message_len)
 {
     JSON_VALUE p_root;
@@ -88,7 +88,7 @@ static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_
 
     struct wolfsentry_allocator *allocator = wolfsentry_get_allocator(wolfsentry);
 
-    if ((ret = json_dom_parse(allocator, json_message, json_message_len, centijson_config,
+    if ((ret = json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), json_message, json_message_len, centijson_config,
                               0 /* dom_flags */, &p_root, &json_pos) < 0)) {
         if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
             fprintf(stderr,
@@ -163,7 +163,7 @@ static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_
                 continue;
             SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "%s%s", i>0 ? "," : "",
                 decision_string);
-            json_value_fini(allocator, decision_string_v);
+            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), decision_string_v);
             decision_string_v = NULL;
         }
 
@@ -190,18 +190,18 @@ static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_
                                NULL);
     } while(0);
 
-    json_value_fini(allocator, action_v);
-    json_value_fini(allocator, rule_id_v);
-    json_value_fini(allocator, rule_hitcount_v);
-    json_value_fini(allocator, af_v);
-    json_value_fini(allocator, proto_v);
-    json_value_fini(allocator, remote_addr_v);
-    json_value_fini(allocator, remote_port_v);
-    json_value_fini(allocator, local_addr_v);
-    json_value_fini(allocator, local_port_v);
-    json_value_fini(allocator, decision_array_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), action_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), rule_id_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), rule_hitcount_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), af_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), proto_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), remote_addr_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), remote_port_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), local_addr_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), local_port_v);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), decision_array_v);
 
-    json_value_fini(allocator, &p_root);
+    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &p_root);
 
     if (notify == NULL)
         return -1;
@@ -223,7 +223,7 @@ static int notify(struct wolfsentry_context *wolfsentry, JSON_CONFIG *centijson_
 }
 
 static wolfsentry_errcode_t my_addr_family_parser(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *addr_text,
     const int addr_text_len,
     byte *addr_internal,
@@ -233,7 +233,7 @@ static wolfsentry_errcode_t my_addr_family_parser(
     char abuf[32];
     int n_octets, parsed_len = 0, i;
 
-    (void)wolfsentry;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
 
     if (snprintf(abuf, sizeof(abuf), "%.*s",addr_text_len,addr_text) >= (int)sizeof(abuf))
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
@@ -259,7 +259,7 @@ static wolfsentry_errcode_t my_addr_family_parser(
 }
 
 static wolfsentry_errcode_t my_addr_family_formatter(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const byte *addr_internal,
     const unsigned int addr_internal_len,
     char *addr_text,
@@ -268,7 +268,7 @@ static wolfsentry_errcode_t my_addr_family_formatter(
     int out_len;
     int ret;
 
-    (void)wolfsentry;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
 
     if (addr_internal_len <= 8)
         out_len = snprintf(addr_text, (size_t)*addr_text_len, "%o/",
@@ -325,6 +325,12 @@ int main(int argc, char **argv) {
 
     struct wolfsentry_context *wolfsentry;
 
+    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_GET_ERROR < 0) {
+        fprintf(stderr, "%s: thread bootstrap failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(WOLFSENTRY_THREAD_GET_ERROR));
+        exit(1);
+    }
+
     for (i=1; i<argc; i+=2) {
         if (argc < i+2) {
             fprintf(stderr,"%s: missing argument to \"%s\"\n", argv[0], argv[i]);
@@ -349,11 +355,12 @@ int main(int argc, char **argv) {
     if (! notify_init("udp_to_dbus"))
         exit(1);
 
-    if (wolfsentry_init(NULL /* HPI */, NULL /* config */, &wolfsentry) < 0)
+    if (wolfsentry_init(wolfsentry_build_settings,
+                          WOLFSENTRY_CONTEXT_ARGS_OUT_EX(NULL /* HPI */), NULL /* config */, &wolfsentry) < 0)
         exit(1);
 
     if (wolfsentry_addr_family_handler_install(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
             WOLFSENTRY_AF_USER_OFFSET,
             "my_AF",
             WOLFSENTRY_LENGTH_NULL_TERMINATED,
@@ -387,7 +394,7 @@ int main(int argc, char **argv) {
     }
 
     if (wolfsentry_config_json_oneshot(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
             wolfsentry_config_map,
             wolfsentry_config_st.st_size,
             WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS,
@@ -406,7 +413,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             fprintf(stderr, "\tOverride string assignment loaded: %s\n", argv[i+1]);
-            ret = wolfsentry_user_value_store_string(wolfsentry, argv[i+1],
+            ret = wolfsentry_user_value_store_string(WOLFSENTRY_CONTEXT_ARGS_OUT, argv[i+1],
                 (int)(cp - argv[i+1]), cp + 1,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED, 1 /* overwrite_p */);
             if (ret < 0) {
@@ -430,7 +437,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             fprintf(stderr, "\tOverride int assignment loaded: %s (%llu)\n", argv[i+1], (unsigned long long int)the_int);
-            ret = wolfsentry_user_value_store_uint(wolfsentry, argv[i+1],
+            ret = wolfsentry_user_value_store_uint(WOLFSENTRY_CONTEXT_ARGS_OUT, argv[i+1],
                 (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {
                 fprintf(stderr, "wolfsentry_user_value_store_string(): " \
@@ -441,7 +448,7 @@ int main(int argc, char **argv) {
     }
 
     ret = wolfsentry_user_value_get_uint(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
         "notification-dest-port",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &notification_dest_port);
@@ -450,7 +457,7 @@ int main(int argc, char **argv) {
         exit(1);
 
     ret = wolfsentry_user_value_get_string(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
         "notification-listen-addr",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &notification_dest_addr,
@@ -466,7 +473,7 @@ int main(int argc, char **argv) {
 
     pton_ret = inet_pton(AF_INET, notification_dest_addr, &inbound_sa.sin_addr);
 
-    ret = wolfsentry_user_value_release_record(wolfsentry, &notification_dest_addr_record);
+    ret = wolfsentry_user_value_release_record(WOLFSENTRY_CONTEXT_ARGS_OUT, &notification_dest_addr_record);
 
     if (ret < 0)
         exit(1);
@@ -523,7 +530,7 @@ int main(int argc, char **argv) {
             perror("recv");
             break;
         }
-        if (notify(wolfsentry, &centijson_config, buf, recv_ret) < 0)
+        if (notify(WOLFSENTRY_CONTEXT_ARGS_OUT, &centijson_config, buf, recv_ret) < 0)
             notnormal = 1;
     }
 
@@ -531,10 +538,16 @@ done:
 
     notify_uninit();
 
-    if (wolfsentry_shutdown(&wolfsentry) < 0) {
+    if (wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)) < 0) {
             fprintf(stderr, "wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT,
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
             notnormal = 1;
+    }
+
+    ret = WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (ret < 0) {
+        fprintf(stderr, "%s: thread shutdown failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        notnormal = 1;
     }
 
     if (! notnormal)

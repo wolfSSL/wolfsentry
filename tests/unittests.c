@@ -509,6 +509,15 @@ usleep(10000);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem_timed(lock, thread, 1000, WOLFSENTRY_LOCK_FLAG_NONE));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
+    /* cursory exercise of null thread calls. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_destroy(lock, NULL /* thread */, test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_init(wolfsentry_get_hpi(wolfsentry), NULL /* thread */, lock,
+                                                    test_rw_locks_WOLFSENTRY_LOCK_FLAGS));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, NULL /* thread */, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, NULL /* thread */, WOLFSENTRY_LOCK_FLAG_NONE));
+
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(&lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry, thread));

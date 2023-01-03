@@ -1699,7 +1699,7 @@ wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_rwlock *lo
     }
 
     WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_EXCLUSIVE);
-    lock->write_lock_holder = WOLFSENTRY_THREAD_GET_ID;
+    WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_GET_ID);
     if (lock->holder_count.write != 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     lock->holder_count.write = 1;
@@ -1792,7 +1792,7 @@ wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock
     }
 
     WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_SHARED);
-    lock->write_lock_holder = WOLFSENTRY_THREAD_NO_ID;
+    WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_NO_ID);
     lock->promoted_at_count = 0;
 
     /* writer count becomes reader count. */
@@ -1972,7 +1972,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed(struct wolfsen
         lock->promoted_at_count = lock->holder_count.read;
         /* read count becomes write count. */
         WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_EXCLUSIVE);
-        lock->write_lock_holder = lock->read2write_reservation_holder;
+        WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, lock->read2write_reservation_holder);
         WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_NO_ID);
         thread->mutex_and_reservation_count += lock->read2write_waiter_read_count - 1; /* -1 for the reservation */
         thread->shared_count -= lock->read2write_waiter_read_count;
@@ -2159,7 +2159,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
     switch (WOLFSENTRY_ATOMIC_LOAD(lock->state)) {
     case WOLFSENTRY_LOCK_EXCLUSIVE:
         /* silently and cheaply tolerate repeat calls to _shared2mutex*(). */
-        if (lock->write_lock_holder == WOLFSENTRY_THREAD_GET_ID)
+        if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID)
             WOLFSENTRY_RETURN_OK;
         else
             WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
@@ -2224,7 +2224,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
     {
         /* read count becomes write count. */
         WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_EXCLUSIVE);
-        lock->write_lock_holder = WOLFSENTRY_THREAD_GET_ID;
+        WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_GET_ID);
 
         ret = sem_post(&lock->sem);
         if (thread->tracked_shared_lock == lock) {
@@ -2299,7 +2299,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
         if (sem_trywait(&lock->sem_read2write_waiters) == 0) {
             if (sem_post(&lock->sem) < 0)
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-            lock->write_lock_holder = WOLFSENTRY_THREAD_GET_ID;
+            WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_GET_ID);
             if (thread->tracked_shared_lock == lock) {
                 thread->mutex_and_reservation_count += thread->recursion_of_tracked_lock - 1; /* -1 for reservation */
                 thread->shared_count -= thread->recursion_of_tracked_lock;
@@ -2322,7 +2322,7 @@ wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwl
             WOLFSENTRY_ERROR_RERETURN(ret);
     }
 
-    lock->write_lock_holder = lock->read2write_reservation_holder;
+    WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, lock->read2write_reservation_holder);
     WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_NO_ID);
 
     if (thread->tracked_shared_lock == lock) {
@@ -2437,7 +2437,7 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
             --lock->write_waiter_count;
             lock->read2write_waiter_read_count = 0;
             WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_EXCLUSIVE);
-            lock->write_lock_holder = lock->read2write_reservation_holder;
+            WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, lock->read2write_reservation_holder);
             if (sem_post(&lock->sem_read2write_waiters) < 0)
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
             else {
@@ -2463,7 +2463,7 @@ wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, stru
         }
         if (lock->holder_count.write == 0) {
             WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_UNLOCKED);
-            lock->write_lock_holder = WOLFSENTRY_THREAD_NO_ID;
+            WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_NO_ID);
             lock->promoted_at_count = 0;
             /* fall through to waiter notification phase. */
         } else {

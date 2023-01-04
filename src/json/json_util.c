@@ -25,7 +25,7 @@
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_JSON_JSON_UTIL_C
 
-wolfsentry_errcode_t wolfsentry_centijson_errcode_translate(wolfsentry_errcode_t centijson_errcode) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_centijson_errcode_translate(wolfsentry_errcode_t centijson_errcode) {
     if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(centijson_errcode) != WOLFSENTRY_SOURCE_ID_UNSET)
         WOLFSENTRY_ERROR_RERETURN(centijson_errcode);
     switch (centijson_errcode) {

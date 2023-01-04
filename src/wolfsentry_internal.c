@@ -24,7 +24,7 @@
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_WOLFSENTRY_INTERNAL_C
 
-wolfsentry_errcode_t wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_header *table, int unique_p) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_header *table, int unique_p) {
     struct wolfsentry_table_ent_header *i = table->head;
     int cmpret;
 
@@ -98,7 +98,7 @@ static wolfsentry_errcode_t wolfsentry_table_clone_map(
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_clone(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_clone(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table,
     struct wolfsentry_context *dest_context,
@@ -196,7 +196,7 @@ wolfsentry_errcode_t wolfsentry_table_clone(
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-wolfsentry_errcode_t wolfsentry_coupled_table_clone(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_coupled_table_clone(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table1,
     struct wolfsentry_table_header *src_table2,
@@ -295,7 +295,7 @@ static inline int wolfsentry_ent_id_cmp(struct wolfsentry_table_ent_header *left
         return 0;
 }
 
-wolfsentry_errcode_t wolfsentry_id_allocate(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_ent_header *ent
     )
@@ -321,7 +321,7 @@ wolfsentry_errcode_t wolfsentry_id_allocate(
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
     struct wolfsentry_table_ent_header *i = wolfsentry->ents_by_id.head;
     int cmpret;
 
@@ -360,7 +360,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_I
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i;
 
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
@@ -381,7 +381,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, 
     WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
 
     if (ent->prev_by_id)
@@ -398,7 +398,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
@@ -416,7 +416,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_I
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i = table->head;
 
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
@@ -435,7 +435,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_IN, struct
     WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
 
     if (ent->parent_table == NULL)
@@ -460,7 +460,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, s
         WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header **ent) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i;
 
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
@@ -486,7 +486,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_IN, str
     WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
 }
 
-wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results) {
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
 
@@ -506,7 +506,7 @@ wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table) {
     struct wolfsentry_table_ent_header *i = table->head, *next;
     wolfsentry_errcode_t ret;
 
@@ -530,34 +530,34 @@ wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_IN, stru
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_cursor *cursor) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_cursor *cursor) {
     WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
     memset(cursor, 0, sizeof *cursor);
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
     cursor->point = table->head;
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
     cursor->point = table->tail;
     WOLFSENTRY_RETURN_OK;
 }
 
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor) {
+WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor) {
     return cursor->point;
 }
 
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor) {
+WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor) {
     if (cursor->point == NULL)
         return NULL;
     cursor->point = cursor->point->prev;
     return cursor->point;
 }
 
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor) {
+WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor) {
     if (cursor->point == NULL)
         return NULL;
     cursor->point = cursor->point->next;
@@ -570,7 +570,7 @@ struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsen
  * before where the search ent would be, right on the search ent, or
  * immediately after where the search ent would be.
  */
-wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_header *table, const struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_header *table, const struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position) {
     struct wolfsentry_table_ent_header *i = table->head;
     while (i) {
         int c = table->cmp_fn(i, ent);
@@ -586,7 +586,7 @@ wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_table_filter(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_filter(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *table,
     wolfsentry_filter_function_t filter,
@@ -616,7 +616,7 @@ wolfsentry_errcode_t wolfsentry_table_filter(
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
-wolfsentry_errcode_t wolfsentry_table_map(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_map(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *table,
     wolfsentry_map_function_t fn,

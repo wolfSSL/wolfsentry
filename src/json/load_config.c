@@ -1415,7 +1415,7 @@ static wolfsentry_errcode_t json_process(
         WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_config_json_init_ex(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_config_load_flags_t load_flags,
     const JSON_CONFIG *json_config,
@@ -1536,7 +1536,7 @@ wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         WOLFSENTRY_RETURN_OK; /* keeping lock! */
 }
 
-wolfsentry_errcode_t wolfsentry_config_json_init(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_config_load_flags_t load_flags,
     struct wolfsentry_json_process_state **jps)
@@ -1554,7 +1554,7 @@ wolfsentry_errcode_t wolfsentry_config_json_init(
  * subsequently be copied to any eventconfigs that are allocated for
  * events-insert configuration.
  */
-wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
     struct wolfsentry_json_process_state *jps,
     struct wolfsentry_eventconfig *config)
 {
@@ -1562,7 +1562,7 @@ wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_config_json_feed(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
     struct wolfsentry_json_process_state *jps,
     const unsigned char *json_in,
     size_t json_in_len,
@@ -1588,7 +1588,7 @@ wolfsentry_errcode_t wolfsentry_config_json_feed(
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct wolfsentry_json_process_state *jps, int *json_errcode, const char **json_errmsg)
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct wolfsentry_json_process_state *jps, int *json_errcode, const char **json_errmsg)
 {
     if ((jps == NULL) || (jps->parser.user_data == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -1599,7 +1599,7 @@ wolfsentry_errcode_t wolfsentry_config_centijson_errcode(struct wolfsentry_json_
     WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_config_json_fini(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
     struct wolfsentry_json_process_state **jps,
     char *err_buf,
     size_t err_buf_size)
@@ -1692,7 +1692,7 @@ wolfsentry_errcode_t wolfsentry_config_json_fini(
         WOLFSENTRY_RETURN_OK;
 }
 
-wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const unsigned char *json_in,
     size_t json_in_len,
@@ -1712,7 +1712,7 @@ wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_config_json_fini(&jps, err_buf, err_buf_size));
 }
 
-wolfsentry_errcode_t wolfsentry_config_json_oneshot(
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const unsigned char *json_in,
     size_t json_in_len,

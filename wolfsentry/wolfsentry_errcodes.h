@@ -127,6 +127,15 @@ typedef int32_t wolfsentry_errcode_t;
 
     #define WOLFSENTRY_UNLOCK_FOR_RETURN() WOLFSENTRY_UNLOCK_FOR_RETURN_EX(wolfsentry)
 
+    #define WOLFSENTRY_UNLOCK_AND_UNRESERVE_FOR_RETURN_EX(ctx) do { \
+        wolfsentry_errcode_t _lock_ret;                             \
+        if ((_lock_ret = wolfsentry_context_unlock_and_abandon_reservation(ctx, thread)) < 0) { \
+            WOLFSENTRY_ERROR_RERETURN(_lock_ret);                   \
+        }                                                           \
+    } while (0)
+
+    #define WOLFSENTRY_UNLOCK_AND_UNRESERVE_FOR_RETURN() WOLFSENTRY_UNLOCK_AND_UNRESERVE_FOR_RETURN_EX(wolfsentry)
+
     #define WOLFSENTRY_MUTEX_EX(ctx) wolfsentry_context_lock_mutex_abstimed(ctx, thread, NULL)
 
     #define WOLFSENTRY_MUTEX_OR_RETURN() do {                   \
@@ -227,7 +236,7 @@ enum wolfsentry_source_id {
     WOLFSENTRY_SOURCE_ID_EVENTS_C   =  2,
     WOLFSENTRY_SOURCE_ID_WOLFSENTRY_INTERNAL_C =  3,
     WOLFSENTRY_SOURCE_ID_ROUTES_C   =  4,
-    WOLFSENTRY_SOURCE_ID_UTIL_C     =  5,
+    WOLFSENTRY_SOURCE_ID_WOLFSENTRY_UTIL_C     =  5,
     WOLFSENTRY_SOURCE_ID_KV_C       =  6,
     WOLFSENTRY_SOURCE_ID_ADDR_FAMILIES_C = 7,
     WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C = 8,

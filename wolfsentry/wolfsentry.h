@@ -120,7 +120,7 @@ struct wolfsentry_semcbs {
 #endif /* WOLFSENTRY_THREADSAFE */
 
 struct wolfsentry_host_platform_interface {
-    struct wolfsentry_build_settings caller_build_settings;
+    struct wolfsentry_build_settings caller_build_settings; /* must be first */
     struct wolfsentry_allocator allocator;
     struct wolfsentry_timecbs timecbs;
 #ifdef WOLFSENTRY_THREADSAFE
@@ -594,6 +594,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_with_reservat
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct timespec *abs_timeout);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_time_t max_wait);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_with_reservation_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(

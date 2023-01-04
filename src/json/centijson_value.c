@@ -215,7 +215,7 @@ json_value_payload(JSON_VALUE* v)
  *** Generic info ***
  ********************/
 
-JSON_VALUE_TYPE
+WOLFSENTRY_API JSON_VALUE_TYPE
 json_value_type(const JSON_VALUE* v)
 {
     if(v == NULL)
@@ -223,7 +223,7 @@ json_value_type(const JSON_VALUE* v)
     return (JSON_VALUE_TYPE)(v->data.data_bytes[0] & TYPE_MASK);
 }
 
-int
+WOLFSENTRY_API int
 json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
 {
     if(json_value_type(v) == type)
@@ -280,7 +280,7 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_value_is_new(const JSON_VALUE* v)
 {
     return (v != NULL  &&  json_value_type(v) == JSON_VALUE_NULL  &&  (v->data.data_bytes[0] & IS_NEW));
@@ -289,7 +289,7 @@ json_value_is_new(const JSON_VALUE* v)
 /* note path is technically UTF-8, but arg is signed char to streamline the
  * common case of caller code passing string literals as the path.
  */
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_path(JSON_VALUE* root, const char* path)
 {
     const unsigned char* token_beg = (const unsigned char *)path;
@@ -332,7 +332,7 @@ json_value_path(JSON_VALUE* root, const char* path)
  *** Initializers ***
  ********************/
 
-void
+WOLFSENTRY_API void
 json_value_init_null(JSON_VALUE* v)
 {
     if(v != NULL)
@@ -345,7 +345,7 @@ json_value_init_new(JSON_VALUE* v)
     v->data.data_bytes[0] = ((uint8_t) JSON_VALUE_NULL) | IS_NEW;
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_bool(JSON_VALUE* v, int b)
 {
     if(v == NULL)
@@ -357,7 +357,7 @@ json_value_init_bool(JSON_VALUE* v, int b)
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_int32(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -374,7 +374,7 @@ json_value_init_int32(
         v, JSON_VALUE_INT32, &i32, sizeof(int32_t));
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_uint32(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -391,7 +391,7 @@ json_value_init_uint32(
         v, JSON_VALUE_UINT32, &u32, sizeof(uint32_t));
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_int64(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -408,7 +408,7 @@ json_value_init_int64(
         v, JSON_VALUE_INT64, &i64, sizeof(int64_t));
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_uint64(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -425,7 +425,7 @@ json_value_init_uint64(
         v, JSON_VALUE_UINT64, &u64, sizeof(uint64_t));
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_float(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -442,7 +442,7 @@ json_value_init_float(
         v, JSON_VALUE_FLOAT, &f, sizeof(float));
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_double(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -459,7 +459,7 @@ json_value_init_double(
         v, JSON_VALUE_DOUBLE, &d, sizeof(double));
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_string_(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -502,7 +502,7 @@ json_value_init_string_(
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_string(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -516,7 +516,7 @@ json_value_init_string(
         v, str, (str != NULL) ? strlen((const char *)str) : 0);
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_array(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -540,7 +540,7 @@ json_value_init_array(
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_dict(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -554,7 +554,7 @@ json_value_init_dict(
         v, NULL, 0);
 }
 
-int
+WOLFSENTRY_API int
 json_value_init_dict_ex(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -594,7 +594,7 @@ json_value_init_dict_ex(
     return 0;
 }
 
-void
+WOLFSENTRY_API void
 json_value_fini(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -629,7 +629,7 @@ json_value_fini(
  *** Basic type getters ***
  **************************/
 
-int
+WOLFSENTRY_API int
 json_value_bool(const JSON_VALUE* v)
 {
     if(json_value_type(v) != JSON_VALUE_BOOL)
@@ -638,7 +638,7 @@ json_value_bool(const JSON_VALUE* v)
     return v->data.data_bytes[1];
 }
 
-int32_t
+WOLFSENTRY_API int32_t
 json_value_int32(const JSON_VALUE* v)
 {
     uint8_t* payload = json_value_payload((JSON_VALUE*) v);
@@ -662,7 +662,7 @@ json_value_int32(const JSON_VALUE* v)
     }
 }
 
-uint32_t
+WOLFSENTRY_API uint32_t
 json_value_uint32(const JSON_VALUE* v)
 {
     uint8_t* payload = json_value_payload((JSON_VALUE*) v);
@@ -686,7 +686,7 @@ json_value_uint32(const JSON_VALUE* v)
     }
 }
 
-int64_t
+WOLFSENTRY_API int64_t
 json_value_int64(const JSON_VALUE* v)
 {
     uint8_t* payload = json_value_payload((JSON_VALUE*) v);
@@ -710,7 +710,7 @@ json_value_int64(const JSON_VALUE* v)
     }
 }
 
-uint64_t
+WOLFSENTRY_API uint64_t
 json_value_uint64(const JSON_VALUE* v)
 {
     uint8_t* payload = json_value_payload((JSON_VALUE*) v);
@@ -734,7 +734,7 @@ json_value_uint64(const JSON_VALUE* v)
     }
 }
 
-float
+WOLFSENTRY_API float
 json_value_float(const JSON_VALUE* v)
 {
     uint8_t* payload = json_value_payload((JSON_VALUE*) v);
@@ -758,7 +758,7 @@ json_value_float(const JSON_VALUE* v)
     }
 }
 
-double
+WOLFSENTRY_API double
 json_value_double(const JSON_VALUE* v)
 {
     uint8_t* payload = json_value_payload((JSON_VALUE*) v);
@@ -782,7 +782,7 @@ json_value_double(const JSON_VALUE* v)
     }
 }
 
-const unsigned char*
+WOLFSENTRY_API const unsigned char*
 json_value_string(const JSON_VALUE* v)
 {
     uint8_t* payload;
@@ -799,7 +799,7 @@ json_value_string(const JSON_VALUE* v)
     return (unsigned char*) payload + off;
 }
 
-size_t
+WOLFSENTRY_API size_t
 json_value_string_length(const JSON_VALUE* v)
 {
     uint8_t* payload;
@@ -853,7 +853,7 @@ json_value_array_realloc(
     return 0;
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_array_get(const JSON_VALUE* v, size_t index)
 {
     ARRAY* a = json_value_array_payload((JSON_VALUE*) v);
@@ -864,7 +864,7 @@ json_value_array_get(const JSON_VALUE* v, size_t index)
         return NULL;
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_array_get_all(const JSON_VALUE* v)
 {
     ARRAY* a = json_value_array_payload((JSON_VALUE*) v);
@@ -875,7 +875,7 @@ json_value_array_get_all(const JSON_VALUE* v)
         return NULL;
 }
 
-size_t
+WOLFSENTRY_API size_t
 json_value_array_size(const JSON_VALUE* v)
 {
     ARRAY* a = json_value_array_payload((JSON_VALUE*) v);
@@ -886,7 +886,7 @@ json_value_array_size(const JSON_VALUE* v)
         return 0;
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_array_append(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -900,7 +900,7 @@ json_value_array_append(
         v, json_value_array_size(v));
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_array_insert(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -930,7 +930,7 @@ json_value_array_insert(
     return &a->json_value_buf[index];
 }
 
-int
+WOLFSENTRY_API int
 json_value_array_remove(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -944,7 +944,7 @@ json_value_array_remove(
         v, index, 1);
 }
 
-int
+WOLFSENTRY_API int
 json_value_array_remove_range(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -980,7 +980,7 @@ json_value_array_remove_range(
     return 0;
 }
 
-void
+WOLFSENTRY_API void
 json_value_array_clean(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1070,7 +1070,7 @@ json_value_dict_leftmost_path(RBTREE** path, RBTREE* node)
     return n;
 }
 
-unsigned
+WOLFSENTRY_API unsigned
 json_value_dict_flags(const JSON_VALUE* v)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
@@ -1082,7 +1082,7 @@ json_value_dict_flags(const JSON_VALUE* v)
     return flags;
 }
 
-size_t
+WOLFSENTRY_API size_t
 json_value_dict_size(const JSON_VALUE* v)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
@@ -1093,7 +1093,7 @@ json_value_dict_size(const JSON_VALUE* v)
         return 0;
 }
 
-size_t
+WOLFSENTRY_API size_t
 json_value_dict_keys_sorted(const JSON_VALUE* v, const JSON_VALUE** buffer, size_t buffer_size)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
@@ -1116,7 +1116,7 @@ json_value_dict_keys_sorted(const JSON_VALUE* v, const JSON_VALUE** buffer, size
     return n;
 }
 
-size_t
+WOLFSENTRY_API size_t
 json_value_dict_keys_ordered(const JSON_VALUE* v, const JSON_VALUE** buffer, size_t buffer_size)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
@@ -1135,7 +1135,7 @@ json_value_dict_keys_ordered(const JSON_VALUE* v, const JSON_VALUE** buffer, siz
     return n;
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_dict_get_(const JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
@@ -1156,7 +1156,7 @@ json_value_dict_get_(const JSON_VALUE* v, const unsigned char* key, size_t key_l
     return NULL;
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_dict_get(const JSON_VALUE* v, const unsigned char* key)
 {
     return json_value_dict_get_(v, key, (key != NULL) ? strlen((const char *)key) : 0);
@@ -1265,7 +1265,7 @@ json_value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
     }
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_dict_add_(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1282,7 +1282,7 @@ json_value_dict_add_(
     return (json_value_is_new(res) ? res : NULL);
 }
 
-JSON_VALUE* json_value_dict_add(
+WOLFSENTRY_API JSON_VALUE* json_value_dict_add(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
@@ -1295,7 +1295,7 @@ JSON_VALUE* json_value_dict_add(
         v, key, strlen((const char *)key));
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1374,7 +1374,7 @@ json_value_dict_get_or_add_(
     return &node->json_value;
 }
 
-JSON_VALUE*
+WOLFSENTRY_API JSON_VALUE*
 json_value_dict_get_or_add(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1471,7 +1471,7 @@ json_value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
     }
 }
 
-int
+WOLFSENTRY_API int
 json_value_dict_remove_(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1610,7 +1610,7 @@ json_value_dict_remove_(
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_value_dict_remove(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1624,7 +1624,7 @@ json_value_dict_remove(
         v, key, (key != NULL) ? strlen((const char *)key) : 0);
 }
 
-int
+WOLFSENTRY_API int
 json_value_dict_walk_ordered(const JSON_VALUE* v, int (*visit_func)(const JSON_VALUE*, JSON_VALUE*, void*), void* ctx)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
@@ -1645,7 +1645,7 @@ json_value_dict_walk_ordered(const JSON_VALUE* v, int (*visit_func)(const JSON_V
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VALUE*, JSON_VALUE*, void*), void* ctx)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
@@ -1670,7 +1670,7 @@ json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VA
     return 0;
 }
 
-void
+WOLFSENTRY_API void
 json_value_dict_clean(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),

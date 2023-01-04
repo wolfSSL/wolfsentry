@@ -257,7 +257,7 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_init_1(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -305,7 +305,7 @@ json_dom_init(
         return ret;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_feed(JSON_DOM_PARSER* dom_parser, const unsigned char* input, size_t size)
 {
     return json_feed(&dom_parser->parser, input, size);
@@ -334,7 +334,7 @@ int json_dom_clean(JSON_DOM_PARSER* dom_parser) {
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
 {
     int ret;
@@ -369,7 +369,7 @@ json_dom_fini_aux(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root)
     return json_dom_clean(dom_parser);
 }
 
-int
+WOLFSENTRY_API int
 json_dom_parse(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -639,7 +639,7 @@ json_dom_dump_helper(
     return ret;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_dump(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -662,7 +662,7 @@ json_dom_dump(
     return ret;
 }
 
-const char* json_dom_error_str(int err_code)
+WOLFSENTRY_API const char* json_dom_error_str(int err_code)
 {
     static const char unexpected_code[] = "Unexpected DOM error code";
     static const char *const errs[] =

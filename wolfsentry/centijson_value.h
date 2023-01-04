@@ -180,7 +180,8 @@ WOLFSENTRY_API JSON_VALUE* json_value_path(JSON_VALUE* root, const char* path);
  * has a type incompatible with the path; if creation of any value along the
  * path fails; or if an array index is out of bounds.
  */
-WOLFSENTRY_API JSON_VALUE* json_value_build_path(JSON_VALUE* root, const char* path);
+/* missing implementation */
+/* WOLFSENTRY_API JSON_VALUE* json_value_build_path(JSON_VALUE* root, const char* path); */
 
 
 /******************

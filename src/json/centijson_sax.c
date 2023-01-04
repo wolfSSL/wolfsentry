@@ -98,7 +98,7 @@ static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
 
 #endif
 
-void
+WOLFSENTRY_API void
 json_default_config(JSON_CONFIG* cfg)
 {
     memcpy(cfg, &json_defaults, sizeof(JSON_CONFIG));
@@ -833,7 +833,7 @@ json_handle_new_line(JSON_PARSER* parser, unsigned char ch)
     }
 }
 
-int
+WOLFSENTRY_API int
 json_feed(JSON_PARSER* parser, const unsigned char* input, size_t size)
 {
     size_t off = 0;
@@ -939,7 +939,7 @@ json_feed(JSON_PARSER* parser, const unsigned char* input, size_t size)
     WOLFSENTRY_RETURN_VALUE(parser->errcode);
 }
 
-int
+WOLFSENTRY_API int
 json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
 {
     if (parser->state == PARSER_STATE_UNINITED)
@@ -969,7 +969,7 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
     WOLFSENTRY_RETURN_VALUE(parser->errcode);
 }
 
-int
+WOLFSENTRY_API int
 json_parse(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1046,7 +1046,7 @@ intstr_is_between(const unsigned char* val_str, size_t val_size,
             intstrncmp(val_str, val_size, (unsigned char *)max_str, max_size) <= 0);
 }
 
-void
+WOLFSENTRY_API void
 json_analyze_number(const unsigned char* num, size_t num_size,
                     int* p_is_int32_compatible,
                     int* p_is_uint32_compatible,
@@ -1107,19 +1107,19 @@ json_analyze_number(const unsigned char* num, size_t num_size,
         *p_is_uint64_compatible = is_uint64_compatible;
 }
 
-int32_t
+WOLFSENTRY_API int32_t
 json_number_to_int32(const unsigned char* num, size_t num_size)
 {
     return (int32_t) json_number_to_int64(num, num_size);
 }
 
-uint32_t
+WOLFSENTRY_API uint32_t
 json_number_to_uint32(const unsigned char* num, size_t num_size)
 {
     return (uint32_t) json_number_to_uint64(num, num_size);
 }
 
-int64_t
+WOLFSENTRY_API int64_t
 json_number_to_int64(const unsigned char* num, size_t num_size)
 {
     size_t off = 0;
@@ -1141,7 +1141,7 @@ json_number_to_int64(const unsigned char* num, size_t num_size)
     return (int64_t) val;
 }
 
-uint64_t
+WOLFSENTRY_API uint64_t
 json_number_to_uint64(const unsigned char* num, size_t num_size)
 {
     size_t off = 0;
@@ -1155,7 +1155,7 @@ json_number_to_uint64(const unsigned char* num, size_t num_size)
     return val;
 }
 
-int
+WOLFSENTRY_API int
 json_number_to_double(const unsigned char* num, size_t num_size, double* p_result)
 {
 #ifdef CENTIJSON_USE_LOCALE
@@ -1230,19 +1230,19 @@ json_number_to_double(const unsigned char* num, size_t num_size, double* p_resul
 }
 
 
-int
+WOLFSENTRY_API int
 json_dump_int32(int32_t i32, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     return json_dump_int64(i32, write_func, user_data);
 }
 
-int
+WOLFSENTRY_API int
 json_dump_uint32(uint32_t u32, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     return json_dump_uint64(u32, write_func, user_data);
 }
 
-int
+WOLFSENTRY_API int
 json_dump_int64(int64_t i64, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     char buffer[32];
@@ -1264,7 +1264,7 @@ json_dump_int64(int64_t i64, JSON_DUMP_CALLBACK write_func, void* user_data)
     return write_func((const unsigned char *)buffer + off, sizeof(buffer) - off, user_data);
 }
 
-int
+WOLFSENTRY_API int
 json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     char buffer[32];
@@ -1282,7 +1282,7 @@ json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data)
     return write_func((const unsigned char *)buffer + off, sizeof(buffer) - off, user_data);
 }
 
-int
+WOLFSENTRY_API int
 json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     static const char fmt[] = "%.16lg";
@@ -1399,7 +1399,7 @@ json_control_to_hex(char* buf, uint8_t ch)
     buf[5] = xdigits[(ch & 0xf)];
 }
 
-int
+WOLFSENTRY_API int
 json_dump_string(const unsigned char* str, size_t size, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
     size_t off = 0;
@@ -1460,7 +1460,7 @@ json_dump_string(const unsigned char* str, size_t size, JSON_DUMP_CALLBACK write
     return 0;
 }
 
-const char* json_error_str(int err_code)
+WOLFSENTRY_API const char* json_error_str(int err_code)
 {
     static const char unexpected_code[] = "Unexpected error code";
     static const char *const errs[] =
@@ -1496,7 +1496,7 @@ const char* json_error_str(int err_code)
     return unexpected_code;
 }
 
-const char* json_type_str(JSON_TYPE type)
+WOLFSENTRY_API const char* json_type_str(JSON_TYPE type)
 {
     switch (type) {
     case JSON_NULL: return "NULL";

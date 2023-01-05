@@ -564,6 +564,41 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfs
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_id(struct wolfsentry_thread_context *thread, wolfsentry_thread_id_t *id) {
+    *id = WOLFSENTRY_THREAD_GET_ID;
+    WOLFSENTRY_RETURN_OK;
+}
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_user_context(struct wolfsentry_thread_context *thread, void **user_context) {
+    if (thread == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (thread->id == WOLFSENTRY_THREAD_NO_ID)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (thread->user_context == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    *user_context = thread->user_context;
+    WOLFSENTRY_RETURN_OK;
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfsentry_thread_context *thread, struct timespec *deadline) {
+    if (thread == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (thread->id == WOLFSENTRY_THREAD_NO_ID)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    *deadline = thread->deadline;
+    WOLFSENTRY_RETURN_OK;
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentry_thread_context *thread, wolfsentry_thread_flags_t *thread_flags) {
+    if (thread == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (thread->id == WOLFSENTRY_THREAD_NO_ID)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    *thread_flags = thread->current_thread_flags;
+    WOLFSENTRY_RETURN_OK;
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t thread_flags) {
     (void)thread_flags;
     if (thread_context->id == WOLFSENTRY_THREAD_NO_ID)
@@ -605,10 +640,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY
     else if (usecs > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
-        WOLFSENTRY_ERROR_RERETURN(WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, usecs), &thread->deadline.tv_sec, &thread->deadline.tv_nsec));
+        ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, usecs), &thread->deadline.tv_sec, &thread->deadline.tv_nsec);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        thread->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_DEADLINE;
+        WOLFSENTRY_RETURN_OK;
     } else {
         thread->deadline.tv_sec = WOLFSENTRY_DEADLINE_NOW;
         thread->deadline.tv_nsec = WOLFSENTRY_DEADLINE_NOW;
+        thread->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_DEADLINE;
         WOLFSENTRY_RETURN_OK;
     }
 }
@@ -622,6 +661,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTE
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     thread->deadline.tv_sec = epoch_secs;
     thread->deadline.tv_nsec = epoch_nsecs;
+    thread->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_DEADLINE;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -629,6 +669,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT
     (void)wolfsentry;
     thread->deadline.tv_sec = WOLFSENTRY_DEADLINE_NEVER;
     thread->deadline.tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
+    thread->current_thread_flags &= ~(enumint_t)WOLFSENTRY_THREAD_FLAG_DEADLINE;
     WOLFSENTRY_RETURN_OK;
 }
 

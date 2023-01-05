@@ -49,6 +49,7 @@
 struct wolfsentry_allocator;
 
 struct wolfsentry_context;
+struct wolfsentry_thread_context;
 
 typedef enum {
     WOLFSENTRY_INIT_FLAG_NONE = 0,
@@ -145,6 +146,9 @@ typedef enum {
     WOLFSENTRY_THREAD_FLAG_READONLY = 1<<1
 } wolfsentry_thread_flags_t;
 
+#define WOLFSENTRY_DEADLINE_NEVER (-1)
+#define WOLFSENTRY_DEADLINE_NOW (-2)
+
 #define WOLFSENTRY_CONTEXT_ARGS_IN struct wolfsentry_context *wolfsentry, struct wolfsentry_thread_context *thread
 #define WOLFSENTRY_CONTEXT_ARGS_IN_EX(ctx) ctx, struct wolfsentry_thread_context *thread
 #define WOLFSENTRY_CONTEXT_ARGS_IN_EX4(ctx, thr) struct wolfsentry_context *ctx, struct wolfsentry_thread_context *thr
@@ -183,6 +187,10 @@ typedef enum {
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_id(struct wolfsentry_thread_context *thread, wolfsentry_thread_id_t *id);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_user_context(struct wolfsentry_thread_context *thread, void **user_context);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfsentry_thread_context *thread, struct timespec *deadline);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentry_thread_context *thread, wolfsentry_thread_flags_t *thread_flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t thread_flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t thread_flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, int usecs);

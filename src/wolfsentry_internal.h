@@ -118,9 +118,6 @@ static_assert(sizeof(struct wolfsentry_thread_context_public) >= sizeof(struct w
 static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof__(struct wolfsentry_thread_context), "alignment of wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
 #endif
 
-#define WOLFSENTRY_DEADLINE_NEVER (-1)
-#define WOLFSENTRY_DEADLINE_NOW (-2)
-
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) do {            \
         wolfsentry_errcode_t _lock_ret =                        \
           wolfsentry_lock_have_mutex(                           \

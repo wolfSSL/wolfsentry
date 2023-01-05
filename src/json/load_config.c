@@ -428,9 +428,9 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
         /* fallthrough */
     case 'm':
         conv *= 60;
-        ++endptr;
         /* fallthrough */
     case 's':
+        ++endptr;
         break;
     }
     if ((size_t)(endptr - (char *)data) != data_size)

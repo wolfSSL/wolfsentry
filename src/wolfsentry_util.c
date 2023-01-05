@@ -1343,6 +1343,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
     if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID)
         WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(lock, thread, abs_timeout, flags));
 
+    if ((thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY) &&
+        (flags & WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO))
+    {
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+
     /* opportunistic error checking. */
     if ((flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED) && (thread->tracked_shared_lock == lock))
         WOLFSENTRY_ERROR_RETURN(ALREADY);
@@ -1466,7 +1472,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
         else if (thread->tracked_shared_lock == lock)
             ++thread->recursion_of_tracked_lock;
 
-        if (flags & (WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO)) {
+        if ((flags & (WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO)) &&
+            (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)))
+        {
             if (WOLFSENTRY_ATOMIC_LOAD(lock->read2write_reservation_holder) != WOLFSENTRY_THREAD_NO_ID) {
                 if (flags & WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO) {
                     ret = wolfsentry_lock_unlock(lock, thread, flags);
@@ -1503,7 +1511,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
     {
         int store_reservation = 0;
 
-        if (flags & (WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO)) {
+        if ((flags & (WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO)) &&
+            (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)))
+        {
             if (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID) {
                 if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_GET_ID) {
                     ++lock->read2write_waiter_read_count;

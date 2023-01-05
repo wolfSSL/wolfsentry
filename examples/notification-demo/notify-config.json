@@ -2,7 +2,7 @@
     "wolfsentry-config-version" : 1,
     "config-update" : {
         "max-connection-count" : 0,
-        "penalty-box-duration" : "1h",
+        "penalty-box-duration" : "10s",
         "max-purgeable-routes" : 10,
         "derog-thresh-for-penalty-boxing" : 4,
         "derog-thresh-ignore-commendable" : false,
@@ -41,11 +41,11 @@
             "label" : "dynamic-within-netblock",
             "config" : {
                 "max-connection-count" : 10,
-                "penalty-box-duration" : "1h",
+                "penalty-box-duration" : "10s",
                 "derog-thresh-for-penalty-boxing" : 4,
                 "derog-thresh-ignore-commendable" : false,
                 "commendable-clears-derogatory" : true,
-                "route-idle-time-for-purge" : "10m"
+                "route-idle-time-for-purge" : "1m"
             },
             "decision-event" : "event-on-decision"
         },
@@ -54,7 +54,7 @@
             "priority" : 1,
             "config" : {
                 "max-connection-count" : 10,
-                "penalty-box-duration" : "1h",
+                "penalty-box-duration" : "10s",
                 "derog-thresh-for-penalty-boxing" : 4
             },
             "actions" : [ "handle-connect", "handle-connect2" ],
@@ -68,7 +68,7 @@
             "priority" : 1,
             "config" : {
                 "max-connection-count" : 10,
-                "penalty-box-duration" : "1h",
+                "penalty-box-duration" : "10s",
                 "derog-thresh-for-penalty-boxing" : 4
             },
             "actions" : [ "handle-connect", "handle-connect2" ],

@@ -71,7 +71,11 @@ int sentry_init(
     struct wolfsentry_host_platform_interface *hpi,
     const unsigned char *json_config);
 
-extern struct wolfsentry_context *wolfsentry;
+extern struct wolfsentry_context *global_wolfsentry;
+#ifdef WOLFSENTRY_THREADSAFE
+/* currently log_server is single-threaded, so a single thread object is used for the entire process. */
+extern struct wolfsentry_thread_context *global_thread;
+#endif
 
 int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_port, in_port_t remote_port, sentry_action_type action);
 

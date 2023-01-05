@@ -48,7 +48,7 @@ int sentry_init()
     wolfsentry_ent_id_t id;
 
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .route_private_data_alignment = 16 };
-    ret =  wolfsentry_init(NULL /* hpi */, &config,
+    ret =  wolfsentry_init(wolfsentry_build_settings, WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(NULL /* hpi */, NULL /* thread */), &config,
                            &wolfsentry);
     if (ret < 0) {
         fprintf(stderr, "wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
@@ -57,7 +57,7 @@ int sentry_init()
     }
 
     /* Insert the possible actions into wolfSentry */
-    wolfsentry_action_insert(      wolfsentry,
+    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                                    "handle-insert",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -65,8 +65,7 @@ int sentry_init()
                                    NULL,
                                    &id);
 
-    wolfsentry_action_insert(
-                                   wolfsentry,
+    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                                    "handle-delete",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -74,8 +73,7 @@ int sentry_init()
                                    NULL,
                                    &id);
 
-    wolfsentry_action_insert(
-                                   wolfsentry,
+    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                                    "handle-match",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -83,8 +81,7 @@ int sentry_init()
                                    NULL,
                                    &id);
 
-    wolfsentry_action_insert(
-                                   wolfsentry,
+    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                                    "notify-on-match",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -92,8 +89,7 @@ int sentry_init()
                                    NULL,
                                    &id);
 
-    wolfsentry_action_insert(
-                                   wolfsentry,
+    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                                    "handle-connect",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -101,8 +97,7 @@ int sentry_init()
                                    NULL,
                                    &id);
 
-    wolfsentry_action_insert(
-                                   wolfsentry,
+    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                                    "handle-connect2",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -124,7 +119,7 @@ int sentry_init()
 
     /* Initalize the wolfSentry JSON parser */
     if ((ret = wolfsentry_config_json_init(
-             wolfsentry,
+             WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
              WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
              &jps)) < 0) {
         fprintf(stderr, "wolfsentry_config_json_init() returned "
@@ -209,7 +204,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
 
     /* Send the details of this to wolfSentry and get the result */
     ret = wolfsentry_route_event_dispatch_with_inited_result(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
             &local.sa,
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -254,7 +249,7 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
     memcpy(remote.sa.addr, &addr->addr, 4);
 
     ret = wolfsentry_route_event_dispatch(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
             &remote.sa, // Reuse for now
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -294,7 +289,7 @@ int sentry_action_mac(struct eth_addr *addr)
     memcpy(remote.sa.addr, &addr->addr, 6);
 
     ret = wolfsentry_route_event_dispatch(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
             &remote.sa, // Reuse for now
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,

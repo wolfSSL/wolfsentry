@@ -1,3 +1,25 @@
+/*
+ * sentry.c
+ *
+ * Copyright (C) 2022-2023 wolfSSL Inc.
+ *
+ * This file is part of wolfSentry.
+ *
+ * wolfSentry is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSentry is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #define DEBUG_TLS
@@ -8,13 +30,18 @@
 #include "sentry.h"
 #include "log_server.h"
 
-struct wolfsentry_context *wolfsentry = NULL;
+struct wolfsentry_context *global_wolfsentry = NULL;
 static int wolfsentry_data_index = -1;
+
+#ifdef WOLFSENTRY_THREADSAFE
+/* currently log_server is single-threaded, so a single thread object is used for the entire process. */
+struct wolfsentry_thread_context *global_thread = NULL;
+#endif
 
 /* Callback that is fired when an action is taken, this can be used for
  * debugging for now */
 static wolfsentry_errcode_t wolfsentry_test_action(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -26,7 +53,7 @@ static wolfsentry_errcode_t wolfsentry_test_action(
     wolfsentry_action_res_t *action_results)
 {
     const struct wolfsentry_event *parent_event;
-    (void)ws_ctx;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
     (void)handler_arg;
     (void)route_table;
     (void)action_results;
@@ -114,7 +141,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
 
     /* Send the details of this to wolfSentry and get the result */
     ret = wolfsentry_route_event_dispatch_with_inited_result(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
             &remote.sa,
             &local.sa,
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -243,7 +270,7 @@ int wolfSentry_NetworkFilterCallback(
         return WOLFSSL_FAILURE;
 
     ret = wolfsentry_route_event_dispatch(
-        _wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(_wolfsentry, global_thread),
         (const struct wolfsentry_sockaddr *)&data->remote,
         (const struct wolfsentry_sockaddr *)&data->local,
         data->flags,
@@ -291,7 +318,7 @@ int wolfSentry_NetworkFilterCallback(
 
 
 static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -336,15 +363,15 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
             ((struct wolfsentry_data *)caller_arg)->rule_route = rule_route;
     }
 
-    ret = wolfsentry_route_export(ws_ctx, trigger_route, &trigger_route_exports);
+    ret = wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_route, &trigger_route_exports);
     if (ret < 0)
         return ret;
 
-    ret = wolfsentry_route_export(ws_ctx, rule_route, &rule_route_exports);
+    ret = wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, rule_route, &rule_route_exports);
     if (ret < 0)
         return ret;
     ret = wolfsentry_user_value_get_uint(
-        ws_ctx,
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
         "notification-dest-port",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &notification_dest_port);
@@ -353,7 +380,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         return ret;
 
     ret = wolfsentry_user_value_get_string(
-        ws_ctx,
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
         "notification-server-addr",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &notification_dest_addr,
@@ -367,7 +394,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     pton_ret = inet_pton(AF_INET, notification_dest_addr, &sa.sin_addr);
 
-    ret = wolfsentry_user_value_release_record(ws_ctx, &notification_dest_addr_record);
+    ret = wolfsentry_user_value_release_record(WOLFSENTRY_CONTEXT_ARGS_OUT, &notification_dest_addr_record);
     if (ret < 0) {
         fprintf(stderr,
                 "wolfsentry_user_value_release_record: " WOLFSENTRY_ERROR_FMT,
@@ -391,12 +418,14 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
 
     addr_family = NULL;
-    family_name = wolfsentry_addr_family_ntop(ws_ctx, trigger_route_exports.sa_family, &addr_family, &ret);
-
-    ret = wolfsentry_time_now_plus_delta(ws_ctx, 0 /* td */, &when);
+    ret = wolfsentry_addr_family_ntop(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_route_exports.sa_family, &addr_family, &family_name);
     if (ret < 0)
         return ret;
-    ret = wolfsentry_time_to_timespec(ws_ctx, when, &ts);
+
+    ret = wolfsentry_time_now_plus_delta(wolfsentry, 0 /* td */, &when);
+    if (ret < 0)
+        return ret;
+    ret = wolfsentry_time_to_timespec(wolfsentry, when, &ts);
     if (ret < 0)
         return ret;
     if (gmtime_r(&ts.tv_sec, &tm) == NULL)
@@ -431,7 +460,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     msgbuf_ptr += msgbuf_len;
 
     if (addr_family) {
-        if ((ret = wolfsentry_addr_family_drop_reference(ws_ctx, addr_family, NULL /* action_results */ )) < 0) {
+        if ((ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ )) < 0) {
             fprintf(stderr, "wolfsentry_addr_family_drop_reference: " WOLFSENTRY_ERROR_FMT,
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
             return ret;
@@ -440,7 +469,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     msgbuf_len = msgbuf_space_left;
     ret = wolfsentry_route_format_address(
-        ws_ctx,
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
         trigger_route_exports.sa_family,
         trigger_route_exports.remote_address,
         trigger_route_exports.remote.addr_len,
@@ -476,7 +505,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     msgbuf_len = (int)msgbuf_space_left;
     ret = wolfsentry_route_format_address(
-        ws_ctx,
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
         trigger_route_exports.sa_family,
         trigger_route_exports.local_address,
         trigger_route_exports.local.addr_len,
@@ -560,7 +589,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 }
 
 static wolfsentry_errcode_t handle_commendable(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -592,7 +621,7 @@ static wolfsentry_errcode_t handle_commendable(
      * increment its commendable count.
      */
 
-    ret = wolfsentry_route_export(ws_ctx, rule_route, &rule_route_exports);
+    ret = wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, rule_route, &rule_route_exports);
     if (ret < 0)
         return ret;
 
@@ -603,7 +632,7 @@ static wolfsentry_errcode_t handle_commendable(
 }
 
 static wolfsentry_errcode_t handle_transaction_successful(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -614,11 +643,11 @@ static wolfsentry_errcode_t handle_transaction_successful(
     struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
-    return handle_commendable(ws_ctx, action, handler_arg, caller_arg, trigger_event, action_type, trigger_route, route_table, rule_route, action_results);
+    return handle_commendable(WOLFSENTRY_CONTEXT_ARGS_OUT, action, handler_arg, caller_arg, trigger_event, action_type, trigger_route, route_table, rule_route, action_results);
 }
 
 static wolfsentry_errcode_t handle_derogatory(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -640,7 +669,7 @@ static wolfsentry_errcode_t handle_derogatory(
     (void)route_table;
     (void)action_results;
 
-    ret = wolfsentry_route_export(ws_ctx, rule_route, &rule_route_exports);
+    ret = wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, rule_route, &rule_route_exports);
     if (ret < 0)
         return ret;
 
@@ -666,7 +695,7 @@ static wolfsentry_errcode_t handle_derogatory(
         wolfsentry_action_res_t action_results_2;
 
         ret = wolfsentry_route_format_address(
-            ws_ctx,
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
             remote_addr->sa_family,
             remote_addr->addr,
             remote_addr->addr_len,
@@ -677,7 +706,7 @@ static wolfsentry_errcode_t handle_derogatory(
             return ret;
 
         ret = wolfsentry_route_insert_and_check_out(
-            ws_ctx,
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
             NULL /* void *caller_arg*/, /* passed to action callback(s) as the caller_arg. */
             (struct wolfsentry_sockaddr *)&((struct wolfsentry_data *)caller_arg)->remote,
             (struct wolfsentry_sockaddr *)&((struct wolfsentry_data *)caller_arg)->local,
@@ -701,7 +730,7 @@ static wolfsentry_errcode_t handle_derogatory(
             return ret;
         }
 
-        ret = wolfsentry_route_increment_derogatory_count(ws_ctx, new_route, 1 /* count_to_add */, &new_derogatory_count);
+        ret = wolfsentry_route_increment_derogatory_count(WOLFSENTRY_CONTEXT_ARGS_OUT, new_route, 1 /* count_to_add */, &new_derogatory_count);
         if (ret < 0) {
             fprintf(stderr, "wolfsentry_route_increment_derogatory_count() returned " WOLFSENTRY_ERROR_FMT "\n",
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -711,7 +740,7 @@ static wolfsentry_errcode_t handle_derogatory(
 #endif
         }
 
-        ret = wolfsentry_route_drop_reference(ws_ctx, new_route, NULL /* action_results */);
+        ret = wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, new_route, NULL /* action_results */);
         if (ret < 0) {
             fprintf(stderr, "wolfsentry_route_drop_reference() returned "
                     WOLFSENTRY_ERROR_FMT "\n",
@@ -724,7 +753,7 @@ static wolfsentry_errcode_t handle_derogatory(
 }
 
 static wolfsentry_errcode_t handle_transaction_failed(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -735,11 +764,11 @@ static wolfsentry_errcode_t handle_transaction_failed(
     struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
-    return handle_derogatory(ws_ctx, action, handler_arg, caller_arg, trigger_event, action_type, trigger_route, route_table, rule_route, action_results);
+    return handle_derogatory(WOLFSENTRY_CONTEXT_ARGS_OUT, action, handler_arg, caller_arg, trigger_event, action_type, trigger_route, route_table, rule_route, action_results);
 }
 
 static wolfsentry_errcode_t handle_handshake_failed(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -750,11 +779,11 @@ static wolfsentry_errcode_t handle_handshake_failed(
     struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
-    return handle_derogatory(ws_ctx, action, handler_arg, caller_arg, trigger_event, action_type, trigger_route, route_table, rule_route, action_results);
+    return handle_derogatory(WOLFSENTRY_CONTEXT_ARGS_OUT, action, handler_arg, caller_arg, trigger_event, action_type, trigger_route, route_table, rule_route, action_results);
 }
 
 static wolfsentry_errcode_t my_addr_family_parser(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *addr_text,
     const int addr_text_len,
     byte *addr_internal,
@@ -764,7 +793,7 @@ static wolfsentry_errcode_t my_addr_family_parser(
     char abuf[32];
     int n_octets, parsed_len = 0, i;
 
-    (void)ws_ctx;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
 
     if (snprintf(abuf,sizeof abuf,"%.*s",addr_text_len,addr_text) >= (int)sizeof abuf)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
@@ -790,7 +819,7 @@ static wolfsentry_errcode_t my_addr_family_parser(
 }
 
 static wolfsentry_errcode_t my_addr_family_formatter(
-    struct wolfsentry_context *ws_ctx,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const byte *addr_internal,
     const unsigned int addr_internal_len,
     char *addr_text,
@@ -799,7 +828,7 @@ static wolfsentry_errcode_t my_addr_family_formatter(
     int out_len;
     int ret;
 
-    (void)ws_ctx;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
 
     if (addr_internal_len <= 8)
         out_len = snprintf(addr_text, (size_t)*addr_text_len,
@@ -829,11 +858,21 @@ int sentry_init(
     int errline;
     wolfsentry_ent_id_t id;
 
+#ifdef WOLFSENTRY_THREADSAFE
+    static struct wolfsentry_thread_context_public thread_buffer;
+    global_thread = (struct wolfsentry_thread_context *)&thread_buffer;
+    ret = wolfsentry_init_thread_context(global_thread, WOLFSENTRY_THREAD_FLAG_NONE, NULL /* user_context */);
+    if (ret < 0) {
+        fprintf(stderr, "sentry_init(): thread bootstrap failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
+#endif
+
     if (json_config == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    ret =  wolfsentry_init(hpi, &ws_init_config,
-                           &wolfsentry);
+    ret =  wolfsentry_init(wolfsentry_build_settings, WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(hpi, global_thread), &ws_init_config,
+                           &global_wolfsentry);
     if (ret < 0) {
         fprintf(stderr, "wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -842,7 +881,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_addr_family_handler_install(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         WOLFSENTRY_AF_USER_OFFSET,
         "my_AF",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
@@ -855,7 +894,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-insert",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -868,7 +907,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-delete",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -881,7 +920,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-match",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -894,7 +933,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "notify-on-match",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -907,7 +946,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-update",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -920,7 +959,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "notify-on-decision",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -933,7 +972,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-transaction-successful",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -946,7 +985,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-transaction-failed",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -959,7 +998,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-handshake-failed",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -972,7 +1011,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-connect",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -985,7 +1024,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "handle-connect2",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -998,7 +1037,7 @@ int sentry_init(
     }
 
     ret = wolfsentry_config_json_oneshot(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         json_config,
         strlen((const char *)json_config),
         WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
@@ -1018,7 +1057,7 @@ int sentry_init(
     ret = wolfSSL_CTX_set_AcceptFilter(
             wolfssl_ctx,
             (NetworkFilterCallback_t)wolfSentry_NetworkFilterCallback,
-            wolfsentry);
+            global_wolfsentry);
     if (ret < 0) {
         fprintf(stderr, "wolfSSL_CTX_set_AcceptFilter() failed with code %d \"%s\".\n", ret, wolfSSL_ERR_reason_error_string(ret));
         errline = __LINE__;
@@ -1029,8 +1068,18 @@ out:
 
     if (ret < 0) {
         fprintf(stderr, "fatal error at line %d.\n", errline);
-        if (wolfsentry != NULL)
-            (void)wolfsentry_shutdown(&wolfsentry);
+        if (global_wolfsentry != NULL) {
+            int ws_ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&global_wolfsentry, global_thread));
+            if (ws_ret < 0)
+                fprintf(stderr, "wolfsentry_shutdown() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ws_ret));
+        }
+#ifdef WOLFSENTRY_THREADSAFE
+        if (global_thread != NULL) {
+            int thr_ret = wolfsentry_destroy_thread_context(global_thread, WOLFSENTRY_THREAD_FLAG_NONE);
+            if (thr_ret < 0)
+                fprintf(stderr, "wolfsentry_destroy_thread_context() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(thr_ret));
+        }
+#endif
     }
 
     return ret;

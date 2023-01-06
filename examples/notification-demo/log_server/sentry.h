@@ -1,3 +1,25 @@
+/*
+ * sentry.h
+ *
+ * Copyright (C) 2022-2023 wolfSSL Inc.
+ *
+ * This file is part of wolfSentry.
+ *
+ * wolfSentry is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSentry is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #ifndef __SENTRY_H__
@@ -49,7 +71,11 @@ int sentry_init(
     struct wolfsentry_host_platform_interface *hpi,
     const unsigned char *json_config);
 
-extern struct wolfsentry_context *wolfsentry;
+extern struct wolfsentry_context *global_wolfsentry;
+#ifdef WOLFSENTRY_THREADSAFE
+/* currently log_server is single-threaded, so a single thread object is used for the entire process. */
+extern struct wolfsentry_thread_context *global_thread;
+#endif
 
 int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_port, in_port_t remote_port, sentry_action_type action);
 

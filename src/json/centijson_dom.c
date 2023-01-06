@@ -1,4 +1,26 @@
 /*
+ * centijson_dom.c
+ *
+ * Copyright (C) 2022-2023 wolfSSL Inc.
+ *
+ * This file is part of wolfSentry.
+ *
+ * wolfSentry is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSentry is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+/*
  * CentiJSON
  * <http://github.com/mity/centijson>
  *
@@ -37,37 +59,37 @@
 
 #ifdef WOLFSENTRY
 
-static void *json_malloc(struct wolfsentry_allocator *allocator, size_t size) {
+static void *json_malloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), size_t size) {
     if (allocator)
-        return allocator->malloc(allocator->context, size);
+        return allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), size);
     else
         return malloc(size);
 }
-#define malloc(size) json_malloc(dom_parser->parser.allocator, size)
-static void json_free(struct wolfsentry_allocator *allocator, void *ptr) {
+#define malloc(size) json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator), size)
+static void json_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), void *ptr) {
     if (allocator)
-        allocator->free(allocator->context, ptr);
+        allocator->free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr);
     else
         free(ptr);
     WOLFSENTRY_RETURN_VOID;
 }
-#define free(ptr) json_free(dom_parser->parser.allocator, ptr)
-static void *json_realloc(struct wolfsentry_allocator *allocator, void *ptr, size_t size) {
+#define free(ptr) json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator), ptr)
+static void *json_realloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), void *ptr, size_t size) {
     if (ptr == NULL)
-        return json_malloc(allocator, size);
+        return json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), size);
     if (allocator)
-        return allocator->realloc(allocator->context, ptr, size);
+        return allocator->realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr, size);
     else
         return realloc(ptr, size);
 }
-#define realloc(ptr, size) json_realloc(dom_parser->parser.allocator, ptr, size)
+#define realloc(ptr, size) json_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator), ptr, size)
 
 #endif
 
 static int
 init_number(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* data, size_t data_size)
 {
@@ -83,25 +105,25 @@ init_number(
     if(is_int32_compatible) {
         return json_value_init_int32(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v, json_number_to_int32(data, data_size));
     } else if(is_uint32_compatible) {
         return json_value_init_uint32(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v, json_number_to_uint32(data, data_size));
     } else if(is_int64_compatible) {
         return json_value_init_int64(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v, json_number_to_int64(data, data_size));
     } else if(is_uint64_compatible) {
         return json_value_init_uint64(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v, json_number_to_uint64(data, data_size));
     } else {
@@ -112,7 +134,7 @@ init_number(
             return err;
         return json_value_init_double(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v, d);
     }
@@ -135,7 +157,7 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
         /* Object key: We just store it until we get the json_value to use it with. */
         if(json_value_init_string_(
 #ifdef WOLFSENTRY
-               dom_parser->parser.allocator,
+               WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                &dom_parser->key, data, data_size) != 0)
             return JSON_ERR_OUTOFMEMORY;
@@ -151,7 +173,7 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
         if(json_value_type(parent) == JSON_VALUE_ARRAY) {
             new_json_value = json_value_array_append(
 #ifdef WOLFSENTRY
-                dom_parser->parser.allocator,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 parent);
             if(new_json_value == NULL)
@@ -159,14 +181,14 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
         } else {
             new_json_value = json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
-                dom_parser->parser.allocator,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                                 parent,
                                 json_value_string(&dom_parser->key),
                                 json_value_string_length(&dom_parser->key));
             json_value_fini(
 #ifdef WOLFSENTRY
-                dom_parser->parser.allocator,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 &dom_parser->key);
 
@@ -180,7 +202,7 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
                     case JSON_DOM_DUPKEY_USELAST:
                         json_value_fini(
 #ifdef WOLFSENTRY
-                            dom_parser->parser.allocator,
+                            WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                             new_json_value);
                         break;
@@ -203,28 +225,28 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
         case JSON_NUMBER:
             init_val_ret = init_number(
 #ifdef WOLFSENTRY
-                dom_parser->parser.allocator,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 new_json_value, data, data_size);
             break;
         case JSON_STRING:
             init_val_ret = json_value_init_string_(
 #ifdef WOLFSENTRY
-                dom_parser->parser.allocator,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 new_json_value, data, data_size);
             break;
         case JSON_ARRAY_BEG:
             init_val_ret = json_value_init_array(
 #ifdef WOLFSENTRY
-                dom_parser->parser.allocator,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 new_json_value);
             break;
         case JSON_OBJECT_BEG:
             init_val_ret = json_value_init_dict_ex(
 #ifdef WOLFSENTRY
-                dom_parser->parser.allocator,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 new_json_value, NULL, dom_parser->dict_flags);
             break;
@@ -257,10 +279,10 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_init_1(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_DOM_PARSER* dom_parser, unsigned dom_flags)
 {
@@ -273,6 +295,9 @@ json_dom_init_1(
     dom_parser->dict_flags = (dom_flags & JSON_DOM_MAINTAINDICTORDER) ? JSON_VALUE_DICT_MAINTAINORDER : 0;
 #ifdef WOLFSENTRY
     dom_parser->parser.allocator = allocator;
+#ifdef WOLFSENTRY_THREADSAFE
+    dom_parser->parser.thread = thread;
+#endif    
 #endif
     return 0;
 }
@@ -280,7 +305,7 @@ json_dom_init_1(
 int
 json_dom_init(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_DOM_PARSER* dom_parser, const JSON_CONFIG* config, unsigned dom_flags)
 {
@@ -289,20 +314,20 @@ json_dom_init(
     };
     int ret = json_dom_init_1(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         dom_parser, dom_flags);
     if (ret == 0)
         return json_init(
 #ifdef WOLFSENTRY
-            allocator,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &dom_parser->parser, &callbacks, config, (void*) dom_parser);
     else
         return ret;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_feed(JSON_DOM_PARSER* dom_parser, const unsigned char* input, size_t size)
 {
     return json_feed(&dom_parser->parser, input, size);
@@ -314,13 +339,13 @@ int json_dom_clean(JSON_DOM_PARSER* dom_parser) {
 
     json_value_fini(
 #ifdef WOLFSENTRY
-        dom_parser->parser.allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
         &dom_parser->root);
 
     json_value_fini(
 #ifdef WOLFSENTRY
-        dom_parser->parser.allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
         &dom_parser->key);
     free(dom_parser->path);
@@ -331,7 +356,7 @@ int json_dom_clean(JSON_DOM_PARSER* dom_parser) {
     return 0;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
 {
     int ret;
@@ -366,10 +391,10 @@ json_dom_fini_aux(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_root)
     return json_dom_clean(dom_parser);
 }
 
-int
+WOLFSENTRY_API int
 json_dom_parse(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                const unsigned char* input, size_t size, const JSON_CONFIG* config,
                unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos)
@@ -379,7 +404,7 @@ json_dom_parse(
 
     ret = json_dom_init(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &dom_parser, config, dom_flags);
     if(ret < 0)
@@ -448,7 +473,7 @@ json_dom_dump_newline(JSON_DOM_DUMP_PARAMS* params)
 static int
 json_dom_dump_helper(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                      const JSON_VALUE* node, int nest_level,
                      JSON_DOM_DUMP_PARAMS* params)
@@ -524,7 +549,7 @@ json_dom_dump_helper(
             for(i = 0; i < n; i++) {
                 ret = json_dom_dump_helper(
 #ifdef WOLFSENTRY
-                    allocator,
+                    WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
                     &json_values[i], nest_level+1, params);
                 if(ret < 0)
@@ -565,7 +590,7 @@ json_dom_dump_helper(
             n = json_value_dict_size(node);
             if(n > 0) {
 #ifdef WOLFSENTRY
-                keys = json_malloc(allocator, sizeof(JSON_VALUE*) * n);
+                keys = json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), sizeof(JSON_VALUE*) * n);
 #else
                 keys = malloc(sizeof(JSON_VALUE*) * n);
 #endif
@@ -583,7 +608,7 @@ json_dom_dump_helper(
 
                     ret = json_dom_dump_helper(
 #ifdef WOLFSENTRY
-                        allocator,
+                        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
                         keys[i], nest_level+1, params);
                     if(ret < 0)
@@ -598,7 +623,7 @@ json_dom_dump_helper(
                     json_value = json_value_dict_get_(node, json_value_string(keys[i]), json_value_string_length(keys[i]));
                     ret = json_dom_dump_helper(
 #ifdef WOLFSENTRY
-                        allocator,
+                        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
                         json_value, -(nest_level+1), params);
                     if(ret < 0)
@@ -616,7 +641,7 @@ json_dom_dump_helper(
                 }
 
 #ifdef WOLFSENTRY
-                json_free(allocator, keys);
+                json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), keys);
 #else
                 free(keys);
 #endif
@@ -636,10 +661,10 @@ json_dom_dump_helper(
     return ret;
 }
 
-int
+WOLFSENTRY_API int
 json_dom_dump(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
               const JSON_VALUE* root, JSON_DUMP_CALLBACK write_func,
               void* user_data, unsigned tab_width, unsigned flags)
@@ -649,7 +674,7 @@ json_dom_dump(
 
     ret = json_dom_dump_helper(
 #ifdef WOLFSENTRY
-        allocator,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         root, 0, &params);
     if(ret < 0)
@@ -659,7 +684,7 @@ json_dom_dump(
     return ret;
 }
 
-const char* json_dom_error_str(int err_code)
+WOLFSENTRY_API const char* json_dom_error_str(int err_code)
 {
     static const char unexpected_code[] = "Unexpected DOM error code";
     static const char *const errs[] =

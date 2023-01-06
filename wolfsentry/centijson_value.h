@@ -1,4 +1,26 @@
 /*
+ * centijson_value.h
+ *
+ * Copyright (C) 2022-2023 wolfSSL Inc.
+ *
+ * This file is part of wolfSentry.
+ *
+ * wolfSentry is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSentry is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+/*
  * C Reusables
  * <http://github.com/mity/c-reusables>
  *
@@ -78,7 +100,7 @@ typedef enum JSON_VALUE_TYPE {
  */
 WOLFSENTRY_API void json_value_fini(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v);
 
@@ -180,7 +202,8 @@ WOLFSENTRY_API JSON_VALUE* json_value_path(JSON_VALUE* root, const char* path);
  * has a type incompatible with the path; if creation of any value along the
  * path fails; or if an array index is out of bounds.
  */
-WOLFSENTRY_API JSON_VALUE* json_value_build_path(JSON_VALUE* root, const char* path);
+/* missing implementation */
+/* WOLFSENTRY_API JSON_VALUE* json_value_build_path(JSON_VALUE* root, const char* path); */
 
 
 /******************
@@ -219,32 +242,32 @@ WOLFSENTRY_API int json_value_bool(const JSON_VALUE* v);
  */
 WOLFSENTRY_API int json_value_init_int32(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, int32_t i32);
 WOLFSENTRY_API int json_value_init_uint32(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, uint32_t u32);
 WOLFSENTRY_API int json_value_init_int64(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, int64_t i64);
 WOLFSENTRY_API int json_value_init_uint64(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, uint64_t u64);
 WOLFSENTRY_API int json_value_init_float(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, float f);
 WOLFSENTRY_API int json_value_init_double(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, double d);
 
@@ -287,12 +310,12 @@ WOLFSENTRY_API double json_value_double(const JSON_VALUE* v);
  */
 WOLFSENTRY_API int json_value_init_string_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* str, size_t len);
 WOLFSENTRY_API int json_value_init_string(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* str);
 
@@ -326,7 +349,7 @@ WOLFSENTRY_API size_t json_value_string_length(const JSON_VALUE* v);
  */
 WOLFSENTRY_API int json_value_init_array(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v);
 
@@ -346,12 +369,12 @@ WOLFSENTRY_API JSON_VALUE* json_value_array_get_all(const JSON_VALUE* v);
  */
 WOLFSENTRY_API JSON_VALUE* json_value_array_append(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v);
 WOLFSENTRY_API JSON_VALUE* json_value_array_insert(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, size_t index);
 
@@ -359,12 +382,12 @@ WOLFSENTRY_API JSON_VALUE* json_value_array_insert(
  */
 WOLFSENTRY_API int json_value_array_remove(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, size_t index);
 WOLFSENTRY_API int json_value_array_remove_range(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, size_t index, size_t count);
 
@@ -372,7 +395,7 @@ WOLFSENTRY_API int json_value_array_remove_range(
  */
 WOLFSENTRY_API void json_value_array_clean(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v);
 
@@ -408,12 +431,12 @@ WOLFSENTRY_API void json_value_array_clean(
  */
 WOLFSENTRY_API int json_value_init_dict(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v);
 WOLFSENTRY_API int json_value_init_dict_ex(
 #ifdef WOLFSENTRY
-                       struct wolfsentry_allocator *allocator,
+                       WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                        JSON_VALUE* v,
                        int (*custom_cmp_func)(const unsigned char* /*key1*/, size_t /*len1*/,
@@ -449,12 +472,12 @@ WOLFSENTRY_API JSON_VALUE* json_value_dict_get(const JSON_VALUE* v, const unsign
  */
 WOLFSENTRY_API JSON_VALUE* json_value_dict_add_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len);
 WOLFSENTRY_API JSON_VALUE* json_value_dict_add(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key);
 
@@ -467,12 +490,12 @@ WOLFSENTRY_API JSON_VALUE* json_value_dict_add(
  */
 WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len);
 WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key);
 
@@ -480,12 +503,12 @@ WOLFSENTRY_API JSON_VALUE* json_value_dict_get_or_add(
  */
 WOLFSENTRY_API int json_value_dict_remove_(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len);
 WOLFSENTRY_API int json_value_dict_remove(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v, const unsigned char* key);
 
@@ -506,7 +529,7 @@ WOLFSENTRY_API int json_value_dict_walk_sorted(const JSON_VALUE* v,
  */
 WOLFSENTRY_API void json_value_dict_clean(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v);
 

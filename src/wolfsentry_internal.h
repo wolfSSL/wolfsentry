@@ -1,7 +1,7 @@
 /*
  * wolfsentry_internal.h
  *
- * Copyright (C) 2021-2022 wolfSSL Inc.
+ * Copyright (C) 2021-2023 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *
@@ -66,53 +66,96 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
-#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
-
-struct wolfsentry_locker_list_ent {
-    struct wolfsentry_list_ent_header header;
-    wolfsentry_thread_id_t thread;
-    enum { WOLFSENTRY_LOCK_HAVE_NONE = (1 << 0),
-           WOLFSENTRY_LOCK_HAVE_READ = (1 << 1),
-           WOLFSENTRY_LOCK_HAVE_WRITE = (1 << 2),
-           WOLFSENTRY_LOCK_HAVE_READ2WRITE_RESERVED = (1 << 3),
-           WOLFSENTRY_LOCK_WAIT_READ = (1 << 4),
-           WOLFSENTRY_LOCK_WAIT_WRITE = (1 << 5),
-           WOLFSENTRY_LOCK_WAIT_READ2WRITE = (1 << 6)
-    } thread_state;
-};
-
-struct wolfsentry_locker_list {
-    struct wolfsentry_list_header header;
-#ifdef WOLFSENTRY_LOCK_DEBUGGING
-    int incoherency_expected;
-#endif
-};
-
 #define WOLFSENTRY_THREAD_ID_SENT ~0UL /* lock handoff not yet implemented. */
 
-#endif
-
 struct wolfsentry_rwlock {
+    const struct wolfsentry_host_platform_interface *hpi;
     sem_t sem;
     sem_t sem_read_waiters;
     sem_t sem_write_waiters;
     sem_t sem_read2write_waiters;
-    volatile int shared_count;
+    volatile wolfsentry_thread_id_t write_lock_holder;
+    volatile wolfsentry_thread_id_t read2write_reservation_holder;
+    union {
+        volatile int read;
+        volatile int write;
+    } holder_count;
     volatile int read_waiter_count;
     volatile int write_waiter_count;
-    volatile int read2write_waiter_count;
+    volatile int read2write_waiter_read_count; /* the recursion depth of the shared lock held by read2write_reservation_holder */
     volatile enum {
         WOLFSENTRY_LOCK_UNINITED = 0,
         WOLFSENTRY_LOCK_UNLOCKED,
         WOLFSENTRY_LOCK_SHARED,
         WOLFSENTRY_LOCK_EXCLUSIVE
     } state;
+    volatile int promoted_at_count;
     wolfsentry_lock_flags_t flags;
-#ifdef WOLFSENTRY_LOCK_ERROR_CHECKING
-    struct wolfsentry_allocator *allocator;
-    struct wolfsentry_locker_list locker_list;
-#endif
 };
+
+struct wolfsentry_thread_context {
+    wolfsentry_thread_id_t id;
+    void *user_context;
+    struct timespec deadline;
+    wolfsentry_thread_flags_t current_thread_flags;
+    struct wolfsentry_rwlock *tracked_shared_lock; /* if !_THREAD_FLAG_READONLY,
+                                            * locker can have shared lock(s) only
+                                            * for this lock.  if another shared lock is
+                                            * obtained, first this one will be
+                                            * promoted.  a currently held lock can
+                                            * be demoted only if it matches
+                                            * current_shared_lock, or current_shared_lock is null.
+                                            */
+    int recursion_of_tracked_lock; /* recursion count for outermost_shared_lock/current_shared_lock -- 1 if locked only once. */
+    int shared_count; /* total count of shared locks held */
+    int mutex_and_reservation_count;
+};
+
+#define WOLFSENTRY_THREAD_GET_ID (thread ? thread->id : WOLFSENTRY_THREAD_GET_ID_HANDLER)
+
+#if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
+static_assert(sizeof(struct wolfsentry_thread_context_public) >= sizeof(struct wolfsentry_thread_context), "wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
+static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof__(struct wolfsentry_thread_context), "alignment of wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
+#endif
+
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) do {            \
+        wolfsentry_errcode_t _lock_ret =                        \
+          wolfsentry_lock_have_mutex(                           \
+            &(ctx)->lock,                                       \
+            thread,                                             \
+            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
+    } while (0)
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(wolfsentry)
+
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(ctx) do {           \
+        wolfsentry_errcode_t _lock_ret =                        \
+          wolfsentry_lock_have_shared(                          \
+            &(ctx)->lock,                                       \
+            thread,                                             \
+            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
+    } while (0)
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(wolfsentry)
+
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(ctx) do {           \
+        wolfsentry_errcode_t _lock_ret =                        \
+          wolfsentry_lock_have_either(                          \
+            &(ctx)->lock,                                       \
+            thread,                                             \
+            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+        WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
+    } while (0)
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(wolfsentry)
+
+#else /* !WOLFSENTRY_THREADSAFE */
+
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) (void)(ctx)
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(ctx) (void)(ctx)
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(ctx) (void)(ctx)
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() (void)wolfsentry
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
@@ -156,7 +199,7 @@ struct wolfsentry_table_ent_header {
 struct wolfsentry_context;
 
 typedef int (*wolfsentry_ent_cmp_fn_t)(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right);
-typedef wolfsentry_errcode_t (*wolfsentry_ent_free_fn_t)(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
+typedef wolfsentry_errcode_t (*wolfsentry_ent_free_fn_t)(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
 
 typedef wolfsentry_errcode_t (*wolfsentry_filter_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
 typedef wolfsentry_errcode_t (*wolfsentry_dropper_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
@@ -164,6 +207,9 @@ typedef wolfsentry_errcode_t (*wolfsentry_map_function_t)(void *context, struct 
 
 typedef wolfsentry_errcode_t (*wolfsentry_table_ent_clone_fn_t)(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *new_context,
     struct wolfsentry_table_ent_header **new_ent,
@@ -171,6 +217,9 @@ typedef wolfsentry_errcode_t (*wolfsentry_table_ent_clone_fn_t)(
 
 typedef wolfsentry_errcode_t (*wolfsentry_coupled_table_ent_clone_fn_t)(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *new_context,
     struct wolfsentry_table_ent_header **new_ent1,
@@ -179,6 +228,9 @@ typedef wolfsentry_errcode_t (*wolfsentry_coupled_table_ent_clone_fn_t)(
 
 typedef wolfsentry_errcode_t (*wolfsentry_table_ent_clone_map_fn_t)(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *new_context,
     struct wolfsentry_table_ent_header *new_ent,
@@ -361,11 +413,10 @@ struct wolfsentry_addr_family_byname_table {
 #endif
 
 struct wolfsentry_context {
+    struct wolfsentry_host_platform_interface hpi;
 #ifdef WOLFSENTRY_THREADSAFE
     struct wolfsentry_rwlock lock;
 #endif
-    struct wolfsentry_allocator allocator;
-    struct wolfsentry_timecbs timecbs;
     wolfsentry_make_id_cb_t mk_id_cb;
     union {
         void *mk_id_cb_arg;
@@ -383,76 +434,102 @@ struct wolfsentry_context {
     struct wolfsentry_table_header ents_by_id;
 };
 
-#define WOLFSENTRY_MALLOC(size) wolfsentry->allocator.malloc(wolfsentry->allocator.context, size)
-#define WOLFSENTRY_FREE(ptr) wolfsentry->allocator.free(wolfsentry->allocator.context, ptr)
-#define WOLFSENTRY_REALLOC(ptr, size) wolfsentry->allocator.realloc(wolfsentry->allocator.context, ptr, size)
-#define WOLFSENTRY_MEMALIGN(alignment, size) (wolfsentry->allocator.memalign ? wolfsentry->allocator.memalign(wolfsentry->allocator.context, alignment, size) : NULL)
-#define WOLFSENTRY_FREE_ALIGNED(ptr) (wolfsentry->allocator.memalign ? wolfsentry->allocator.free_aligned(wolfsentry->allocator.context, ptr) : (void)NULL)
+#ifdef WOLFSENTRY_THREADSAFE
 
-#define WOLFSENTRY_GET_TIME(time_p) wolfsentry->timecbs.get_time(wolfsentry->timecbs.context, time_p)
-#define WOLFSENTRY_DIFF_TIME(later, earlier) wolfsentry->timecbs.diff_time(later, earlier)
-#define WOLFSENTRY_ADD_TIME(start_time, time_interval) wolfsentry->timecbs.add_time(start_time, time_interval)
-#define WOLFSENTRY_TO_EPOCH_TIME(when, epoch_secs, epoch_nsecs) wolfsentry->timecbs.to_epoch_time(when, epoch_secs, epoch_nsecs)
-#define WOLFSENTRY_FROM_EPOCH_TIME(epoch_secs, epoch_nsecs, when) wolfsentry->timecbs.from_epoch_time(epoch_secs, epoch_nsecs, when)
-#define WOLFSENTRY_INTERVAL_TO_SECONDS(howlong, howlong_secs, howlong_nsecs) wolfsentry->timecbs.interval_to_seconds(howlong, howlong_secs, howlong_nsecs)
-#define WOLFSENTRY_INTERVAL_FROM_SECONDS(howlong_secs, howlong_nsecs, howlong) wolfsentry->timecbs.interval_from_seconds(howlong_secs, howlong_nsecs, howlong)
+#define WOLFSENTRY_MALLOC_1(allocator, size) ((allocator).malloc((allocator).context, thread, size))
+#define WOLFSENTRY_FREE_1(allocator, ptr) (allocator).free((allocator).context, thread, ptr)
+#define WOLFSENTRY_REALLOC_1(allocator, ptr, size) ((allocator).realloc(wolfsentry->hpi.allocator.context, thread, ptr, size))
+#define WOLFSENTRY_MEMALIGN_1(allocator, alignment, size) ((allocator).memalign ? (allocator).memalign((allocator).context, thread, alignment, size) : NULL)
+#define WOLFSENTRY_FREE_ALIGNED_1(allocator, ptr) ((allocator).memalign ? (allocator).free_aligned((allocator).context, thread, ptr) : (void)NULL)
 
-wolfsentry_errcode_t wolfsentry_id_allocate(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent);
+#else /* !WOLFSENTRY_THREADSAFE */
 
-int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_event *right);
-wolfsentry_errcode_t wolfsentry_event_table_init(
+#define WOLFSENTRY_MALLOC_1(allocator, size) ((allocator).malloc((allocator).context, size))
+#define WOLFSENTRY_FREE_1(allocator, ptr) (allocator).free((allocator).context, ptr)
+#define WOLFSENTRY_REALLOC_1(allocator, ptr, size) ((allocator).realloc(wolfsentry->hpi.allocator.context, ptr, size))
+#define WOLFSENTRY_MEMALIGN_1(allocator, alignment, size) ((allocator).memalign ? (allocator).memalign((allocator).context, alignment, size) : NULL)
+#define WOLFSENTRY_FREE_ALIGNED_1(allocator, ptr) ((allocator).memalign ? (allocator).free_aligned((allocator).context, ptr) : (void)NULL)
+
+#endif /* WOLFSENTRY_THREADSAFE */
+
+#define WOLFSENTRY_MALLOC(size) WOLFSENTRY_MALLOC_1(wolfsentry->hpi.allocator, size)
+#define WOLFSENTRY_FREE(ptr) WOLFSENTRY_FREE_1(wolfsentry->hpi.allocator, ptr)
+#define WOLFSENTRY_REALLOC(ptr, size) WOLFSENTRY_REALLOC_1(wolfsentry->hpi.allocator, ptr, size)
+#define WOLFSENTRY_MEMALIGN(alignment, size) WOLFSENTRY_MEMALIGN_1(wolfsentry->hpi.allocator, alignment, size)
+#define WOLFSENTRY_FREE_ALIGNED(ptr) WOLFSENTRY_FREE_ALIGNED_1(wolfsentry->hpi.allocator, ptr)
+
+#define WOLFSENTRY_GET_TIME_1(timecbs, time_p) ((timecbs).get_time((timecbs).context, time_p))
+#define WOLFSENTRY_DIFF_TIME_1(timecbs, later, earlier) ((timecbs).diff_time(later, earlier))
+#define WOLFSENTRY_ADD_TIME_1(timecbs, start_time, time_interval) ((timecbs).add_time(start_time, time_interval))
+#define WOLFSENTRY_TO_EPOCH_TIME_1(timecbs, when, epoch_secs, epoch_nsecs) ((timecbs).to_epoch_time(when, epoch_secs, epoch_nsecs))
+#define WOLFSENTRY_FROM_EPOCH_TIME_1(timecbs, epoch_secs, epoch_nsecs, when) ((timecbs).from_epoch_time(epoch_secs, epoch_nsecs, when))
+#define WOLFSENTRY_INTERVAL_TO_SECONDS_1(timecbs, howlong, howlong_secs, howlong_nsecs) ((timecbs).interval_to_seconds(howlong, howlong_secs, howlong_nsecs))
+#define WOLFSENTRY_INTERVAL_FROM_SECONDS_1(timecbs, howlong_secs, howlong_nsecs, howlong) ((timecbs).interval_from_seconds(howlong_secs, howlong_nsecs, howlong))
+
+#define WOLFSENTRY_GET_TIME(time_p) WOLFSENTRY_GET_TIME_1(wolfsentry->hpi.timecbs, time_p)
+#define WOLFSENTRY_DIFF_TIME(later, earlier) WOLFSENTRY_DIFF_TIME_1(wolfsentry->hpi.timecbs, later, earlier)
+#define WOLFSENTRY_ADD_TIME(start_time, time_interval) WOLFSENTRY_ADD_TIME_1(wolfsentry->hpi.timecbs, start_time, time_interval)
+#define WOLFSENTRY_TO_EPOCH_TIME(when, epoch_secs, epoch_nsecs) WOLFSENTRY_TO_EPOCH_TIME_1(wolfsentry->hpi.timecbs, when, epoch_secs, epoch_nsecs)
+#define WOLFSENTRY_FROM_EPOCH_TIME(epoch_secs, epoch_nsecs, when) WOLFSENTRY_FROM_EPOCH_TIME_1(wolfsentry->hpi.timecbs, epoch_secs, epoch_nsecs, when)
+#define WOLFSENTRY_INTERVAL_TO_SECONDS(howlong, howlong_secs, howlong_nsecs) WOLFSENTRY_INTERVAL_TO_SECONDS_1(wolfsentry->hpi.timecbs, howlong, howlong_secs, howlong_nsecs)
+#define WOLFSENTRY_INTERVAL_FROM_SECONDS(howlong_secs, howlong_nsecs, howlong) WOLFSENTRY_INTERVAL_FROM_SECONDS_1(wolfsentry->hpi.timecbs, howlong_secs, howlong_nsecs, howlong)
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
+
+WOLFSENTRY_LOCAL int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_event *right);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_table_init(
     struct wolfsentry_event_table *event_table);
-wolfsentry_errcode_t wolfsentry_event_table_clone_header(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_table_clone_header(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table,
     wolfsentry_clone_flags_t flags);
-wolfsentry_errcode_t wolfsentry_action_table_init(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_table_init(
     struct wolfsentry_action_table *action_table);
-wolfsentry_errcode_t wolfsentry_action_table_clone_header(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_table_clone_header(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table,
     wolfsentry_clone_flags_t flags);
-wolfsentry_errcode_t wolfsentry_route_table_init(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_init(
     struct wolfsentry_route_table *route_table);
-wolfsentry_errcode_t wolfsentry_route_table_fallthrough_route_alloc(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_fallthrough_route_alloc(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table *route_table);
-wolfsentry_errcode_t wolfsentry_route_table_clone_header(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table,
     wolfsentry_clone_flags_t flags);
-void wolfsentry_route_table_free(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL void wolfsentry_route_table_free(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table **route_table);
-wolfsentry_errcode_t wolfsentry_kv_table_init(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_init(
     struct wolfsentry_kv_table *kv_table);
-wolfsentry_errcode_t wolfsentry_kv_table_clone_header(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_clone_header(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table,
     wolfsentry_clone_flags_t flags);
-wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init(
     struct wolfsentry_addr_family_bynumber_table *addr_family_bynumber_table);
 #ifndef WOLFSENTRY_PROTOCOL_NAMES
-wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_clone_header(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_clone_header(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table,
     wolfsentry_clone_flags_t flags);
 #endif
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-wolfsentry_errcode_t wolfsentry_addr_family_byname_table_init(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_byname_table_init(
     struct wolfsentry_addr_family_byname_table *addr_family_byname_table);
-wolfsentry_errcode_t wolfsentry_addr_family_table_clone_headers(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_table_clone_headers(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table1,
     struct wolfsentry_table_header *src_table2,
     struct wolfsentry_context *dest_context,
@@ -461,26 +538,26 @@ wolfsentry_errcode_t wolfsentry_addr_family_table_clone_headers(
     wolfsentry_clone_flags_t flags);
 #endif
 
-wolfsentry_errcode_t wolfsentry_table_ent_insert(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_header *table, int unique_p);
-wolfsentry_errcode_t wolfsentry_table_ent_get(struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent);
-wolfsentry_errcode_t wolfsentry_table_ent_delete(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header **ent);
-wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
-wolfsentry_errcode_t wolfsentry_table_ent_delete_1(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_header *table, int unique_p);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header **ent);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 
-wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent);
-wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(struct wolfsentry_context *wolfsentry, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
-void wolfsentry_table_ent_delete_by_id_1(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_ent_header *ent);
-wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(struct wolfsentry_context *wolfsentry, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
 
-wolfsentry_errcode_t wolfsentry_table_clone(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_clone(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_coupled_table_clone(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_coupled_table_clone(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *src_table1,
     struct wolfsentry_table_header *src_table2,
     struct wolfsentry_context *dest_context,
@@ -488,98 +565,113 @@ wolfsentry_errcode_t wolfsentry_coupled_table_clone(
     struct wolfsentry_table_header *dest_table2,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_action_clone(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_clone(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header **new_ent,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_event_clone_bare(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_clone_bare(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header **new_ent,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_event_clone_resolve(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_clone_resolve(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header *new_ent,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_route_clone(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header **new_ent,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_table_free_ents(struct wolfsentry_context *wolfsentry, struct wolfsentry_table_header *table);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table);
 
-wolfsentry_errcode_t wolfsentry_table_cursor_init(struct wolfsentry_context *wolfsentry, struct wolfsentry_cursor *cursor);
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
-wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor);
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor);
-struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor);
-wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_header *table, const struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_cursor *cursor);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
+WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor);
+WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor);
+WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_header *table, const struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position);
 
-wolfsentry_errcode_t wolfsentry_table_filter(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_filter(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *table,
     wolfsentry_filter_function_t filter,
     void *filter_arg,
     wolfsentry_dropper_function_t dropper,
     void *dropper_arg);
 
-wolfsentry_errcode_t wolfsentry_table_map(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_map(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_header *table,
     wolfsentry_map_function_t fn,
     void *map_context,
     wolfsentry_action_res_t *action_results);
 
-wolfsentry_errcode_t wolfsentry_action_list_append(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_append(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list,
     const char *label,
     int label_len);
 
-wolfsentry_errcode_t wolfsentry_action_list_prepend(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_prepend(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list,
     const char *label,
     int label_len);
 
-wolfsentry_errcode_t wolfsentry_action_list_insert_after(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_insert_after(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list,
     const char *label,
     int label_len,
     const char *point_label,
     int point_label_len);
 
-wolfsentry_errcode_t wolfsentry_action_list_clone(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_clone(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_action_list *src_action_list,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_action_list *dest_action_list,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_action_list_delete(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_delete(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list,
     const char *label,
     int label_len);
 
-wolfsentry_errcode_t wolfsentry_action_list_delete_all(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_delete_all(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list);
 
-wolfsentry_errcode_t wolfsentry_action_list_dispatch(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     void *caller_arg,
     struct wolfsentry_event *action_event,
     struct wolfsentry_event *trigger_event,
@@ -589,132 +681,135 @@ wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results);
 
-wolfsentry_errcode_t wolfsentry_eventconfig_load(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_load(
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal);
 
-wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
     const struct wolfsentry_eventconfig_internal *internal,
     struct wolfsentry_eventconfig *exported);
 
-wolfsentry_errcode_t wolfsentry_eventconfig_update_1(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_update_1(
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal);
 
-wolfsentry_errcode_t wolfsentry_kv_new(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_new(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *key,
     int key_len,
     int data_len, /* length with terminating null if WOLFSENTRY_KV_STRING, base64 length with null if WOLFSENTRY_KV_BYTES, 0 otherwise */
     struct wolfsentry_kv_pair_internal **kv);
 
-wolfsentry_errcode_t wolfsentry_kv_drop_reference(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_drop_reference(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_pair_internal *kv,
     wolfsentry_action_res_t *action_results);
 
-wolfsentry_errcode_t wolfsentry_kv_set_mutability(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set_mutability(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     struct wolfsentry_kv_pair_internal *kv,
     int mutable);
 
-int wolfsentry_kv_get_mutability(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL int wolfsentry_kv_get_mutability(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const struct wolfsentry_kv_pair_internal *kv);
 
-wolfsentry_errcode_t wolfsentry_kv_insert(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_insert(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     struct wolfsentry_kv_pair_internal *kv);
 
-wolfsentry_errcode_t wolfsentry_kv_set(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     struct wolfsentry_kv_pair_internal *kv);
 
-wolfsentry_errcode_t wolfsentry_kv_get_reference(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_reference(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const char *key,
     int key_len,
     wolfsentry_kv_type_t type,
     struct wolfsentry_kv_pair_internal **kv);
 
-wolfsentry_errcode_t wolfsentry_kv_get_type(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_type(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const char *key,
     int key_len,
     wolfsentry_kv_type_t *type);
 
-wolfsentry_errcode_t wolfsentry_kv_clone(
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_clone(
     struct wolfsentry_context *src_context,
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread,
+#endif
     struct wolfsentry_table_ent_header * const src_ent,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header ** const new_ent,
     wolfsentry_clone_flags_t flags);
 
-wolfsentry_errcode_t wolfsentry_kv_delete(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_delete(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const char *key,
     int key_len);
 
-wolfsentry_errcode_t wolfsentry_kv_set_validator(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set_validator(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     wolfsentry_kv_validator_t validator,
     wolfsentry_action_res_t *action_results);
 
-wolfsentry_errcode_t wolfsentry_kv_table_iterate_start(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_start(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor **cursor);
 
-wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_head(
-    const struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_head(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor *cursor);
 
-wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_tail(
-    const struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_tail(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor *cursor);
 
-wolfsentry_errcode_t wolfsentry_kv_table_iterate_current(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_current(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor *cursor,
     struct wolfsentry_kv_pair_internal **kv);
 
-wolfsentry_errcode_t wolfsentry_kv_table_iterate_prev(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_prev(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor *cursor,
     struct wolfsentry_kv_pair_internal **kv);
 
-wolfsentry_errcode_t wolfsentry_kv_table_iterate_next(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_next(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor *cursor,
     struct wolfsentry_kv_pair_internal **kv);
 
-wolfsentry_errcode_t wolfsentry_kv_table_iterate_end(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_end(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_table *table,
     struct wolfsentry_cursor **cursor);
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-wolfsentry_errcode_t wolfsentry_addr_family_table_pair(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_table_pair(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_addr_family_bynumber_table *bynumber_table,
     struct wolfsentry_addr_family_byname_table *byname_table);
 #endif
 
-wolfsentry_errcode_t wolfsentry_addr_family_insert(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_addr_family_bynumber_table *bynumber_table,
     wolfsentry_addr_family_t family_bynumber,
     const char *family_byname,
@@ -723,29 +818,29 @@ wolfsentry_errcode_t wolfsentry_addr_family_insert(
     wolfsentry_addr_family_formatter_t formatter,
     int max_addr_bits);
 
-wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_get_bynumber(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family_bynumber,
     const struct wolfsentry_addr_family_bynumber **addr_family);
 
-wolfsentry_errcode_t wolfsentry_addr_family_get_byname(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_get_byname(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_addr_family_t family_bynumber,
     const char *family_byname,
     int family_byname_len,
     const struct wolfsentry_addr_family_bynumber **addr_family);
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-wolfsentry_errcode_t wolfsentry_addr_family_clone(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_clone(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header **new_ent1,
     struct wolfsentry_table_ent_header **new_ent2,
     wolfsentry_clone_flags_t flags);
 #else
-wolfsentry_errcode_t wolfsentry_addr_family_bynumber_clone(
-    struct wolfsentry_context *wolfsentry,
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_bynumber_clone(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_table_ent_header *src_ent,
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header **new_ent,

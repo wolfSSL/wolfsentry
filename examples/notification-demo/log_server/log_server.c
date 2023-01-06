@@ -1,3 +1,25 @@
+/*
+ * log_server.c
+ *
+ * Copyright (C) 2022-2023 wolfSSL Inc.
+ *
+ * This file is part of wolfSentry.
+ *
+ * wolfSentry is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSentry is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 //#define DEBUG_HTTP
@@ -50,6 +72,10 @@
 #include <wolfssl/certs_test.h>
 #include <wolfssl/ssl.h>
 #include <wolfssl/error-ssl.h>
+
+#ifndef OPENSSL_EXTRA
+#error log_server requires that wolfSSL be built with --enable-opensslextra
+#endif
 
 static WOLFSSL_CTX* wolf_ctx = NULL;
 static int log_server_data_index = -1;
@@ -321,7 +347,7 @@ wolfsentry_errcode_t circlog_enqueue_one(size_t msg_len, char **msg_buf) {
     }
 
     new_ent = (struct circlog_message *)(void *)(circlog + new_msg_start);
-    ret = wolfsentry_time_now_plus_delta(wolfsentry, 0 /* td */, &new_ent->when);
+    ret = wolfsentry_time_now_plus_delta(global_wolfsentry, 0 /* td */, &new_ent->when);
     new_ent->len = (uint16_t)msg_len;
     *msg_buf = new_ent->msg_buf;
     circlog_tail = new_msg_start + new_ent_size;
@@ -502,6 +528,8 @@ static unsigned long cert_subject_name_hash(DecodedCert *cert) {
 struct io_ctx {
     int timeout;
 };
+
+#ifndef NO_IO_TIMEOUTS
 
 #ifdef HAVE_POLL
 static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx) {
@@ -744,7 +772,8 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
 }
 #endif /* HAVE_SELECT */
 
-#ifdef NO_IO_TIMEOUTS
+#else /* NO_IO_TIMEOUTS */
+
 static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx) {
     int ret;
     int fd = wolfSSL_get_fd(ssl);
@@ -798,6 +827,7 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
     }
     return (int)total_written;
 }
+
 #endif /* NO_IO_TIMEOUTS */
 
 /* Init the TCP listener */
@@ -929,7 +959,7 @@ int log_server_init() {
     int pton_ret;
 
     ret = wolfsentry_user_value_get_uint(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "admin-listen-port",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &admin_listen_port);
@@ -942,7 +972,7 @@ int log_server_init() {
     }
 
     ret = wolfsentry_user_value_get_string(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "admin-listen-addr",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &admin_listen_addr,
@@ -958,7 +988,7 @@ int log_server_init() {
 
     pton_ret = inet_pton(AF_INET, admin_listen_addr, &inbound_sa.sin_addr);
 
-    ret = wolfsentry_user_value_release_record(wolfsentry, &admin_listen_addr_record);
+    ret = wolfsentry_user_value_release_record(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread), &admin_listen_addr_record);
 
     if (ret < 0)
         exit(1);
@@ -1132,6 +1162,22 @@ static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
     #include "../notify-config.h"
 #endif
 
+static volatile int running = 0;
+static int peer_fd = -1;
+static void handle_interrupt(int sig) {
+    (void)sig;
+    if (running)
+        running = 0;
+    if (inbound_fd > 0) {
+        (void)close(inbound_fd);
+        inbound_fd = -1;
+    }
+    if (peer_fd > 0) {
+        (void)close(peer_fd);
+        peer_fd = -1;
+    }
+}
+
 int main(int argc, char **argv) {
     wolfsentry_errcode_t ret;
     size_t circlog_size;
@@ -1145,6 +1191,10 @@ int main(int argc, char **argv) {
     unsigned char* wolfsentry_config_data = NULL;
     size_t wolfsentry_config_data_sz = 0;
 #endif
+    int notnormal = 0;
+    WOLFSSL *ssl = NULL;
+    struct log_server_data *app_data = NULL;
+    int handshake_done = 0, transaction_successful = 0;
 
     http_buf_size = HTTP_BUF_SZ;
     http_buf = (char *)malloc(http_buf_size);
@@ -1228,7 +1278,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             fprintf(stderr, "\tOverride string assignment loaded: %s\n", argv[i+1]);
-            ret = wolfsentry_user_value_store_string(wolfsentry, argv[i+1],
+            ret = wolfsentry_user_value_store_string(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread), argv[i+1],
                 (int)(cp - argv[i+1]), cp + 1, WOLFSENTRY_LENGTH_NULL_TERMINATED, 1 /* overwrite_p */);
             if (ret < 0) {
                 fprintf(stderr, "wolfsentry_user_value_store_string(): " \
@@ -1250,7 +1300,7 @@ int main(int argc, char **argv) {
                 exit(1);
             }
             fprintf(stderr, "\tOverride int assignment loaded: %s (%llu)\n", argv[i+1], (unsigned long long int)the_int);
-            ret = wolfsentry_user_value_store_uint(wolfsentry, argv[i+1], (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
+            ret = wolfsentry_user_value_store_uint(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread), argv[i+1], (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {
                 fprintf(stderr, "wolfsentry_user_value_store_string(): " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
                 exit(1);
@@ -1288,7 +1338,7 @@ int main(int argc, char **argv) {
                 "}\n"
                                 , (int)(cp - argv[i+1]), argv[i+1], cp+1);
 
-            ret = wolfsentry_config_json_oneshot(wolfsentry,
+            ret = wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
                                                 json_buf,
                                                 json_len,
                                                 WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH,
@@ -1332,7 +1382,7 @@ int main(int argc, char **argv) {
                 "}\n",
                 (int)(cp - argv[i+1]), argv[i+1], cp+1);
 
-            ret = wolfsentry_config_json_oneshot(wolfsentry,
+            ret = wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
                                                 json_buf,
                                                 json_len,
                                                 WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH,
@@ -1347,7 +1397,7 @@ int main(int argc, char **argv) {
     } /* for */
 
     ret = wolfsentry_user_value_get_uint(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
         "circlog-size",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &circlog_size_uint64);
@@ -1418,440 +1468,505 @@ int main(int argc, char **argv) {
         }
     }
 
-
     fprintf(stderr,"circlog_head=%zu circlog_tail=%zu\n",circlog_head,circlog_tail);
 }
 #endif /* CIRCLOG_UNIT_TEST */
 
+    log_server_init();
 
-  log_server_init();
+    running = 1;
 
-  /* Infinite loop */
-  for (;;) {
-    int peer_fd;
-    struct sockaddr_in server_addr;
-    socklen_t server_len;
-    struct sockaddr_in client_addr;
-    socklen_t client_len;
-    struct wolfsentry_data *wolfsentry_data = NULL;
-    int ret;
-#ifdef HTTP_NONBLOCKING
-    int retry;
-#endif
-    WOLFSSL *ssl = NULL;
-    struct log_server_data *app_data = NULL;
-    int handshake_done = 0, transaction_successful = 0;
-    char *url, *url_end;
-
-      client_len = sizeof client_addr;
-      peer_fd = accept(inbound_fd, (struct sockaddr*)&client_addr,
-                      &client_len);
-
-      if (peer_fd < 0) {
-          perror("accept");
-          exit(1);
-      }
-
-    if ((ssl = wolfSSL_new(wolf_ctx)) == NULL) {
-        fprintf(stderr, "ERROR: failed to create WOLFSSL object\n");
-        break;
+    if (signal(SIGINT,handle_interrupt) == SIG_ERR) {
+        perror("signal(SIGINT)");
+        exit(1);
     }
-
-    app_data = (struct log_server_data *)XMALLOC(sizeof *app_data, NULL /* heap */, DYNAMIC_TYPE_TMP_BUFFER);
-    if (app_data == NULL) {
-        fprintf(stderr,"%s L%d: XMALLOC(%zu) failed: %s\n", __FILE__, __LINE__, sizeof *app_data, strerror(errno));
-        goto ssl_shutdown;
+    if (signal(SIGTERM,handle_interrupt) == SIG_ERR) {
+        perror("signal(SIGTERM)");
+        exit(1);
     }
-    memset(app_data, 0, sizeof *app_data);
-    app_data->error_code = INCOMPLETE_DATA;
-    wolfSSL_SetCertCbCtx(ssl, (void *)app_data);
-
-    ret = wolfSSL_set_fd(ssl, peer_fd);
-    if (ret != WOLFSSL_SUCCESS) {
-        fprintf(stderr,"SSL_set_fd() failed: %s\n", wolfSSL_ERR_reason_error_string(ret));
+    if (signal(SIGHUP,handle_interrupt) == SIG_ERR) {
+        perror("signal(SIGHUP)");
         exit(1);
     }
 
-    /* note a custom read ctx can only be set after wolfSSL_set_fd(), because
-     * the latter sets it to &ssl->rfd.
-     */
-    wolfSSL_SetIOReadCtx(ssl, (void *)&io_ctx);
-    wolfSSL_SetIOWriteCtx(ssl, (void *)&io_ctx);
-
-    server_len = sizeof server_addr;
-    if (getsockname(peer_fd, (struct sockaddr *)&server_addr, &server_len) < 0) {
-        perror("getsockname");
-        exit(1);
-    }
-
-    ret = wolfsentry_store_endpoints(ssl, &client_addr, &server_addr, IPPROTO_TCP,
-                               WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN, &wolfsentry_data);
-
+    while (running) {
+        struct sockaddr_in server_addr;
+        socklen_t server_len;
+        struct sockaddr_in client_addr;
+        socklen_t client_len;
+        struct wolfsentry_data *wolfsentry_data = NULL;
+        int ret;
 #ifdef HTTP_NONBLOCKING
-    retry = HTTP_MAX_NB_TRIES;
-    do {
-/*
-        if (pcb->state == CLOSE_WAIT) {
-            fprintf(stderr, "Client immediately hung-up\n");
-            goto close_wait;
-        }
-*/
-        ret = wolfSSL_accept(ssl);
-        if ((wolfSSL_want_read(ssl) || wolfSSL_want_write(ssl))) {
-            usleep(100000);
-            retry--;
-        } else {
-            retry = 0;
-        }
-    } while (retry);
-
-#else
-
-    ret = wolfSSL_accept(ssl);
-
-#endif /* HTTP_NONBLOCKING */
-
-
-    if (ret != WOLFSSL_SUCCESS) {
-        wolfsentry_data->ssl_error = wolfSSL_get_error(ssl, ret);
-        fprintf(stderr, "wolfSSL_accept ret = %d, error = %d (%s), sub-error = %d (%s)\n",
-                ret, wolfSSL_get_error(ssl, ret), wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)),
-                app_data->error_code, wolfSSL_ERR_reason_error_string(app_data->error_code));
-        goto ssl_shutdown;
-    }
-
-    /* sanity check */
-    if (app_data->issuer_cert == NULL) {
-        fprintf(stderr, "%s L%d app_data->issuer_cert is null!\n",__FILE__,__LINE__);
-        goto ssl_shutdown;
-    }
-
-    handshake_done = 1;
-#if defined(DEBUG_HTTP) || defined(DEBUG_TLS)
-    fprintf(stderr, "Handshake done\n");
+        int retry;
 #endif
+        char *url, *url_end;
 
-    http_buf_len = 0;
-#ifdef HTTP_NONBLOCKING
-    retry = 0;
-#endif
-    for (;;) {
-        if (http_buf_len >= http_buf_size - 1) {
-            fprintf(stderr, "overlong client payload\n");
+        client_len = sizeof client_addr;
+        peer_fd = accept(inbound_fd, (struct sockaddr*)&client_addr,
+                         &client_len);
+        if (! running)
             goto ssl_shutdown;
-        }
-        ret = wolfSSL_read(ssl, http_buf + http_buf_len, http_buf_size - http_buf_len - 1);
-        if (ret < 0) {
-        #ifdef DEBUG_HTTP
-            fprintf(stderr,"\nL%d\n%.*s\n",__LINE__,(int)http_buf_len, http_buf);
-        #endif
+
+        if (peer_fd < 0) {
+            perror("accept");
+            notnormal = 1;
             break;
         }
-        http_buf_len += (size_t)ret;
-#ifdef HTTP_NONBLOCKING
-        if ((wolfSSL_want_read(ssl) || wolfSSL_want_write(ssl))) {
-            if (retry == HTTP_MAX_NB_TRIES-1) {
-                fprintf(stderr, "giving up on client payload read after %d retries.\n", retry);
-                break;
-            }
-            usleep(100000);
-            retry++;
-#ifdef DEBUG_HTTP
-            fprintf(stderr,"%s L%d retry %d\n",__FILE__,__LINE__,retry);
-#endif
+
+        if ((ssl = wolfSSL_new(wolf_ctx)) == NULL) {
+            fprintf(stderr, "ERROR: failed to create WOLFSSL object\n");
+            notnormal = 1;
+            break;
         }
-        else
-#endif /* HTTP_NONBLOCKING */
-        {
-            if ((http_buf_len >= 4) && (! strncmp(http_buf + http_buf_len - 4, "\r\n\r\n", 4)))
-                break;
-            if ((http_buf_len >= 2) && (! strncmp(http_buf + http_buf_len - 2, "\n\n", 2)))
-                break;
+
+        app_data = (struct log_server_data *)XMALLOC(sizeof *app_data, NULL /* heap */, DYNAMIC_TYPE_TMP_BUFFER);
+        if (app_data == NULL) {
+            fprintf(stderr,"%s L%d: XMALLOC(%zu) failed: %s\n", __FILE__, __LINE__, sizeof *app_data, strerror(errno));
+            notnormal = 1;
+            running = 0;
+            goto ssl_shutdown;
         }
-    }
+        memset(app_data, 0, sizeof *app_data);
+        app_data->error_code = INCOMPLETE_DATA;
+        wolfSSL_SetCertCbCtx(ssl, (void *)app_data);
 
-    /* add null string termination to make string calls inherently safe. */
-    http_buf[http_buf_len] = 0;
-
-    if (ret < 0) {
-        fprintf(stderr, "ERROR: failed to read: %s\n", wolfSSL_ERR_reason_error_string(ret));
-        goto ssl_shutdown;
-    }
-
-#ifdef DEBUG_HTTP
-    fprintf(stderr,"\n%.*s\n",(int)http_buf_len, http_buf);
-#endif
-
-    if (strncmp(http_buf, "GET ", 4) != 0) {
-#ifdef DEBUG_HTTP
-        fprintf(stderr, "%s L%d non-GET request\n", __FILE__, __LINE__);
-#endif
-        goto ssl_shutdown;
-    }
-
-    url_end = memchr(http_buf + 4, ' ', http_buf_len - 4);
-    if ((url_end == NULL) || (url_end == http_buf + 4)) {
-#ifdef DEBUG_HTTP
-        fprintf(stderr, "%s L%d malformed request\n", __FILE__, __LINE__);
-#endif
-        goto ssl_shutdown;
-    }
-
-    url = http_buf + 4;
-
-    if (strncmp(url_end+1, "HTTP/", 5) != 0) {
-#ifdef DEBUG_HTTP
-        fprintf(stderr, "%s L%d unexpected protocol\n", __FILE__, __LINE__);
-#endif
-        goto ssl_shutdown;
-    }
-
-    *url_end = 0;
-
-    if (strcmp(url, "/reset-log") == 0) {
-
-        if (! app_data->issuer_cert->can_issue_admin_certs) {
-            (void)http_write_header(ssl, http_buf, http_buf_size, 403, 0, NULL, NULL);
+        ret = wolfSSL_set_fd(ssl, peer_fd);
+        if (ret != WOLFSSL_SUCCESS) {
+            fprintf(stderr,"SSL_set_fd() failed: %s\n", wolfSSL_ERR_reason_error_string(ret));
+            notnormal = 1;
+            running = 0;
             goto ssl_shutdown;
         }
 
-        ret = circlog_reset();
-        if (ret < 0)
-            (void)http_write_header(ssl, http_buf, http_buf_size, 500, 0, NULL, NULL);
-        else
-            (void)http_write_header(ssl, http_buf, http_buf_size, 200, 0, NULL, NULL);
-
-        transaction_successful = 1;
-
-        goto ssl_shutdown;
-    }
-
-#if 0
-    /* not yet implemented */
-    if (strncmp(url, "/reset-host", strlen("/reset-host"))) {
-        const char *host_to_reset = url + strlen("/reset-host");
-
-        if (! app_data->issuer_cert->can_issue_admin_certs) {
-            (void)http_write_header(ssl, http_buf, http_buf_size, 403, 0, NULL, NULL);
-            goto ssl_shutdown;
-        }
-
-        /* get the host to clear from the URL-encoded args, parse it, and call
-         * wolfsentry_route_delete().  note this requires an exact match with
-         * the rule inserted dynamically by sentry.c:handle_derogatory().
+        /* note a custom read ctx can only be set after wolfSSL_set_fd(), because
+         * the latter sets it to &ssl->rfd.
          */
+        wolfSSL_SetIOReadCtx(ssl, (void *)&io_ctx);
+        wolfSSL_SetIOWriteCtx(ssl, (void *)&io_ctx);
 
-        transaction_successful = 1;
-    }
+        server_len = sizeof server_addr;
+        if (getsockname(peer_fd, (struct sockaddr *)&server_addr, &server_len) < 0) {
+            perror("getsockname");
+            notnormal = 1;
+            running = 0;
+            goto ssl_shutdown;
+        }
+
+        ret = wolfsentry_store_endpoints(ssl, &client_addr, &server_addr, IPPROTO_TCP,
+                                         WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN, &wolfsentry_data);
+        if (ret < 0) {
+            fprintf(stderr, "wolfsentry_store_endpoints() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            notnormal = 1;
+            running = 0;
+            goto ssl_shutdown;
+        }
+
+#ifdef HTTP_NONBLOCKING
+        retry = HTTP_MAX_NB_TRIES;
+        do {
+            ret = wolfSSL_accept(ssl);
+            if ((wolfSSL_want_read(ssl) || wolfSSL_want_write(ssl))) {
+                usleep(100000);
+                retry--;
+            } else {
+                retry = 0;
+            }
+        } while (retry);
+#else
+        ret = wolfSSL_accept(ssl);
+#endif /* HTTP_NONBLOCKING */
+        if (! running)
+            goto ssl_shutdown;
+
+        if (ret != WOLFSSL_SUCCESS) {
+            wolfsentry_data->ssl_error = wolfSSL_get_error(ssl, ret);
+            fprintf(stderr, "wolfSSL_accept ret = %d, error = %d (%s), sub-error = %d (%s)\n",
+                    ret, wolfSSL_get_error(ssl, ret), wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)),
+                    app_data->error_code, wolfSSL_ERR_reason_error_string(app_data->error_code));
+            goto ssl_shutdown;
+        }
+
+        /* sanity check */
+        if (app_data->issuer_cert == NULL) {
+            fprintf(stderr, "%s L%d app_data->issuer_cert is null!\n",__FILE__,__LINE__);
+            goto ssl_shutdown;
+        }
+
+        handshake_done = 1;
+#if defined(DEBUG_HTTP) || defined(DEBUG_TLS)
+        fprintf(stderr, "Handshake done\n");
 #endif
 
-    if ((strncmp(url, "/show-log", strlen("/show-log")) == 0) &&
-        ((url[strlen("/show-log")] == 0) ||
-         (url[strlen("/show-log")] == '?')))
-    {
-        int resp_len;
-        struct circlog_message *msg_i = NULL;
-        size_t total_msg_len;
-        char *show_log_args = url + strlen("/show-log");
-
-        (void)show_log_args; /* arg processing not yet implemented. */
-
-        total_msg_len = 2; /* "[\n" */
-        for (ret = circlog_iterate(&msg_i); ret >= 0; ret = circlog_iterate(&msg_i)) {
-            size_t this_out_len;
-            ret = circlog_format_one(msg_i, NULL /* char **out */, &this_out_len);
-            if (ret < 0) {
-                fprintf(stderr, " %s L%d circlog_format_one() for size failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        http_buf_len = 0;
+#ifdef HTTP_NONBLOCKING
+        retry = 0;
+#endif
+        for (;;) {
+            if (http_buf_len >= http_buf_size - 1) {
+                fprintf(stderr, "overlong client payload\n");
                 goto ssl_shutdown;
             }
-            total_msg_len += this_out_len + 2; /* +2 for the ",\n" or "\n]" */
-        }
-        total_msg_len += 1; /* "\n" */
-
+            ret = wolfSSL_read(ssl, http_buf + http_buf_len, http_buf_size - http_buf_len - 1);
+            if (! running)
+                goto ssl_shutdown;
+            if (ret < 0) {
 #ifdef DEBUG_HTTP
-        fprintf(stderr, "Sending response\n");
+                fprintf(stderr,"\nL%d\n%.*s\n",__LINE__,(int)http_buf_len, http_buf);
 #endif
-
-        transaction_successful = 1;
-
-        if (http_write_header(ssl, http_buf, http_buf_size, 200, total_msg_len, "application/json", NULL) < 0)
-            goto ssl_shutdown;
-
-        /* option to dump rule counts? */
-        {
-            char *out_ptr = http_buf;
-            size_t out_space = http_buf_size;
-            int is_first;
-
-            for (ret = circlog_iterate(&msg_i), is_first = 1; ret >= 0; ret = circlog_iterate(&msg_i)) {
-                int printed_this_sep = 0;
-                for (;;) {
-                    if (printed_this_sep) {
-                    } else if (is_first) {
-                        memcpy(out_ptr, "[\n", strlen("[\n"));
-                        out_ptr += strlen("[\n");
-                        out_space -= strlen("[\n");
-                        is_first = 0;
-                        printed_this_sep = 1;
-                    } else {
-                        if (out_space < strlen(",\n"))
-                            goto flush_now;
-                        memcpy(out_ptr, ",\n", strlen(",\n"));
-                        out_ptr += strlen(",\n");
-                        out_space -= strlen(",\n");
-                        printed_this_sep = 1;
-                    }
-                    ret = circlog_format_one(msg_i, &out_ptr, &out_space);
-                    if (ret < 0) {
-                        if (WOLFSENTRY_ERROR_CODE_IS(ret, BUFFER_TOO_SMALL)) {
-                            if (http_buf_size - out_space <= strlen(",\n")) {
-                                fprintf(stderr,"%s L%d msg won't fit in http_buf!\n",__FILE__,__LINE__);
-                                goto ssl_shutdown;
-                            }
-                        flush_now:
-                            resp_len = (int)(http_buf_size - out_space);
-                            if ((ret = wolfSSL_write(ssl, http_buf, resp_len)) != resp_len) {
-                                fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
-                                goto ssl_shutdown;
-                            }
-                            out_ptr = http_buf;
-                            out_space = http_buf_size;
-                            continue;
-                        } else {
-                            fprintf(stderr, " %s L%d circlog_format_one() failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
-                            goto ssl_shutdown;
-                        }
-                    }
+                break;
+            }
+            http_buf_len += (size_t)ret;
+#ifdef HTTP_NONBLOCKING
+            if ((wolfSSL_want_read(ssl) || wolfSSL_want_write(ssl))) {
+                if (retry == HTTP_MAX_NB_TRIES-1) {
+                    fprintf(stderr, "giving up on client payload read after %d retries.\n", retry);
                     break;
                 }
-
+                usleep(100000);
+                retry++;
+#ifdef DEBUG_HTTP
+                fprintf(stderr,"%s L%d retry %d\n",__FILE__,__LINE__,retry);
+#endif
             }
-            if (out_ptr != http_buf) {
-                resp_len = (int)(http_buf_size - out_space);
-                if ((ret = wolfSSL_write(ssl, http_buf, resp_len)) != resp_len) {
+            else
+#endif /* HTTP_NONBLOCKING */
+            {
+                if ((http_buf_len >= 4) && (! strncmp(http_buf + http_buf_len - 4, "\r\n\r\n", 4)))
+                    break;
+                if ((http_buf_len >= 2) && (! strncmp(http_buf + http_buf_len - 2, "\n\n", 2)))
+                    break;
+            }
+        }
+
+        /* add null string termination to make string calls inherently safe. */
+        http_buf[http_buf_len] = 0;
+
+        if (ret < 0) {
+            fprintf(stderr, "ERROR: failed to read: %s\n", wolfSSL_ERR_reason_error_string(ret));
+            goto ssl_shutdown;
+        }
+
+#ifdef DEBUG_HTTP
+        fprintf(stderr,"\n%.*s\n",(int)http_buf_len, http_buf);
+#endif
+
+        if (strncmp(http_buf, "GET ", 4) != 0) {
+#ifdef DEBUG_HTTP
+            fprintf(stderr, "%s L%d non-GET request\n", __FILE__, __LINE__);
+#endif
+            goto ssl_shutdown;
+        }
+
+        url_end = memchr(http_buf + 4, ' ', http_buf_len - 4);
+        if ((url_end == NULL) || (url_end == http_buf + 4)) {
+#ifdef DEBUG_HTTP
+            fprintf(stderr, "%s L%d malformed request\n", __FILE__, __LINE__);
+#endif
+            goto ssl_shutdown;
+        }
+
+        url = http_buf + 4;
+
+        if (strncmp(url_end+1, "HTTP/", 5) != 0) {
+#ifdef DEBUG_HTTP
+            fprintf(stderr, "%s L%d unexpected protocol\n", __FILE__, __LINE__);
+#endif
+            goto ssl_shutdown;
+        }
+
+        *url_end = 0;
+
+        if (strcmp(url, "/reset-log") == 0) {
+
+            if (! app_data->issuer_cert->can_issue_admin_certs) {
+                (void)http_write_header(ssl, http_buf, http_buf_size, 403, 0, NULL, NULL);
+                goto ssl_shutdown;
+            }
+
+            ret = circlog_reset();
+            if (ret < 0)
+                (void)http_write_header(ssl, http_buf, http_buf_size, 500, 0, NULL, NULL);
+            else
+                (void)http_write_header(ssl, http_buf, http_buf_size, 200, 0, NULL, NULL);
+
+            transaction_successful = 1;
+
+            goto ssl_shutdown;
+        }
+
+        if (strcmp(url, "/kill-server") == 0) {
+
+            if (! app_data->issuer_cert->can_issue_admin_certs) {
+                (void)http_write_header(ssl, http_buf, http_buf_size, 403, 0, NULL, NULL);
+                goto ssl_shutdown;
+            }
+
+            (void)http_write_header(ssl, http_buf, http_buf_size, 200, 0, NULL, NULL);
+
+            transaction_successful = 1;
+
+            running = 0;
+
+            goto ssl_shutdown;
+        }
+
+#if 0
+        /* not yet implemented */
+        if (strncmp(url, "/reset-host", strlen("/reset-host"))) {
+            const char *host_to_reset = url + strlen("/reset-host");
+
+            if (! app_data->issuer_cert->can_issue_admin_certs) {
+                (void)http_write_header(ssl, http_buf, http_buf_size, 403, 0, NULL, NULL);
+                goto ssl_shutdown;
+            }
+
+            /* get the host to clear from the URL-encoded args, parse it, and call
+             * wolfsentry_route_delete().  note this requires an exact match with
+             * the rule inserted dynamically by sentry.c:handle_derogatory().
+             */
+
+            transaction_successful = 1;
+        }
+#endif
+
+        if ((strncmp(url, "/show-log", strlen("/show-log")) == 0) &&
+            ((url[strlen("/show-log")] == 0) ||
+             (url[strlen("/show-log")] == '?')))
+        {
+            int resp_len;
+            struct circlog_message *msg_i = NULL;
+            size_t total_msg_len;
+            char *show_log_args = url + strlen("/show-log");
+
+            (void)show_log_args; /* arg processing not yet implemented. */
+
+            total_msg_len = 2; /* "[\n" */
+            for (ret = circlog_iterate(&msg_i); ret >= 0; ret = circlog_iterate(&msg_i)) {
+                size_t this_out_len;
+                ret = circlog_format_one(msg_i, NULL /* char **out */, &this_out_len);
+                if (ret < 0) {
+                    fprintf(stderr, " %s L%d circlog_format_one() for size failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                    goto ssl_shutdown;
+                }
+                total_msg_len += this_out_len + 2; /* +2 for the ",\n" or "\n]" */
+            }
+            total_msg_len += 1; /* "\n" */
+
+#ifdef DEBUG_HTTP
+            fprintf(stderr, "Sending response\n");
+#endif
+
+            transaction_successful = 1;
+
+            if (http_write_header(ssl, http_buf, http_buf_size, 200, total_msg_len, "application/json", NULL) < 0)
+                goto ssl_shutdown;
+
+            /* option to dump rule counts? */
+            {
+                char *out_ptr = http_buf;
+                size_t out_space = http_buf_size;
+                int is_first;
+
+                for (ret = circlog_iterate(&msg_i), is_first = 1; ret >= 0; ret = circlog_iterate(&msg_i)) {
+                    int printed_this_sep = 0;
+                    for (;;) {
+                        if (printed_this_sep) {
+                        } else if (is_first) {
+                            memcpy(out_ptr, "[\n", strlen("[\n"));
+                            out_ptr += strlen("[\n");
+                            out_space -= strlen("[\n");
+                            is_first = 0;
+                            printed_this_sep = 1;
+                        } else {
+                            if (out_space < strlen(",\n"))
+                                goto flush_now;
+                            memcpy(out_ptr, ",\n", strlen(",\n"));
+                            out_ptr += strlen(",\n");
+                            out_space -= strlen(",\n");
+                            printed_this_sep = 1;
+                        }
+                        ret = circlog_format_one(msg_i, &out_ptr, &out_space);
+                        if (ret < 0) {
+                            if (WOLFSENTRY_ERROR_CODE_IS(ret, BUFFER_TOO_SMALL)) {
+                                if (http_buf_size - out_space <= strlen(",\n")) {
+                                    fprintf(stderr,"%s L%d msg won't fit in http_buf!\n",__FILE__,__LINE__);
+                                    goto ssl_shutdown;
+                                }
+                            flush_now:
+                                resp_len = (int)(http_buf_size - out_space);
+                                if ((ret = wolfSSL_write(ssl, http_buf, resp_len)) != resp_len) {
+                                    fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
+                                    goto ssl_shutdown;
+                                }
+                                out_ptr = http_buf;
+                                out_space = http_buf_size;
+                                continue;
+                            } else {
+                                fprintf(stderr, " %s L%d circlog_format_one() failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                                goto ssl_shutdown;
+                            }
+                        }
+                        break;
+                    }
+
+                }
+                if (out_ptr != http_buf) {
+                    resp_len = (int)(http_buf_size - out_space);
+                    if ((ret = wolfSSL_write(ssl, http_buf, resp_len)) != resp_len) {
+                        fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
+                        goto ssl_shutdown;
+                    }
+                }
+
+                if ((ret = wolfSSL_write(ssl, "\n]\n", strlen("\n]\n"))) != strlen("\n]\n")) {
                     fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
                     goto ssl_shutdown;
                 }
             }
 
-            if ((ret = wolfSSL_write(ssl, "\n]\n", strlen("\n]\n"))) != strlen("\n]\n")) {
-                fprintf(stderr, "ERROR: failed to write: %s\n",wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)));
-                goto ssl_shutdown;
-            }
+            goto ssl_shutdown;
         }
 
-        goto ssl_shutdown;
-    }
+        (void)http_write_header(ssl, http_buf, http_buf_size, 404, 0, NULL, NULL);
 
-    (void)http_write_header(ssl, http_buf, http_buf_size, 404, 0, NULL, NULL);
+        /* don't dock client */
+        transaction_successful = 1;
 
-    /* don't dock client */
-    transaction_successful = 1;
+    ssl_shutdown:
 
-ssl_shutdown:
+        /* if ssl_error != SOCKET_FILTERED_E, then pass in an appropriate event for the endpoint -- no-cert, bad-cert, transaction-forbidden. */
 
-    /* if ssl_error != SOCKET_FILTERED_E, then pass in an appropriate event for the endpoint -- no-cert, bad-cert, transaction-forbidden. */
+        if (wolfsentry_data) {
+            struct wolfsentry_route_metadata_exports m;
 
-    if (wolfsentry_data && (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH))
-        fprintf(stderr, "%s L%d WOLFSENTRY_ACTION_RES_FALLTHROUGH\n",__FILE__,__LINE__);
+            if (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)
+                fprintf(stderr, "%s L%d WOLFSENTRY_ACTION_RES_FALLTHROUGH\n",__FILE__,__LINE__);
 
-    {
-        struct wolfsentry_route_metadata_exports m;
-        ret = wolfsentry_route_get_metadata(wolfsentry_data->rule_route, &m);
-        wolfsentry_time_t now;
-        struct timespec age, purge_after;
-        (void)wolfsentry_time_now_plus_delta(wolfsentry, 0 /* td */, &now);
-        (void)wolfsentry_time_to_timespec(wolfsentry, now - m.insert_time, &age);
-        if (m.purge_after)
-            (void)wolfsentry_time_to_timespec(wolfsentry, m.purge_after - now, &purge_after);
-        else
-            purge_after.tv_sec = 0;
+            ret = wolfsentry_route_get_metadata(wolfsentry_data->rule_route, &m);
+            wolfsentry_time_t now;
+            struct timespec age, purge_after;
+            (void)wolfsentry_time_now_plus_delta(global_wolfsentry, 0 /* td */, &now);
+            (void)wolfsentry_time_to_timespec(global_wolfsentry, now - m.insert_time, &age);
+            if (m.purge_after)
+                (void)wolfsentry_time_to_timespec(global_wolfsentry, m.purge_after - now, &purge_after);
+            else
+                purge_after.tv_sec = 0;
 #ifdef DEBUG_WOLFSENTRY
-        fprintf(stderr,"%s L%d wolfsentry_data->rule_route_id = %u, derog = %u, commend = %u, hits = %u, age = %lds, purge_after=+%lds\n", __FILE__, __LINE__,
-                wolfsentry_data->rule_route_id,
-                m.derogatory_count,
-                m.commendable_count,
-                m.hit_count,
-                age.tv_sec,
-                purge_after.tv_sec
-            );
+            fprintf(stderr,"%s L%d wolfsentry_data->rule_route_id = %u, derog = %u, commend = %u, hits = %u, age = %lds, purge_after=+%lds\n", __FILE__, __LINE__,
+                    wolfsentry_data->rule_route_id,
+                    m.derogatory_count,
+                    m.commendable_count,
+                    m.hit_count,
+                    age.tv_sec,
+                    purge_after.tv_sec
+                );
 #endif
-    }
 
-    if (! (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)) {
-        wolfsentry_action_res_t action_results;
-        if (transaction_successful) {
-            ret = wolfsentry_route_event_dispatch_by_route(wolfsentry,
-                wolfsentry_data->rule_route, "transaction-successful",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED, wolfsentry_data, &action_results);
-            if (ret < 0) {
-                fprintf(stderr, "wolfsentry_route_event_dispatch_by_id() returned "
-                        WOLFSENTRY_ERROR_FMT "\n",
-                        WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            if (! (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)) {
+                wolfsentry_action_res_t action_results;
+                if (transaction_successful) {
+                    ret = wolfsentry_route_event_dispatch_by_route(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
+                                                                   wolfsentry_data->rule_route, "transaction-successful",
+                                                                   WOLFSENTRY_LENGTH_NULL_TERMINATED, wolfsentry_data, &action_results);
+                    if (ret < 0) {
+                        fprintf(stderr, "wolfsentry_route_event_dispatch_by_id() returned "
+                                WOLFSENTRY_ERROR_FMT "\n",
+                                WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                    }
+                } else if (handshake_done)
+                    ret = wolfsentry_route_event_dispatch_by_route(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
+                                                                   wolfsentry_data->rule_route, "transaction-failed",
+                                                                   WOLFSENTRY_LENGTH_NULL_TERMINATED, wolfsentry_data, &action_results);
+                else {
+                    if (wolfsentry_data->ssl_error != SOCKET_FILTERED_E)
+                        ret = wolfsentry_route_event_dispatch_by_route(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
+                                                                       wolfsentry_data->rule_route, "handshake-failed",
+                                                                       WOLFSENTRY_LENGTH_NULL_TERMINATED, wolfsentry_data, &action_results);
+                }
             }
-        } else if (handshake_done)
-            ret = wolfsentry_route_event_dispatch_by_route(wolfsentry,
-                wolfsentry_data->rule_route, "transaction-failed",
-                WOLFSENTRY_LENGTH_NULL_TERMINATED, wolfsentry_data, &action_results);
-        else {
-            if (wolfsentry_data->ssl_error != SOCKET_FILTERED_E)
-                ret = wolfsentry_route_event_dispatch_by_route(wolfsentry,
-                    wolfsentry_data->rule_route, "handshake-failed",
-                    WOLFSENTRY_LENGTH_NULL_TERMINATED, wolfsentry_data, &action_results);
+
+            if (app_data != NULL) {
+                if (wolfsentry_data->rule_route != NULL) {
+                    wolfsentry_action_res_t action_results = 0;
+                    ret = wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
+                                                          wolfsentry_data->rule_route, &action_results);
+#ifdef DEBUG_WOLFSENTRY
+                    fprintf(stderr,"%s L%d rule_route=%p action_results=0%o\n",
+                            __FILE__, __LINE__, wolfsentry_data->rule_route, action_results);
+#endif
+                    if (ret < 0) {
+                        fprintf(stderr, "wolfsentry_route_drop_reference() returned "
+                                WOLFSENTRY_ERROR_FMT "\n",
+                                WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                        exit(1);
+                    }
+                }
+                XFREE(app_data, NULL /* heap */, DYNAMIC_TYPE_TMP_BUFFER);
+                app_data = NULL;
+            }
+
+            wolfsentry_data = NULL;
         }
-    }
 
-    if (handshake_done) {
+        if (handshake_done) {
+            handshake_done = 0;
 #ifdef HTTP_NONBLOCKING
-        retry = HTTP_MAX_NB_TRIES;
-        do {
-            ret = wolfSSL_shutdown(ssl);
-            if (ret == SSL_SHUTDOWN_NOT_DONE) {
-                usleep(500);
-                retry--;
-            } else {
-                break;
-            }
-        } while (retry);
+            retry = HTTP_MAX_NB_TRIES;
+            do {
+                ret = wolfSSL_shutdown(ssl);
+                if (ret == SSL_SHUTDOWN_NOT_DONE) {
+                    usleep(500);
+                    retry--;
+                } else {
+                    break;
+                }
+            } while (retry);
 #else
-        ret = wolfSSL_shutdown(ssl);
+            ret = wolfSSL_shutdown(ssl);
 #endif /* HTTP_NONBLOCKING */
 
-        if (ret < 0) {
-            fprintf(stderr, "wolfSSL_shutdown() returned code %d %s\n",
-                ret, wolfSSL_ERR_reason_error_string(ret));
-        }
-    }
-
-    (void)close(peer_fd);
-
-#ifdef DEBUG_HTTP
-    fprintf(stderr, "Connection closed\n");
-#endif
-    wolfSSL_free(ssl);
-
-    if (app_data != NULL) {
-        if (wolfsentry_data->rule_route != NULL) {
-            wolfsentry_action_res_t action_results = 0;
-            ret = wolfsentry_route_drop_reference(wolfsentry,
-                wolfsentry_data->rule_route, &action_results);
-#ifdef DEBUG_WOLFSENTRY
-            fprintf(stderr,"%s L%d rule_route=%p action_results=0%o\n",
-                __FILE__, __LINE__, wolfsentry_data->rule_route, action_results);
-#endif
             if (ret < 0) {
-                fprintf(stderr, "wolfsentry_route_drop_reference() returned "
-                        WOLFSENTRY_ERROR_FMT "\n",
-                        WOLFSENTRY_ERROR_FMT_ARGS(ret));
-                exit(1);
+                fprintf(stderr, "wolfSSL_shutdown() returned code %d %s\n",
+                        ret, wolfSSL_ERR_reason_error_string(ret));
             }
         }
-        XFREE(app_data, NULL /* heap */, DYNAMIC_TYPE_TMP_BUFFER);
+
+        if (ssl) {
+            wolfSSL_free(ssl);
+            ssl = NULL;
+        }
+
+        if (peer_fd > 0) {
+            (void)close(peer_fd);
+            peer_fd = -1;
+#ifdef DEBUG_HTTP
+            fprintf(stderr, "Connection closed\n");
+#endif
+        }
     }
 
-  }
+    ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&global_wolfsentry, global_thread));
+    if (ret < 0) {
+        fprintf(stderr, "wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT,
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        notnormal = 1;
+    }
 
-  return 0;
+#ifdef WOLFSENTRY_THREADSAFE
+    ret = wolfsentry_destroy_thread_context(global_thread, WOLFSENTRY_THREAD_FLAG_NONE);
+    if (ret < 0) {
+        fprintf(stderr, "%s: thread shutdown failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        notnormal = 1;
+    }
+#endif
+
+    if (! notnormal) {
+        printf("\nnormal exit.\n");
+        exit(0);
+    } else {
+        fprintf(stderr,"\nexiting with warnings or errors.\n");
+        exit(1);
+    }
 }
 
 #else

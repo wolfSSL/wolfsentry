@@ -1,7 +1,7 @@
 /*
  * wolfsentry_json.h
  *
- * Copyright (C) 2021-2022 wolfSSL Inc.
+ * Copyright (C) 2021-2023 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *
@@ -57,12 +57,12 @@ enum {
 struct wolfsentry_json_process_state;
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_config_load_flags_t load_flags,
     struct wolfsentry_json_process_state **jps);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_config_load_flags_t load_flags,
     const JSON_CONFIG *json_config,
     struct wolfsentry_json_process_state **jps);
@@ -86,7 +86,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
     size_t err_buf_size);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const unsigned char *json_in,
     size_t json_in_len,
     wolfsentry_config_load_flags_t load_flags,
@@ -94,7 +94,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot(
     size_t err_buf_size);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const unsigned char *json_in,
     size_t json_in_len,
     wolfsentry_config_load_flags_t load_flags,

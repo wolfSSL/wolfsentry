@@ -138,7 +138,7 @@ int sentry_init()
     wolfsentry_ent_id_t id;
 
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .route_private_data_alignment = 16 };
-    ret =  wolfsentry_init(NULL /* hpi */, &config,
+    ret =  wolfsentry_init(wolfsentry_build_settings, NULL /* hpi */, &config,
                            &wolfsentry);
 
     if (ret < 0)

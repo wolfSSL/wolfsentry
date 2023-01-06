@@ -1,6 +1,6 @@
 # Makefile
 #
-# Copyright (C) 2021-2022 wolfSSL Inc.
+# Copyright (C) 2021-2023 wolfSSL Inc.
 #
 # This file is part of wolfSentry.
 #
@@ -30,7 +30,7 @@ ifdef USER_MAKE_CONF
     include $(USER_MAKE_CONF)
 endif
 
-SRCS := util.c wolfsentry_internal.c addr_families.c routes.c events.c actions.c kv.c
+SRCS := wolfsentry_util.c wolfsentry_internal.c addr_families.c routes.c events.c actions.c kv.c
 
 ifndef SRC_TOP
     SRC_TOP := $(shell pwd -P)
@@ -77,7 +77,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(SRC_TOP) -I$(BUILD_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
@@ -132,7 +132,7 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry_options.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry_options.h
 
 all: $(BUILD_TOP)/$(LIB_NAME)
 
@@ -181,6 +181,7 @@ endif
 	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 endif
 
+$(BUILD_TOP)/$(LIB_NAME): $(BUILD_TOP)/wolfsentry_options.h
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
 ifdef VERY_QUIET
 	@rm -f $@
@@ -206,6 +207,7 @@ endif
 	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
 endif
 
+$(BUILD_TOP)/$(DYNLIB_NAME): $(BUILD_TOP)/wolfsentry_options.h
 $(BUILD_TOP)/$(DYNLIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So))
 ifdef VERY_QUIET
 	@$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
@@ -226,31 +228,35 @@ ifneq "$(NO_JSON)" "1"
     $(BUILD_TOP)/tests/test_json: override CFLAGS+=$(TEST_JSON_CFLAGS)
 endif
 
+$(BUILD_TOP)/wolfsentry/wolfsentry_options.h:
+	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
+	@[ -e $(BUILD_TOP)/wolfsentry/wolfsentry_options.h ] || ln -s ../wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
+
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME)
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $+
+	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
 endif
 
 
 UNITTEST_LIST_SHARED=test_all_shared
 UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]')) $(TEST_JSON_CFLAGS)
 
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME)
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $+
+	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
 endif
 
 ifdef BUILD_DYNAMIC
@@ -338,7 +344,8 @@ endif
 	fi
 
 dist-test: dist
-	@[ -d $(BUILD_TOP)/dist-test ] || mkdir -p $(BUILD_TOP)/dist-test
+	@rm -rf $(BUILD_TOP)/dist-test
+	@mkdir -p $(BUILD_TOP)/dist-test
 ifdef VERY_QUIET
 	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
 else
@@ -349,7 +356,7 @@ dist-test-clean:
 	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $(SRC_TOP)/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $(SRC_TOP)/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
 	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
 
-CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
+CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
 .PHONY: release
 release:

@@ -1,6 +1,6 @@
 # Makefile
 #
-# Copyright (C) 2021-2022 wolfSSL Inc.
+# Copyright (C) 2021-2023 wolfSSL Inc.
 #
 # This file is part of wolfSentry.
 #
@@ -27,7 +27,7 @@ endif
 # lock in the expected major versions of LLVM/clang/compiler-rt-sanitizers, in
 # order of preference:
 ifndef CLANG_PATH
-	CLANG_PATH:=/usr/lib/llvm/15/bin:/usr/lib/llvm-15:/usr/lib/llvm/14/bin:/usr/lib/llvm-14:/usr/lib/llvm/13/bin:/usr/lib/llvm-13:/usr/bin
+	CLANG_PATH:=/usr/lib/llvm/16/bin:/usr/lib/llvm-16:/usr/lib/llvm/15/bin:/usr/lib/llvm-15:/usr/lib/llvm/14/bin:/usr/lib/llvm-14:/usr/lib/llvm/13/bin:/usr/lib/llvm-13:/usr/bin
 endif
 
 valgrind-all-clang: PATH:=$(CLANG_PATH):$(PATH)
@@ -100,7 +100,7 @@ sanitize-no-leak: TEST_ENV+=ASAN_OPTIONS='detect_invalid_pointer_pairs=2:halt_on
 sanitize-no-leak: test
 
 .PHONY: sanitize-thread
-sanitize-thread: CFLAGS+=-fsanitize=thread -DWOLFSENTRY_LOCK_ERROR_CHECKING -DWOLFSENTRY_LOCK_DEBUGGING
+sanitize-thread: CFLAGS+=-fsanitize=thread
 sanitize-thread: LDFLAGS+=-fsanitize=thread
 sanitize-thread: TEST_ENV+=ASAN_OPTIONS='halt_on_error=1'
 sanitize-thread: test

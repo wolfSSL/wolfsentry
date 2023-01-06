@@ -1,4 +1,26 @@
 /*
+ * centijson_dom.h
+ *
+ * Copyright (C) 2022-2023 wolfSSL Inc.
+ *
+ * This file is part of wolfSentry.
+ *
+ * wolfSentry is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSentry is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+/*
  * CentiJSON
  * <http://github.com/mity/centijson>
  *
@@ -75,7 +97,7 @@ typedef struct JSON_DOM_PARSER {
 /* Used internally by load_config.c:handle_user_value_clause() */
 int json_dom_init_1(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_DOM_PARSER* dom_parser, unsigned dom_flags);
 
@@ -93,7 +115,7 @@ int json_dom_clean(JSON_DOM_PARSER* dom_parser);
  */
 WOLFSENTRY_API int json_dom_init(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_DOM_PARSER* dom_parser, const JSON_CONFIG* config, unsigned dom_flags);
 
@@ -120,7 +142,7 @@ WOLFSENTRY_API int json_dom_fini(JSON_DOM_PARSER* dom_parser, JSON_VALUE* p_dom,
  */
 WOLFSENTRY_API int json_dom_parse(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                    const unsigned char* input, size_t size, const JSON_CONFIG* config,
                    unsigned dom_flags, JSON_VALUE* p_root, JSON_INPUT_POS* p_pos);
@@ -143,7 +165,7 @@ WOLFSENTRY_API int json_dom_parse(
 
 WOLFSENTRY_API int json_dom_dump(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                   const JSON_VALUE* root,
                   JSON_DUMP_CALLBACK write_func, void* user_data,

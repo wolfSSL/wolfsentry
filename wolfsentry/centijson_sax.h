@@ -1,4 +1,26 @@
 /*
+ * centijson_sax.h
+ *
+ * Copyright (C) 2021-2023 wolfSSL Inc.
+ *
+ * This file is part of wolfSentry.
+ *
+ * wolfSentry is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSentry is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+/*
  * CentiJSON
  * <http://github.com/mity/centijson>
  *
@@ -161,6 +183,9 @@ typedef struct JSON_CALLBACKS {
 typedef struct JSON_PARSER {
 #ifdef WOLFSENTRY
     struct wolfsentry_allocator *allocator;
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_thread_context *thread;
+#endif
 #endif
     JSON_CALLBACKS callbacks;
     JSON_CONFIG config;
@@ -205,7 +230,7 @@ WOLFSENTRY_API void json_default_config(JSON_CONFIG* config);
  */
 WOLFSENTRY_API int json_init(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
               JSON_PARSER* parser,
               const JSON_CALLBACKS* callbacks,
@@ -245,7 +270,7 @@ WOLFSENTRY_API int json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos);
  */
 WOLFSENTRY_API int json_parse(
 #ifdef WOLFSENTRY
-    struct wolfsentry_allocator *allocator,
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
                const unsigned char* input, size_t size,
                const JSON_CALLBACKS* callbacks, const JSON_CONFIG* config,

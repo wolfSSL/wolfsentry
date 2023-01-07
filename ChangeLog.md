@@ -1,3 +1,71 @@
+# wolfSentry Release 0.8.0 (Jan 6, 2023)
+
+Preview Release 0.8.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:
+
+## New Features
+
+### Multithreaded application support
+
+* Automatic locking on API entry, using a high performance, highly portable
+  semaphore-based readwrite lock facility, with error checking and opportunistic
+  lock sharing.
+
+* Thread-specific deadlines set by the caller, limiting waits for lock
+  acquisition as needed for realtime applications.
+
+* A mechanism for per-thread private data, accessible to user plugins.
+
+* No dependencies on platform-supplied thread-local storage.
+
+## Updated Examples
+
+### examples/notification-demo
+
+* Add interrupt handling for clean error-checked shutdown in `log_server`.
+
+* Add `/kill-server` admin command to `log_server`.
+
+* Reduce penalty-box-duration in `notify-config.{json,h}` to 10s for demo convenience.
+
+## Noteworthy Changes and Additions
+
+* A new first argument to `wolfsentry_init_ex()` and `wolfsentry_init()`,
+  `caller_build_settings`, for runtime error-checking of application/library
+  compatibility.  This mechanism will also allow future library changes to be
+  conditionalized on caller version and/or configuration expectations as needed,
+  often avoiding the need for application recompilation.
+
+* `src/util.c` was renamed to `src/wolfsentry_util.c`.
+
+* `wolfsentry/wolfsentry_settings.h` was added, containing setup code previously in `wolfsentry/wolfsentry.h`.
+
+* Error IDs in `enum wolfsentry_error_id` are all now negative, and a new `WOLFSENTRY_SUCCESS_ID_*` namespace was added, with positive values and supporting macros.
+
+### New public utility APIs, macros, types, etc.
+
+* `WOLFSENTRY_VERSION_*` macros, for version testing
+
+* `wolfsentry_init_thread_context()`, `wolfsentry_alloc_thread_context()`, `wolfsentry_get_thread_id()`, `wolfsentry_get_thread_user_context()`, `wolfsentry_get_thread_deadline()`, `wolfsentry_get_thread_flags()`, `wolfsentry_destroy_thread_context()`, `wolfsentry_free_thread_context()`, `wolfsentry_set_deadline_rel_usecs()`, `wolfsentry_set_deadline_abs()`, `wolfsentry_clear_deadline()`, `wolfsentry_set_thread_readonly()`, `wolfsentry_set_thread_readwrite()`
+
+* `WOLFSENTRY_DEADLINE_NEVER` and `WOLFSENTRY_DEADLINE_NOW`, used internally and for testing values returned by `wolfsentry_get_thread_deadline()`
+
+* Many new values in the `WOLFSENTRY_LOCK_FLAG_*` set.
+
+* `wolfsentry_lock_*()` APIs now firmed, and new `wolfsentry_context_lock_shared_with_reservation_abstimed()`.
+
+* `WOLFSENTRY_CONTEXT_*` helper macros.
+
+* `WOLFSENTRY_UNLOCK_*()`, `WOLFSENTRY_SHARED_*()`, `WOLFSENTRY_MUTEX_*()`, and `WOLFSENTRY_PROMOTABLE_*()` helper macros
+
+* `WOLFSENTRY_ERROR_UNLOCK_AND_RETURN()`, `WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN()`, and related helper macros.
+
+## Bug Fixes
+
+* Various fixes, and additional hardening and cleanup, in the readwrite lock kernel.
+
+* Various fixes in `Makefile`, for proper handling and installation of `wolfsentry_options.h`.
+
+
 # wolfSentry Release 0.7.0 (Nov 7, 2022)
 
 Preview Release 0.7.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:

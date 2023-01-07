@@ -6,9 +6,9 @@ wolfSentry is the wolfSSL IDPS (Intrusion Detection and Prevention System).  It 
 
 At a high level, wolfSentry is a dynamically configurable logic hub, arbitrarily associating user-defined events with user-defined actions, contextualized by connection attributes, tracking the evolution of the client-server relationship. At a low level, wolfSentry is an embedded firewall engine (both static and fully dynamic), with O(log n) lookup of known hosts/netblocks.
 
-wolfSentry will be fully integrated into the wolfSSL library, wolfMQTT, and wolfSSH, with optional in-tree call-ins and callbacks that give application developers turnkey IDPS across all network-facing wolfSSL products, with a viable zero-configuration option. These integrations will be available via simple `--enable-wolfidps` configure options in wolfSSL sibling products.
+wolfSentry will be fully integrated into the wolfSSL library, wolfMQTT, and wolfSSH, with optional in-tree call-ins and callbacks that give application developers turnkey IDPS across all network-facing wolfSSL products, with a viable zero-configuration option. These integrations will be available via simple `--enable-wolfsentry` configure options in wolfSSL sibling products.
 
-The wolfSentry engine will be dynamically configurable programmatically through an API, or from a textual input file supplied to the engine. Callback and client-server implementations will also be supplied that deliver advanced capabilities including remote logging through MQTT or syslog, and remote configuration and status queries, all cryptographically secured.
+The wolfSentry engine is dynamically configurable programmatically through an API, or from a textual input file in JSON supplied to the engine. Callback and client-server implementations can deliver advanced capabilities including remote logging through MQTT or syslog, and remote configuration and status queries, all cryptographically secured.
 
 Notably, wolfSentry is designed from the ground up to function well in resource-constrained, bare-metal, and realtime environments, with algorithms to stay within designated maximum memory footprints and maintain deterministic throughput. Opportunities include RTOS IDPS, and IDPS for ARM silicon and other common embedded CPUs and MCUs. wolfSentry with dynamic firewalling can add as little as 64k to the code footprint, and 32k to the volatile state footprint, and can fully leverage the existing logic and state of applications and sibling libraries.
 
@@ -16,8 +16,8 @@ Notably, wolfSentry is designed from the ground up to function well in resource-
 ## Dependencies
 
 In its default build, wolfSentry depends on a POSIX runtime, specifically the
-heap allocator, clock_gettime, stdio, semaphore, and string APIs.  However,
-these dependencies can be avoided with various build-time options.  In
+heap allocator, clock_gettime, stdio, semaphore, pthreads, and string APIs.
+However, these dependencies can be avoided with various build-time options.  In
 particular, the recipe
 
 ```
@@ -101,3 +101,8 @@ In the wolfsentry/examples/ directory are a set of example ports and
 applications, including a port to FreeRTOS-LWIP (integrated directly in the IP
 stack) and a demo pop-up notification system integrating with the Linux D-Bus
 facility.
+
+
+## Change Log
+
+The latest changes and additions are noted in ChangeLog.md at the top of the repository.

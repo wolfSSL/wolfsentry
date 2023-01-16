@@ -165,7 +165,7 @@ endif
 $(BUILD_TOP)/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentry_options_h.awk $(BUILD_TOP)/.build_params
 	@echo '$(CFLAGS)' | $< > $@
 
-$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)): $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(SRC_TOP)/Makefile
+$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(SRC_TOP)/Makefile
 
 INTERNAL_CFLAGS := -DBUILDING_LIBWOLFSENTRY
 
@@ -181,7 +181,6 @@ endif
 	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 endif
 
-$(BUILD_TOP)/$(LIB_NAME): $(BUILD_TOP)/wolfsentry_options.h
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
 ifdef VERY_QUIET
 	@rm -f $@
@@ -207,7 +206,6 @@ endif
 	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
 endif
 
-$(BUILD_TOP)/$(DYNLIB_NAME): $(BUILD_TOP)/wolfsentry_options.h
 $(BUILD_TOP)/$(DYNLIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So))
 ifdef VERY_QUIET
 	@$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+

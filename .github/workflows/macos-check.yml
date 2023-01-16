@@ -14,4 +14,4 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: make test
-      run: make -j SINGLETHREADED=1 test
+      run: make -j test

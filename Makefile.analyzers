@@ -1,4 +1,4 @@
-# Makefile
+# Makefile.analyzers
 #
 # Copyright (C) 2021-2023 wolfSSL Inc.
 #
@@ -282,9 +282,10 @@ lock-error-checking-test:
 
 .PHONY: dist-check
 dist-check:
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 dist-test
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 dist-test-clean
-	@echo $@ 'passed.'
+	@if [[ ! -d .git ]]; then echo 'skipping dist-check in non-git source tree.'; exit 0; fi; \
+	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 dist-test && \
+	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 dist-test-clean && \
+	echo $@ 'passed.'
 
 .PHONY: check-common
 check-common: dynamic-build-test c99-test-gcc c99-test-clang singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-stdio-build-test minimal-build-test

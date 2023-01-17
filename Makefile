@@ -331,6 +331,7 @@ endif
 
 .PHONY: dist
 dist:
+	@if [[ ! -d .git ]]; then echo 'dist target requires git artifacts.' 1>&2; exit 1; fi
 ifndef VERY_QUIET
 	@echo "generating wolfsentry-$(VERSION).tgz"
 endif
@@ -364,6 +365,80 @@ ifndef VERY_QUIET
 endif
 	@cd $(SRC_TOP) || exit $$?; \
 	git archive --format=zip --prefix="wolfsentry-$(RELEASE)/" --worktree-attributes --output="wolfsentry-$(RELEASE).zip" "$(RELEASE)"
+
+.PHONY: com-bundle
+com-bundle:
+	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make commercial bundle -- version isn't known."; exit 1; fi
+	@if [[ ! -d "$(SRC_TOP)/../scripts/license_replace" ]]; then echo "license_replace script directory not found."; exit 1; fi
+ifndef VERY_QUIET
+	@echo "generating wolfsentry-commercial-$(RELEASE).tgz and wolfsentry-commercial-$(RELEASE).zip"
+endif
+	@cd $(SRC_TOP) || exit $$?; \
+	workdir=$$(mktemp -d) || exit $$?; \
+	trap "rm -rf \"$$workdir\"" EXIT; \
+	git archive --format=tar --prefix="wolfsentry-commercial-$(RELEASE)/" --worktree-attributes "$(RELEASE)" | (cd "$$workdir" && tar -xf -) || exit $$?; \
+	pushd "$$workdir" >/dev/null || exit $$?; \
+	awk ' \
+	BEGIN { \
+		FS = ""; \
+		boilerplate = "Copyright (C) 2021-" strftime("%Y", systime(), 1) " wolfSSL Inc.  All rights reserved.\n\nThis file is part of wolfSentry.\n\nContact licensing@wolfssl.com with any questions or comments.\n\nhttps://www.wolfssl.com"; \
+	} \
+	BEGINFILE { \
+		seen_copyright = 0; \
+		seen_copyright_end = 0; \
+		tmpfile = FILENAME "-comm"; \
+	} \
+	{ \
+		if (seen_copyright && seen_copyright_end) {print >>tmpfile; next;} \
+		if ((seen_copyright == 1) && ($$0 ~ "\\*/$$")) { \
+			seen_copyright_end = 1; \
+			next; \
+		} \
+		if ((seen_copyright == 2) && ($$0 !~ "^#")) { seen_copyright_end = 1;} \
+		if (seen_copyright) {next;} \
+	} \
+	/^\/\/ SPDX-License-Identifier: GPL-2.0-or-later/ { \
+		seen_copyright = 1; \
+		seen_copyright_end = 1; \
+		print "/* " gensub("\n","\n * ","g",boilerplate) "\n */" >>tmpfile; \
+		next; \
+	} \
+	/^ \* [cC]opyright/ { \
+		seen_copyright = 1; \
+		print " * " gensub("\n","\n * ","g",boilerplate) "\n */" >>tmpfile; \
+		next; \
+	} \
+	/^# [cC]opyright/ { \
+		seen_copyright = 2; \
+		print "# " gensub("\n","\n# ","g",boilerplate) >>tmpfile; \
+		next; \
+	} \
+	{print >>tmpfile;} \
+	ENDFILE { \
+		if (! seen_copyright) { \
+			print "copyright boilerplate missing from " FILENAME; \
+			system("rm \"" tmpfile "\""); \
+		} else { \
+		if (seen_copyright && (! seen_copyright_end)) { \
+			print FILENAME " copyright notice end not found." >"/dev/stderr"; \
+			exit(1); \
+		} \
+		exitstat = system("touch --reference=\"" FILENAME "\" \"" tmpfile "\""); \
+		if (exitstat != 0) { \
+			exit(exitstat); \
+		} \
+		exitstat = system("chmod --reference=\"" FILENAME "\" \"" tmpfile "\""); \
+		if (exitstat != 0) { \
+			exit(exitstat); \
+		} \
+		exitstat = system("mv \"" tmpfile "\" \"" FILENAME "\""); \
+		if (exitstat != 0) { \
+			exit(exitstat); \
+		} \
+		} \
+	}' $$(find . -name Makefile\* -o -name '*.[ch]') || exit $$?; \
+	tar --owner=root:0 --group=root:0 --gzip -cf "$(SRC_TOP)/wolfsentry-commercial-$(RELEASE).tgz" "wolfsentry-commercial-$(RELEASE)" || exit $$?; \
+	zip --quiet -r "$(SRC_TOP)/wolfsentry-commercial-$(RELEASE).zip" "wolfsentry-commercial-$(RELEASE)"
 
 .PHONY: clean
 clean:

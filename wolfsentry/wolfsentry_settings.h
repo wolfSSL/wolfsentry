@@ -31,34 +31,44 @@
 
 #define WOLFSENTRY_THREADSAFE
 
-#if defined(__MACH__) || defined(FREERTOS) || defined(_WIN32)
-#define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+#if defined(__MACH__)
+    #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+#elif defined(FREERTOS)
+    #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+    #define WOLFSENTRY_USE_NONPOSIX_THREADS
+#elif defined(_WIN32)
+    #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+    #define WOLFSENTRY_USE_NONPOSIX_THREADS
 #endif
 
 #ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-#define WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
+    #define WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
+#endif
+
+#ifndef WOLFSENTRY_USE_NONPOSIX_THREADS
+    #define WOLFSENTRY_USE_NATIVE_POSIX_THREADS
 #endif
 
 #ifndef WOLFSENTRY_HAVE_NONGNU_ATOMICS
-#define WOLFSENTRY_HAVE_GNU_ATOMICS
+    #define WOLFSENTRY_HAVE_GNU_ATOMICS
 #endif
 
 #endif /* !WOLFSENTRY_SINGLETHREADED */
 
 #ifndef WOLFSENTRY_NO_CLOCK_BUILTIN
-#define WOLFSENTRY_CLOCK_BUILTINS
+    #define WOLFSENTRY_CLOCK_BUILTINS
 #endif
 
 #ifndef WOLFSENTRY_NO_MALLOC_BUILTIN
-#define WOLFSENTRY_MALLOC_BUILTINS
+    #define WOLFSENTRY_MALLOC_BUILTINS
 #endif
 
 #ifndef WOLFSENTRY_NO_ERROR_STRINGS
-#define WOLFSENTRY_ERROR_STRINGS
+    #define WOLFSENTRY_ERROR_STRINGS
 #endif
 
 #ifndef WOLFSENTRY_NO_PROTOCOL_NAMES
-#define WOLFSENTRY_PROTOCOL_NAMES
+    #define WOLFSENTRY_PROTOCOL_NAMES
 #endif
 
 #if defined(WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES) || defined(WOLFSENTRY_CLOCK_BUILTINS) || defined(WOLFSENTRY_MALLOC_BUILTINS)
@@ -164,18 +174,17 @@ typedef uint32_t enumint_t;
 #endif
 
 #if defined(WOLFSENTRY_THREADSAFE)
-    #ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-        #include <pthread.h>
-    #elif defined(WOLFSENTRY_THREAD_INCLUDE)
+    #if defined(WOLFSENTRY_THREAD_INCLUDE)
         #include WOLFSENTRY_THREAD_INCLUDE
+    #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
+        #include <pthread.h>
     #else
         #error Must supply WOLFSENTRY_THREAD_INCLUDE for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
-    #if !defined(WOLFSENTRY_THREAD_ID_T) && !defined(WOLFSENTRY_USE_NONPOSIX_SEMAPHORES)
-        #define WOLFSENTRY_THREAD_ID_T pthread_t
-    #endif
-    #ifdef WOLFSENTRY_THREAD_ID_T
+    #if defined(WOLFSENTRY_THREAD_ID_T)
         typedef WOLFSENTRY_THREAD_ID_T wolfsentry_thread_id_t;
+    #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
+        typedef pthread_t wolfsentry_thread_id_t;
     #else
         #error Must supply WOLFSENTRY_THREAD_ID_T for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
@@ -183,7 +192,7 @@ typedef uint32_t enumint_t;
         #define WOLFSENTRY_THREAD_NO_ID 0
     #endif
     #if !defined(WOLFSENTRY_THREAD_GET_ID_HANDLER)
-        #if !defined(WOLFSENTRY_USE_NONPOSIX_SEMAPHORES)
+        #if defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
             #define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self()
         #else
             #error Must supply WOLFSENTRY_THREAD_GET_ID_HANDLER for WOLFSENTRY_THREADSAFE on non-POSIX targets.

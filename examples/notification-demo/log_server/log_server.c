@@ -20,8 +20,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-// SPDX-License-Identifier: GPL-2.0-or-later
-
 //#define DEBUG_HTTP
 //#define DEBUG_HTTP_IO
 #define DEBUG_TLS
@@ -1500,6 +1498,8 @@ int main(int argc, char **argv) {
         int retry;
 #endif
         char *url, *url_end;
+
+        transaction_successful = 0;
 
         client_len = sizeof client_addr;
         peer_fd = accept(inbound_fd, (struct sockaddr*)&client_addr,

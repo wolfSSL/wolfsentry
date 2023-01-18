@@ -700,15 +700,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfs
  * FreeRTOS).
  */
 
-#ifdef WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
-#include <errno.h>
+#ifdef WOLFSENTRY_USE_NATIVE_POSIX_THREADS
+    #include <errno.h>
 #endif
 
 #ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
 
 #ifdef __MACH__
-
-#include <errno.h>
 
 /* Apple style dispatch semaphores -- this uses the only unnamed semaphore
  * facility available in Darwin since POSIX sem_* deprecation.  see
@@ -763,7 +761,7 @@ static int darwin_sem_wait(sem_t *sem)
 }
 #define sem_wait darwin_sem_wait
 
-static int darwin_sem_timedwait(sem_t *sem, struct timespec *abs_timeout) {
+static int darwin_sem_timedwait(sem_t *sem, const struct timespec *abs_timeout) {
     if (dispatch_semaphore_wait(*sem, dispatch_walltime(abs_timeout, 0)) == 0)
         WOLFSENTRY_RETURN_VALUE(0);
     else {

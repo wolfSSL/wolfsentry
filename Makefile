@@ -132,7 +132,7 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry_options.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 
 all: $(BUILD_TOP)/$(LIB_NAME)
 
@@ -162,10 +162,11 @@ else
 	@{ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
 endif
 
-$(BUILD_TOP)/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentry_options_h.awk $(BUILD_TOP)/.build_params
+$(BUILD_TOP)/wolfsentry/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentry_options_h.awk $(BUILD_TOP)/.build_params
+	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
 	@echo '$(CFLAGS)' | $< > $@
 
-$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(SRC_TOP)/Makefile
+$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(SRC_TOP)/Makefile
 
 INTERNAL_CFLAGS := -DBUILDING_LIBWOLFSENTRY
 
@@ -226,20 +227,16 @@ ifneq "$(NO_JSON)" "1"
     $(BUILD_TOP)/tests/test_json: override CFLAGS+=$(TEST_JSON_CFLAGS)
 endif
 
-$(BUILD_TOP)/wolfsentry/wolfsentry_options.h:
-	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
-	@[ -e $(BUILD_TOP)/wolfsentry/wolfsentry_options.h ] || ln -s ../wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
-
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
+	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
+	@$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
 endif
 
 
@@ -249,12 +246,12 @@ UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
+	$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) -include $(BUILD_TOP)/wolfsentry_options.h $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
+	@$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
 endif
 
 ifdef BUILD_DYNAMIC
@@ -326,7 +323,7 @@ ifndef VERSION
 endif
 
 ifndef RELEASE
-	RELEASE := $(shell git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1)" 2>/dev/null)
+    RELEASE := $(shell git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1 2>/dev/null)" 2>/dev/null)
 endif
 
 .PHONY: dist
@@ -355,7 +352,7 @@ dist-test-clean:
 	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $(SRC_TOP)/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $(SRC_TOP)/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
 	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
 
-CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry_options.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
+CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
 .PHONY: release
 release:
@@ -378,65 +375,7 @@ endif
 	trap "rm -rf \"$$workdir\"" EXIT; \
 	git archive --format=tar --prefix="wolfsentry-commercial-$(RELEASE)/" --worktree-attributes "$(RELEASE)" | (cd "$$workdir" && tar -xf -) || exit $$?; \
 	pushd "$$workdir" >/dev/null || exit $$?; \
-	awk ' \
-	BEGIN { \
-		FS = ""; \
-		boilerplate = "Copyright (C) 2021-" strftime("%Y", systime(), 1) " wolfSSL Inc.  All rights reserved.\n\nThis file is part of wolfSentry.\n\nContact licensing@wolfssl.com with any questions or comments.\n\nhttps://www.wolfssl.com"; \
-	} \
-	BEGINFILE { \
-		seen_copyright = 0; \
-		seen_copyright_end = 0; \
-		tmpfile = FILENAME "-comm"; \
-	} \
-	{ \
-		if (seen_copyright && seen_copyright_end) {print >>tmpfile; next;} \
-		if ((seen_copyright == 1) && ($$0 ~ "\\*/$$")) { \
-			seen_copyright_end = 1; \
-			next; \
-		} \
-		if ((seen_copyright == 2) && ($$0 !~ "^#")) { seen_copyright_end = 1;} \
-		if (seen_copyright) {next;} \
-	} \
-	/^\/\/ SPDX-License-Identifier: GPL-2.0-or-later/ { \
-		seen_copyright = 1; \
-		seen_copyright_end = 1; \
-		print "/* " gensub("\n","\n * ","g",boilerplate) "\n */" >>tmpfile; \
-		next; \
-	} \
-	/^ \* [cC]opyright/ { \
-		seen_copyright = 1; \
-		print " * " gensub("\n","\n * ","g",boilerplate) "\n */" >>tmpfile; \
-		next; \
-	} \
-	/^# [cC]opyright/ { \
-		seen_copyright = 2; \
-		print "# " gensub("\n","\n# ","g",boilerplate) >>tmpfile; \
-		next; \
-	} \
-	{print >>tmpfile;} \
-	ENDFILE { \
-		if (! seen_copyright) { \
-			print "copyright boilerplate missing from " FILENAME; \
-			system("rm \"" tmpfile "\""); \
-		} else { \
-		if (seen_copyright && (! seen_copyright_end)) { \
-			print FILENAME " copyright notice end not found." >"/dev/stderr"; \
-			exit(1); \
-		} \
-		exitstat = system("touch --reference=\"" FILENAME "\" \"" tmpfile "\""); \
-		if (exitstat != 0) { \
-			exit(exitstat); \
-		} \
-		exitstat = system("chmod --reference=\"" FILENAME "\" \"" tmpfile "\""); \
-		if (exitstat != 0) { \
-			exit(exitstat); \
-		} \
-		exitstat = system("mv \"" tmpfile "\" \"" FILENAME "\""); \
-		if (exitstat != 0) { \
-			exit(exitstat); \
-		} \
-		} \
-	}' $$(find . -name Makefile\* -o -name '*.[ch]') || exit $$?; \
+	$(SRC_TOP)/scripts/convert_copyright_boilerplate.awk $$(find . -name Makefile\* -o -name '*.[ch]' -o -name '*.sh' -o -name '*.awk') || exit $$?; \
 	tar --owner=root:0 --group=root:0 --gzip -cf "$(SRC_TOP)/wolfsentry-commercial-$(RELEASE).tgz" "wolfsentry-commercial-$(RELEASE)" || exit $$?; \
 	zip --quiet -r "$(SRC_TOP)/wolfsentry-commercial-$(RELEASE).zip" "wolfsentry-commercial-$(RELEASE)"
 

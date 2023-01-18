@@ -20,8 +20,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-// SPDX-License-Identifier: GPL-2.0-or-later
-
 //#define DEBUG_HTTP
 //#define DEBUG_HTTP_IO
 #define DEBUG_TLS

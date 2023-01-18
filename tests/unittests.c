@@ -526,8 +526,6 @@ usleep(10000);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
-    printf("test_rwlocks succeeded.\n");
-
     WOLFSENTRY_RETURN_OK;
 }
 

@@ -1,3 +1,18 @@
+# wolfSentry Release 1.0.0 (Jan 18, 2023)
+
+Production Release 1.0.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## Noteworthy Changes and Additions
+
+* Makefile improvements around wolfsentry_options.h, and a new com-bundle rule.
+
+* A new macro WOLFSENTRY_USE_NONPOSIX_THREADS, separated from WOLFSENTRY_USE_NONPOSIX_SEMAPHORES, supporting mixed-model targets, e.g. Mac OS X.
+
+## Bug Fixes
+
+* In examples/notification-demo/log_server/log_server.c, in main(), properly reset `transaction_successful` at top of accept loop.
+
+
 # wolfSentry Release 0.8.0 (Jan 6, 2023)
 
 Preview Release 0.8.0 of the wolfSentry embedded firewall/IDPS has bug fixes and new features including:

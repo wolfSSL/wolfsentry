@@ -77,7 +77,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I$(SRC_TOP) -I$(BUILD_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
@@ -318,39 +318,40 @@ ifndef TAR
 endif
 
 ifndef VERSION
-    VERSION := $(shell git rev-parse --short=8 HEAD 2>/dev/null || echo xxxxxxxx)
-    VERSION := $(VERSION)$(shell git diff --quiet 2>/dev/null || [ $$? -ne 1 ] || echo "-dirty")
+    VERSION := $(shell cd "$(SRC_TOP)" && git rev-parse --short=8 HEAD 2>/dev/null || echo xxxxxxxx)
+    VERSION := $(VERSION)$(shell cd "$(SRC_TOP)" && git diff --quiet 2>/dev/null || [ $$? -ne 1 ] || echo "-dirty")
 endif
 
 ifndef RELEASE
-    RELEASE := $(shell git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1 2>/dev/null)" 2>/dev/null)
+    RELEASE := $(shell cd "$(SRC_TOP)" && git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1 2>/dev/null)" 2>/dev/null)
 endif
 
 .PHONY: dist
 dist:
-	@if [[ ! -d .git ]]; then echo 'dist target requires git artifacts.' 1>&2; exit 1; fi
+	@if [[ ! -d "$(SRC_TOP)/.git" ]]; then echo 'dist target requires git artifacts.' 1>&2; exit 1; fi
 ifndef VERY_QUIET
-	@echo "generating wolfsentry-$(VERSION).tgz"
+	@echo "generating dist archive wolfsentry-$(VERSION).tgz"
 endif
-	@cd $(SRC_TOP); \
+	@DEST_DIR="$$PWD"; \
+	cd $(SRC_TOP); \
 	if [[ "$(VERSION)" =~ -dirty$$ ]]; then \
-		$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf "wolfsentry-$(VERSION).tgz" $$(git ls-files); \
+		$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" $$(git ls-files); \
 	else \
-		git archive --format=tar --prefix="wolfsentry-$(VERSION)/" --worktree-attributes --output="wolfsentry-$(VERSION).tgz" "$(VERSION)"; \
+		git archive --format=tar --prefix="wolfsentry-$(VERSION)/" --worktree-attributes --output="$${DEST_DIR}/wolfsentry-$(VERSION).tgz" "$(VERSION)"; \
 	fi
 
 dist-test: dist
 	@rm -rf $(BUILD_TOP)/dist-test
 	@mkdir -p $(BUILD_TOP)/dist-test
 ifdef VERY_QUIET
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
+	@DEST_DIR="$$PWD" && cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
 else
-	@cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$(SRC_TOP)/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) test
+	@DEST_DIR="$$PWD" && cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) test
 endif
 
 dist-test-clean:
-	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $(SRC_TOP)/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $(SRC_TOP)/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
-	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
+	@DEST_DIR="$$PWD" && [ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $${DEST_DIR}/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $${DEST_DIR}/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
+	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) && rmdir $(BUILD_TOP)/dist-test
 
 CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
@@ -358,35 +359,43 @@ CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry
 release:
 	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make release -- version isn't known."; exit 1; fi
 ifndef VERY_QUIET
-	@echo "generating wolfsentry-$(RELEASE).zip"
+	@echo "generating release archive $${PWD}/wolfsentry-$(RELEASE).zip"
 endif
-	@cd $(SRC_TOP) || exit $$?; \
-	git archive --format=zip --prefix="wolfsentry-$(RELEASE)/" --worktree-attributes --output="wolfsentry-$(RELEASE).zip" "$(RELEASE)"
+	@DEST_DIR="$$PWD"; \
+	cd $(SRC_TOP) || exit $$?; \
+	git archive --format=zip --prefix="wolfsentry-$(RELEASE)/" --worktree-attributes --output="$${DEST_DIR}/wolfsentry-$(RELEASE).zip" "$(RELEASE)"
 
 .PHONY: com-bundle
 com-bundle:
 	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make commercial bundle -- version isn't known."; exit 1; fi
 	@if [[ ! -d "$(SRC_TOP)/../scripts/license_replace" ]]; then echo "license_replace script directory not found."; exit 1; fi
 ifndef VERY_QUIET
-	@echo "generating wolfsentry-commercial-$(RELEASE).tgz and wolfsentry-commercial-$(RELEASE).zip"
+	@echo "generating com-bundle $${PWD}/wolfsentry-$(RELEASE)-commercial.7z ..."
 endif
-	@cd $(SRC_TOP) || exit $$?; \
+	@DEST_DIR="$$PWD"; \
+	cd $(SRC_TOP) || exit $$?; \
+	read -r -p 'com bundle password? [empty to autogenerate] ' the_password; \
+	if [[ -z "$$the_password" ]]; then the_password=$$(head -c 15 /dev/urandom | base64) || exit $$?; echo "com-bundle generated password: $${the_password}"; fi; \
 	workdir=$$(mktemp -d) || exit $$?; \
 	trap "rm -rf \"$$workdir\"" EXIT; \
-	git archive --format=tar --prefix="wolfsentry-commercial-$(RELEASE)/" --worktree-attributes "$(RELEASE)" | (cd "$$workdir" && tar -xf -) || exit $$?; \
+	git archive --format=tar --prefix="wolfsentry-$(RELEASE)-commercial/" --worktree-attributes "$(RELEASE)" | (cd "$$workdir" && tar -xf -) || exit $$?; \
 	pushd "$$workdir" >/dev/null || exit $$?; \
 	$(SRC_TOP)/scripts/convert_copyright_boilerplate.awk $$(find . -name Makefile\* -o -name '*.[ch]' -o -name '*.sh' -o -name '*.awk') || exit $$?; \
-	tar --owner=root:0 --group=root:0 --gzip -cf "$(SRC_TOP)/wolfsentry-commercial-$(RELEASE).tgz" "wolfsentry-commercial-$(RELEASE)" || exit $$?; \
-	zip --quiet -r "$(SRC_TOP)/wolfsentry-commercial-$(RELEASE).zip" "wolfsentry-commercial-$(RELEASE)"
+	if [[ -e "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" ]]; then rm "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" || exit $$?; fi; \
+	7za a -r -mmt -mhe=on -mx=9 -ms=on -p"$$the_password" "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" "wolfsentry-$(RELEASE)-commercial" 1>/dev/null || exit $$?; \
+	echo -n "com-bundle SHA256: " && sha256sum "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z"
 
 .PHONY: clean
 clean:
-ifdef VERY_QUIET
-	@rm $(CLEAN_RM_ARGS)
+ifeq "$(V)" "1"
+	rm $(CLEAN_RM_ARGS)
 else
-	@rm $(CLEAN_RM_ARGS) && echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
+	@rm $(CLEAN_RM_ARGS)
 endif
-	@[ "$(BUILD_TOP)" != "." ] && find $(BUILD_TOP) -depth -type d 2>/dev/null | xargs rmdir 2>/dev/null || exit 0
+	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,wolfsentry,examples,scripts,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir || exit 0
+ifndef VERY_QUIET
+	@echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
+endif
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd))

@@ -428,7 +428,7 @@ ifeq "$(V)" "1"
 else
 	@rm $(CLEAN_RM_ARGS)
 endif
-	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,wolfsentry,examples,scripts,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir || exit 0
+	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,wolfsentry,examples,scripts,FreeRTOS,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir || exit 0
 ifndef VERY_QUIET
 	@echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
 endif

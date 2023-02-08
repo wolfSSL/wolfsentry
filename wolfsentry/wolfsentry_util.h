@@ -34,6 +34,18 @@
 #define container_of(ptr, container_type, member_name) ((container_type *)(void *)(((byte *)(ptr)) - offsetof(container_type, member_name)))
 #endif
 
+#ifndef attr_align_to
+#ifdef __GNUC__
+#define attr_align_to(x) __attribute__((aligned(x)))
+#elif defined(_MSC_VER)
+/* disable align warning, we want alignment ! */
+#pragma warning(disable: 4324)
+#define attr_align_to(x) __declspec(align(x))
+#else
+#error must supply definition for attr_align_to() macro.
+#endif
+#endif
+
 #define streq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
 #define strcaseeq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (strncasecmp(vs,fs,vs_len) == 0))
 
@@ -42,10 +54,10 @@
 
 #define WOLFSENTRY_SET_BITS(enumint, bits) ((enumint) |= (bits))
 #define WOLFSENTRY_CHECK_BITS(enumint, bits) (((enumint) & (bits)) == (bits))
-#define WOLFSENTRY_CLEAR_BITS(enumint, bits) ((enumint) &= ~(enumint_t)(bits))
+#define WOLFSENTRY_CLEAR_BITS(enumint, bits) ((enumint) &= ~(uint32_t)(bits))
 #define WOLFSENTRY_MASKIN_BITS(enumint, bits) ((enumint) & (bits))
-#define WOLFSENTRY_MASKOUT_BITS(enumint, bits) ((enumint) & ~(enumint_t)(bits))
-#define WOLFSENTRY_CLEAR_ALL_BITS(enumint) ((enumint) = (enumint_t)0)
+#define WOLFSENTRY_MASKOUT_BITS(enumint, bits) ((enumint) & ~(uint32_t)(bits))
+#define WOLFSENTRY_CLEAR_ALL_BITS(enumint) ((enumint) = 0)
 
 #ifndef BITS_PER_BYTE
 #define BITS_PER_BYTE 8

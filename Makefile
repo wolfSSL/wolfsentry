@@ -50,6 +50,42 @@ ifndef OPTIM
     OPTIM := -O3
 endif
 
+ifdef HOST
+    ifeq "$(CC)" "cc"
+        CC = $(HOST)-gcc
+    endif
+    ifeq "$(CXX)" "c++"
+        CXX = $(HOST)-g++
+    endif
+    ifeq "$(CPP)" "cpp"
+        CPP = $(HOST)-cpp
+    endif
+    ifeq "$(LD)" "ld"
+        LD = $(HOST)-gcc
+    endif
+    ifeq "$(AR)" "ar"
+        AR = $(HOST)-ar
+    endif
+    ifeq "$(AS)" "as"
+        AS = $(HOST)-as
+    endif
+endif
+
+ifdef RUNTIME
+    ifeq "$(RUNTIME)" "FreeRTOS-lwIP"
+        ifndef FREERTOS_TOP
+            $(error FREERTOS_TOP not supplied with RUNTIME=$(RUNTIME))
+        endif
+        ifndef LWIP_TOP
+            $(error LWIP_TOP not supplied with RUNTIME=$(RUNTIME))
+        endif
+# -D_POSIX_THREADS
+        RUNTIME_CFLAGS += -DFREERTOS -DWOLFSENTRY_LWIP -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_POSIX_MEMALIGN -ffreestanding -I$(LWIP_TOP)/include/compat/posix -I$(LWIP_TOP)/include -I./FreeRTOS/include -I$(FREERTOS_TOP)/include -I$(FREERTOS_TOP)/portable/GCC/ARM_CM3
+    else
+        $(error unrecognized runtime "$(RUNTIME)")
+    endif
+endif
+
 CC_V := $(shell $(CC) -v 2>&1 | sed "s/'/'\\\\''/g")
 
 CC_IS_GCC := $(shell if [[ '$(CC_V)' =~ 'gcc version' ]]; then echo 1; else echo 0; fi)
@@ -77,7 +113,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(RUNTIME_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1

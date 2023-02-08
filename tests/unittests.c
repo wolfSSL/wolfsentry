@@ -315,7 +315,7 @@ usleep(10000);
         fprintf(stderr,"wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
-        WOLFSENTRY_RETURN_VALUE(1);
+        WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
 
@@ -397,7 +397,7 @@ usleep(10000);
         fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
-        WOLFSENTRY_RETURN_VALUE(1);
+        WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
 
@@ -486,7 +486,7 @@ usleep(10000);
         fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
             fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
-        WOLFSENTRY_RETURN_VALUE(1);
+        WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
 
@@ -677,13 +677,13 @@ static int test_static_routes (void) {
     if (private_data_size < PRIVATE_DATA_SIZE) {
     // GCOV_EXCL_START
         printf("private_data_size is %zu but expected %d.\n",private_data_size,PRIVATE_DATA_SIZE);
-        WOLFSENTRY_RETURN_VALUE(1);
+        WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
     if ((PRIVATE_DATA_ALIGNMENT > 0) && ((uintptr_t)private_data % (uintptr_t)PRIVATE_DATA_ALIGNMENT)) {
     // GCOV_EXCL_START
         printf("private_data (%p) is not aligned to %d.\n",private_data,PRIVATE_DATA_ALIGNMENT);
-        WOLFSENTRY_RETURN_VALUE(1);
+        WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
 

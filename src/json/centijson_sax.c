@@ -238,7 +238,7 @@ json_switch_automaton(JSON_PARSER* parser, unsigned automaton)
     parser->buf_used = 0;
 }
 
-static inline void
+static void
 json_process(JSON_PARSER* parser, JSON_TYPE type, const unsigned char* data, size_t size)
 {
     if(parser->errcode < 0)

@@ -37,6 +37,9 @@ BEGIN {
                 printf(" %s", val);
             }
             print "";
+        } else if ($i ~ /^-U/) {
+            print "";
+            print "#undef " substr($i,3);
         }
     }
 }

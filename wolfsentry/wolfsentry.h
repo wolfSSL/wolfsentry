@@ -104,10 +104,6 @@ struct wolfsentry_timecbs {
 
 #ifdef WOLFSENTRY_THREADSAFE
 
-#if !defined(WOLFSENTRY_NO_SEMAPHORE_H) && !defined(FREERTOS)
-#include <semaphore.h>
-#endif
-
 typedef int (*sem_init_cb_t)(sem_t *sem, int pshared, unsigned int value);
 typedef int (*sem_post_cb_t)(sem_t *sem);
 typedef int (*sem_wait_cb_t)(sem_t *sem);

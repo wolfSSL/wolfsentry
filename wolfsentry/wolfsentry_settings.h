@@ -185,14 +185,17 @@ typedef uint16_t wolfsentry_priority_t;
 
 #if defined(WOLFSENTRY_THREADSAFE)
 
-#ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+#ifdef WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
 
-#ifdef __MACH__
+#include <semaphore.h>
+
+#elif defined(__MACH__)
 
 #include <dispatch/dispatch.h>
+#include <semaphore.h>
 #define sem_t dispatch_semaphore_t
 
-#elif defined FREERTOS
+#elif defined(FREERTOS)
 
 #include <semphr.h>
 #include <atomic.h>
@@ -206,8 +209,6 @@ typedef uint16_t wolfsentry_priority_t;
 #error semaphore shim set missing for target
 
 #endif
-
-#endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
     #ifdef WOLFSENTRY_THREAD_INCLUDE
         #include WOLFSENTRY_THREAD_INCLUDE

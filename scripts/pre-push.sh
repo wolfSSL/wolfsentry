@@ -52,7 +52,7 @@ do
     git checkout -q "$local_oid" || exit $?
     if [ "$have_linux" = 'y' ]; then
 	echo "make --quiet -j check for ${local_ref} at ${local_oid} ..."
-	make --quiet -j check || exit $?
+	make --quiet -j FREERTOS_TOP="${REPO_ROOT}/../third/FreeRTOS/FreeRTOS/Source" LWIP_TOP="${REPO_ROOT}/../third/lwip/src" check || exit $?
     else
 	echo "make --quiet -j test for ${local_ref} at ${local_oid} ..."
 	make --quiet -j test || exit $?

@@ -31,7 +31,7 @@ wolfsentry_host_platform_interface` supplied to `wolfsentry_init()`.
 
 ## Building and testing
 
-Build and test libwolfsentry.a:
+Build and test libwolfsentry.a on Linux:
 
 `make -j test`
 
@@ -75,6 +75,9 @@ Build and test with user settings:
 
 `make -j USER_SETTINGS_FILE=user_settings.h test`
 
+Build for FreeRTOS on ARM32, assuming FreeRTOS and lwIP source trees are located as shown:
+
+`make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00/FreeRTOS/Source LWIP_TOP=../third/lwip/src EXTRA_CFLAGS='-mcpu=cortex-m7'
 
 ## Examples
 

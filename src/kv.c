@@ -123,7 +123,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set_mutability(
         WOLFSENTRY_UNLOCK_AND_RETURN_OK;
     case 1:
         if ((kv->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY) != 0)
-            kv->kv.v_type &= (enumint_t)~WOLFSENTRY_KV_FLAG_READONLY;
+            WOLFSENTRY_CLEAR_BITS(kv->kv.v_type, WOLFSENTRY_KV_FLAG_READONLY);
         WOLFSENTRY_UNLOCK_AND_RETURN_OK;
     default:
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(INVALID_ARG);

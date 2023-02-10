@@ -194,6 +194,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Caller owns a mutex on the designated lock";
     case WOLFSENTRY_SUCCESS_ID_HAVE_READ_LOCK:
         return "Caller shares the designated lock";
+    case WOLFSENTRY_SUCCESS_ID_USED_FALLBACK:
+        return "Operation succeeded by fallback strategy";
 
     case WOLFSENTRY_ERROR_ID_USER_BASE:
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
@@ -307,6 +309,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
         return "HAVE_MUTEX";
     case WOLFSENTRY_SUCCESS_ID_HAVE_READ_LOCK:
         return "HAVE_READ_LOCK";
+    case WOLFSENTRY_SUCCESS_ID_USED_FALLBACK:
+        return "USED_FALLBACK";
 
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
     case WOLFSENTRY_ERROR_ID_USER_BASE:
@@ -318,9 +322,19 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 #if defined(WOLFSENTRY_DEBUG_CALL_TRACE) && defined(__GNUC__) && !defined(__STRICT_ANSI__)
 _Pragma("GCC diagnostic push");
 _Pragma("GCC diagnostic ignored \"-Wframe-address\"");
-WOLFSENTRY_LOCAL unsigned int _wolfsentry_call_depth(void) {
+
+#ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
+WOLFSENTRY_LOCAL const char *_wolfsentry_call_depth(void)
+#else
+WOLFSENTRY_LOCAL unsigned int _wolfsentry_call_depth(void)
+#endif
+{
     unsigned int i;
     void *p = __builtin_frame_address(0);
+#ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
+    static const char spaces[] = "                ";
+    wolfsentry_static_assert(sizeof spaces == 17, "spaces for WOLFSENTRY_CALL_DEPTH_RETURNS_STRING must be 16 characters plus the terminating null.");
+#endif
     if (p == 0)
         return 0;
     for (i=1;;++i) {
@@ -346,10 +360,15 @@ WOLFSENTRY_LOCAL unsigned int _wolfsentry_call_depth(void) {
         if ((q == 0) || ((ptrdiff_t)p - (ptrdiff_t)q > 0x10000) || ((ptrdiff_t)p - (ptrdiff_t)q < -0x10000))
             break;
     }
+#ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
+    return spaces + sizeof spaces - i;
+#else
     return i - 1;
+#endif
 }
 _Pragma("GCC diagnostic pop");
-#endif
+
+#endif /* WOLFSENTRY_DEBUG_CALL_TRACE __GNUC__ && !__STRICT_ANSI__ */
 
 WOLFSENTRY_API const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned int bit) {
     if (bit > 31)
@@ -416,7 +435,7 @@ WOLFSENTRY_API const char *wolfsentry_action_res_decode(wolfsentry_action_res_t 
             return "user+13";
         case WOLFSENTRY_ACTION_RES_USER_BASE << 14U:
             return "user+14";
-        case (unsigned)WOLFSENTRY_ACTION_RES_USER_BASE << 15U:
+        case ((unsigned)WOLFSENTRY_ACTION_RES_USER_BASE) << 15U:
             return "user+15";
         }
         return "(?)";
@@ -447,6 +466,154 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_build_settings_compatible(struct 
 
 #ifdef WOLFSENTRY_MALLOC_BUILTINS
 
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+
+static volatile int n_mallocs = 0;
+
+WOLFSENTRY_API int _wolfsentry_get_n_mallocs(void) {
+    return n_mallocs;
+}
+
+#endif /* WOLFSENTRY_MALLOC_DEBUG */
+
+#ifdef FREERTOS
+
+#if (configSUPPORT_DYNAMIC_ALLOCATION != 1)
+#error need configSUPPORT_DYNAMIC_ALLOCATION to use WOLFSENTRY_MALLOC_BUILTINS on FreeRTOS.
+#endif
+
+static void *wolfsentry_builtin_malloc(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t size)
+{
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    {
+        void *ret = pvPortMalloc(size);
+        if (ret != NULL)
+            WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+        return ret;
+    }
+#else
+    WOLFSENTRY_RETURN_VALUE(pvPortMalloc(size));
+#endif
+}
+
+static void wolfsentry_builtin_free(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr)
+{
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    vPortFree(ptr);
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    if (ptr != NULL)
+        WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
+#endif
+    WOLFSENTRY_RETURN_VOID;
+}
+
+/* this implementation of realloc() only works with FreeRTOS heap_{4,5}.c, which
+ * is checked at build time by forcing the linker to resolve vPortGetHeapStats().
+ */
+
+/* Assumes 8bit bytes! */
+#define heapBITS_PER_BYTE         ( ( size_t ) 8 )
+
+/* MSB of the xBlockSize member of an BlockLink_t structure is used to track
+ * the allocation status of a block.  When MSB of the xBlockSize member of
+ * an BlockLink_t structure is set then the block belongs to the application.
+ * When the bit is free the block is still part of the free heap space. */
+#define heapBLOCK_ALLOCATED_BITMASK    ( ( ( size_t ) 1 ) << ( ( sizeof( size_t ) * heapBITS_PER_BYTE ) - 1 ) )
+#define heapBLOCK_IS_ALLOCATED( pxBlock )        ( ( ( pxBlock->xBlockSize ) & heapBLOCK_ALLOCATED_BITMASK ) != 0 )
+
+/* Define the linked list structure.  This is used to link free blocks in order
+ * of their memory address. */
+typedef struct A_BLOCK_LINK {
+    struct A_BLOCK_LINK * pxNextFreeBlock; /*<< The next free block in the list. */
+    size_t xBlockSize;                     /*<< The size of the free block. */
+} BlockLink_t;
+
+static const size_t xHeapStructSize = ( sizeof( BlockLink_t ) + ( ( size_t ) ( portBYTE_ALIGNMENT - 1 ) ) ) & ~( ( size_t ) portBYTE_ALIGNMENT_MASK );
+
+static void *wolfsentry_builtin_realloc(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr,
+    size_t size)
+{
+    static int checked_heap_flavor = 0;
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+
+    if (checked_heap_flavor == 0) {
+        /* force use of vPortGetHeapStats() to confirm use of heap_4 or heap_5. */
+        HeapStats_t pxHeapStats;
+        vPortGetHeapStats(&pxHeapStats);
+        checked_heap_flavor = 1;
+    }
+
+    if (size == 0) {
+        wolfsentry_builtin_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(context), ptr);
+        WOLFSENTRY_RETURN_VALUE(NULL);
+    } else if (ptr == NULL) {
+        WOLFSENTRY_RETURN_VALUE(wolfsentry_builtin_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(context), size));
+    } else {
+        void *pvReturn = NULL;
+        BlockLink_t *pxLink = (BlockLink_t *)(void *)((char*)ptr - xHeapStructSize);
+        if (heapBLOCK_IS_ALLOCATED(pxLink)) {
+            uint32_t blockSize = pxLink->xBlockSize & ~heapBLOCK_ALLOCATED_BITMASK;
+            blockSize -= xHeapStructSize;
+            if (blockSize >= size)
+                WOLFSENTRY_RETURN_VALUE(ptr);
+            pvReturn = pvPortMalloc(size);
+            if (pvReturn) {
+                memcpy(pvReturn, ptr, blockSize);
+                vPortFree(ptr);
+            }
+        }
+        WOLFSENTRY_RETURN_VALUE(pvReturn);
+    }
+}
+
+static void *wolfsentry_builtin_memalign(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t alignment,
+    size_t size)
+{
+    (void)context;
+    void *ptr = NULL;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+
+    if (alignment && size) {
+        uint32_t hdr_size = sizeof(uint16_t) + (alignment - 1);
+        void *p = pvPortMalloc(size + hdr_size);
+        if (p) {
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+            WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+#endif
+            /* Align to powers of two */
+            ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
+            *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+        }
+    }
+    WOLFSENTRY_RETURN_VALUE(ptr);
+}
+
+static void wolfsentry_builtin_free_aligned(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr)
+{
+    uint16_t offset = *((uint16_t *)ptr - 1);
+    void *p = (void *)((uint8_t *)ptr - offset);
+
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+
+    vPortFree(p);
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
+#endif
+    WOLFSENTRY_RETURN_VOID;
+}
+
+#else
+
 #include <stdlib.h>
 
 static void *wolfsentry_builtin_malloc(
@@ -454,7 +621,16 @@ static void *wolfsentry_builtin_malloc(
 {
     (void)context;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    {
+        ret = malloc(size);
+        if (ret != NULL)
+            WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+        WOLFSENTRY_RETURN_VALUE(ret);
+    }
+#else
     WOLFSENTRY_RETURN_VALUE(malloc(size));
+#endif
 }
 
 static void wolfsentry_builtin_free(
@@ -463,6 +639,10 @@ static void wolfsentry_builtin_free(
     (void)context;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     free(ptr);
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    if (ptr != NULL)
+        WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
+#endif
     WOLFSENTRY_RETURN_VOID;
 }
 
@@ -472,7 +652,18 @@ static void *wolfsentry_builtin_realloc(
 {
     (void)context;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    {
+        void *ret = realloc(ptr, size);
+        if ((ptr == null) && (ret != NULL))
+            WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+        else if ((ptr != null) && (ret == NULL))
+            WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
+        return ret;
+    }
+#else
     WOLFSENTRY_RETURN_VALUE(realloc(ptr, size));
+#endif
 }
 
 static void *wolfsentry_builtin_memalign(
@@ -480,9 +671,9 @@ static void *wolfsentry_builtin_memalign(
     size_t size)
 {
     (void)context;
-    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
 #ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
     void *ptr = NULL;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (alignment && size) {
         uint32_t hdr_size = sizeof(uint16_t) + (alignment - 1);
         void *p = malloc(size + hdr_size);
@@ -492,14 +683,23 @@ static void *wolfsentry_builtin_memalign(
             *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
         }
     }
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    if (ptr != NULL)
+        WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+#endif
     WOLFSENTRY_RETURN_VALUE(ptr);
 #else
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (alignment <= sizeof(void *))
         WOLFSENTRY_RETURN_VALUE(malloc(size));
     else {
         void *ret = 0;
         if (posix_memalign(&ret, alignment, size) < 0)
             WOLFSENTRY_RETURN_VALUE(NULL);
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    if (ret != NULL)
+        WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+#endif
         WOLFSENTRY_RETURN_VALUE(ret);
     }
 #endif
@@ -517,8 +717,13 @@ static void wolfsentry_builtin_free_aligned(
 #else
     free(ptr);
 #endif
+#ifdef WOLFSENTRY_MALLOC_DEBUG
+    WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
+#endif
     WOLFSENTRY_RETURN_VOID;
 }
+
+#endif
 
 static const struct wolfsentry_allocator default_allocator = {
 #ifdef __GNUC__
@@ -540,18 +745,39 @@ static const struct wolfsentry_allocator default_allocator = {
 
 #endif /* WOLFSENTRY_MALLOC_BUILTINS */
 
+#if defined(FREERTOS) && (defined(WOLFSENTRY_THREADSAFE) || defined(WOLFSENTRY_CLOCK_BUILTINS))
+
+#include <task.h>
+
+static void freertos_now(struct timespec *now) {
+    TimeOut_t xCurrentTime = { 0 };
+    uint64_t ullTickCount = 0;
+
+    vTaskSetTimeOutState(&xCurrentTime);
+    ullTickCount = (uint64_t)(xCurrentTime.xOverflowCount) << (sizeof(TickType_t) * 8);
+    ullTickCount += xCurrentTime.xTimeOnEntering;
+
+    now->tv_sec = (time_t)(ullTickCount / configTICK_RATE_HZ);
+    now->tv_nsec = (long int)(((ullTickCount % configTICK_RATE_HZ) * FREERTOS_NANOSECONDS_PER_SECOND) / configTICK_RATE_HZ);
+}
+
+#endif /* FREERTOS && (WOLFSENTRY_THREADSAFE || WOLFSENTRY_CLOCK_BUILTINS) */
+
 #ifdef WOLFSENTRY_THREADSAFE
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context) {
+    static wolfsentry_thread_id_t fallback_thread_id_counter = WOLFSENTRY_THREAD_NO_ID;
     memset(thread_context, 0, sizeof *thread_context);
-    thread_context->id = WOLFSENTRY_THREAD_GET_ID_HANDLER;
-    if (thread_context->id == WOLFSENTRY_THREAD_NO_ID)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
     thread_context->user_context = user_context;
     thread_context->deadline.tv_sec = WOLFSENTRY_DEADLINE_NEVER;
     thread_context->deadline.tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
     thread_context->current_thread_flags = init_thread_flags;
-    WOLFSENTRY_RETURN_OK;
+    thread_context->id = WOLFSENTRY_THREAD_GET_ID_HANDLER();
+    if (thread_context->id == WOLFSENTRY_THREAD_NO_ID) {
+        thread_context->id = WOLFSENTRY_ATOMIC_DECREMENT(fallback_thread_id_counter, 1);
+        WOLFSENTRY_SUCCESS_RETURN(USED_FALLBACK);
+    } else
+        WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context) {
@@ -569,7 +795,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_id(struct wolfsentry_t
     WOLFSENTRY_RETURN_OK;
 }
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_user_context(struct wolfsentry_thread_context *thread, void **user_context) {
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (thread->id == WOLFSENTRY_THREAD_NO_ID)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -580,7 +806,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_user_context(struct wo
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfsentry_thread_context *thread, struct timespec *deadline) {
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (thread->id == WOLFSENTRY_THREAD_NO_ID)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -591,7 +817,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfse
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentry_thread_context *thread, wolfsentry_thread_flags_t *thread_flags) {
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (thread->id == WOLFSENTRY_THREAD_NO_ID)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -599,24 +825,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentr
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t thread_flags) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wolfsentry_thread_context *thread, wolfsentry_thread_flags_t thread_flags) {
     (void)thread_flags;
-    if (thread_context->id == WOLFSENTRY_THREAD_NO_ID)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (thread_context->shared_count > 0)
+    if (thread->shared_count > 0)
         WOLFSENTRY_ERROR_RETURN(BUSY);
-    else if (thread_context->shared_count < 0)
+    else if (thread->shared_count < 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
-    if (thread_context->mutex_and_reservation_count > 0)
+    if (thread->mutex_and_reservation_count > 0)
         WOLFSENTRY_ERROR_RETURN(BUSY);
-    else if (thread_context->mutex_and_reservation_count < 0)
+    else if (thread->mutex_and_reservation_count < 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
-    if (thread_context->recursion_of_tracked_lock)
+    if (thread->recursion_of_tracked_lock)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
-    if (thread_context->tracked_shared_lock != NULL)
+    if (thread->tracked_shared_lock != NULL)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
-    memset(thread_context, 0, sizeof *thread_context);
-    thread_context->id = WOLFSENTRY_THREAD_NO_ID;
+    memset(thread, 0, sizeof *thread);
+    thread->id = WOLFSENTRY_THREAD_NO_ID;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -635,6 +861,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY
     wolfsentry_time_t now;
     wolfsentry_errcode_t ret;
 
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if (usecs < 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     else if (usecs > 0) {
@@ -652,8 +881,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY
     }
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, long epoch_secs, long epoch_nsecs) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, time_t epoch_secs, long epoch_nsecs) {
     (void)wolfsentry;
+
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if ((epoch_nsecs < 0) || (epoch_nsecs >= 1000000000))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if ((epoch_secs == WOLFSENTRY_DEADLINE_NEVER) ||
@@ -667,23 +900,33 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTE
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN) {
     (void)wolfsentry;
+
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     thread->deadline.tv_sec = WOLFSENTRY_DEADLINE_NEVER;
     thread->deadline.tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
-    thread->current_thread_flags &= ~(enumint_t)WOLFSENTRY_THREAD_FLAG_DEADLINE;
+    WOLFSENTRY_CLEAR_BITS(thread->current_thread_flags, WOLFSENTRY_THREAD_FLAG_DEADLINE);
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfsentry_thread_context *thread_context) {
-    if (thread_context->mutex_and_reservation_count > 0)
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfsentry_thread_context *thread) {
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    if (thread->mutex_and_reservation_count > 0)
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
-    thread_context->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_READONLY;
+    thread->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_READONLY;
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfsentry_thread_context *thread_context) {
-    if (thread_context->shared_count > thread_context->recursion_of_tracked_lock)
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfsentry_thread_context *thread) {
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    if (thread->shared_count > thread->recursion_of_tracked_lock)
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
-    thread_context->current_thread_flags &= ~(enumint_t)WOLFSENTRY_THREAD_FLAG_READONLY;
+    WOLFSENTRY_CLEAR_BITS(thread->current_thread_flags, WOLFSENTRY_THREAD_FLAG_READONLY);
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -838,28 +1081,6 @@ static int freertos_sem_post( sem_t * sem )
 
 #define sem_post freertos_sem_post
 
-
-static void UTILS_NanosecondsToTimespec( int64_t llSource,
-        struct timespec * const pxDestination )
-{
-	long lCarrySec = 0;
-
-	/* Convert to timespec. */
-	pxDestination->tv_sec = ( time_t ) ( llSource / FREERTOS_NANOSECONDS_PER_SECOND );
-	pxDestination->tv_nsec = ( long ) ( llSource % FREERTOS_NANOSECONDS_PER_SECOND );
-
-	/* Subtract from tv_sec if tv_nsec < 0. */
-	if( pxDestination->tv_nsec < 0L )
-	{
-		/* Compute the number of seconds to carry. */
-		lCarrySec = ( pxDestination->tv_nsec / ( long ) FREERTOS_NANOSECONDS_PER_SECOND ) + 1L;
-
-		pxDestination->tv_sec -= ( time_t ) ( lCarrySec );
-		pxDestination->tv_nsec += lCarrySec * ( long ) FREERTOS_NANOSECONDS_PER_SECOND;
-	}
-        WOLFSENTRY_RETURN_VOID;
-}
-
 static int UTILS_TimespecCompare( const struct timespec * const x,
                            const struct timespec * const y )
 {
@@ -926,12 +1147,12 @@ static int UTILS_TimespecSubtract( const struct timespec * const x,
         /* if x < y then result would be negative, WOLFSENTRY_RETURN_VALUE(1 */
         if( iCompareResult == -1 )
         {
-            iStatus = 1);
+            iStatus = 1;
         }
         else if( iCompareResult == 0 )
         {
             /* if times are the same WOLFSENTRY_RETURN_VALUE(zero */
-            pxResult->tv_sec = 0);
+            pxResult->tv_sec = 0;
             pxResult->tv_nsec = 0;
         }
         else
@@ -961,7 +1182,7 @@ static int UTILS_TimespecSubtract( const struct timespec * const x,
 
 static int UTILS_ValidateTimespec( const struct timespec * const pxTimespec )
 {
-    int xWOLFSENTRY_RETURN_VALUE(= 0);
+    int xReturn = 0;
 
     if( pxTimespec != NULL )
     {
@@ -969,7 +1190,7 @@ static int UTILS_ValidateTimespec( const struct timespec * const pxTimespec )
         if( ( pxTimespec->tv_nsec >= 0 ) &&
             ( pxTimespec->tv_nsec < FREERTOS_NANOSECONDS_PER_SECOND ) )
         {
-            xWOLFSENTRY_RETURN_VALUE(= 1);
+            xReturn = 1;
         }
     }
 
@@ -1020,7 +1241,7 @@ static int UTILS_TimespecToTicks( const struct timespec * const pxTimespec,
             /* check for downcast overflow */
             if( ulTickTypeSize == sizeof( uint32_t ) )
             {
-                if( llTotalTicks > UINT_MAX )
+                if( llTotalTicks > (int64_t)MAX_UINT_OF(*pxResult) )
                 {
                     iStatus = EINVAL;
                 }
@@ -1073,10 +1294,6 @@ static int UTILS_AbsoluteTimespecToDeltaTicks( const struct timespec * const pxA
     WOLFSENTRY_RETURN_VALUE(iStatus);
 }
 
-static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now);
-
-#define clock_gettime wolfsentry_builtin_get_time
-
 static int freertos_sem_timedwait( sem_t * sem,
                    const struct timespec * abstime )
 {
@@ -1096,15 +1313,8 @@ static int freertos_sem_timedwait( sem_t * sem,
         {
             struct timespec xCurrentTime = { 0 };
 
-            /* Get current time */
-            if( clock_gettime( CLOCK_REALTIME, &xCurrentTime ) != 0 )
-            {
-                iStatus = EINVAL;
-            }
-            else
-            {
-                iStatus = UTILS_AbsoluteTimespecToDeltaTicks( abstime, &xCurrentTime, &xDelay );
-            }
+            freertos_now(&xCurrentTime);
+            iStatus = UTILS_AbsoluteTimespecToDeltaTicks( abstime, &xCurrentTime, &xDelay );
 
             /* If abstime was in the past, still attempt to take the semaphore without
              * blocking, per POSIX spec. */
@@ -1268,7 +1478,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rw
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
     }
     if (lock->state != WOLFSENTRY_LOCK_UNLOCKED) {
-        WOLFSENTRY_WARN("attempt to destroy used lock {%d,%d,%d,%d,%d,%d,%d}\n", lock->state, lock->holder_count.read, lock->read_waiter_count, lock->write_waiter_count, lock->read2write_waiter_read_count, lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID, lock->promoted_at_count);
+        WOLFSENTRY_WARN("attempt to destroy used lock {%u,%d,%d,%d,%d,%d,%d}\n", (unsigned int)lock->state, lock->holder_count.read, lock->read_waiter_count, lock->write_waiter_count, lock->read2write_waiter_read_count, lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID, lock->promoted_at_count);
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
@@ -1284,7 +1494,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rw
         (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID) ||
         (lock->promoted_at_count != 0))
     {
-        WOLFSENTRY_WARN("attempt to destroy lock with corrupted state {%d,%d,%d,%d,%d,%d,%d}\n", lock->state, lock->holder_count.read, lock->read_waiter_count, lock->write_waiter_count, lock->read2write_waiter_read_count, lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID, lock->promoted_at_count);
+        WOLFSENTRY_WARN("attempt to destroy lock with corrupted state {%u,%d,%d,%d,%d,%d,%d}\n", (unsigned int)lock->state, lock->holder_count.read, lock->read_waiter_count, lock->write_waiter_count, lock->read2write_waiter_read_count, lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID, lock->promoted_at_count);
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
@@ -1335,7 +1545,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID)
@@ -1588,9 +1798,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwl
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
-    if (thread && (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY))
-        WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
-
+    if (thread) {
+        if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)
+            WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
+        if (thread->id == WOLFSENTRY_THREAD_NO_ID)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
 
     switch (WOLFSENTRY_ATOMIC_LOAD(lock->state)) {
     case WOLFSENTRY_LOCK_EXCLUSIVE:
@@ -1780,7 +1993,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsent
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (lock->state == WOLFSENTRY_LOCK_SHARED)
@@ -1882,7 +2095,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct 
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)
@@ -1944,7 +2157,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_EXCLUSIVE) {
@@ -2142,7 +2355,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct 
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_GET_ID) {
@@ -2193,7 +2406,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsent
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)
@@ -2411,6 +2624,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
     if ((thread == NULL) && (flags & WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    if (thread && (thread->id == WOLFSENTRY_THREAD_NO_ID))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     /* unlocking a recursive mutex, like recursively locking one, can be done lock-free. */
     if ((WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID) &&
         (lock->holder_count.write > 1))
@@ -2536,7 +2752,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
             }
         }
     } else {
-        WOLFSENTRY_WARN("wolfsentry_lock_unlock with state=%d\n", lock->state);
+        WOLFSENTRY_WARN("wolfsentry_lock_unlock with state=%u\n", (unsigned int)lock->state);
         ret = WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
         goto out;
     }
@@ -2551,6 +2767,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
                 goto out;
             }
         }
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
     } else if (lock->read_waiter_count > 0) {
         int i;
         lock->holder_count.read += lock->read_waiter_count;
@@ -2562,7 +2779,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
                 goto out;
             }
         }
-    }
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    } else
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
   out:
 
@@ -2572,9 +2791,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    enumint_t lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
+    uint32_t lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
 
-    if (thread == NULL)
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     (void)flags;
@@ -2605,7 +2824,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentr
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    enumint_t lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
+    uint32_t lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
 
     (void)flags;
 
@@ -2651,65 +2870,65 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_get_flags(struct wolfsentry_
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_IN) {
-    return wolfsentry_lock_mutex(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct timespec *abs_timeout)
 {
-    return wolfsentry_lock_mutex_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait)
 {
-    return wolfsentry_lock_mutex_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared(
     WOLFSENTRY_CONTEXT_ARGS_IN)
 {
-    return wolfsentry_lock_shared(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_shared(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_abstimed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct timespec *abs_timeout)
 {
-    return wolfsentry_lock_shared_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_shared_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_with_reservation_abstimed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct timespec *abs_timeout)
 {
-    return wolfsentry_lock_shared_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_shared_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait)
 {
-    return wolfsentry_lock_shared_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_shared_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_with_reservation_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait)
 {
-    return wolfsentry_lock_shared_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_shared_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_IN) {
-    return wolfsentry_lock_unlock(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_unlock(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reservation(
     WOLFSENTRY_CONTEXT_ARGS_IN)
 {
-    return wolfsentry_lock_unlock(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_unlock(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO));
 }
 
 
@@ -2719,21 +2938,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reserv
 
 #ifdef FREERTOS
 
-#include <FreeRTOS.h>
-#include <task.h>
-
-/* Note: NANOSECONDS_PER_SECOND % configTICK_RATE_HZ should equal 0 or this
- * won't work well */
-
 static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now) {
-    TimeOut_t xCurrentTime = { 0 };
-    uint64_t ullTickCount = 0;
-    vTaskSetTimeOutState(&xCurrentTime);
-    ullTickCount = (uint64_t)(xCurrentTime.xOverflowCount) << (sizeof(TickType_t) * 8);
-    ullTickCount += xCurrentTime.xTimeOnEntering;
-    *now = ullTickCount * FREERTOS_NANOSECONDS_PER_TICK;
+    struct timespec ts;
+    (void)context;
+    freertos_now(&ts);
+    *now = ((wolfsentry_time_t)ts.tv_sec * (wolfsentry_time_t)1000000) + ((wolfsentry_time_t)ts.tv_nsec / (wolfsentry_time_t)1000);
     WOLFSENTRY_RETURN_OK;
 }
+
 #else
 
 #include <time.h>
@@ -2926,7 +3138,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
     if (config->route_private_data_alignment > 0) {
         size_t private_data_slop = offsetof(struct wolfsentry_route, data) % config->route_private_data_alignment;
         if (private_data_slop > 0) {
-            if (config->route_private_data_size + private_data_slop > MAX_UINT_OF(((struct wolfsentry_route *)0)->data_addr_offset))
+            if (config->route_private_data_size + (config->route_private_data_alignment - private_data_slop) > MAX_UINT_OF(((struct wolfsentry_route *)0)->data_addr_offset))
                 WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
         }
     }
@@ -2948,7 +3160,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_load(
         size_t private_data_slop = offsetof(struct wolfsentry_route, data) % internal->config.route_private_data_alignment;
         if (private_data_slop > 0) {
             internal->route_private_data_padding = internal->config.route_private_data_alignment - private_data_slop;
-            internal->config.route_private_data_size += private_data_slop;
+            internal->config.route_private_data_size += internal->route_private_data_padding;
         }
     }
 

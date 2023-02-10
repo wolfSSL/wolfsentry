@@ -23,8 +23,31 @@
 #ifndef WOLFSENTRY_SETTINGS_H
 #define WOLFSENTRY_SETTINGS_H
 
+#ifdef WOLFSENTRY_USER_SETTINGS_FILE
+#include WOLFSENTRY_USER_SETTINGS_FILE
+#endif
+
 #ifndef BUILDING_LIBWOLFSENTRY
 #include <wolfsentry/wolfsentry_options.h>
+#endif
+
+#ifdef FREERTOS
+    #include <FreeRTOS.h>
+    #define WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
+    #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
+        #define WOLFSENTRY_PRINTF_ERR(...) printf(__VA_ARGS__)
+    #endif
+
+#ifdef WOLFSENTRY_LWIP
+    #include <time.h>
+    #include <lwip/inet.h>
+    #include <lwip/sockets.h>
+#endif
+
+#endif
+
+#if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
+    #define WOLFSENTRY_PRINTF_ERR(...) fprintf(stderr, __VA_ARGS__)
 #endif
 
 #ifndef WOLFSENTRY_SINGLETHREADED
@@ -163,8 +186,6 @@ typedef WOLFSENTRY_PRIORITY_TYPE wolfsentry_priority_t;
 typedef uint16_t wolfsentry_priority_t;
 #endif
 
-typedef uint32_t enumint_t;
-
 #ifndef __attribute_maybe_unused__
 #if defined(__GNUC__)
 #define __attribute_maybe_unused__ __attribute__((unused))
@@ -173,36 +194,83 @@ typedef uint32_t enumint_t;
 #endif
 #endif
 
+#ifndef wolfsentry_static_assert
+#if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
+#define wolfsentry_static_assert(c, m) static_assert(c, m)
+#else
+#define wolfsentry_static_assert(c, m) do {} while ()
+#endif
+#endif /* !wolfsentry_static_assert */
+
 #if defined(WOLFSENTRY_THREADSAFE)
-    #if defined(WOLFSENTRY_THREAD_INCLUDE)
+
+#ifdef WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
+
+#include <semaphore.h>
+
+#elif defined(__MACH__)
+
+#include <dispatch/dispatch.h>
+#include <semaphore.h>
+#define sem_t dispatch_semaphore_t
+
+#elif defined(FREERTOS)
+
+#include <semphr.h>
+#include <atomic.h>
+
+#define SEM_VALUE_MAX        0x7FFFU
+
+#define sem_t StaticSemaphore_t
+
+#else
+
+#error semaphore shim set missing for target
+
+#endif
+
+    #ifdef WOLFSENTRY_THREAD_INCLUDE
         #include WOLFSENTRY_THREAD_INCLUDE
     #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
         #include <pthread.h>
-    #else
-        #error Must supply WOLFSENTRY_THREAD_INCLUDE for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
-    #if defined(WOLFSENTRY_THREAD_ID_T)
+    #ifdef WOLFSENTRY_THREAD_ID_T
         typedef WOLFSENTRY_THREAD_ID_T wolfsentry_thread_id_t;
     #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
         typedef pthread_t wolfsentry_thread_id_t;
+    #elif defined(FREERTOS)
+        typedef TaskHandle_t wolfsentry_thread_id_t;
     #else
         #error Must supply WOLFSENTRY_THREAD_ID_T for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
-    #ifndef WOLFSENTRY_THREAD_NO_ID
+    /* note WOLFSENTRY_THREAD_NO_ID needs to be the value returned by a failed call
+     * to WOLFSENTRY_THREAD_GET_ID_HANDLER.
+     */
+    #ifdef WOLFSENTRY_THREAD_NO_ID
+    #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
         #define WOLFSENTRY_THREAD_NO_ID 0
+    #elif defined(FREERTOS)
+        /* xTaskGetCurrentTaskHandle() returns NULL if no tasks have been created,
+         * and if that happens, we want wolfsentry_init_thread_context() to assign
+         * an internally generated ID.
+         */
+        #define WOLFSENTRY_THREAD_NO_ID ((TaskHandle_t)0)
+    #else
+        #error Must supply WOLFSENTRY_THREAD_NO_ID for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
-    #if !defined(WOLFSENTRY_THREAD_GET_ID_HANDLER)
-        #if defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
-            #define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self()
-        #else
-            #error Must supply WOLFSENTRY_THREAD_GET_ID_HANDLER for WOLFSENTRY_THREADSAFE on non-POSIX targets.
-        #endif
+    #ifdef WOLFSENTRY_THREAD_GET_ID_HANDLER
+    #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
+       #define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self
+    #elif defined(FREERTOS)
+       #define WOLFSENTRY_THREAD_GET_ID_HANDLER xTaskGetCurrentTaskHandle
+    #else
+        #error Must supply WOLFSENTRY_THREAD_GET_ID_HANDLER for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
 
     struct wolfsentry_thread_context;
 
     struct wolfsentry_thread_context_public {
-        void *opaque[9];
+        uint64_t opaque[9];
     };
 #endif
 
@@ -293,7 +361,7 @@ enum wolfsentry_build_flags {
 
 struct wolfsentry_build_settings {
     uint32_t version;
-    enumint_t config;
+    uint32_t config;
 };
 
 #if !defined(BUILDING_LIBWOLFSENTRY) || defined(DEFINE_WOLFSENTRY_BUILD_SETTINGS)

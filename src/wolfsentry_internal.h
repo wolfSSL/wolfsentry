@@ -35,38 +35,20 @@ typedef uint32_t wolfsentry_refcount_t;
 #include "wolfsentry_ll.h"
 
 #ifdef FREERTOS
-#include <FreeRTOS.h>
 #define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
 #define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
 #endif
 
 #ifdef WOLFSENTRY_THREADSAFE
 
-#ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-
-#ifdef __MACH__
-
-#include <dispatch/dispatch.h>
-#define sem_t dispatch_semaphore_t
-
-#elif defined FREERTOS
-
-#include <semphr.h>
-#include <atomic.h>
-
-#define SEM_VALUE_MAX        0x7FFFU
-
-#define sem_t StaticSemaphore_t
-
-#else
-
-#error semaphore shim set missing for target
-
-#endif
-
-#endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
-
 #define WOLFSENTRY_THREAD_ID_SENT ~0UL /* lock handoff not yet implemented. */
+
+enum wolfsentry_rwlock_state {
+    WOLFSENTRY_LOCK_UNINITED = 0,
+    WOLFSENTRY_LOCK_UNLOCKED,
+    WOLFSENTRY_LOCK_SHARED,
+    WOLFSENTRY_LOCK_EXCLUSIVE
+};
 
 struct wolfsentry_rwlock {
     const struct wolfsentry_host_platform_interface *hpi;
@@ -83,12 +65,7 @@ struct wolfsentry_rwlock {
     volatile int read_waiter_count;
     volatile int write_waiter_count;
     volatile int read2write_waiter_read_count; /* the recursion depth of the shared lock held by read2write_reservation_holder */
-    volatile enum {
-        WOLFSENTRY_LOCK_UNINITED = 0,
-        WOLFSENTRY_LOCK_UNLOCKED,
-        WOLFSENTRY_LOCK_SHARED,
-        WOLFSENTRY_LOCK_EXCLUSIVE
-    } state;
+    volatile uint32_t state;
     volatile int promoted_at_count;
     wolfsentry_lock_flags_t flags;
 };
@@ -111,7 +88,7 @@ struct wolfsentry_thread_context {
     int mutex_and_reservation_count;
 };
 
-#define WOLFSENTRY_THREAD_GET_ID (thread ? thread->id : WOLFSENTRY_THREAD_GET_ID_HANDLER)
+#define WOLFSENTRY_THREAD_GET_ID (thread ? thread->id : WOLFSENTRY_THREAD_GET_ID_HANDLER())
 
 #if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
 static_assert(sizeof(struct wolfsentry_thread_context_public) >= sizeof(struct wolfsentry_thread_context), "wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
@@ -180,7 +157,13 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 
 struct wolfsentry_table_header;
 
-struct wolfsentry_table_ent_header {
+#ifdef __arm__
+/* must be uint64-aligned to allow warning-free casts on ARM32. */
+struct attr_align_to(8) wolfsentry_table_ent_header
+#else
+struct wolfsentry_table_ent_header
+#endif
+{
     struct wolfsentry_table_header *parent_table;
     struct wolfsentry_table_ent_header *prev, *next; /* these will be replaced by red-black table elements later. */
     struct wolfsentry_table_ent_header *prev_by_id, *next_by_id; /* these will be replaced by red-black table elements later. */

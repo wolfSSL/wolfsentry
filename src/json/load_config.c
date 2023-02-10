@@ -33,7 +33,7 @@
 #define MAX_IPV6_ADDR_BITS (sizeof(struct in6_addr) * BITS_PER_BYTE)
 #define MAX_MAC_ADDR_BITS 64
 
-#ifdef WOLFSENTRY_PROTOCOL_NAMES
+#ifndef WOLFSENTRY_NO_GETPROTOBY
 #include <netdb.h>
 #endif
 
@@ -396,7 +396,7 @@ static wolfsentry_errcode_t convert_double(JSON_TYPE type, const unsigned char *
     WOLFSENTRY_RETURN_OK;
 }
 
-static wolfsentry_errcode_t convert_boolean_flag(JSON_TYPE type, enumint_t *flags, enumint_t flag) {
+static wolfsentry_errcode_t convert_eventconfig_flag(JSON_TYPE type, wolfsentry_eventconfig_flags_t *flags, wolfsentry_eventconfig_flags_t flag) {
     if (type == JSON_FALSE)
         *flags &= ~flag;
     else if (type == JSON_TRUE)
@@ -478,9 +478,9 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
     if (! strcmp(jps->cur_keyname, "derog-thresh-for-penalty-boxing"))
         WOLFSENTRY_ERROR_RERETURN(convert_uint32(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox));
     if (! strcmp(jps->cur_keyname, "derog-thresh-ignore-commendable"))
-        WOLFSENTRY_ERROR_RERETURN(convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE));
+        WOLFSENTRY_ERROR_RERETURN(convert_eventconfig_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE));
     if (! strcmp(jps->cur_keyname, "commendable-clears-derogatory"))
-        WOLFSENTRY_ERROR_RERETURN(convert_boolean_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY));
+        WOLFSENTRY_ERROR_RERETURN(convert_eventconfig_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY));
 
     if (! strcmp(jps->cur_keyname, "max-purgeable-routes")) {
         struct wolfsentry_route_table *route_table;
@@ -627,7 +627,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(struct wolfsentry_json_proc
     }
 }
 
-#if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
+#ifndef WOLFSENTRY_NO_GETPROTOBY
 
 static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_process_state *jps, const unsigned char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     char d_buf[64];
@@ -667,7 +667,7 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD);
         if (type == JSON_NUMBER)
             WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &sa->sa_port));
-#if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
+#ifndef WOLFSENTRY_NO_GETPROTOBY
         else if (type == JSON_STRING)
             WOLFSENTRY_ERROR_RERETURN(convert_sockaddr_port_name(jps, data, data_size, sa));
 #endif
@@ -732,7 +732,7 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         jps->o_u_c.route.local.sa_proto = jps->o_u_c.route.remote.sa_proto;
     }
-#if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
+#ifndef WOLFSENTRY_NO_GETPROTOBY
     else if (type == JSON_STRING) {
         char d_buf[64];
         struct protoent *p;
@@ -1579,9 +1579,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
         WOLFSENTRY_SET_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI);
         if (err_buf) {
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s", json_pos.offset,json_pos.line_number, json_pos.column_number, jps->fini_ret, json_error_str(jps->fini_ret));
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, L%u, col %u, with centijson code " WOLFSENTRY_ERRCODE_FMT ": %s", (int)json_pos.offset, json_pos.line_number, json_pos.column_number, (int)jps->fini_ret, json_error_str(jps->fini_ret));
             else
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, L%u, col %u, with " WOLFSENTRY_ERROR_FMT, (int)json_pos.offset, json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
         }
         WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(jps->fini_ret));
     }
@@ -1619,8 +1619,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
         (*jps)->fini_ret = json_fini(&(*jps)->parser, &json_pos);
         if ((*jps)->fini_ret < 0) {
             if (err_buf != NULL)
-                snprintf(err_buf, err_buf_size, "json_fini failed at offset " SIZET_FMT ", L%u, col %u, with code %d: %s.",
-                         json_pos.offset,json_pos.line_number, json_pos.column_number, (*jps)->fini_ret, json_error_str((*jps)->fini_ret));
+                snprintf(err_buf, err_buf_size, "json_fini failed at offset %d, L%u, col %u, with code " WOLFSENTRY_ERRCODE_FMT ": %s.",
+                         (int)json_pos.offset,json_pos.line_number, json_pos.column_number, (int)(*jps)->fini_ret, json_error_str((*jps)->fini_ret));
             ret = wolfsentry_centijson_errcode_translate((*jps)->fini_ret);
             goto out;
         }

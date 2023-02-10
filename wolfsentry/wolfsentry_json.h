@@ -40,7 +40,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_centijson_errcode_translate(wolfs
 #define WOLFSENTRY_MAX_JSON_NESTING 16
 #endif
 
-typedef enumint_t wolfsentry_config_load_flags_t;
+typedef uint32_t wolfsentry_config_load_flags_t;
 enum {
     WOLFSENTRY_CONFIG_LOAD_FLAG_NONE             = 0U,
     WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH         = 1U << 0U,

@@ -38,10 +38,6 @@
 #define WOLFSENTRY
 #endif
 
-#ifdef WOLFSENTRY_USER_SETTINGS_FILE
-#include WOLFSENTRY_USER_SETTINGS_FILE
-#endif
-
 #include <wolfsentry/wolfsentry_settings.h>
 
 #include <wolfsentry/wolfsentry_errcodes.h>
@@ -86,10 +82,10 @@ struct wolfsentry_allocator {
 typedef wolfsentry_errcode_t (*wolfsentry_get_time_cb_t)(void *context, wolfsentry_time_t *ts);
 typedef wolfsentry_time_t (*wolfsentry_diff_time_cb_t)(wolfsentry_time_t earlier, wolfsentry_time_t later);
 typedef wolfsentry_time_t (*wolfsentry_add_time_cb_t)(wolfsentry_time_t start_time, wolfsentry_time_t time_interval);
-typedef wolfsentry_errcode_t (*wolfsentry_to_epoch_time_cb_t)(wolfsentry_time_t when, long *epoch_secs, long *epoch_nsecs);
-typedef wolfsentry_errcode_t (*wolfsentry_from_epoch_time_cb_t)(long epoch_secs, long epoch_nsecs, wolfsentry_time_t *when);
-typedef wolfsentry_errcode_t (*wolfsentry_interval_to_seconds_cb_t)(wolfsentry_time_t howlong, long *howlong_secs, long *howlong_nsecs);
-typedef wolfsentry_errcode_t (*wolfsentry_interval_from_seconds_cb_t)(long howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong);
+typedef wolfsentry_errcode_t (*wolfsentry_to_epoch_time_cb_t)(wolfsentry_time_t when, time_t *epoch_secs, long *epoch_nsecs);
+typedef wolfsentry_errcode_t (*wolfsentry_from_epoch_time_cb_t)(time_t epoch_secs, long epoch_nsecs, wolfsentry_time_t *when);
+typedef wolfsentry_errcode_t (*wolfsentry_interval_to_seconds_cb_t)(wolfsentry_time_t howlong, time_t *howlong_secs, long *howlong_nsecs);
+typedef wolfsentry_errcode_t (*wolfsentry_interval_from_seconds_cb_t)(time_t howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong);
 
 struct wolfsentry_timecbs {
     void *context;
@@ -103,10 +99,6 @@ struct wolfsentry_timecbs {
 };
 
 #ifdef WOLFSENTRY_THREADSAFE
-
-#if !defined(WOLFSENTRY_NO_SEMAPHORE_H) && !defined(FREERTOS)
-#include <semaphore.h>
-#endif
 
 typedef int (*sem_init_cb_t)(sem_t *sem, int pshared, unsigned int value);
 typedef int (*sem_post_cb_t)(sem_t *sem);
@@ -194,7 +186,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentr
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t thread_flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t thread_flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, int usecs);
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, long epoch_secs, long epoch_nsecs);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, time_t epoch_secs, long epoch_nsecs);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfsentry_thread_context *thread_context);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfsentry_thread_context *thread_context);
@@ -466,6 +458,9 @@ WOLFSENTRY_API void wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr);
 WOLFSENTRY_API void *wolfsentry_realloc(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr, size_t size);
 WOLFSENTRY_API void *wolfsentry_memalign(WOLFSENTRY_CONTEXT_ARGS_IN, size_t alignment, size_t size);
 WOLFSENTRY_API void wolfsentry_free_aligned(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr);
+#if defined(WOLFSENTRY_MALLOC_BUILTINS) && defined(WOLFSENTRY_MALLOC_DEBUG)
+WOLFSENTRY_API int _wolfsentry_get_n_mallocs(void);
+#endif
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t *time_p);
 WOLFSENTRY_API wolfsentry_time_t wolfsentry_diff_time(struct wolfsentry_context *wolfsentry, wolfsentry_time_t later, wolfsentry_time_t earlier);
@@ -1170,7 +1165,7 @@ struct wolfsentry_kv_pair {
 
 #define WOLFSENTRY_KV_KEY_LEN(kv) ((kv)->key_len)
 #define WOLFSENTRY_KV_KEY(kv) ((char *)((kv)->b))
-#define WOLFSENTRY_KV_TYPE(kv) ((enumint_t)(kv)->v_type & ~(enumint_t)WOLFSENTRY_KV_FLAG_MASK)
+#define WOLFSENTRY_KV_TYPE(kv) ((uint32_t)(kv)->v_type & ~(uint32_t)WOLFSENTRY_KV_FLAG_MASK)
 #define WOLFSENTRY_KV_V_UINT(kv) ((kv)->a.v_uint)
 #define WOLFSENTRY_KV_V_SINT(kv) ((kv)->a.v_sint)
 #define WOLFSENTRY_KV_V_FLOAT(kv) ((kv)->a.v_float)

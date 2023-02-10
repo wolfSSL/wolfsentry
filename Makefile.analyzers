@@ -124,7 +124,7 @@ endif
 	@echo
 	@echo "passed: sanitizers found no defects."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP=sanitizer-builds clean
-	@rmdir --ignore-fail-on-non-empty sanitizer-builds
+	@rmdir sanitizer-builds || true
 
 .PHONY: valgrind-all-gcc
 valgrind-all-gcc:
@@ -137,7 +137,7 @@ valgrind-all-gcc:
 	@echo "passed: no defects from gcc valgrind helgrind"
 	@echo "passed: no defects from any gcc valgrinds."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-gcc-builds clean
-	@rmdir --ignore-fail-on-non-empty valgrind-gcc-builds
+	@rmdir valgrind-gcc-builds || true
 
 .PHONY: valgrind-all-clang
 valgrind-all-clang: clang-version-test
@@ -150,7 +150,7 @@ valgrind-all-clang: clang-version-test
 	@echo "passed: no defects from clang valgrind helgrind"
 	@echo "passed: no defects from any clang valgrinds."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=valgrind-clang-builds clean
-	@rmdir --ignore-fail-on-non-empty valgrind-clang-builds
+	@rmdir valgrind-clang-builds || true
 
 .PHONY: sanitize-all-gcc
 sanitize-all-gcc:
@@ -162,7 +162,7 @@ sanitize-all-gcc:
 	@echo "passed: no defects from gcc sanitize thread"
 	@echo "passed: no defects from any gcc sanitizers."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-gcc clean
-	@rmdir --ignore-fail-on-non-empty sanitizer-builds-gcc
+	@rmdir sanitizer-builds-gcc || true
 
 .PHONY: sanitize-all-clang
 sanitize-all-clang: clang-version-test
@@ -174,7 +174,7 @@ sanitize-all-clang: clang-version-test
 	@echo "passed: no defects from clang sanitize thread"
 	@echo "passed: no defects from any clang sanitizers."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean
-	@rmdir --ignore-fail-on-non-empty sanitizer-builds-clang
+	@rmdir sanitizer-builds-clang || true
 
 .PHONY: sanitize-all-clang-macosx
 sanitize-all-clang-macosx: clang-version-test
@@ -183,7 +183,7 @@ sanitize-all-clang-macosx: clang-version-test
 	@echo "passed: no defects from clang sanitize address, undefined, float-cast-overflow, and float-divide-by-zero"
 	@echo "passed: no defects from any clang sanitizers."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=sanitizer-builds-clang clean
-	@rmdir --ignore-fail-on-non-empty sanitizer-builds-clang
+	@rmdir sanitizer-builds-clang || true
 
 .PHONY: analyze-all
 # valgrind-all-clang disabled until the valgrind team fixes https://bugs.kde.org/show_bug.cgi?id=452758
@@ -203,7 +203,7 @@ c99-test-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=gcc-c99-builds clean
 	@echo "passed: gcc std=c99 library build tests."
-	@rmdir --ignore-fail-on-non-empty gcc-c99-builds
+	@rmdir gcc-c99-builds || true
 
 .PHONY: c99-test-clang
 c99-test-clang: clang-version-test
@@ -213,7 +213,7 @@ c99-test-clang: clang-version-test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=clang-c99-builds CC=$(CLANG) EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=clang-c99-builds clean
 	@echo "passed: clang std=c99 library build tests."
-	@rmdir --ignore-fail-on-non-empty clang-c99-builds
+	@rmdir clang-c99-builds || true
 
 .PHONY: m32-test
 m32-test:
@@ -221,7 +221,7 @@ m32-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=m32-builds EXTRA_CFLAGS+=-m32 EXTRA_LDFLAGS+=-m32 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=m32-builds clean
 	@echo "passed: -m32 test."
-	@rmdir --ignore-fail-on-non-empty m32-builds
+	@rmdir m32-builds || true
 
 .PHONY: singlethreaded-test
 singlethreaded-test:
@@ -229,7 +229,7 @@ singlethreaded-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=singlethreaded-builds SINGLETHREADED=1 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=singlethreaded-builds clean
 	@echo "passed: SINGLETHREADED test."
-	@rmdir --ignore-fail-on-non-empty singlethreaded-builds
+	@rmdir singlethreaded-builds || true
 
 .PHONY: no-json-test
 no-json-test:
@@ -237,7 +237,7 @@ no-json-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON-builds NO_JSON=1 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON-builds clean
 	@echo "passed: NO_JSON test."
-	@rmdir --ignore-fail-on-non-empty NO_JSON-builds
+	@rmdir NO_JSON-builds || true
 
 .PHONY: no-json-dom-test
 no-json-dom-test:
@@ -245,7 +245,7 @@ no-json-dom-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON_DOM-builds NO_JSON_DOM=1 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=NO_JSON_DOM-builds clean
 	@echo "passed: NO_JSON_DOM test."
-	@rmdir --ignore-fail-on-non-empty NO_JSON_DOM-builds
+	@rmdir NO_JSON_DOM-builds || true
 
 .PHONY: no-error-strings-test
 no-error-strings-test:
@@ -253,7 +253,7 @@ no-error-strings-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-error-strings-builds EXTRA_CFLAGS+='-DWOLFSENTRY_NO_ERROR_STRINGS' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-error-strings-builds clean
 	@echo "passed: no-error-strings test."
-	@rmdir --ignore-fail-on-non-empty no-error-strings-builds
+	@rmdir no-error-strings-builds || true
 
 .PHONY: no-protocol-names-test
 no-protocol-names-test:
@@ -261,7 +261,7 @@ no-protocol-names-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-protocol-names-builds EXTRA_CFLAGS+='-DWOLFSENTRY_NO_PROTOCOL_NAMES' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-protocol-names-builds clean
 	@echo "passed: no-protocol-names test."
-	@rmdir --ignore-fail-on-non-empty no-protocol-names-builds
+	@rmdir no-protocol-names-builds || true
 
 .PHONY: no-getprotoby-test
 no-getprotoby-test:
@@ -269,7 +269,7 @@ no-getprotoby-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-getprotoby-builds EXTRA_CFLAGS+='-DWOLFSENTRY_NO_GETPROTOBY' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no-getprotoby-builds clean
 	@echo "passed: no-getprotoby test."
-	@rmdir --ignore-fail-on-non-empty no-getprotoby-builds
+	@rmdir no-getprotoby-builds || true
 
 .PHONY: no-stdio-build-test
 no-stdio-build-test:
@@ -277,7 +277,7 @@ no-stdio-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds NO_STDIO=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=no_stdio-builds clean
 	@echo "passed: NO_STDIO build test."
-	@rmdir --ignore-fail-on-non-empty no_stdio-builds
+	@rmdir no_stdio-builds || true
 
 .PHONY: minimal-build-test
 minimal-build-test:
@@ -285,7 +285,7 @@ minimal-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=minimal-builds SINGLETHREADED=1 NO_STDIO=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_PROTOCOL_NAMES -DWOLFSENTRY_NO_GETPROTOBY -Wno-error=inline -Wno-inline'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=minimal-builds clean
 	@echo "passed: minimal build test."
-	@rmdir --ignore-fail-on-non-empty minimal-builds
+	@rmdir minimal-builds || true
 
 .PHONY: dynamic-build-test
 dynamic-build-test:
@@ -294,7 +294,7 @@ dynamic-build-test:
 	@for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH=$(BUILD_TOP) $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/dynamic-build-test/tests/$$test" >/dev/null || exit $?; done
 	@echo 'passed: $(UNITTEST_LIST_SHARED).'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=dynamic-build-test clean
-	@rmdir --ignore-fail-on-non-empty dynamic-build-test
+	@rmdir dynamic-build-test || true
 
 .PHONY: lock-error-checking-test
 lock-error-checking-test:
@@ -302,7 +302,7 @@ lock-error-checking-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=lock-error-checking-builds EXTRA_CFLAGS+='-DWOLFSENTRY_LOCK_ERROR_CHECKING' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=lock-error-checking-builds clean
 	@echo "passed: lock-error-checking test."
-	@rmdir --ignore-fail-on-non-empty lock-error-checking-builds
+	@rmdir lock-error-checking-builds || true
 
 ifdef FREERTOS_TOP
     FREERTOS_TOP_FOR_TEST := $(FREERTOS_TOP)
@@ -324,7 +324,7 @@ freertos-arm32-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=freertos-arm32-test-builds HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP=freertos-arm32-test-builds clean
 	@echo "passed: freertos-arm32-build test."
-	@rmdir --ignore-fail-on-non-empty freertos-arm32-test-builds
+	@rmdir freertos-arm32-test-builds || true
 
 .PHONY: dist-check
 dist-check:

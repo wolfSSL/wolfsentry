@@ -38,10 +38,6 @@
 #define WOLFSENTRY
 #endif
 
-#ifdef WOLFSENTRY_USER_SETTINGS_FILE
-#include WOLFSENTRY_USER_SETTINGS_FILE
-#endif
-
 #include <wolfsentry/wolfsentry_settings.h>
 
 #include <wolfsentry/wolfsentry_errcodes.h>

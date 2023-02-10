@@ -23,6 +23,10 @@
 #ifndef WOLFSENTRY_SETTINGS_H
 #define WOLFSENTRY_SETTINGS_H
 
+#ifdef WOLFSENTRY_USER_SETTINGS_FILE
+#include WOLFSENTRY_USER_SETTINGS_FILE
+#endif
+
 #ifndef BUILDING_LIBWOLFSENTRY
 #include <wolfsentry/wolfsentry_options.h>
 #endif
@@ -33,6 +37,13 @@
     #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
         #define WOLFSENTRY_PRINTF_ERR(...) printf(__VA_ARGS__)
     #endif
+
+#ifdef WOLFSENTRY_LWIP
+    #include <time.h>
+    #include <lwip/inet.h>
+    #include <lwip/sockets.h>
+#endif
+
 #endif
 
 #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
@@ -182,6 +193,14 @@ typedef uint16_t wolfsentry_priority_t;
 #define __attribute_maybe_unused__
 #endif
 #endif
+
+#ifndef wolfsentry_static_assert
+#if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
+#define wolfsentry_static_assert(c, m) static_assert(c, m)
+#else
+#define wolfsentry_static_assert(c, m) do {} while ()
+#endif
+#endif /* !wolfsentry_static_assert */
 
 #if defined(WOLFSENTRY_THREADSAFE)
 

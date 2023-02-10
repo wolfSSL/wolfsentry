@@ -333,9 +333,7 @@ WOLFSENTRY_LOCAL unsigned int _wolfsentry_call_depth(void)
     void *p = __builtin_frame_address(0);
 #ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
     static const char spaces[] = "                ";
-#if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
-    static_assert(sizeof spaces == 17, "spaces for WOLFSENTRY_CALL_DEPTH_RETURNS_STRING must be 16 characters plus the terminating null.");
-#endif
+    wolfsentry_static_assert(sizeof spaces == 17, "spaces for WOLFSENTRY_CALL_DEPTH_RETURNS_STRING must be 16 characters plus the terminating null.");
 #endif
     if (p == 0)
         return 0;
@@ -437,7 +435,7 @@ WOLFSENTRY_API const char *wolfsentry_action_res_decode(wolfsentry_action_res_t 
             return "user+13";
         case WOLFSENTRY_ACTION_RES_USER_BASE << 14U:
             return "user+14";
-        case (unsigned)WOLFSENTRY_ACTION_RES_USER_BASE << 15U:
+        case ((unsigned)WOLFSENTRY_ACTION_RES_USER_BASE) << 15U:
             return "user+15";
         }
         return "(?)";
@@ -480,7 +478,7 @@ WOLFSENTRY_API int _wolfsentry_get_n_mallocs(void) {
 
 #ifdef FREERTOS
 
-#ifndef configSUPPORT_DYNAMIC_ALLOCATION
+#if (configSUPPORT_DYNAMIC_ALLOCATION != 1)
 #error need configSUPPORT_DYNAMIC_ALLOCATION to use WOLFSENTRY_MALLOC_BUILTINS on FreeRTOS.
 #endif
 

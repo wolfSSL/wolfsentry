@@ -46,17 +46,17 @@ typedef int32_t wolfsentry_errcode_t;
            | ((__LINE__ & WOLFSENTRY_LINE_NUMBER_MAX) << 8)                  \
            | ((WOLFSENTRY_SOURCE_ID & WOLFSENTRY_SOURCE_ID_MAX) << 24)))
 
-#if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
+#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 #define WOLFSENTRY_ERROR_ENCODE_1(x) ({                                      \
-    static_assert(((x) >= -WOLFSENTRY_ERROR_ID_MAX)                          \
+    wolfsentry_static_assert(((x) >= -WOLFSENTRY_ERROR_ID_MAX)               \
                    && ((x) <= WOLFSENTRY_ERROR_ID_MAX),                      \
                   "error code must be -"                                     \
                   _q(WOLFSENTRY_ERROR_ID_MAX)                                \
                   " <= e <= "                                                \
                   _q(WOLFSENTRY_ERROR_ID_MAX) );                             \
-    static_assert(__LINE__ <= WOLFSENTRY_LINE_NUMBER_MAX,                    \
+    wolfsentry_static_assert(__LINE__ <= WOLFSENTRY_LINE_NUMBER_MAX,         \
                   "line number must be 1-" _q(WOLFSENTRY_LINE_NUMBER_MAX) ); \
-    static_assert((WOLFSENTRY_SOURCE_ID >= 0)                                \
+    wolfsentry_static_assert((WOLFSENTRY_SOURCE_ID >= 0)                     \
                   && (WOLFSENTRY_SOURCE_ID <= 0x7f),                         \
                   "source file ID must be 0-" _q(WOLFSENTRY_SOURCE_ID_MAX) );\
     WOLFSENTRY_ERROR_ENCODE_0(x);                                            \

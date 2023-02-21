@@ -387,7 +387,7 @@ endif
 
 dist-test-clean:
 	@DEST_DIR="$$PWD" && [ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $${DEST_DIR}/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $${DEST_DIR}/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
-	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) && rmdir $(BUILD_TOP)/dist-test
+	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
 
 CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
@@ -429,9 +429,9 @@ else
 	@rm $(CLEAN_RM_ARGS)
 endif
 	@rm -rf $(addsuffix .dSYM,$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST) $(UNITTEST_LIST_SHARED)))
-	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,wolfsentry,examples,scripts,FreeRTOS,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir || exit 0
+	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,wolfsentry,examples,scripts,FreeRTOS,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir && rmdir "${BUILD_TOP}" || exit 0
 ifndef VERY_QUIET
-	@echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
+	@echo 'cleaned all targets and ephemera in $(BUILD_TOP).'
 endif
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))

@@ -78,10 +78,7 @@ static wolfsentry_errcode_t test_init (void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
     wolfsentry_errcode_t ret;
-    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
-
-    if (WOLFSENTRY_THREAD_GET_ERROR < 0)
-        WOLFSENTRY_ERROR_RERETURN(WOLFSENTRY_THREAD_GET_ERROR);
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     ret = wolfsentry_init(wolfsentry_build_settings,
                           WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
@@ -221,9 +218,7 @@ static int test_rw_locks (void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_rwlock *lock;
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
-    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
-
-    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     (void)alarm(1);
 
@@ -573,8 +568,7 @@ static int test_static_routes (void) {
         .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
     };
 
-    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
-    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(
@@ -1289,9 +1283,9 @@ static int test_dynamic_rules (void) {
     wolfsentry_ent_id_t id;
 
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+    struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
 
-    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
-    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(
@@ -1388,9 +1382,56 @@ static int test_dynamic_rules (void) {
             "deletion_side_effect_demo",
             -1 /* label_len */,
             10,
-            NULL /* config */,
+            &config2,
             WOLFSENTRY_EVENT_FLAG_NONE,
             &id));
+
+    {
+        struct wolfsentry_eventconfig eventconfig;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_get_config(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "deletion_side_effect_demo",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &eventconfig));
+
+        WOLFSENTRY_EXIT_ON_FALSE((eventconfig.route_private_data_size == config2.route_private_data_size) &&
+                                 (eventconfig.route_private_data_alignment == config2.route_private_data_alignment) &&
+                                 (eventconfig.max_connection_count == config2.max_connection_count));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_update_config(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "deletion_side_effect_demo",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &config));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_get_config(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "deletion_side_effect_demo",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &eventconfig));
+
+        WOLFSENTRY_EXIT_ON_FALSE((eventconfig.route_private_data_size == config.route_private_data_size) &&
+                                 (eventconfig.route_private_data_alignment == config.route_private_data_alignment) &&
+                                 (eventconfig.max_connection_count == config.max_connection_count));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "deletion_side_effect_demo",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                NULL /* action_results */));
+
+        WOLFSENTRY_EXIT_ON_SUCCESS(
+            wolfsentry_event_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "deletion_side_effect_demo",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                NULL /* action_results */));
+    }
 
 #if 0
 int wolfsentry_event_set_subevent(
@@ -1680,6 +1721,83 @@ int wolfsentry_event_set_subevent(
             NULL /* handler_context */,
             &id));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "match_side_effect_demo",
+            -1,
+            "del_from_greenlist",
+            -1));
+
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        wolfsentry_event_action_prepend(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "match_side_effect_demo",
+            -1,
+            "del_from_greenlist",
+            -1));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_prepend(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "match_side_effect_demo",
+            -1,
+            "add_to_greenlist",
+            -1));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_insert_after(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "match_side_effect_demo",
+            -1,
+            "check_counts",
+            -1,
+            "add_to_greenlist",
+            -1));
+
+    {
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        struct wolfsentry_action_list_ent *cursor;
+        const char *action_label;
+        int action_label_len;
+        static const char *labels[] = { "add_to_greenlist", "check_counts", "del_from_greenlist" };
+        int label_i = 0;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_action_list_start(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "match_side_effect_demo",
+                -1,
+                &cursor));
+
+        while (wolfsentry_event_action_list_next(
+                   WOLFSENTRY_CONTEXT_ARGS_OUT,
+                   &cursor,
+                   &action_label,
+                   &action_label_len) >= 0) {
+            WOLFSENTRY_EXIT_ON_TRUE((size_t)label_i >= sizeof labels / sizeof labels[0]);
+            WOLFSENTRY_EXIT_ON_FALSE(strcmp(action_label, labels[label_i++]) == 0);
+        }
+
+        WOLFSENTRY_EXIT_ON_FALSE(label_i == sizeof labels / sizeof labels[0]);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_action_list_done(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &cursor));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "match_side_effect_demo",
+            -1,
+            "del_from_greenlist",
+            -1));
+
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
@@ -1747,8 +1865,7 @@ static int test_user_values (void) {
     wolfsentry_kv_type_t kv_type;
     struct wolfsentry_kv_pair_internal *kv_ref;
 
-    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
-    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(
@@ -2203,8 +2320,7 @@ static int test_user_addr_families (void) {
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
 
-    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
-    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(
@@ -2551,8 +2667,7 @@ static int test_json(const char *fname) {
 
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
 
-    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
-    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(
@@ -2727,6 +2842,13 @@ static int test_json(const char *fname) {
     }
 
     {
+        struct wolfsentry_context *ctx_clone;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &ctx_clone, WOLFSENTRY_CLONE_FLAG_NONE));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_clone)));
+    }
+
+    {
         struct wolfsentry_cursor *cursor;
         struct wolfsentry_route *route;
         struct wolfsentry_route_exports route_exports;
@@ -2852,18 +2974,18 @@ static int test_json(const char *fname) {
 
         WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "wolfsentry-config-version")) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(json_value_uint32(v1) == 1U);
-        json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v1);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v1)));
 
         WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "default-policies")) == NULL);
         WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-policy")) == NULL);
         WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(strcmp((const char *)s, "reject") == 0);
-        json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2)));
 
         WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_path(v1, "default-event")) == NULL);
         WOLFSENTRY_EXIT_ON_TRUE((s = json_value_string(v2)) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(strcmp((const char *)s, "static-route-parent") == 0);
-        json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2)));
         v2 = NULL;
 
         WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "static-routes-insert")) == NULL);
@@ -2872,23 +2994,23 @@ static int test_json(const char *fname) {
             WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_array_get(v1, i)) == NULL);
             WOLFSENTRY_EXIT_ON_TRUE((v3 = json_value_path(v2, "family")) == NULL);
             WOLFSENTRY_EXIT_ON_TRUE((json_value_string(v3) == NULL) && (json_value_int32(v3) <= 0));
-            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v3);
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v3)));
             v3 = NULL;
-            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2);
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2)));
             v2 = NULL;
         }
-        json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v1);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v1)));
 
         WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "user-values/user-null")) == NULL);
         WOLFSENTRY_EXIT_ON_FALSE(json_value_type(v1) == JSON_VALUE_NULL);
 
         if (v3)
-            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v3);
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v3)));
         if (v2)
-            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2);
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v2)));
         if (v1)
-            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v1);
-        json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_root);
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), v1)));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_root)));
         if (test_json_document != NULL)
             free(test_json_document);
         if (fd != -1)

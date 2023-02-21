@@ -159,10 +159,15 @@ typedef enum {
     struct wolfsentry_thread_context_public thread_buffer;              \
     struct wolfsentry_thread_context *thread =                          \
         (struct wolfsentry_thread_context *)&thread_buffer;             \
-    wolfsentry_errcode_t _init_thread_context_ret =                     \
+    wolfsentry_errcode_t _thread_context_ret =                     \
         wolfsentry_init_thread_context(thread, flags, NULL /* user_context */)
-#define WOLFSENTRY_THREAD_GET_ERROR _init_thread_context_ret
-#define WOLFSENTRY_THREAD_TAILER(flags) wolfsentry_destroy_thread_context(thread, flags)
+#define WOLFSENTRY_THREAD_HEADER_CHECKED(flags)                         \
+    WOLFSENTRY_THREAD_HEADER(flags);                                    \
+    if (_thread_context_ret < 0)                                   \
+        return _thread_context_ret
+#define WOLFSENTRY_THREAD_TAILER(flags) (_thread_context_ret = wolfsentry_destroy_thread_context(thread, flags))
+#define WOLFSENTRY_THREAD_TAILER_CHECKED(flags) do { WOLFSENTRY_THREAD_TAILER(flags); if (_thread_context_ret < 0) return _thread_context_ret; } while (0)
+#define WOLFSENTRY_THREAD_GET_ERROR _thread_context_ret
 
 typedef enum {
     WOLFSENTRY_LOCK_FLAG_NONE = 0,
@@ -235,8 +240,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwloc
 #define WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED do {} while (0)
 
 #define WOLFSENTRY_THREAD_HEADER(flags) do {} while (0)
+#define WOLFSENTRY_THREAD_HEADER_CHECKED(flags) do {} while (0)
 #define WOLFSENTRY_THREAD_GET_ERROR 0
 #define WOLFSENTRY_THREAD_TAILER(flags) 0
+#define WOLFSENTRY_THREAD_TAILER_CHECKED(flags) do {} while (0)
 
 #define wolfsentry_lock_init(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_alloc(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
@@ -454,10 +461,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_now_plus_delta_timespec(stru
 typedef wolfsentry_errcode_t (*wolfsentry_make_id_cb_t)(void *context, wolfsentry_ent_id_t *id);
 
 WOLFSENTRY_API void *wolfsentry_malloc(WOLFSENTRY_CONTEXT_ARGS_IN, size_t size);
-WOLFSENTRY_API void wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr);
+WOLFSENTRY_API_VOID wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr);
 WOLFSENTRY_API void *wolfsentry_realloc(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr, size_t size);
 WOLFSENTRY_API void *wolfsentry_memalign(WOLFSENTRY_CONTEXT_ARGS_IN, size_t alignment, size_t size);
-WOLFSENTRY_API void wolfsentry_free_aligned(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr);
+WOLFSENTRY_API_VOID wolfsentry_free_aligned(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr);
 #if defined(WOLFSENTRY_MALLOC_BUILTINS) && defined(WOLFSENTRY_MALLOC_DEBUG)
 WOLFSENTRY_API int _wolfsentry_get_n_mallocs(void);
 #endif

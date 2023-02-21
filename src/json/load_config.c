@@ -1132,8 +1132,11 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
                 0 /* overwrite_p */);
 
             if (ret < 0) {
-                json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry_get_allocator(jps->wolfsentry), jps->thread), &jv);
-                WOLFSENTRY_ERROR_RERETURN(ret);
+                wolfsentry_errcode_t ret2 = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry_get_allocator(jps->wolfsentry), jps->thread), &jv);
+                if (ret2 < 0)
+                    WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret2));
+                else
+                    WOLFSENTRY_ERROR_RERETURN(ret);
             }
 
             jps->section_under_construction = S_U_C_NONE;
@@ -1527,7 +1530,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT) &&
             ((*jps)->wolfsentry != NULL))
         {
-            (void)wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT);
+            int ret2 = wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT);
+            if (ret2 < 0)
+                ret = ret2;
         }
         wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_OUT, *jps);
         *jps = NULL;
@@ -1706,7 +1711,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
     if ((ret = wolfsentry_config_json_init_ex(WOLFSENTRY_CONTEXT_ARGS_OUT, load_flags, json_config, &jps)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size)) < 0) {
-        (void)wolfsentry_config_json_fini(&jps, NULL, 0);
+        ret = wolfsentry_config_json_fini(&jps, NULL, 0);
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_config_json_fini(&jps, err_buf, err_buf_size));

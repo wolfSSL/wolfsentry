@@ -132,6 +132,20 @@ struct DICT_tag {
     int (*cmp_func)(const unsigned char*, size_t, const unsigned char*, size_t);
 };
 
+static inline RBTREE **malloc_rbtree_stack(
+#ifdef WOLFSENTRY
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
+#endif
+    DICT *rbtree)
+{
+#ifdef LOG2_32
+    /* max possible height of an RB tree is 2*log2(n+1). */
+    return (RBTREE **)malloc((size_t)(2 * LOG2_32(rbtree->size + 1)) * sizeof(RBTREE *));
+#else
+    /* easy space optimization: the tree can't be deeper than the total number of leaves. */
+    return (RBTREE **)malloc((rbtree->size < RBTREE_MAX_HEIGHT ? rbtree->size : RBTREE_MAX_HEIGHT) * sizeof(RBTREE *));
+#endif
+}
 
 #if defined offsetof
     #define OFFSETOF(type, member)      offsetof(type, member)
@@ -354,7 +368,7 @@ json_value_path(JSON_VALUE* root, const char* path)
  *** Initializers ***
  ********************/
 
-WOLFSENTRY_API void
+WOLFSENTRY_API_VOID
 json_value_init_null(JSON_VALUE* v)
 {
     if(v != NULL)
@@ -616,7 +630,7 @@ json_value_init_dict_ex(
     return 0;
 }
 
-WOLFSENTRY_API void
+WOLFSENTRY_API int
 json_value_fini(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -624,26 +638,34 @@ json_value_fini(
     JSON_VALUE* v)
 {
     if(v == NULL)
-        return;
+        return 0;
 
-    if(json_value_type(v) == JSON_VALUE_ARRAY)
-        json_value_array_clean(
+    if(json_value_type(v) == JSON_VALUE_ARRAY) {
+        int ret = json_value_array_clean(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v);
+        if (ret < 0)
+            return ret;
+    }
 
-    if(json_value_type(v) == JSON_VALUE_DICT)
-        json_value_dict_clean(
+    if(json_value_type(v) == JSON_VALUE_DICT) {
+        int ret = json_value_dict_clean(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             v);
+        if (ret < 0)
+            return ret;
+    }
 
     if(v->data.data_bytes[0] & 0x80)
         free(json_value_payload(v));
 
     v->data.data_bytes[0] = JSON_VALUE_NULL;
+
+    return 0;
 }
 
 
@@ -975,16 +997,20 @@ json_value_array_remove_range(
 {
     ARRAY* a = json_value_array_payload(v);
     size_t i;
+    int ret;
 
     if(a == NULL  ||  index + count > a->size)
         return -1;
 
-    for(i = index; i < index + count; i++)
-        json_value_fini(
+    for(i = index; i < index + count; i++) {
+        ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &a->json_value_buf[i]);
+        if (ret < 0)
+            return ret;
+    }
 
     if(index + count < a->size) {
         memmove(a->json_value_buf + index, a->json_value_buf + index + count,
@@ -1002,7 +1028,7 @@ json_value_array_remove_range(
     return 0;
 }
 
-WOLFSENTRY_API void
+WOLFSENTRY_API int
 json_value_array_clean(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1011,19 +1037,25 @@ json_value_array_clean(
 {
     ARRAY* a = json_value_array_payload(v);
     size_t i;
+    int ret;
 
     if(a == NULL)
-        return;
+        return 0;
 
-    for(i = 0; i < a->size; i++)
-        json_value_fini(
+    for(i = 0; i < a->size; i++) {
+        ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &a->json_value_buf[i]);
+        if (ret < 0)
+            return ret;
+    }
 
     free(a->json_value_buf);
     memset(a, 0, sizeof(ARRAY));
+
+    return 0;
 }
 
 
@@ -1506,6 +1538,7 @@ json_value_dict_remove_(
     RBTREE* path[RBTREE_MAX_HEIGHT];
     int path_len = 0;
     int cmp;
+    int ret;
 
     /* Find the node to remove. */
     while(node != NULL) {
@@ -1616,16 +1649,20 @@ json_value_dict_remove_(
         else
             d->order_tail = node->order_prev;
     }
-    json_value_fini(
+    ret = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->key);
-    json_value_fini(
+    if (ret < 0)
+        return ret;
+    ret = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->json_value);
+    if (ret < 0)
+        return ret;
     free(node);
     d->size--;
 
@@ -1692,7 +1729,7 @@ json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VA
     return 0;
 }
 
-WOLFSENTRY_API void
+WOLFSENTRY_API int
 json_value_dict_clean(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
@@ -1700,13 +1737,22 @@ json_value_dict_clean(
     JSON_VALUE* v)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
-    RBTREE* stack[RBTREE_MAX_HEIGHT];
+    RBTREE **stack;
     int stack_size;
     RBTREE* node;
     RBTREE* right;
+    int ret;
 
     if(d == NULL)
-        return;
+        return 0;
+
+    stack = malloc_rbtree_stack(
+#ifdef WOLFSENTRY
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
+#endif
+        d);
+    if (stack == NULL)
+        return JSON_ERR_OUTOFMEMORY;
 
     stack_size = json_value_dict_leftmost_path(stack, d->root);
 
@@ -1714,16 +1760,20 @@ json_value_dict_clean(
         node = stack[--stack_size];
         right = node->right;
 
-        json_value_fini(
+        ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->key);
-        json_value_fini(
+        if (ret < 0)
+            return ret;
+        ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->json_value);
+        if (ret < 0)
+            return ret;
         free(node);
 
         stack_size += json_value_dict_leftmost_path(stack + stack_size, right);
@@ -1733,9 +1783,148 @@ json_value_dict_clean(
         memset(d, 0, OFFSETOF(DICT, cmp_func));
     else
         memset(d, 0, OFFSETOF(DICT, order_head));
+
+    free(stack);
+
+    return 0;
 }
 
+#ifdef WOLFSENTRY
 
+WOLFSENTRY_API int
+json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
+                 const JSON_VALUE* node, JSON_VALUE *clone)
+{
+    int ret = 0;
+
+    switch(json_value_type(node)) {
+        case JSON_VALUE_NULL:
+            json_value_init_null(clone);
+            break;
+
+        case JSON_VALUE_BOOL:
+            ret = json_value_init_bool(clone, json_value_bool(node));
+            break;
+
+        case JSON_VALUE_INT32:
+            ret = json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_int32(node));
+            break;
+
+        case JSON_VALUE_UINT32:
+            ret = json_value_init_uint32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_uint32(node));
+            break;
+
+        case JSON_VALUE_INT64:
+            ret = json_value_init_int64(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_int64(node));
+            break;
+
+        case JSON_VALUE_UINT64:
+            ret = json_value_init_uint64(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_uint64(node));
+            break;
+
+        case JSON_VALUE_FLOAT:
+            ret = json_value_init_float(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_float(node));
+            break;
+
+        case JSON_VALUE_DOUBLE:
+            ret = json_value_init_double(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_double(node));
+            break;
+
+        case JSON_VALUE_STRING:
+            ret = json_value_init_string_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_string(node), json_value_string_length(node));
+            break;
+
+        case JSON_VALUE_ARRAY:
+        {
+            const ARRAY* src_a = json_value_array_payload((JSON_VALUE *)node);
+            size_t n = json_value_array_size(node);
+            const JSON_VALUE* src_values = json_value_array_get_all(node);
+            ARRAY* dest_a;
+            JSON_VALUE* dest_values;
+            size_t i;
+
+            ret = json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);
+            if (ret < 0)
+                break;
+
+            dest_a = json_value_array_payload(clone);
+            if (! dest_a) {
+                ret = JSON_ERR_INTERNAL;
+                break;
+            }
+
+            ret = json_value_array_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
+                                           dest_a, src_a->alloc);
+            if (ret < 0)
+                break;
+
+            dest_values = json_value_array_get_all(clone);
+            if (! dest_values) {
+                ret = JSON_ERR_INTERNAL;
+                break;
+            }
+
+            for(i = 0; i < n; i++) {
+                ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_values[i], &dest_values[i]);
+                if (ret < 0)
+                    break;
+            }
+
+            dest_a->size = src_a->size;
+
+            break;
+        }
+
+        case JSON_VALUE_DICT:
+        {
+            DICT* src_dict = json_value_dict_payload((JSON_VALUE *)node);
+            RBTREE **stack; /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
+            int stack_size;
+            RBTREE *src_dict_node;
+            JSON_VALUE *dest_node;
+
+            stack = malloc_rbtree_stack(
+#ifdef WOLFSENTRY
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
+#endif
+                src_dict);
+            if (! stack) {
+                ret = JSON_ERR_OUTOFMEMORY;
+                break;
+            }
+
+            ret = json_value_init_dict_ex(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone,
+                                          (node->data.data_bytes[0] & HAS_CUSTOMCMP) ? src_dict->cmp_func : 0,
+                                          json_value_dict_flags(node));
+            if (ret < 0) {
+                free(stack);
+                break;
+            }
+
+            stack_size = json_value_dict_leftmost_path(stack, src_dict->root);
+            while(stack_size > 0) {
+                src_dict_node = stack[--stack_size];
+                dest_node = json_value_dict_get_or_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_string(&src_dict_node->key), json_value_string_length(&src_dict_node->key));
+                if (! dest_node) {
+                    ret = JSON_ERR_OUTOFMEMORY;
+                    break;
+                }
+                ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_dict_node->json_value, dest_node);
+                if (ret < 0)
+                    break;
+                stack_size += json_value_dict_leftmost_path(stack + stack_size, src_dict_node->right);
+            }
+
+            free(stack);
+
+            break;
+        }
+    }
+
+    return ret;
+}
+
+#endif /* WOLFSENTRY */
 
 #ifdef CRE_TEST
 /* Verification of RB-tree correctness. */

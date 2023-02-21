@@ -785,8 +785,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfs
     if ((*thread_context = (struct wolfsentry_thread_context *)hpi->allocator.malloc(hpi->allocator.context, NULL /* thread */, sizeof **thread_context)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     ret = wolfsentry_init_thread_context(*thread_context, init_thread_flags, user_context);
-    if (ret < 0)
-        wolfsentry_free_thread_context(hpi, thread_context, init_thread_flags);
+    if (ret < 0) {
+        int ret2 = wolfsentry_free_thread_context(hpi, thread_context, init_thread_flags);
+        if (ret2 < 0)
+            ret = ret2;
+    }
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
@@ -2848,7 +2851,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_either(struct wolfsentr
         if (! WOLFSENTRY_ERROR_CODE_IS(ret, LACKING_READ_LOCK))
             WOLFSENTRY_ERROR_RERETURN(ret);
     }
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_have_mutex(lock, thread, flags));
+    ret = wolfsentry_lock_have_mutex(lock, thread, flags);
+    if (WOLFSENTRY_ERROR_CODE_IS(ret, NOT_PERMITTED) ||
+        WOLFSENTRY_ERROR_CODE_IS(ret, LACKING_MUTEX))
+    {
+        WOLFSENTRY_ERROR_RETURN(LACKING_READ_LOCK);
+    } else
+        WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservation(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
@@ -3044,7 +3053,7 @@ WOLFSENTRY_API void *wolfsentry_malloc(WOLFSENTRY_CONTEXT_ARGS_IN, size_t size) 
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry->hpi.allocator.context),
             size));
 }
-WOLFSENTRY_API void wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr) {
+WOLFSENTRY_API_VOID wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr) {
     wolfsentry->hpi.allocator.free(
         wolfsentry->hpi.allocator.context,
 #ifdef WOLFSENTRY_THREADSAFE
@@ -3068,7 +3077,7 @@ WOLFSENTRY_API void *wolfsentry_memalign(WOLFSENTRY_CONTEXT_ARGS_IN, size_t alig
             size)
         : NULL);
 }
-WOLFSENTRY_API void wolfsentry_free_aligned(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr) {
+WOLFSENTRY_API_VOID wolfsentry_free_aligned(WOLFSENTRY_CONTEXT_ARGS_IN, void *ptr) {
     if (ptr && wolfsentry->hpi.allocator.free_aligned)
         wolfsentry->hpi.allocator.free_aligned(
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry->hpi.allocator.context),
@@ -3466,49 +3475,37 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init(
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_IN) {
     wolfsentry_errcode_t ret;
-    wolfsentry_action_res_t action_results;
-
-    action_results = WOLFSENTRY_ACTION_RES_NONE;
+    wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
     if ((ret = wolfsentry_route_flush_table(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->routes, &action_results)) < 0)
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
-    if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->events->header)) < 0)
-        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+    ret = wolfsentry_event_flush_all(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
 
-    if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->user_values->header)) < 0)
-        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+    ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->user_values->header);
 
-    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_context **wolfsentry)) {
     wolfsentry_errcode_t ret;
+    wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
 
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(*wolfsentry);
 
-    if ((*wolfsentry)->routes != NULL) {
-        if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->routes->header)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
-    }
-    if ((*wolfsentry)->actions != NULL) {
-        if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->actions->header)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
-    }
-    if ((*wolfsentry)->events != NULL) {
-        if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->events->header)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
-    }
-    if ((*wolfsentry)->user_values != NULL) {
-        if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->user_values->header)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
-    }
-    if ((*wolfsentry)->addr_families_bynumber != NULL) {
-        if ((ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->addr_families_bynumber->header)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
-    }
+    ret = wolfsentry_route_flush_table(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), (*wolfsentry)->routes, &action_results);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    ret = wolfsentry_action_flush_all(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry));
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    ret = wolfsentry_event_flush_all(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry));
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->user_values->header);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    ret = wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), &(*wolfsentry)->addr_families_bynumber->header);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     /* freeing ents in addr_families_byname is implicit to freeing the
      * corresponding ents in addr_families_bynumber.
      */
@@ -3636,8 +3633,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
 
     if ((ret < 0) && (*clone != NULL)) {
 #ifdef WOLFSENTRY_THREADSAFE
-        if (clone_is_locked)
-            (void)wolfsentry_context_unlock(*clone, thread);
+        if (clone_is_locked) {
+            int ret2 = wolfsentry_context_unlock(*clone, thread);
+            if (ret2 < 0)
+                ret = ret2;
+        }
 #endif
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone)));
     }

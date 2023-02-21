@@ -99,8 +99,17 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_drop_reference(
     if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
-    if (WOLFSENTRY_KV_TYPE(&kv->kv) == WOLFSENTRY_KV_JSON)
-        json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), WOLFSENTRY_KV_V_JSON(&kv->kv));
+    if (WOLFSENTRY_KV_TYPE(&kv->kv) == WOLFSENTRY_KV_JSON) {
+        ret = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), WOLFSENTRY_KV_V_JSON(&kv->kv));
+        if (ret < 0) {
+            wolfsentry_errcode_t ret2;
+            WOLFSENTRY_REFCOUNT_INCREMENT(kv->header.refcount, ret2);
+            if (ret2 < 0)
+                WOLFSENTRY_ERROR_RERETURN(ret2);
+            else
+                WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
+        }
+    }
 #endif
     WOLFSENTRY_FREE(kv);
     WOLFSENTRY_RETURN_OK;
@@ -490,6 +499,16 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_clone(
     if ((*new_kv_pair = WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, new_size)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     memcpy(*new_kv_pair, src_kv_pair, new_size);
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    if (WOLFSENTRY_KV_TYPE(&src_kv_pair->kv) == WOLFSENTRY_KV_JSON) {
+        int ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(dest_context)),
+                                   &src_kv_pair->kv.a.v_json, &(*new_kv_pair)->kv.a.v_json);
+        if (ret < 0)
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
+    }
+#endif
+
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
 
     WOLFSENTRY_RETURN_OK;

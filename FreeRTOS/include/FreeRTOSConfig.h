@@ -86,8 +86,9 @@
 
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
 
-#ifndef __IASMARM__
-        #define configASSERT(c, m) wolfsentry_static_assert(c, m)
+#ifndef __IASMARM__ /* Prevent C code being included in IAR asm files. */
+        void vAssertCalled( const char *pcFileName, uint32_t ulLine );
+        #define configASSERT( x ) if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ );
 #endif
 
 #endif /* FREERTOS_CONFIG_H */

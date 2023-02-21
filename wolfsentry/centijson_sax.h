@@ -220,7 +220,7 @@ typedef struct JSON_PARSER {
 
 /* Fill `config` with options used by default.
  */
-WOLFSENTRY_API void json_default_config(JSON_CONFIG* config);
+WOLFSENTRY_API_VOID json_default_config(JSON_CONFIG* config);
 
 
 /* Initialize the parser, associate it with the given callbacks and
@@ -298,7 +298,7 @@ WOLFSENTRY_API const char* json_type_str(JSON_TYPE type);
  * (Note it says "no" in cases the number string contains any fraction or
  * exponent part.)
  */
-WOLFSENTRY_API void json_analyze_number(const unsigned char* num, size_t num_size,
+WOLFSENTRY_API int json_analyze_number(const unsigned char* num, size_t num_size,
                          int* p_is_int32_compatible,
                          int* p_is_uint32_compatible,
                          int* p_is_int64_compatible,

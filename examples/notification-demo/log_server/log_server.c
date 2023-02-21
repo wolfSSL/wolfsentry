@@ -1837,29 +1837,30 @@ int main(int argc, char **argv) {
         /* if ssl_error != SOCKET_FILTERED_E, then pass in an appropriate event for the endpoint -- no-cert, bad-cert, transaction-forbidden. */
 
         if (wolfsentry_data) {
-            struct wolfsentry_route_metadata_exports m;
-
             if (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)
                 fprintf(stderr, "%s L%d WOLFSENTRY_ACTION_RES_FALLTHROUGH\n",__FILE__,__LINE__);
 
-            ret = wolfsentry_route_get_metadata(wolfsentry_data->rule_route, &m);
-            wolfsentry_time_t now;
-            struct timespec age, purge_after;
-            (void)wolfsentry_time_now_plus_delta(global_wolfsentry, 0 /* td */, &now);
-            (void)wolfsentry_time_to_timespec(global_wolfsentry, now - m.insert_time, &age);
-            if (m.purge_after)
-                (void)wolfsentry_time_to_timespec(global_wolfsentry, m.purge_after - now, &purge_after);
-            else
-                purge_after.tv_sec = 0;
 #ifdef DEBUG_WOLFSENTRY
-            fprintf(stderr,"%s L%d wolfsentry_data->rule_route_id = %u, derog = %u, commend = %u, hits = %u, age = %lds, purge_after=+%lds\n", __FILE__, __LINE__,
-                    wolfsentry_data->rule_route_id,
-                    m.derogatory_count,
-                    m.commendable_count,
-                    m.hit_count,
-                    age.tv_sec,
-                    purge_after.tv_sec
-                );
+            {
+                struct wolfsentry_route_metadata_exports m;
+                wolfsentry_time_t now;
+                struct timespec age, purge_after;
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_get_metadata(wolfsentry_data->rule_route, &m));
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_time_now_plus_delta(global_wolfsentry, 0 /* td */, &now));
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_time_to_timespec(global_wolfsentry, now - m.insert_time, &age));
+                if (m.purge_after)
+                    (void)wolfsentry_time_to_timespec(global_wolfsentry, m.purge_after - now, &purge_after);
+                else
+                    purge_after.tv_sec = 0;
+                fprintf(stderr,"%s L%d wolfsentry_data->rule_route_id = %u, derog = %u, commend = %u, hits = %u, age = %lds, purge_after=+%lds\n", __FILE__, __LINE__,
+                        wolfsentry_data->rule_route_id,
+                        m.derogatory_count,
+                        m.commendable_count,
+                        m.hit_count,
+                        age.tv_sec,
+                        purge_after.tv_sec
+                    );
+            }
 #endif
 
             if (! (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)) {

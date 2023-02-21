@@ -46,6 +46,15 @@
 #endif
 #endif
 
+#if defined(__GNUC__) && !defined(WOLFSENTRY_NO_BUILTIN_CLZ)
+#ifndef LOG2_32
+#define LOG2_32(x) (31 - __builtin_clz((unsigned int)(x)))
+#endif
+#ifndef LOG2_64
+#define LOG2_64(x) ((sizeof(unsigned long long) * 8ULL) - (unsigned long long)__builtin_clzll((unsigned long long)(x)) - 1ULL)
+#endif
+#endif
+
 #define streq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
 #define strcaseeq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (strncasecmp(vs,fs,vs_len) == 0))
 

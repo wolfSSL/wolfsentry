@@ -44,6 +44,9 @@
     #include <lwip/sockets.h>
 #endif
 
+#define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
+#define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
+
 #endif
 
 #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
@@ -194,6 +197,18 @@ typedef uint16_t wolfsentry_priority_t;
 #endif
 #endif
 
+#ifndef __wolfsentry_wur
+#ifdef __wur
+#define __wolfsentry_wur __wur
+#elif defined(__must_check)
+#define __wolfsentry_wur __must_check
+#elif defined(__GNUC__) && (__GNUC__ >= 4)
+#define __wolfsentry_wur __attribute__((warn_unused_result))
+#else
+#define __wolfsentry_wur
+#endif
+#endif
+
 #ifndef wolfsentry_static_assert
 #if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
 #define wolfsentry_static_assert(c, m) static_assert(c, m)
@@ -278,35 +293,38 @@ typedef uint16_t wolfsentry_priority_t;
     #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || \
         defined(_WIN32_WCE)
         #if defined(WOLFSENTRY_DLL)
-            #define WOLFSENTRY_API __declspec(dllexport)
+            #define WOLFSENTRY_API_BASE __declspec(dllexport)
         #else
-            #define WOLFSENTRY_API
+            #define WOLFSENTRY_API_BASE
         #endif
         #define WOLFSENTRY_LOCAL
     #elif defined(HAVE_VISIBILITY) && HAVE_VISIBILITY
-        #define WOLFSENTRY_API   __attribute__ ((visibility("default")))
+        #define WOLFSENTRY_API_BASE   __attribute__ ((visibility("default")))
         #define WOLFSENTRY_LOCAL __attribute__ ((visibility("hidden")))
     #elif defined(__SUNPRO_C) && (__SUNPRO_C >= 0x550)
-        #define WOLFSENTRY_API   __global
+        #define WOLFSENTRY_API_BASE   __global
         #define WOLFSENTRY_LOCAL __hidden
     #else
-        #define WOLFSENTRY_API
+        #define WOLFSENTRY_API_BASE
         #define WOLFSENTRY_LOCAL
     #endif /* HAVE_VISIBILITY */
 #else /* !BUILDING_LIBWOLFSENTRY */
     #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || \
         defined(_WIN32_WCE)
         #if defined(WOLFSENTRY_DLL)
-            #define WOLFSENTRY_API __declspec(dllimport)
+            #define WOLFSENTRY_API_BASE __declspec(dllimport)
         #else
-            #define WOLFSENTRY_API
+            #define WOLFSENTRY_API_BASE
         #endif
         #define WOLFSENTRY_LOCAL
     #else
-        #define WOLFSENTRY_API
+        #define WOLFSENTRY_API_BASE
         #define WOLFSENTRY_LOCAL
     #endif
 #endif /* !BUILDING_LIBWOLFSENTRY */
+
+#define WOLFSENTRY_API_VOID WOLFSENTRY_API_BASE void
+#define WOLFSENTRY_API WOLFSENTRY_API_BASE __wolfsentry_wur
 
 #ifdef WOLFSENTRY_NO_INLINE
 #define inline __attribute_maybe_unused__

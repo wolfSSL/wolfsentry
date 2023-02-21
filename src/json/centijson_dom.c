@@ -97,10 +97,13 @@ init_number(
     int is_uint32_compatible;
     int is_int64_compatible;
     int is_uint64_compatible;
+    int ret;
 
-    json_analyze_number(data, data_size,
+    ret = json_analyze_number(data, data_size,
             &is_int32_compatible, &is_uint32_compatible,
             &is_int64_compatible, &is_uint64_compatible);
+    if (ret < 0)
+        return ret;
 
     if(is_int32_compatible) {
         return json_value_init_int32(
@@ -145,7 +148,7 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
 {
     JSON_DOM_PARSER* dom_parser = (JSON_DOM_PARSER*) user_data;
     JSON_VALUE* new_json_value;
-    int init_val_ret = 0;
+    int ret = 0;
 
     if(type == JSON_ARRAY_END || type == JSON_OBJECT_END) {
         /* Reached end of current array or object? Just pop-up in the path. */
@@ -186,11 +189,13 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
                                 parent,
                                 json_value_string(&dom_parser->key),
                                 json_value_string_length(&dom_parser->key));
-            json_value_fini(
+            ret = json_value_fini(
 #ifdef WOLFSENTRY
                 WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 &dom_parser->key);
+            if (ret < 0)
+                return ret;
 
             if(new_json_value == NULL)
                 return JSON_ERR_OUTOFMEMORY;
@@ -200,11 +205,13 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
                 switch(dom_parser->flags & JSON_DOM_DUPKEY_MASK) {
                     case JSON_DOM_DUPKEY_USEFIRST:  return 0;
                     case JSON_DOM_DUPKEY_USELAST:
-                        json_value_fini(
+                        ret = json_value_fini(
 #ifdef WOLFSENTRY
                             WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                             new_json_value);
+                        if (ret < 0)
+                            return ret;
                         break;
                     case JSON_DOM_DUPKEY_ABORT:     /* Pass through. */
                     default:
@@ -220,31 +227,31 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
     /* Initialize the new json_value. */
     switch(type) {
         case JSON_NULL:         json_value_init_null(new_json_value); break;
-        case JSON_FALSE:        json_value_init_bool(new_json_value, 0); break;
-        case JSON_TRUE:         json_value_init_bool(new_json_value, 1); break;
+        case JSON_FALSE:        ret = json_value_init_bool(new_json_value, 0); break;
+        case JSON_TRUE:         ret = json_value_init_bool(new_json_value, 1); break;
         case JSON_NUMBER:
-            init_val_ret = init_number(
+            ret = init_number(
 #ifdef WOLFSENTRY
                 WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 new_json_value, data, data_size);
             break;
         case JSON_STRING:
-            init_val_ret = json_value_init_string_(
+            ret = json_value_init_string_(
 #ifdef WOLFSENTRY
                 WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 new_json_value, data, data_size);
             break;
         case JSON_ARRAY_BEG:
-            init_val_ret = json_value_init_array(
+            ret = json_value_init_array(
 #ifdef WOLFSENTRY
                 WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
                 new_json_value);
             break;
         case JSON_OBJECT_BEG:
-            init_val_ret = json_value_init_dict_ex(
+            ret = json_value_init_dict_ex(
 #ifdef WOLFSENTRY
                 WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
@@ -253,7 +260,7 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
         default:                return JSON_ERR_INTERNAL;
     }
 
-    if(init_val_ret < 0)
+    if(ret < 0)
         return JSON_ERR_OUTOFMEMORY;
 
     if(type == JSON_ARRAY_BEG || type == JSON_OBJECT_BEG) {
@@ -334,20 +341,27 @@ json_dom_feed(JSON_DOM_PARSER* dom_parser, const unsigned char* input, size_t si
 }
 
 int json_dom_clean(JSON_DOM_PARSER* dom_parser) {
+    int ret;
+
     if (! (dom_parser->flags & JSON_DOM_FLAG_INITED))
         return JSON_ERR_NOT_INITED;
 
-    json_value_fini(
+    ret = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
         &dom_parser->root);
+    if (ret < 0)
+        return ret;
 
-    json_value_fini(
+    ret = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator),
 #endif
         &dom_parser->key);
+    if (ret < 0)
+        return ret;
+
     free(dom_parser->path);
     dom_parser->path = NULL;
 
@@ -411,7 +425,8 @@ json_dom_parse(
         return ret;
 
     /* We rely on propagation of any error code into json_fini(). */
-    json_dom_feed(&dom_parser, input, size);
+    if (json_dom_feed(&dom_parser, input, size) < 0) {
+    }
 
     return json_dom_fini(&dom_parser, p_root, p_pos);
 }
@@ -478,7 +493,7 @@ json_dom_dump_helper(
                      const JSON_VALUE* node, int nest_level,
                      JSON_DOM_DUMP_PARAMS* params)
 {
-    int ret;
+    int ret = 0;
 
     if(nest_level >= 0) {
         ret = json_dom_dump_indent((unsigned int)nest_level, params);
@@ -589,6 +604,7 @@ json_dom_dump_helper(
 
             n = json_value_dict_size(node);
             if(n > 0) {
+                size_t keys_size;
 #ifdef WOLFSENTRY
                 keys = json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), sizeof(JSON_VALUE*) * n);
 #else
@@ -599,9 +615,11 @@ json_dom_dump_helper(
 
                 if((params->flags & JSON_DOM_DUMP_PREFERDICTORDER)  &&
                    (json_value_dict_flags(node) & JSON_VALUE_DICT_MAINTAINORDER))
-                    json_value_dict_keys_ordered(node, keys, n);
+                    keys_size = json_value_dict_keys_ordered(node, keys, n);
                 else
-                    json_value_dict_keys_sorted(node, keys, n);
+                    keys_size = json_value_dict_keys_sorted(node, keys, n);
+                if (keys_size != n)
+                    return JSON_ERR_INTERNAL;
 
                 for(i = 0; i < n; i++) {
                     JSON_VALUE* json_value;

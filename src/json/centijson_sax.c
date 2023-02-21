@@ -120,7 +120,7 @@ static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
 
 #endif
 
-WOLFSENTRY_API void
+WOLFSENTRY_API_VOID
 json_default_config(JSON_CONFIG* cfg)
 {
     memcpy(cfg, &json_defaults, sizeof(JSON_CONFIG));
@@ -1012,7 +1012,8 @@ json_parse(
         WOLFSENTRY_RETURN_VALUE(ret);
 
     /* We rely on propagation of any error code into json_fini(). */
-    json_feed(&parser, input, size);
+    if (json_feed(&parser, input, size) < 0) {
+    }
 
     WOLFSENTRY_RETURN_VALUE(json_fini(&parser, p_pos));
 }
@@ -1068,7 +1069,7 @@ intstr_is_between(const unsigned char* val_str, size_t val_size,
             intstrncmp(val_str, val_size, (unsigned char *)max_str, max_size) <= 0);
 }
 
-WOLFSENTRY_API void
+WOLFSENTRY_API int
 json_analyze_number(const unsigned char* num, size_t num_size,
                     int* p_is_int32_compatible,
                     int* p_is_uint32_compatible,
@@ -1127,6 +1128,8 @@ json_analyze_number(const unsigned char* num, size_t num_size,
         *p_is_int64_compatible = is_int64_compatible;
     if(p_is_uint64_compatible != NULL)
         *p_is_uint64_compatible = is_uint64_compatible;
+
+    return 0;
 }
 
 WOLFSENTRY_API int32_t

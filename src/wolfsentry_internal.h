@@ -34,11 +34,6 @@ typedef uint32_t wolfsentry_refcount_t;
 
 #include "wolfsentry_ll.h"
 
-#ifdef FREERTOS
-#define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
-#define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
-#endif
-
 #ifdef WOLFSENTRY_THREADSAFE
 
 #define WOLFSENTRY_THREAD_ID_SENT ~0UL /* lock handoff not yet implemented. */

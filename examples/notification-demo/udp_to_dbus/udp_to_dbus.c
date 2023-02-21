@@ -56,6 +56,8 @@ static int notnormal = 0;
     (ptr) += _len;                                                      \
 }
 
+#define WARN_ON_JSON_FAILURE(x) do { int _x = (x); if (_x < 0) { fprintf(stderr, "%s L %d: JSON call (%s) failed with code %d (%s)\n", __FILE__, __LINE__, #x, _x, json_error_str(_x)); } } while (0)
+
 static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, const unsigned char *json_message,
     size_t json_message_len)
 {
@@ -163,7 +165,7 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
                 continue;
             SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "%s%s", i>0 ? "," : "",
                 decision_string);
-            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), decision_string_v);
+            WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), decision_string_v));
             decision_string_v = NULL;
         }
 
@@ -190,18 +192,18 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
                                NULL);
     } while(0);
 
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), action_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), rule_id_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), rule_hitcount_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), af_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), proto_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), remote_addr_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), remote_port_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), local_addr_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), local_port_v);
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), decision_array_v);
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), action_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), rule_id_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), rule_hitcount_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), af_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), proto_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), remote_addr_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), remote_port_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), local_addr_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), local_port_v));
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), decision_array_v));
 
-    json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &p_root);
+    WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &p_root));
 
     if (notify == NULL)
         return -1;

@@ -98,7 +98,7 @@ typedef enum JSON_VALUE_TYPE {
 /* Free any resources the value holds.
  * For ARRAY and DICT it is recursive.
  */
-WOLFSENTRY_API void json_value_fini(
+WOLFSENTRY_API int json_value_fini(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
@@ -221,7 +221,7 @@ WOLFSENTRY_API JSON_VALUE* json_value_path(JSON_VALUE* root, const char* path);
  */
 #define JSON_VALUE_NULL_INITIALIZER    { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } }
 
-WOLFSENTRY_API void json_value_init_null(JSON_VALUE* v);
+WOLFSENTRY_API_VOID json_value_init_null(JSON_VALUE* v);
 
 
 /******************
@@ -393,7 +393,7 @@ WOLFSENTRY_API int json_value_array_remove_range(
 
 /* Remove and destroy all members (recursively).
  */
-WOLFSENTRY_API void json_value_array_clean(
+WOLFSENTRY_API int json_value_array_clean(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
@@ -527,12 +527,17 @@ WOLFSENTRY_API int json_value_dict_walk_sorted(const JSON_VALUE* v,
 
 /* Remove and destroy all members (recursively).
  */
-WOLFSENTRY_API void json_value_dict_clean(
+WOLFSENTRY_API int json_value_dict_clean(
 #ifdef WOLFSENTRY
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
 #endif
     JSON_VALUE* v);
 
+#ifdef WOLFSENTRY
+WOLFSENTRY_API int
+json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
+                 const JSON_VALUE* node, JSON_VALUE *clone);
+#endif
 
 #ifdef __cplusplus
 }

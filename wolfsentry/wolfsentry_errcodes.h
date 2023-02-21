@@ -235,8 +235,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 #else
 
 #define WOLFSENTRY_WARN(fmt,...) do {} while (0)
-#define WOLFSENTRY_WARN_ON_FAILURE(...) (__VA_ARGS__)
-#define WOLFSENTRY_WARN_ON_FAILURE_LIBC(...) (__VA_ARGS__)
+#define WOLFSENTRY_WARN_ON_FAILURE(...) do { if ((__VA_ARGS__) < 0) {} } while (0)
+#define WOLFSENTRY_WARN_ON_FAILURE_LIBC(...) do { if ((__VA_ARGS__) < 0) {}} while (0)
 
 #endif /* !WOLFSENTRY_NO_STDIO && !WOLFSENTRY_NO_DIAG_MSGS */
 

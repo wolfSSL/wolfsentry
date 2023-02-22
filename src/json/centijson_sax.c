@@ -775,6 +775,8 @@ json_string_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
                     if(json_buf_append_codepoint(parser, codepoint) < 0)
                         break;
                     parser->substate = 0;
+                    parser->codepoint[0] = 0;
+                    parser->codepoint[1] = 0;
                 } else if(IS_HI_SURROGATE(parser->codepoint[1])) {
                     /* parser->codepoint[1] is high surrogate. Store it and we
                      * see later if low surrogate follows. */

@@ -533,7 +533,8 @@ json_value_init_string_(
     }
     payload[off++] = tmplen & 0x7f;
 
-    memcpy(payload + off, str, len);
+    if (len > 0)
+        memcpy(payload + off, str, len);
     payload[off + len] = '\0';
     return 0;
 }

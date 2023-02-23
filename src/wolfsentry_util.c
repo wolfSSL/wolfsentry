@@ -861,7 +861,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wol
      * fallback allocation, try to reclaim the ID.
      */
     if (thread->id == fallback_thread_id_counter)
-        (void)WOLFSENTRY_ATOMIC_TEST_AND_SET(fallback_thread_id_counter, thread->id, (uintptr_t)thread->id + 1);
+        (void)WOLFSENTRY_ATOMIC_TEST_AND_SET(fallback_thread_id_counter, thread->id, (wolfsentry_thread_id_t)((uintptr_t)thread->id + 1));
 
     memset(thread, 0, sizeof *thread);
     thread->id = WOLFSENTRY_THREAD_NO_ID;

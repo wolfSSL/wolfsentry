@@ -250,12 +250,12 @@ else
 	$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
 endif
 
-
-UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules test_user_values test_user_addr_families
+UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules test_user_values test_user_addr_families $(UNITTEST_LIST_EXTRAS)
 
 ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json
     ifneq "$(NO_JSON_DOM)" "1"
+        UNITTEST_LIST += $(UNITTEST_LIST_JSON_DOM_EXTRAS)
         TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
     else
         TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-dom.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
@@ -315,6 +315,11 @@ ifndef VERY_QUIET
 endif
 endif
 	@touch $(BUILD_TOP)/.tested
+
+.PHONY: retest
+retest:
+	@$(RM) -f $(BUILD_TOP)/.tested
+	@$(MAKE) -f $(THIS_MAKEFILE) test
 
 -include $(SRC_TOP)/Makefile.analyzers
 

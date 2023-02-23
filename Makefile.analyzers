@@ -329,7 +329,16 @@ dist-check:
 .PHONY: check-common
 check-common: dynamic-build-test c99-test-gcc c99-test-clang singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
 
+ifdef JSON_TEST_CORPUS_DIR
+export JSON_TEST_CORPUS_DIR
+else
+export JSON_TEST_CORPUS_DIR := $(SRC_TOP)/tests/JSON-Schema-Test-Suite/tests/latest
+endif
+
 .PHONY: check
+#ifneq "$(NO_JSON)" "1"
+check: override EXTRA_MAKE_FLAGS += UNITTEST_LIST_JSON_DOM_EXTRAS=test_json_corpus
+#endif
 check: analyze-all check-common static-build-test m32-test freertos-arm32-build-test dist-check lock-error-checking-test
 	@echo "passed: all checks."
 
@@ -367,6 +376,9 @@ endif
 endif
 
 $(BUILD_TOP)/tests/coverage-unittest.o: override CFLAGS+=$(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]'))
+ifneq "$(NO_JSON)" "1"
+$(BUILD_TOP)/tests/coverage-unittest.o: override CFLAGS+=-DTEST_JSON_CORPUS
+endif
 $(BUILD_TOP)/tests/coverage-unittest.o: override CFLAGS+=$(TEST_JSON_CFLAGS)
 $(BUILD_TOP)/tests/coverage-unittest.o: $(SRC_TOP)/tests/unittests.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)

@@ -1426,6 +1426,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
 
     (void)thread;
 
+    if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     memset(lock,0,sizeof *lock);
 
     lock->flags = flags;
@@ -1872,6 +1875,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 
+    /* _RETAIN_SEMAPHORE is for use by interrupt handlers, which never wait, so
+     * wouldn't be able to wait at unlock time for the semaphore either.
+     */
+    if ((flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE) &&
+        (abs_timeout != &timespec_deadline_now))
+    {
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+
     if ((abs_timeout == NULL) &&
         thread &&
         (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
@@ -1983,6 +1995,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
     lock->holder_count.write = 1;
     if (thread)
         ++thread->mutex_and_reservation_count;
+
+    if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE) {
+        lock->flags |= WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE;
+        WOLFSENTRY_RETURN_OK;
+    }
 
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -2659,12 +2676,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
         WOLFSENTRY_RETURN_OK;
     }
 
-    /* trap and retry for EINTR to avoid unnecessary failures. */
-    do {
-        ret = sem_wait(&lock->sem);
-    } while ((ret < 0) && (errno == EINTR));
-    if (ret < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    if (lock->flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
+        WOLFSENTRY_CLEAR_BITS(lock->flags, WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE);
+    else {
+        /* trap and retry for EINTR to avoid unnecessary failures. */
+        do {
+            ret = sem_wait(&lock->sem);
+        } while ((ret < 0) && (errno == EINTR));
+        if (ret < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    }
 
     SHARED_LOCKER_LIST_ASSERT_CONSISTENCY(lock);
 
@@ -2908,11 +2929,27 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed(
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed_ex(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct timespec *abs_timeout,
+    wolfsentry_lock_flags_t flags)
+{
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(&wolfsentry->lock, thread, abs_timeout, flags));
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait)
 {
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_NONE));
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed_ex(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_time_t max_wait,
+    wolfsentry_lock_flags_t flags)
+{
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_timed(&wolfsentry->lock, thread, max_wait, flags));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared(

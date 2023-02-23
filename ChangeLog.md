@@ -1,16 +1,55 @@
+# wolfSentry Release 1.1.0 (Feb 23, 2023)
+
+Production Release 1.1.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## New Features
+
+Internal settings, types, alignments, constants, a complete set of internal shims, and Makefile clauses, for portability to native FreeRTOS with threads on 32 bit gcc targets.
+
+## Noteworthy Changes and Additions
+
+rwlock control contexts can now be allocated inside interrupt handlers, and `WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE` can be supplied to the new `wolfsentry_context_lock_mutex_timed_ex()`, allowing safe trylock followed by automatic lock recursion.
+
+API routines are now marked warn-unused-return by default, subject to user-defined override.  This new default warns on untrapped errors, to aid preventing undefined behavior.
+
+API arguments previously accepting "long" ints for counts of seconds now expect `time_t`, for portability to ARM32 and FreeRTOS.
+
+New unit test: `test_json_corpus`, for highly configurable bulk trial runs of the JSON processing subsystem.
+
+New tests in `Makefile.analyzers`: `no-getprotoby-test`, `freertos-arm32-build-test`.
+
+A new guard macro, `WOLFSENTRY_NO_GETPROTOBY`, allows narrow elimination of dependencies on `getprotobyname()` and `getprotobynumber()`.
+
+Recursive JSON DOM tree processing logic was refactored to greatly reduce stack burden.
+
+Substantial enlargement of code coverage by unit tests, guided by `gcov`.
+
+New convenience macros for typical threaded state tracking wrappers: `WOLFSENTRY_THREAD_HEADER_CHECKED()` and `WOLFSENTRY_THREAD_TAILER_CHECKED()`.
+
+## Bug Fixes
+
+Cloning of user-defined deep JSON objects is now implemented, as needed for configuration load dry runs and load-then-commit semantics.
+
+JSON processing of UTF-8 surrogate pairs is now fixed.
+
+Fixed retval testing in `wolfsentry_action_list_{append,prepend,insert}_1()`, and added missing `point_action` lookup in `wolfsentry_action_list_insert_after()`.
+
+Fixed potential use-after-free defect in `wolfsentry_event_delete()`.
+
+
 # wolfSentry Release 1.0.0 (Jan 18, 2023)
 
 Production Release 1.0.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
 
 ## Noteworthy Changes and Additions
 
-* Makefile improvements around wolfsentry_options.h, and a new com-bundle rule.
+* Makefile improvements around `wolfsentry_options.h`, and a new com-bundle rule.
 
-* A new macro WOLFSENTRY_USE_NONPOSIX_THREADS, separated from WOLFSENTRY_USE_NONPOSIX_SEMAPHORES, supporting mixed-model targets, e.g. Mac OS X.
+* A new macro `WOLFSENTRY_USE_NONPOSIX_THREADS`, separated from `WOLFSENTRY_USE_NONPOSIX_SEMAPHORES`, supporting mixed-model targets, e.g. Mac OS X.
 
 ## Bug Fixes
 
-* In examples/notification-demo/log_server/log_server.c, in main(), properly reset `transaction_successful` at top of accept loop.
+* In `examples/notification-demo/log_server/log_server.c`, in `main()`, properly reset `transaction_successful` at top of the accept loop.
 
 
 # wolfSentry Release 0.8.0 (Jan 6, 2023)

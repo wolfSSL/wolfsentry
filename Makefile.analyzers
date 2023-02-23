@@ -331,8 +331,6 @@ check-common: dynamic-build-test c99-test-gcc c99-test-clang singlethreaded-test
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR
-else
-export JSON_TEST_CORPUS_DIR := $(SRC_TOP)/tests/JSON-Schema-Test-Suite/tests/latest
 endif
 
 .PHONY: check

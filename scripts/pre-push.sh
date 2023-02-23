@@ -35,6 +35,10 @@ url="$2"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)" || exit $?
 
+if [ -d "${REPO_ROOT}/tests/JSON-Schema-Test-Suite/tests/latest/." ]; then
+    export JSON_TEST_CORPUS_DIR="${REPO_ROOT}/tests/JSON-Schema-Test-Suite/tests/latest/."
+fi
+
 git clone -q --shared -n "$REPO_ROOT" "$WORKDIR" || exit $?
 cd "$WORKDIR" || exit $?
 

@@ -56,6 +56,7 @@
 #endif
 
 #include <stdlib.h>
+#include <alloca.h>
 
 #ifdef WOLFSENTRY
 
@@ -132,18 +133,13 @@ struct DICT_tag {
     int (*cmp_func)(const unsigned char*, size_t, const unsigned char*, size_t);
 };
 
-static inline RBTREE **malloc_rbtree_stack(
-#ifdef WOLFSENTRY
-    WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
-#endif
-    DICT *rbtree)
-{
+static inline size_t rbtree_stack_size_needed(DICT *rbtree) {
 #ifdef LOG2_32
     /* max possible height of an RB tree is 2*log2(n+1). */
-    return (RBTREE **)malloc((size_t)(2 * LOG2_32(rbtree->size + 1)) * sizeof(RBTREE *));
+    return (size_t)(2 * LOG2_32(rbtree->size + 1)) * sizeof(RBTREE *);
 #else
     /* easy space optimization: the tree can't be deeper than the total number of leaves. */
-    return (RBTREE **)malloc((rbtree->size < RBTREE_MAX_HEIGHT ? rbtree->size : RBTREE_MAX_HEIGHT) * sizeof(RBTREE *));
+    return (rbtree->size < RBTREE_MAX_HEIGHT ? rbtree->size : RBTREE_MAX_HEIGHT) * sizeof(RBTREE *);
 #endif
 }
 
@@ -1152,13 +1148,15 @@ WOLFSENTRY_API size_t
 json_value_dict_keys_sorted(const JSON_VALUE* v, const JSON_VALUE** buffer, size_t buffer_size)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
-    RBTREE* stack[RBTREE_MAX_HEIGHT];
+    RBTREE **stack;
     int stack_size = 0;
     RBTREE* node;
     size_t n = 0;
 
     if(d == NULL)
         return 0;
+
+    stack = (RBTREE **)alloca(rbtree_stack_size_needed(d));
 
     stack_size = json_value_dict_leftmost_path(stack, d->root);
 
@@ -1359,12 +1357,14 @@ json_value_dict_get_or_add_(
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
-    RBTREE* path[RBTREE_MAX_HEIGHT];
+    RBTREE **path;
     int path_len = 0;
     int cmp;
 
     if(d == NULL)
         return NULL;
+
+    path = (RBTREE **)alloca(rbtree_stack_size_needed(d) + sizeof(RBTREE *)); /* +1 for the new member. */
 
     while(node != NULL) {
         cmp = json_value_dict_cmp(v, d, key, key_len,
@@ -1536,10 +1536,15 @@ json_value_dict_remove_(
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
     RBTREE* single_child;
-    RBTREE* path[RBTREE_MAX_HEIGHT];
+    RBTREE **path;
     int path_len = 0;
     int cmp;
     int ret;
+
+    if (node == NULL)
+        return -1;
+
+    path = (RBTREE **)alloca(rbtree_stack_size_needed(d));
 
     /* Find the node to remove. */
     while(node != NULL) {
@@ -1709,13 +1714,15 @@ WOLFSENTRY_API int
 json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VALUE*, JSON_VALUE*, void*), void* ctx)
 {
     DICT* d = json_value_dict_payload((JSON_VALUE*) v);
-    RBTREE* stack[RBTREE_MAX_HEIGHT];
+    RBTREE **stack;
     int stack_size = 0;
     RBTREE* node;
     int ret;
 
     if(d == NULL)
         return -1;
+
+    stack = (RBTREE **)alloca(rbtree_stack_size_needed(d));
 
     stack_size = json_value_dict_leftmost_path(stack, d->root);
 
@@ -1747,11 +1754,7 @@ json_value_dict_clean(
     if(d == NULL)
         return 0;
 
-    stack = malloc_rbtree_stack(
-#ifdef WOLFSENTRY
-        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
-#endif
-        d);
+    stack = (RBTREE **)malloc(rbtree_stack_size_needed(d));
     if (stack == NULL)
         return JSON_ERR_OUTOFMEMORY;
 
@@ -1902,7 +1905,7 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                 }
             } else {
                 int stack_size;
-                RBTREE **stack = malloc_rbtree_stack(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), src_dict); /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
+                RBTREE **stack = (RBTREE **)malloc(rbtree_stack_size_needed(src_dict)); /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
                 if (! stack) {
                     ret = JSON_ERR_OUTOFMEMORY;
                     break;

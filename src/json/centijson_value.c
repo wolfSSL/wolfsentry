@@ -1879,46 +1879,59 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
         case JSON_VALUE_DICT:
         {
             DICT* src_dict = json_value_dict_payload((JSON_VALUE *)node);
-            RBTREE **stack; /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
-            int stack_size;
             RBTREE *src_dict_node;
             JSON_VALUE *dest_node;
-
-            stack = malloc_rbtree_stack(
-#ifdef WOLFSENTRY
-                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
-#endif
-                src_dict);
-            if (! stack) {
-                ret = JSON_ERR_OUTOFMEMORY;
-                break;
-            }
+            unsigned dict_flags = json_value_dict_flags(node);
 
             ret = json_value_init_dict_ex(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone,
                                           (node->data.data_bytes[0] & HAS_CUSTOMCMP) ? src_dict->cmp_func : 0,
-                                          json_value_dict_flags(node));
-            if (ret < 0) {
-                free(stack);
+                                          dict_flags);
+            if (ret < 0)
                 break;
-            }
 
-            stack_size = json_value_dict_leftmost_path(stack, src_dict->root);
-            while(stack_size > 0) {
-                src_dict_node = stack[--stack_size];
-                dest_node = json_value_dict_get_or_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_string(&src_dict_node->key), json_value_string_length(&src_dict_node->key));
-                if (! dest_node) {
+            if (dict_flags & JSON_VALUE_DICT_MAINTAINORDER) {
+                src_dict_node = src_dict->order_head;
+                while (src_dict_node != NULL) {
+                    dest_node = json_value_dict_get_or_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_string(&src_dict_node->key), json_value_string_length(&src_dict_node->key));
+                    if (! dest_node) {
+                        ret = JSON_ERR_OUTOFMEMORY;
+                        break;
+                    }
+                    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_dict_node->json_value, dest_node);
+                    src_dict_node = src_dict_node->order_next;
+                }
+            } else {
+                int stack_size;
+                RBTREE **stack = malloc_rbtree_stack(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), src_dict); /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
+                if (! stack) {
                     ret = JSON_ERR_OUTOFMEMORY;
                     break;
                 }
-                ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_dict_node->json_value, dest_node);
-                if (ret < 0)
-                    break;
-                stack_size += json_value_dict_leftmost_path(stack + stack_size, src_dict_node->right);
+
+                stack_size = json_value_dict_leftmost_path(stack, src_dict->root);
+
+                while(stack_size > 0) {
+                    src_dict_node = stack[--stack_size];
+                    dest_node = json_value_dict_get_or_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_string(&src_dict_node->key), json_value_string_length(&src_dict_node->key));
+                    if (! dest_node) {
+                        ret = JSON_ERR_OUTOFMEMORY;
+                        break;
+                    }
+                    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_dict_node->json_value, dest_node);
+                    if (ret < 0)
+                        break;
+                    stack_size += json_value_dict_leftmost_path(stack + stack_size, src_dict_node->right);
+                }
+
+                free(stack);
+
+                break;
             }
-
-            free(stack);
-
-            break;
+            if (ret < 0) {
+                int ret2 = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);
+                if (ret2 < 0)
+                    WOLFSENTRY_WARN("json_value_fini: %s\n", json_error_str(ret2));
+            }
         }
     }
 

@@ -91,6 +91,16 @@
 #define WOLFSENTRY_ATOMIC_STORE(i, x) __atomic_store_n(&(i), x, __ATOMIC_RELEASE)
 #define WOLFSENTRY_ATOMIC_LOAD(i) __atomic_load_n(&(i), __ATOMIC_CONSUME)
 
+/* caution, _TEST_AND_SET() alters arg2 (and returns false) on failure. */
+#define WOLFSENTRY_ATOMIC_TEST_AND_SET(i, expected, intended)           \
+    __atomic_compare_exchange_n(                                        \
+        &(i),                                                           \
+        &(expected),                                                    \
+        intended,                                                       \
+        0 /* weak */,                                                   \
+        __ATOMIC_SEQ_CST /* success_memmodel */,                        \
+        __ATOMIC_SEQ_CST /* failure_memmodel */);
+
 #define WOLFSENTRY_ATOMIC_UPDATE_FLAGS(i, set_i, clear_i, pre_i, post_i)\
 do {                                                                    \
     *(pre_i) = (i);                                                     \

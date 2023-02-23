@@ -23,8 +23,8 @@
 #ifndef WOLFSENTRY_H
 #define WOLFSENTRY_H
 
-#define WOLFSENTRY_VERSION_MAJOR 0
-#define WOLFSENTRY_VERSION_MINOR 8
+#define WOLFSENTRY_VERSION_MAJOR 1
+#define WOLFSENTRY_VERSION_MINOR 1
 #define WOLFSENTRY_VERSION_TINY 0
 #define WOLFSENTRY_VERSION_ENCODE(major, minor, tiny) (((major) << 16U) | ((minor) << 8U) | (tiny))
 #define WOLFSENTRY_VERSION WOLFSENTRY_VERSION_ENCODE(WOLFSENTRY_VERSION_MAJOR, WOLFSENTRY_VERSION_MINOR, WOLFSENTRY_VERSION_TINY)
@@ -179,7 +179,8 @@ typedef enum {
     WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO = 1<<5,
     WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO = 1<<6,
     WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE = 1<<7,
-    WOLFSENTRY_LOCK_FLAG_READONLY = 1<<8
+    WOLFSENTRY_LOCK_FLAG_READONLY = 1<<8,
+    WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE = 1<<9
 } wolfsentry_lock_flags_t;
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context);
@@ -599,9 +600,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex(
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct timespec *abs_timeout);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed_ex(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct timespec *abs_timeout,
+    wolfsentry_lock_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed_ex(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_time_t max_wait,
+    wolfsentry_lock_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared(
     WOLFSENTRY_CONTEXT_ARGS_IN);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared_abstimed(

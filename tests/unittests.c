@@ -512,6 +512,11 @@ usleep(10000);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, NULL /* thread */, WOLFSENTRY_LOCK_FLAG_NONE));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, NULL /* thread */, WOLFSENTRY_LOCK_FLAG_NONE));
 
+    /* exercise interrupt-handler-style lock cycle. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(&lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
@@ -3027,6 +3032,209 @@ static int test_json(const char *fname) {
 
 #endif /* TEST_JSON */
 
+#ifdef TEST_JSON_CORPUS
+
+#include "wolfsentry/wolfsentry_json.h"
+#include <wolfsentry/centijson_dom.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <sys/mman.h>
+
+static int dump_string_for_json(const unsigned char* str, size_t size, void* user_data) {
+    (void)user_data;
+    printf("%.*s", (int)size, str);
+    return 0;
+}
+
+static int test_json_corpus(void) {
+    wolfsentry_errcode_t ret = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
+    struct wolfsentry_context *wolfsentry;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    do {
+        static JSON_CONFIG centijson_config = {
+            65536,  /* max_total_len */
+            10000,  /* max_total_values */
+            20,  /* max_number_len */
+            4096,  /* max_string_len */
+            255,  /* max_key_len */
+            10,  /* max_nesting_level */
+            0 /*JSON_IGNOREILLUTF8VALUE*/ /* flags */
+        };
+        unsigned dom_flags = 0;
+        JSON_VALUE p_root, clone;
+        JSON_INPUT_POS json_pos;
+        DIR *corpus_dir;
+        struct dirent *scenario_ent;
+        int scenario_fd;
+        struct stat st;
+        const unsigned char *scenario = MAP_FAILED;
+        const char *corpus_path;
+        char *cp, *endcp;
+        int dump_json = 0;
+        int ignore_failed_parse = 0;
+
+        if (! (corpus_path = getenv("JSON_TEST_CORPUS_DIR"))) {
+            printf("JSON_TEST_CORPUS_DIR unset -- skipping test_json_corpus().\n");
+            ret = 0;
+            break;
+        }
+
+#define PARSE_UNSIGNED_EV(ev, type, elname) do { if ((cp = getenv(ev))) { \
+            centijson_config.elname = (type)strtoul(cp, &endcp, 0);     \
+            WOLFSENTRY_EXIT_ON_FALSE((endcp != cp) || (*endcp == 0));   \
+            } } while (0)
+
+        PARSE_UNSIGNED_EV("JSON_TEST_CORPUS_MAX_TOTAL_LEN", size_t, max_total_len);
+        PARSE_UNSIGNED_EV("JSON_TEST_CORPUS_MAX_TOTAL_VALUES", size_t, max_total_values);
+        PARSE_UNSIGNED_EV("JSON_TEST_CORPUS_MAX_STRING_LEN", size_t, max_string_len);
+        PARSE_UNSIGNED_EV("JSON_TEST_CORPUS_MAX_KEY_LEN", size_t, max_key_len);
+        PARSE_UNSIGNED_EV("JSON_TEST_CORPUS_MAX_NESTING_LEVEL", unsigned, max_nesting_level);
+
+        if ((cp = getenv("JSON_TEST_CORPUS_FLAGS"))) {
+            static const struct { const char *name; unsigned int flag; unsigned int dom_flag; } centijson_flag_map[] = {
+#define FLAG_MAP_ENT(name) { #name, JSON_ ## name, 0 }
+                FLAG_MAP_ENT(NONULLASROOT),
+                FLAG_MAP_ENT(NOBOOLASROOT),
+                FLAG_MAP_ENT(NONUMBERASROOT),
+                FLAG_MAP_ENT(NOSTRINGASROOT),
+                FLAG_MAP_ENT(NOARRAYASROOT),
+                FLAG_MAP_ENT(NOOBJECTASROOT),
+                FLAG_MAP_ENT(IGNOREILLUTF8KEY),
+                FLAG_MAP_ENT(FIXILLUTF8KEY),
+                FLAG_MAP_ENT(IGNOREILLUTF8VALUE),
+                FLAG_MAP_ENT(FIXILLUTF8VALUE),
+                FLAG_MAP_ENT(NOSCALARROOT) /* compound flag */,
+                FLAG_MAP_ENT(NOVECTORROOT) /* compound flag */,
+#define FLAG_MAP_DOM_ENT(name) { #name, 0, JSON_DOM_ ## name }
+                FLAG_MAP_DOM_ENT(DUPKEY_ABORT),
+                FLAG_MAP_DOM_ENT(DUPKEY_USEFIRST),
+                FLAG_MAP_DOM_ENT(DUPKEY_USELAST),
+                FLAG_MAP_DOM_ENT(MAINTAINDICTORDER)
+            };
+            while (*cp != 0) {
+                size_t label_len, i;
+                endcp = strchr(cp, '|');
+                if (endcp)
+                    label_len = (size_t)(endcp - cp);
+                else
+                    label_len = strlen(cp);
+                for (i = 0; i < sizeof centijson_flag_map / sizeof centijson_flag_map[0]; ++i) {
+                    if ((label_len == strlen(centijson_flag_map[i].name)) && (! memcmp(cp, centijson_flag_map[i].name, label_len))) {
+                        centijson_config.flags |= centijson_flag_map[i].flag;
+                        dom_flags |= centijson_flag_map[i].dom_flag;
+                        break;
+                    }
+                }
+                if (i == sizeof centijson_flag_map / sizeof centijson_flag_map[0]) {
+                    fprintf(stderr, "unrecognized flag \"%.*s\" in JSON_TEST_CORPUS_FLAGS.\n", (int)label_len, cp);
+                    exit(1);
+                }
+                cp += label_len;
+                if (*cp == '|')
+                    ++cp;
+            }
+        }
+
+        if (getenv("JSON_TEST_CORPUS_DUMP"))
+            dump_json = 1;
+
+        if (getenv("JSON_TEST_CORPUS_IGNORE_FAILED_PARSE"))
+            ignore_failed_parse = 1;
+
+        corpus_dir = opendir(corpus_path);
+        if (! corpus_dir) {
+            perror(corpus_path);
+            ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
+            break;
+        }
+
+        json_value_init_null(&p_root);
+        json_value_init_null(&clone);
+
+        while ((scenario_ent = readdir(corpus_dir))) {
+            size_t namelen = strlen(scenario_ent->d_name);
+            if (namelen <= strlen(".json"))
+                continue;
+            if (strcmp(scenario_ent->d_name + strlen(scenario_ent->d_name) - strlen(".json"), ".json") != 0)
+                continue;
+            scenario_fd = openat(dirfd(corpus_dir), scenario_ent->d_name, O_RDONLY);
+            if (scenario_fd < 0) {
+                perror(scenario_ent->d_name);
+                continue;
+            }
+            if (fstat(scenario_fd, &st) < 0) {
+                perror(scenario_ent->d_name);
+                goto inner_cleanup;
+            }
+            scenario = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_SHARED, scenario_fd, 0);
+            if (scenario == MAP_FAILED) {
+                perror(scenario_ent->d_name);
+                goto inner_cleanup;
+            }
+
+            printf("%s\n", scenario_ent->d_name);
+
+            if ((ret = json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), scenario, (size_t)st.st_size, &centijson_config,
+                                      dom_flags, &p_root, &json_pos)) < 0) {
+                void *p = memchr((const char *)(scenario + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
+                int linelen = p ? ((int)((unsigned char *)p - (scenario + json_pos.offset)) + (int)json_pos.column_number - 1) :
+                    ((int)((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
+                if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
+                    fprintf(stderr, "%s/%s: json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", corpus_path, scenario_ent->d_name, json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
+                else
+                    fprintf(stderr, "%s/%s: json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT "\n", corpus_path, scenario_ent->d_name, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                fprintf(stderr,"%.*s\n", linelen, scenario + json_pos.offset - json_pos.column_number + 1);
+                goto inner_cleanup;
+            }
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_root, &clone)));
+
+            if (dump_json) {
+                WOLFSENTRY_EXIT_ON_FAILURE(json_dom_dump(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &clone, dump_string_for_json, NULL /* user_data */, 2 /* tab_width */, JSON_DOM_DUMP_INDENTWITHSPACES | (dom_flags & JSON_DOM_MAINTAINDICTORDER ? JSON_DOM_DUMP_PREFERDICTORDER : 0)));
+            }
+
+        inner_cleanup:
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_root)));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &clone)));
+            if (scenario_fd >= 0)
+                (void)close(scenario_fd);
+            if (scenario != MAP_FAILED) {
+                munmap((void *)scenario, (size_t)st.st_size);
+                scenario = MAP_FAILED;
+            }
+
+            if ((ret < 0) && (! ignore_failed_parse)) {
+                ret = wolfsentry_centijson_errcode_translate(ret);
+                ret = WOLFSENTRY_ERROR_RECODE(ret);
+                break;
+            }
+        }
+
+        closedir(corpus_dir);
+    } while (0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_ERROR_RERETURN(ret);
+}
+
+#endif /* TEST_JSON_CORPUS */
+
 int main (int argc, char* argv[]) {
     wolfsentry_errcode_t ret = 0;
     int err = 0;
@@ -3112,6 +3320,16 @@ int main (int argc, char* argv[]) {
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
     // GCOV_EXCL_START
         printf("test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    // GCOV_EXCL_STOP
+    }
+#endif
+
+#ifdef TEST_JSON_CORPUS
+    ret = test_json_corpus();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+    // GCOV_EXCL_START
+        printf("test_json_corpus failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     // GCOV_EXCL_STOP
     }

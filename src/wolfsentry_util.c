@@ -765,8 +765,9 @@ static void freertos_now(struct timespec *now) {
 
 #ifdef WOLFSENTRY_THREADSAFE
 
+static wolfsentry_thread_id_t fallback_thread_id_counter = WOLFSENTRY_THREAD_NO_ID;
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfsentry_thread_context *thread_context, wolfsentry_thread_flags_t init_thread_flags, void *user_context) {
-    static wolfsentry_thread_id_t fallback_thread_id_counter = WOLFSENTRY_THREAD_NO_ID;
     memset(thread_context, 0, sizeof *thread_context);
     thread_context->user_context = user_context;
     thread_context->deadline.tv_sec = WOLFSENTRY_DEADLINE_NEVER;
@@ -775,6 +776,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_thread_context(struct wolfse
     thread_context->id = WOLFSENTRY_THREAD_GET_ID_HANDLER();
     if (thread_context->id == WOLFSENTRY_THREAD_NO_ID) {
         thread_context->id = WOLFSENTRY_ATOMIC_DECREMENT(fallback_thread_id_counter, 1);
+        /* run in a loop of 2^24 to try to avoid overlap with host-generated
+         * thread IDs.  the expectation is that contexts need to be
+         * orthogonalized from each other and from other tasks, by fallback if
+         * necessary, but that fallback will occur only for short-lived
+         * (non-task) contexts (mainly interrupt handlers).  with this, a
+         * trylock call is safe from an interrupt handler, and if it succeeds,
+         * the held lock can be safely locked recursively from within the
+         * interrupt context.
+         */
+        if (thread_context->id == (wolfsentry_thread_id_t)((uintptr_t)WOLFSENTRY_THREAD_NO_ID - 0xffffff))
+            WOLFSENTRY_ATOMIC_INCREMENT(fallback_thread_id_counter, 0xffffff);
         WOLFSENTRY_SUCCESS_RETURN(USED_FALLBACK);
     } else
         WOLFSENTRY_RETURN_OK;
@@ -844,6 +856,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wol
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if (thread->tracked_shared_lock != NULL)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+
+    /* if this thread was allocated by fallback, and is exiting before another
+     * fallback allocation, try to reclaim the ID.
+     */
+    if (thread->id == fallback_thread_id_counter)
+        (void)WOLFSENTRY_ATOMIC_TEST_AND_SET(fallback_thread_id_counter, thread->id, (wolfsentry_thread_id_t)((uintptr_t)thread->id + 1));
+
     memset(thread, 0, sizeof *thread);
     thread->id = WOLFSENTRY_THREAD_NO_ID;
     WOLFSENTRY_RETURN_OK;
@@ -1407,6 +1426,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
 
     (void)thread;
 
+    if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     memset(lock,0,sizeof *lock);
 
     lock->flags = flags;
@@ -1853,6 +1875,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 
+    /* _RETAIN_SEMAPHORE is for use by interrupt handlers, which never wait, so
+     * wouldn't be able to wait at unlock time for the semaphore either.
+     */
+    if ((flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE) &&
+        (abs_timeout != &timespec_deadline_now))
+    {
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+
     if ((abs_timeout == NULL) &&
         thread &&
         (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
@@ -1964,6 +1995,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
     lock->holder_count.write = 1;
     if (thread)
         ++thread->mutex_and_reservation_count;
+
+    if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE) {
+        lock->flags |= WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE;
+        WOLFSENTRY_RETURN_OK;
+    }
 
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -2640,12 +2676,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
         WOLFSENTRY_RETURN_OK;
     }
 
-    /* trap and retry for EINTR to avoid unnecessary failures. */
-    do {
-        ret = sem_wait(&lock->sem);
-    } while ((ret < 0) && (errno == EINTR));
-    if (ret < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    if (lock->flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
+        WOLFSENTRY_CLEAR_BITS(lock->flags, WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE);
+    else {
+        /* trap and retry for EINTR to avoid unnecessary failures. */
+        do {
+            ret = sem_wait(&lock->sem);
+        } while ((ret < 0) && (errno == EINTR));
+        if (ret < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+    }
 
     SHARED_LOCKER_LIST_ASSERT_CONSISTENCY(lock);
 
@@ -2889,11 +2929,27 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed(
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(&wolfsentry->lock, thread, abs_timeout, WOLFSENTRY_LOCK_FLAG_NONE));
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_abstimed_ex(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct timespec *abs_timeout,
+    wolfsentry_lock_flags_t flags)
+{
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(&wolfsentry->lock, thread, abs_timeout, flags));
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_time_t max_wait)
 {
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_timed(&wolfsentry->lock, thread, max_wait, WOLFSENTRY_LOCK_FLAG_NONE));
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_mutex_timed_ex(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_time_t max_wait,
+    wolfsentry_lock_flags_t flags)
+{
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_timed(&wolfsentry->lock, thread, max_wait, flags));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_lock_shared(

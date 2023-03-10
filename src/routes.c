@@ -143,7 +143,7 @@ static int wolfsentry_route_key_cmp_1(
                 if (inexact_matches)
                     *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
             } else
-                WOLFSENTRY_RETURN_VALUE(-1);
+                WOLFSENTRY_RETURN_VALUE(1);
         } else if (left->parent_event == NULL) {
             if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
                 if (inexact_matches)
@@ -163,7 +163,7 @@ static int wolfsentry_route_key_cmp_1(
                 if (inexact_matches)
                     *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
             } else
-                WOLFSENTRY_RETURN_VALUE(-1);
+                WOLFSENTRY_RETURN_VALUE(1);
         }
     }
 
@@ -891,7 +891,9 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
             continue;
         cursor_position = wolfsentry_route_key_cmp_1(i, target_route, 1 /* match_wildcards_p */, inexact_matches);
         if (cursor_position == 0) {
-            if (i->parent_event == NULL) {
+            if ((i->parent_event == NULL) ||
+                (i->parent_event == target_route->parent_event))
+            {
                 *found_route = i;
                 ret = WOLFSENTRY_ERROR_ENCODE(OK);
                 goto out;
@@ -1457,8 +1459,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     WOLFSENTRY_SHARED_OR_RETURN();
 
     if (event_label) {
-        if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &trigger_event)) < 0)
+        if (((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &trigger_event)) < 0)
+            && (! (flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)))
+        {
             WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+        }
     }
 
     if (id)

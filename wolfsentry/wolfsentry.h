@@ -155,16 +155,32 @@ typedef enum {
 #define WOLFSENTRY_CONTEXT_ARGS_NOT_USED (void)wolfsentry; (void)thread
 #define WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED (void)thread
 
-#define WOLFSENTRY_THREAD_HEADER(flags)                                 \
+#define WOLFSENTRY_THREAD_HEADER_DECLS                                  \
     struct wolfsentry_thread_context_public thread_buffer;              \
     struct wolfsentry_thread_context *thread =                          \
         (struct wolfsentry_thread_context *)&thread_buffer;             \
-    wolfsentry_errcode_t _thread_context_ret =                     \
+    wolfsentry_errcode_t _thread_context_ret
+
+#define WOLFSENTRY_THREAD_HEADER_INIT(flags)                            \
+    _thread_context_ret =                                               \
         wolfsentry_init_thread_context(thread, flags, NULL /* user_context */)
+
+#define WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(flags)                    \
+    do {                                                                \
+        _thread_context_ret =                                           \
+            wolfsentry_init_thread_context(thread, flags, NULL /* user_context */); \
+        if (_thread_context_ret < 0)                                    \
+            return _thread_context_ret;                                 \
+    } while (0)
+
+#define WOLFSENTRY_THREAD_HEADER(flags)                                 \
+    WOLFSENTRY_THREAD_HEADER_DECLS;                                     \
+    WOLFSENTRY_THREAD_HEADER_INIT(flags)
+
 #define WOLFSENTRY_THREAD_HEADER_CHECKED(flags)                         \
-    WOLFSENTRY_THREAD_HEADER(flags);                                    \
-    if (_thread_context_ret < 0)                                   \
-        return _thread_context_ret
+    WOLFSENTRY_THREAD_HEADER_DECLS;                                     \
+    WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(flags)
+
 #define WOLFSENTRY_THREAD_TAILER(flags) (_thread_context_ret = wolfsentry_destroy_thread_context(thread, flags))
 #define WOLFSENTRY_THREAD_TAILER_CHECKED(flags) do { WOLFSENTRY_THREAD_TAILER(flags); if (_thread_context_ret < 0) return _thread_context_ret; } while (0)
 #define WOLFSENTRY_THREAD_GET_ERROR _thread_context_ret

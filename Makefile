@@ -79,8 +79,8 @@ ifdef RUNTIME
         ifndef LWIP_TOP
             $(error LWIP_TOP not supplied with RUNTIME=$(RUNTIME))
         endif
-# -D_POSIX_THREADS
         RUNTIME_CFLAGS += -DFREERTOS -DWOLFSENTRY_LWIP -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_POSIX_MEMALIGN -ffreestanding -I$(LWIP_TOP)/include/compat/posix -I$(LWIP_TOP)/include -I./FreeRTOS/include -I$(FREERTOS_TOP)/include -I$(FREERTOS_TOP)/portable/GCC/ARM_CM3
+        SRCS += lwip/packet_filter_glue.c
     else
         $(error unrecognized runtime "$(RUNTIME)")
     endif
@@ -122,6 +122,8 @@ DYNAMIC_LDFLAGS := -shared
 
 $(BUILD_TOP)/src/json/centijson_%.o: CFLAGS+=-DWOLFSENTRY
 $(BUILD_TOP)/src/json/centijson_%.So: CFLAGS+=-DWOLFSENTRY
+
+$(BUILD_TOP)/src/lwip/%.o: CFLAGS+=-Wno-cast-align -Wno-conversion
 
 ifeq "$(NO_STDIO)" "1"
     CFLAGS += -DWOLFSENTRY_NO_STDIO

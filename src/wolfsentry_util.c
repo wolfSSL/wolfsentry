@@ -65,6 +65,9 @@ WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t
         return "json/load_config.c";
     case WOLFSENTRY_SOURCE_ID_JSON_JSON_UTIL_C:
         return "json/json_util.c";
+    case WOLFSENTRY_SOURCE_ID_LWIP_PACKET_FILTER_GLUE_C:
+        return "lwip/packet_filter_glue.c";
+
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
         break;
     }

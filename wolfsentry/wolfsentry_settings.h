@@ -189,6 +189,18 @@ typedef WOLFSENTRY_PRIORITY_TYPE wolfsentry_priority_t;
 typedef uint16_t wolfsentry_priority_t;
 #endif
 
+#ifndef attr_align_to
+#ifdef __GNUC__
+#define attr_align_to(x) __attribute__((aligned(x)))
+#elif defined(_MSC_VER)
+/* disable align warning, we want alignment ! */
+#pragma warning(disable: 4324)
+#define attr_align_to(x) __declspec(align(x))
+#else
+#error must supply definition for attr_align_to() macro.
+#endif
+#endif
+
 #ifndef __attribute_maybe_unused__
 #if defined(__GNUC__)
 #define __attribute_maybe_unused__ __attribute__((unused))

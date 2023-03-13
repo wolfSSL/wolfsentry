@@ -162,8 +162,8 @@ typedef enum {
     wolfsentry_errcode_t _thread_context_ret
 
 #define WOLFSENTRY_THREAD_HEADER_INIT(flags)                            \
-    _thread_context_ret =                                               \
-        wolfsentry_init_thread_context(thread, flags, NULL /* user_context */)
+    (_thread_context_ret =                                              \
+        wolfsentry_init_thread_context(thread, flags, NULL /* user_context */))
 
 #define WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(flags)                    \
     do {                                                                \
@@ -461,7 +461,7 @@ struct wolfsentry_eventconfig {
     wolfsentry_port_t sa_port;                  \
     wolfsentry_addr_bits_t addr_len;            \
     byte interface;                             \
-    byte addr[n];                               \
+    attr_align_to(4) byte addr[n];              \
 }
 
 struct wolfsentry_sockaddr WOLFSENTRY_SOCKADDR_MEMBERS(WOLFSENTRY_FLEXIBLE_ARRAY_SIZE);

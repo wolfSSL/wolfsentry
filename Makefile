@@ -123,8 +123,6 @@ DYNAMIC_LDFLAGS := -shared
 $(BUILD_TOP)/src/json/centijson_%.o: CFLAGS+=-DWOLFSENTRY
 $(BUILD_TOP)/src/json/centijson_%.So: CFLAGS+=-DWOLFSENTRY
 
-$(BUILD_TOP)/src/lwip/%.o: CFLAGS+=-Wno-cast-align -Wno-conversion
-
 ifeq "$(NO_STDIO)" "1"
     CFLAGS += -DWOLFSENTRY_NO_STDIO
     NO_JSON := 1

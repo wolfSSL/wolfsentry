@@ -39,7 +39,8 @@ static err_t tcp_filter_wolfsentry(
     ip_addr_t *raddr,
     u16_t rport)
 {
-    wolfsentry_errcode_t ret;
+    err_t ret;
+    wolfsentry_errcode_t ws_ret;
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS |
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
@@ -52,7 +53,9 @@ static err_t tcp_filter_wolfsentry(
 #else
         ip4_addr_t addr_buf;
 #endif
-    } remote, local;
+    }
+    remote, local;
+    static_assert((void *)&remote.sa.addr == (void *)&remote.addr_buf, "unexpected layout in struct wolfsentry_sockaddr.");
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
     WOLFSENTRY_THREAD_HEADER_DECLS;
 
@@ -141,20 +144,20 @@ static err_t tcp_filter_wolfsentry(
     if (laddr->type == IPADDR_TYPE_V6) {
         remote.sa.sa_family = WOLFSENTRY_AF_INET6;
         remote.sa.addr_len = 128; /* ip6_addr_t includes an extra byte for the zone. */
-        ip6_addr_set_hton((struct ip6_addr *)&remote.sa.addr, ip_2_ip6(raddr));
+        ip6_addr_set_hton((struct ip6_addr *)&remote.addr_buf, ip_2_ip6(raddr));
 
         local.sa.sa_family = WOLFSENTRY_AF_INET6;
         local.sa.addr_len = 128; /* ip6_addr_t includes an extra byte for the zone. */
-        ip6_addr_set_hton((struct ip6_addr *)&local.sa.addr, ip_2_ip6(laddr));
+        ip6_addr_set_hton((struct ip6_addr *)&local.addr_buf, ip_2_ip6(laddr));
     } else {
 #endif
         remote.sa.sa_family = WOLFSENTRY_AF_INET;
         remote.sa.addr_len = sizeof(ip4_addr_t) * 8;
-        ip4_addr_set_hton((struct ip4_addr *)&remote.sa.addr, ip_2_ip4(raddr));
+        ip4_addr_set_hton((struct ip4_addr *)&remote.addr_buf, ip_2_ip4(raddr));
 
         local.sa.sa_family = WOLFSENTRY_AF_INET;
         local.sa.addr_len = sizeof(ip4_addr_t) * 8;
-        ip4_addr_set_hton((struct ip4_addr *)&local.sa.addr, ip_2_ip4(laddr));
+        ip4_addr_set_hton((struct ip4_addr *)&local.addr_buf, ip_2_ip4(laddr));
 #if LWIP_IPV6
     }
 #endif
@@ -172,9 +175,11 @@ static err_t tcp_filter_wolfsentry(
         route_flags |= WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD;
     }
 
-    WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_GET_ERROR < 0)
+        return ERR_MEM;
 
-    ret = wolfsentry_route_event_dispatch_with_inited_result(
+    ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             &remote.sa,
             &local.sa,
@@ -186,7 +191,7 @@ static err_t tcp_filter_wolfsentry(
             NULL,
             &action_results);
 
-    if (ret < 0)
+    if (ws_ret < 0)
         ret = ERR_OK;
     else {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
@@ -195,7 +200,8 @@ static err_t tcp_filter_wolfsentry(
             ret = ERR_OK;
     }
 
-    WOLFSENTRY_THREAD_TAILER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
+        return ERR_MEM;
 
     return ret;
 }
@@ -214,7 +220,8 @@ static err_t udp_filter_wolfsentry(
     const ip_addr_t *raddr,
     u16_t rport)
 {
-    wolfsentry_errcode_t ret;
+    err_t ret;
+    wolfsentry_errcode_t ws_ret;
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS |
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
@@ -223,9 +230,9 @@ static err_t udp_filter_wolfsentry(
     struct {
         struct wolfsentry_sockaddr sa;
 #if LWIP_IPV6
-        byte addr_buf[sizeof(ip6_addr_t)]; /* note, includes extra byte for zone. */
+        ip6_addr_t addr_buf; /* note, includes extra byte for zone. */
 #else
-        byte addr_buf[sizeof(ip4_addr_t)];
+        ip4_addr_t addr_buf;
 #endif
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
@@ -291,20 +298,20 @@ static err_t udp_filter_wolfsentry(
     if (laddr->type == IPADDR_TYPE_V6) {
         remote.sa.sa_family = WOLFSENTRY_AF_INET6;
         remote.sa.addr_len = 128; /* ip6_addr_t includes an extra byte for the zone. */
-        ip6_addr_set_hton((struct ip6_addr *)&remote.sa.addr, ip_2_ip6(raddr));
+        ip6_addr_set_hton((struct ip6_addr *)&remote.addr_buf, ip_2_ip6(raddr));
 
         local.sa.sa_family = WOLFSENTRY_AF_INET6;
         local.sa.addr_len = 128; /* ip6_addr_t includes an extra byte for the zone. */
-        ip6_addr_set_hton((struct ip6_addr *)&local.sa.addr, ip_2_ip6(laddr));
+        ip6_addr_set_hton((struct ip6_addr *)&local.addr_buf, ip_2_ip6(laddr));
     } else {
 #endif
         remote.sa.sa_family = WOLFSENTRY_AF_INET;
         remote.sa.addr_len = sizeof(ip4_addr_t) * 8;
-        ip4_addr_set_hton((struct ip4_addr *)&remote.sa.addr, ip_2_ip4(raddr));
+        ip4_addr_set_hton((struct ip4_addr *)&remote.addr_buf, ip_2_ip4(raddr));
 
         local.sa.sa_family = WOLFSENTRY_AF_INET;
         local.sa.addr_len = sizeof(ip4_addr_t) * 8;
-        ip4_addr_set_hton((struct ip4_addr *)&local.sa.addr, ip_2_ip4(laddr));
+        ip4_addr_set_hton((struct ip4_addr *)&local.addr_buf, ip_2_ip4(laddr));
 #if LWIP_IPV6
     }
 #endif
@@ -322,9 +329,10 @@ static err_t udp_filter_wolfsentry(
         route_flags |= WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD;
     }
 
-    WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
+        return ERR_MEM;
 
-    ret = wolfsentry_route_event_dispatch_with_inited_result(
+    ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             &remote.sa,
             &local.sa,
@@ -336,7 +344,7 @@ static err_t udp_filter_wolfsentry(
             NULL,
             &action_results);
 
-    if (ret >= 0) {
+    if (ws_ret >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
             ret = ERR_ABRT;
         else
@@ -344,7 +352,8 @@ static err_t udp_filter_wolfsentry(
     } else
         ret = ERR_OK;
 
-  WOLFSENTRY_THREAD_TAILER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
+        return ERR_MEM;
 
   return ret;
 }
@@ -362,14 +371,15 @@ static err_t icmp4_filter_wolfsentry(
     const ip4_addr_t *raddr,
     u8_t icmp4_type)
 {
-    wolfsentry_errcode_t ret;
+    err_t ret;
+    wolfsentry_errcode_t ws_ret;
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
     const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
-        byte addr_buf[sizeof(ip4_addr_t)];
+        ip4_addr_t addr_buf;
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
     WOLFSENTRY_THREAD_HEADER_DECLS;
@@ -414,11 +424,11 @@ static err_t icmp4_filter_wolfsentry(
 
     remote.sa.sa_family = WOLFSENTRY_AF_INET;
     remote.sa.addr_len = sizeof(ip4_addr_t) * 8;
-    ip4_addr_set_hton((struct ip4_addr *)&remote.sa.addr, raddr);
+    ip4_addr_set_hton(&remote.addr_buf, raddr);
 
     local.sa.sa_family = WOLFSENTRY_AF_INET;
     local.sa.addr_len = sizeof(ip4_addr_t) * 8;
-    ip4_addr_set_hton((struct ip4_addr *)&local.sa.addr, laddr);
+    ip4_addr_set_hton(&local.addr_buf, laddr);
 
     remote.sa.sa_proto = IPPROTO_ICMP;
     remote.sa.sa_port = 0;
@@ -433,9 +443,10 @@ static err_t icmp4_filter_wolfsentry(
         route_flags |= WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD;
     }
 
-    WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
+        return ERR_MEM;
 
-    ret = wolfsentry_route_event_dispatch_with_inited_result(
+    ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             &remote.sa,
             &local.sa,
@@ -447,7 +458,7 @@ static err_t icmp4_filter_wolfsentry(
             NULL,
             &action_results);
 
-    if (ret >= 0) {
+    if (ws_ret >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
             ret = ERR_ABRT;
         else
@@ -455,9 +466,10 @@ static err_t icmp4_filter_wolfsentry(
     } else
         ret = ERR_OK;
 
-  WOLFSENTRY_THREAD_TAILER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
+        return ERR_MEM;
 
-  return ret;
+    return ret;
 }
 
 #endif /* LWIP_ICMP */
@@ -473,14 +485,15 @@ static err_t icmp6_filter_wolfsentry(
     const ip6_addr_t *raddr,
     u8_t icmp6_type)
 {
-    wolfsentry_errcode_t ret;
+    err_t ret;
+    wolfsentry_errcode_t ws_ret;
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
     const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
-        byte addr_buf[sizeof(ip6_addr_t)]; /* note, includes extra byte for zone. */
+        ip6_addr_t addr_buf; /* note, includes extra byte for zone. */
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
     WOLFSENTRY_THREAD_HEADER_DECLS;
@@ -525,11 +538,11 @@ static err_t icmp6_filter_wolfsentry(
 
     remote.sa.sa_family = WOLFSENTRY_AF_INET6;
     remote.sa.addr_len = 128; /* ip6_addr_t includes an extra byte for the zone. */
-    ip6_addr_set_hton((struct ip6_addr *)&remote.sa.addr, raddr);
+    ip6_addr_set_hton(&remote.addr_buf, raddr);
 
     local.sa.sa_family = WOLFSENTRY_AF_INET6;
     local.sa.addr_len = 128; /* ip6_addr_t includes an extra byte for the zone. */
-    ip6_addr_set_hton((struct ip6_addr *)&local.sa.addr, laddr);
+    ip6_addr_set_hton(&local.addr_buf, laddr);
 
     remote.sa.sa_proto = IPPROTO_ICMP;
     remote.sa.sa_port = 0;
@@ -544,9 +557,10 @@ static err_t icmp6_filter_wolfsentry(
         route_flags |= WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD;
     }
 
-    WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
+        return ERR_MEM;
 
-    ret = wolfsentry_route_event_dispatch_with_inited_result(
+    ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             &remote.sa,
             &local.sa,
@@ -558,7 +572,7 @@ static err_t icmp6_filter_wolfsentry(
             NULL,
             &action_results);
 
-    if (ret >= 0) {
+    if (ws_ret >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
             ret = ERR_ABRT;
         else
@@ -566,7 +580,8 @@ static err_t icmp6_filter_wolfsentry(
     } else
         ret = ERR_OK;
 
-  WOLFSENTRY_THREAD_TAILER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+    if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
+        return ERR_MEM;
 
   return ret;
 }

@@ -38,15 +38,8 @@
         #define WOLFSENTRY_PRINTF_ERR(...) printf(__VA_ARGS__)
     #endif
 
-#ifdef WOLFSENTRY_LWIP
-    #include <time.h>
-    #include <lwip/inet.h>
-    #include <lwip/sockets.h>
-#endif
-
-#define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
-#define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
-
+    #define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
+    #define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
 #endif
 
 #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)

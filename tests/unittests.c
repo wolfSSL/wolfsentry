@@ -27,6 +27,35 @@
 
 #include "src/wolfsentry_internal.h"
 
+#ifdef WOLFSENTRY_LWIP
+
+#define iovec iovec /* inhibit lwIP's definition of struct iovec */
+#include "lwip/sockets.h"
+#undef iovec
+
+/* supply libc-based implementations of lwip_inet_{ntop,pton}, since we're not
+ * currently building/linking any lwIP objects for the unit tests.
+ */
+#undef inet_ntop
+const char *inet_ntop(int af, const void *restrict src,
+                             char *restrict dst, socklen_t size);
+const char *lwip_inet_ntop(int af, const void *restrict src,
+                             char *restrict dst, socklen_t size) {
+    return inet_ntop(af, src, dst, size);
+}
+#undef inet_pton
+int inet_pton(int af, const char *restrict src, void *restrict dst);
+int lwip_inet_pton(int af, const char *restrict src, void *restrict dst) {
+    return inet_pton(af, src, dst);
+}
+
+#else /* !WOLFSENTRY_LWIP */
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#endif /* WOLFSENTRY_LWIP */
+
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -538,13 +567,6 @@ TEST_SKIP(test_rw_locks)
 #endif /* TEST_RWLOCKS */
 
 #ifdef TEST_STATIC_ROUTES
-
-#ifdef LWIP
-#include "lwip-socket.h"
-#else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#endif
 
 #define PRIVATE_DATA_SIZE 32
 #ifndef PRIVATE_DATA_ALIGNMENT
@@ -1232,13 +1254,6 @@ static int test_static_routes (void) {
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
-
-#ifdef LWIP
-#include "lwip-socket.h"
-#else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#endif
 
 #define PRIVATE_DATA_SIZE 32
 #define PRIVATE_DATA_ALIGNMENT 8
@@ -2547,13 +2562,6 @@ static int test_user_addr_families (void) {
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-#endif
-
-#ifdef LWIP
-#include "lwip-socket.h"
-#else
-#include <sys/socket.h>
-#include <netinet/in.h>
 #endif
 
 #define PRIVATE_DATA_SIZE 32

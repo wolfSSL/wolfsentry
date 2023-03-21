@@ -23,13 +23,39 @@
 #ifndef WOLFSENTRY_LWIP_H
 #define WOLFSENTRY_LWIP_H
 
-#include "lwip/opt.h"
+#include "lwip/init.h"
 
 #if LWIP_PACKET_FILTER_API
 
 #include "lwip/filter.h"
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_callbacks(struct wolfsentry_context *wolfsentry, packet_filter_event_mask_t tcp_mask, packet_filter_event_mask_t udp_mask, packet_filter_event_mask_t icmp_mask);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ethernet_callback(
+    struct wolfsentry_context *wolfsentry,
+    packet_filter_event_mask_t ethernet_mask);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ip_callbacks(
+    struct wolfsentry_context *wolfsentry,
+    packet_filter_event_mask_t ip_mask);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_icmp_callbacks(
+    struct wolfsentry_context *wolfsentry,
+    packet_filter_event_mask_t icmp_mask);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_tcp_callback(
+    struct wolfsentry_context *wolfsentry,
+    packet_filter_event_mask_t tcp_mask);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_udp_callback(
+    struct wolfsentry_context *wolfsentry,
+    packet_filter_event_mask_t udp_mask);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_callbacks(
+    struct wolfsentry_context *wolfsentry,
+    packet_filter_event_mask_t ethernet_mask,
+    packet_filter_event_mask_t ip_mask,
+    packet_filter_event_mask_t icmp_mask,
+    packet_filter_event_mask_t tcp_mask,
+    packet_filter_event_mask_t udp_mask);
 
 #endif /* LWIP_PACKET_FILTER_API */
 

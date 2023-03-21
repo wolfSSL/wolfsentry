@@ -319,6 +319,13 @@ freertos-arm32-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' clean
 	@echo "passed: freertos-arm32-build test."
 
+.PHONY: linux-lwip-test
+linux-lwip-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" LWIP=1 LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" LWIP=1 LWIP_TOP=$(LWIP_TOP_FOR_TEST) test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" LWIP=1 LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
+	@echo "passed: linux-lwip test."
+
 .PHONY: dist-check
 dist-check:
 	@if [[ ! -d $(SRC_TOP)/.git ]]; then echo 'skipping dist-check in non-git source tree.'; exit 0; fi; \
@@ -337,7 +344,7 @@ endif
 #ifneq "$(NO_JSON)" "1"
 check: override EXTRA_MAKE_FLAGS += UNITTEST_LIST_JSON_DOM_EXTRAS=test_json_corpus
 #endif
-check: analyze-all check-common static-build-test m32-test freertos-arm32-build-test dist-check lock-error-checking-test
+check: analyze-all check-common static-build-test m32-test freertos-arm32-build-test linux-lwip-test dist-check lock-error-checking-test
 	@echo "passed: all checks."
 
 .PHONY: check-macosx

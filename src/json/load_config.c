@@ -26,12 +26,17 @@
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C
 
 #include <stdlib.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
 
 #define MAX_IPV4_ADDR_BITS (sizeof(struct in_addr) * BITS_PER_BYTE)
 #define MAX_IPV6_ADDR_BITS (sizeof(struct in6_addr) * BITS_PER_BYTE)
 #define MAX_MAC_ADDR_BITS 64
+
+#ifdef WOLFSENTRY_LWIP
+#include "lwip/sockets.h"
+#else
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#endif
 
 #ifndef WOLFSENTRY_NO_GETPROTOBY
 #include <netdb.h>

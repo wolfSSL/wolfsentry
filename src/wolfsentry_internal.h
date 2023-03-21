@@ -327,8 +327,10 @@ struct wolfsentry_route {
 };
 
 #define WOLFSENTRY_ROUTE_REMOTE_ADDR(r) ((byte *)(r)->data + (r)->data_addr_offset)
+#define WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r) ((r)->remote.addr_len)
 #define WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) WOLFSENTRY_BITS_TO_BYTES((r)->remote.addr_len)
 #define WOLFSENTRY_ROUTE_LOCAL_ADDR(r) ((byte *)(r)->data + (r)->data_addr_offset + WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r))
+#define WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r) ((r)->local.addr_len)
 #define WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) WOLFSENTRY_BITS_TO_BYTES((r)->local.addr_len)
 #define WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) (1U + (r)->remote.extra_port_count)
 #define WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) (1U + (r)->local.extra_port_count)

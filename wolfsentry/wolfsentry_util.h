@@ -34,6 +34,14 @@
 #define container_of(ptr, container_type, member_name) ((container_type *)(void *)(((byte *)(ptr)) - offsetof(container_type, member_name)))
 #endif
 
+#ifndef popcount32
+#ifdef __GNUC__
+#define popcount32(x) __builtin_popcount(x)
+#else
+#error Must supply binding for popcount32() on non-__GNUC__ targets.
+#endif
+#endif
+
 #if defined(__GNUC__) && !defined(WOLFSENTRY_NO_BUILTIN_CLZ)
 #ifndef LOG2_32
 #define LOG2_32(x) (31 - __builtin_clz((unsigned int)(x)))

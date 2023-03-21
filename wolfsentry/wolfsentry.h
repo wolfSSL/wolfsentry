@@ -43,9 +43,12 @@
 #include <wolfsentry/wolfsentry_errcodes.h>
 
 struct wolfsentry_allocator;
-
 struct wolfsentry_context;
 struct wolfsentry_thread_context;
+
+#ifdef WOLFSENTRY_LWIP
+    #include "wolfsentry/wolfsentry_lwip.h"
+#endif
 
 typedef enum {
     WOLFSENTRY_INIT_FLAG_NONE = 0,
@@ -363,15 +366,19 @@ typedef wolfsentry_errcode_t (*wolfsentry_action_callback_t)(
 
 typedef enum {
     WOLFSENTRY_ROUTE_FLAG_NONE                           = 0U,
-    WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<0U,
-    WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<1U,
-    WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD       = 1U<<2U,
-    WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD             = 1U<<3U,
-    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD        = 1U<<4U,
+    /* note the wildcard bits need to be at the start, in order of field
+     * comparison by wolfsentry_route_key_cmp_1(), due to math in
+     * wolfsentry_route_lookup_0().
+     */
+    WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD             = 1U<<0U,
+    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD        = 1U<<1U,
+    WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD              = 1U<<2U,
+    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD         = 1U<<3U,
+    WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<4U,
     WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD         = 1U<<5U,
-    WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD              = 1U<<6U,
-    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<7U,
-    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD         = 1U<<8U,
+    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<6U,
+    WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<7U,
+    WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD       = 1U<<8U,
     WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS           = 1U<<9U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN                   = 1U<<10U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT                  = 1U<<11U,
@@ -393,6 +400,8 @@ typedef enum {
     WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS                = 1U<<18U,
     WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS = 1U<<19U
 } wolfsentry_route_flags_t;
+
+#define WOLFSENTRY_ROUTE_WILDCARD_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS - 1U)
 
 #define WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_IN_TABLE - 1U)
 

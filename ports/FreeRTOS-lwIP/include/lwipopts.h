@@ -24,25 +24,27 @@
 #define __LWIPOPTS_H__
 
 #define TCP_MSS                      1500
-#define TCP_WND                     65535
+#define TCP_WND                     16384
 #define NO_SYS                          0
-#define LWIP_NOASSERT                   1
+//#define LWIP_NOASSERT                   1
 #define SYS_LIGHTWEIGHT_PROT            1
 
 #define MEM_LIBC_MALLOC                 0
-#define MEMP_MEM_MALLOC                 0
+#define MEMP_MEM_MALLOC                 1
 #define MEM_USE_POOLS                   0
 #define LWIP_ALLOW_MEM_FREE_FROM_OTHER_CONTEXT 1
 
 #define LWIP_ETHERNET                   1
 #define LWIP_IPV4                       1
+#define LWIP_IPV6                       1
 #define LWIP_TCP                        1
 #define LWIP_UDP                        1
 #define LWIP_ARP                        1
 #define LWIP_ICMP                       1
+#define LWIP_ICMP6                      1
 #define IP_FRAG                         1
 
-#define LWIP_DEBUG                      0
+#define LWIP_DEBUG
 #define ECHO_DEBUG                      LWIP_DBG_ON
 //#define IP4_DEBUG                       LWIP_DBG_ON
 //#define NETIF_DEBUG                     LWIP_DBG_ON
@@ -55,12 +57,14 @@
 #define LWIP_RAW                        1
 #define LWIP_COMPAT_SOCKETS             1
 #define LWIP_TIMEVAL_PRIVATE            0
+#include <sys/time.h>
 #define LWIP_STATS                      0
 
 #define LWIP_CHECKSUM_CTRL_PER_NETIF    1
 
 //#define LWIP_PROVIDE_ERRNO 1
 #undef LWIP_PROVIDE_ERRNO
+#include <errno.h>
 
 #define TCPIP_THREAD_PRIO               3
 #define MEM_ALIGNMENT                   4
@@ -105,6 +109,7 @@
 #define LINK_STATS                      1
 #define IP_STATS                        1
 #define ICMP_STATS                      1
+#define ICMP6_STATS                     1
 #define UDP_STATS                       1
 #define TCP_STATS                       1
 #define MEM_STATS                       1
@@ -112,5 +117,7 @@
 #define PBUF_STATS                      1
 #define SYS_STATS                       1
 #endif /* STATS */
+
+#define LWIP_PACKET_FILTER_API 1
 
 #endif /* __LWIPOPTS_H__ */

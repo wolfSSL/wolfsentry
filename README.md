@@ -77,7 +77,7 @@ Build and test with user settings:
 
 Build for FreeRTOS on ARM32, assuming FreeRTOS and lwIP source trees are located as shown:
 
-`make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00/FreeRTOS/Source LWIP_TOP=../third/lwip/src EXTRA_CFLAGS='-mcpu=cortex-m7'
+`make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00/FreeRTOS/Source LWIP_TOP=../third/lwip/src EXTRA_CFLAGS='-mcpu=cortex-m7'`
 
 ## Examples
 

@@ -34,15 +34,11 @@
 #define container_of(ptr, container_type, member_name) ((container_type *)(void *)(((byte *)(ptr)) - offsetof(container_type, member_name)))
 #endif
 
-#ifndef attr_align_to
+#ifndef popcount32
 #ifdef __GNUC__
-#define attr_align_to(x) __attribute__((aligned(x)))
-#elif defined(_MSC_VER)
-/* disable align warning, we want alignment ! */
-#pragma warning(disable: 4324)
-#define attr_align_to(x) __declspec(align(x))
+#define popcount32(x) __builtin_popcount(x)
 #else
-#error must supply definition for attr_align_to() macro.
+#error Must supply binding for popcount32() on non-__GNUC__ targets.
 #endif
 #endif
 

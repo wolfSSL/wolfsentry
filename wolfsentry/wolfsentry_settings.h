@@ -38,15 +38,8 @@
         #define WOLFSENTRY_PRINTF_ERR(...) printf(__VA_ARGS__)
     #endif
 
-#ifdef WOLFSENTRY_LWIP
-    #include <time.h>
-    #include <lwip/inet.h>
-    #include <lwip/sockets.h>
-#endif
-
-#define FREERTOS_NANOSECONDS_PER_SECOND     ( 1000000000LL )                                /**< Nanoseconds per second. */
-#define FREERTOS_NANOSECONDS_PER_TICK       ( FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ ) /**< Nanoseconds per FreeRTOS tick. */
-
+    #define FREERTOS_NANOSECONDS_PER_SECOND     1000000000LL
+    #define FREERTOS_NANOSECONDS_PER_TICK       (FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ)
 #endif
 
 #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
@@ -187,6 +180,18 @@ typedef int64_t wolfsentry_time_t;
 typedef WOLFSENTRY_PRIORITY_TYPE wolfsentry_priority_t;
 #else
 typedef uint16_t wolfsentry_priority_t;
+#endif
+
+#ifndef attr_align_to
+#ifdef __GNUC__
+#define attr_align_to(x) __attribute__((aligned(x)))
+#elif defined(_MSC_VER)
+/* disable align warning, we want alignment ! */
+#pragma warning(disable: 4324)
+#define attr_align_to(x) __declspec(align(x))
+#else
+#error must supply definition for attr_align_to() macro.
+#endif
 #endif
 
 #ifndef __attribute_maybe_unused__

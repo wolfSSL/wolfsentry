@@ -43,9 +43,12 @@
 #include <wolfsentry/wolfsentry_errcodes.h>
 
 struct wolfsentry_allocator;
-
 struct wolfsentry_context;
 struct wolfsentry_thread_context;
+
+#ifdef WOLFSENTRY_LWIP
+    #include "wolfsentry/wolfsentry_lwip.h"
+#endif
 
 typedef enum {
     WOLFSENTRY_INIT_FLAG_NONE = 0,
@@ -155,16 +158,32 @@ typedef enum {
 #define WOLFSENTRY_CONTEXT_ARGS_NOT_USED (void)wolfsentry; (void)thread
 #define WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED (void)thread
 
-#define WOLFSENTRY_THREAD_HEADER(flags)                                 \
+#define WOLFSENTRY_THREAD_HEADER_DECLS                                  \
     struct wolfsentry_thread_context_public thread_buffer;              \
     struct wolfsentry_thread_context *thread =                          \
         (struct wolfsentry_thread_context *)&thread_buffer;             \
-    wolfsentry_errcode_t _thread_context_ret =                     \
-        wolfsentry_init_thread_context(thread, flags, NULL /* user_context */)
+    wolfsentry_errcode_t _thread_context_ret
+
+#define WOLFSENTRY_THREAD_HEADER_INIT(flags)                            \
+    (_thread_context_ret =                                              \
+        wolfsentry_init_thread_context(thread, flags, NULL /* user_context */))
+
+#define WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(flags)                    \
+    do {                                                                \
+        _thread_context_ret =                                           \
+            wolfsentry_init_thread_context(thread, flags, NULL /* user_context */); \
+        if (_thread_context_ret < 0)                                    \
+            return _thread_context_ret;                                 \
+    } while (0)
+
+#define WOLFSENTRY_THREAD_HEADER(flags)                                 \
+    WOLFSENTRY_THREAD_HEADER_DECLS;                                     \
+    WOLFSENTRY_THREAD_HEADER_INIT(flags)
+
 #define WOLFSENTRY_THREAD_HEADER_CHECKED(flags)                         \
-    WOLFSENTRY_THREAD_HEADER(flags);                                    \
-    if (_thread_context_ret < 0)                                   \
-        return _thread_context_ret
+    WOLFSENTRY_THREAD_HEADER_DECLS;                                     \
+    WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(flags)
+
 #define WOLFSENTRY_THREAD_TAILER(flags) (_thread_context_ret = wolfsentry_destroy_thread_context(thread, flags))
 #define WOLFSENTRY_THREAD_TAILER_CHECKED(flags) do { WOLFSENTRY_THREAD_TAILER(flags); if (_thread_context_ret < 0) return _thread_context_ret; } while (0)
 #define WOLFSENTRY_THREAD_GET_ERROR _thread_context_ret
@@ -347,15 +366,19 @@ typedef wolfsentry_errcode_t (*wolfsentry_action_callback_t)(
 
 typedef enum {
     WOLFSENTRY_ROUTE_FLAG_NONE                           = 0U,
-    WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<0U,
-    WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<1U,
-    WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD       = 1U<<2U,
-    WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD             = 1U<<3U,
-    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD        = 1U<<4U,
+    /* note the wildcard bits need to be at the start, in order of field
+     * comparison by wolfsentry_route_key_cmp_1(), due to math in
+     * wolfsentry_route_lookup_0().
+     */
+    WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD             = 1U<<0U,
+    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD        = 1U<<1U,
+    WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD              = 1U<<2U,
+    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD         = 1U<<3U,
+    WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<4U,
     WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD         = 1U<<5U,
-    WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD              = 1U<<6U,
-    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<7U,
-    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD         = 1U<<8U,
+    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<6U,
+    WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<7U,
+    WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD       = 1U<<8U,
     WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS           = 1U<<9U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN                   = 1U<<10U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT                  = 1U<<11U,
@@ -377,6 +400,8 @@ typedef enum {
     WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS                = 1U<<18U,
     WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS = 1U<<19U
 } wolfsentry_route_flags_t;
+
+#define WOLFSENTRY_ROUTE_WILDCARD_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS - 1U)
 
 #define WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_IN_TABLE - 1U)
 
@@ -445,7 +470,7 @@ struct wolfsentry_eventconfig {
     wolfsentry_port_t sa_port;                  \
     wolfsentry_addr_bits_t addr_len;            \
     byte interface;                             \
-    byte addr[n];                               \
+    attr_align_to(4) byte addr[n];              \
 }
 
 struct wolfsentry_sockaddr WOLFSENTRY_SOCKADDR_MEMBERS(WOLFSENTRY_FLEXIBLE_ARRAY_SIZE);

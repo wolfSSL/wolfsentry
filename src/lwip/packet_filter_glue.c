@@ -59,7 +59,7 @@ static err_t ethernet_filter_with_wolfsentry(
     WOLFSENTRY_THREAD_HEADER_DECLS;
 
     if (wolfsentry == NULL)
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -89,7 +89,7 @@ static err_t ethernet_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
 
     remote.sa.sa_family = WOLFSENTRY_AF_LINK;
@@ -114,7 +114,7 @@ static err_t ethernet_filter_with_wolfsentry(
     }
 
     if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -137,14 +137,14 @@ static err_t ethernet_filter_with_wolfsentry(
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef debug_packet_filter_glue
 #define macargs(x) (unsigned)(x)->addr[0], (unsigned)(x)->addr[1], (unsigned)(x)->addr[2], (unsigned)(x)->addr[3], (unsigned)(x)->addr[4], (unsigned)(x)->addr[5]
     fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%02x:%02x:%02x:%02x:%02x:%02x %s-%s raddr=%02x:%02x:%02x:%02x:%02x:%02x, type=0x%X\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), macargs(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", macargs(raddr), (int)type);
 #endif
 
-    return ret;
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 #endif /* LWIP_ARP || LWIP_ETHERNET */
@@ -173,7 +173,7 @@ static err_t ip4_filter_with_wolfsentry(
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
     WOLFSENTRY_THREAD_HEADER_DECLS;
     if (wolfsentry == NULL)
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -207,7 +207,7 @@ static err_t ip4_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
 
     remote.sa.sa_family = WOLFSENTRY_AF_INET;
@@ -232,7 +232,7 @@ static err_t ip4_filter_with_wolfsentry(
     }
 
     if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -255,13 +255,13 @@ static err_t ip4_filter_with_wolfsentry(
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef debug_packet_filter_glue
     fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=" V4_FMT " %s-%s raddr=" V4_FMT " proto=%d\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)proto);
 #endif
 
-    return ret;
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 #endif /* LWIP_IPV4 */
@@ -291,7 +291,7 @@ static err_t ip6_filter_with_wolfsentry(
     WOLFSENTRY_THREAD_HEADER_DECLS;
 
     if (wolfsentry == NULL)
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -325,7 +325,7 @@ static err_t ip6_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
 
     remote.sa.sa_family = WOLFSENTRY_AF_INET6;
@@ -350,7 +350,7 @@ static err_t ip6_filter_with_wolfsentry(
     }
 
     if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -373,9 +373,9 @@ static err_t ip6_filter_with_wolfsentry(
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
-  return ret;
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 #endif /* LWIP_IP6 */
@@ -413,7 +413,7 @@ static err_t tcp_filter_with_wolfsentry(
     WOLFSENTRY_THREAD_HEADER_DECLS;
 
     if (wolfsentry == NULL)
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
 
     switch(event->reason) {
     case FILT_ACCEPTING:
@@ -490,7 +490,7 @@ static err_t tcp_filter_with_wolfsentry(
         event_name = "error";
         break;
     case FILT_DISSOCIATE: /* can't happen. */
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
 
 #if LWIP_IPV6
@@ -530,7 +530,7 @@ static err_t tcp_filter_with_wolfsentry(
 
     WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE);
     if (WOLFSENTRY_THREAD_GET_ERROR < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -554,7 +554,7 @@ static err_t tcp_filter_with_wolfsentry(
     }
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef debug_packet_filter_glue
     if (laddr->type == IPADDR_TYPE_V4) {
@@ -562,7 +562,7 @@ static err_t tcp_filter_with_wolfsentry(
     }
 #endif
 
-    return ret;
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 #endif /* LWIP_TCP */
@@ -598,7 +598,7 @@ static err_t udp_filter_with_wolfsentry(
     WOLFSENTRY_THREAD_HEADER_DECLS;
 
     if (wolfsentry == NULL)
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
 
     switch(event->reason) {
     case FILT_BINDING:
@@ -650,7 +650,7 @@ static err_t udp_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
 
 #if LWIP_IPV6
@@ -689,7 +689,7 @@ static err_t udp_filter_with_wolfsentry(
     }
 
     if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -712,7 +712,7 @@ static err_t udp_filter_with_wolfsentry(
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef debug_packet_filter_glue
     if (laddr->type == IPADDR_TYPE_V4) {
@@ -720,7 +720,7 @@ static err_t udp_filter_with_wolfsentry(
     }
 #endif
 
-  return ret;
+  WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 #endif /* LWIP_UDP */
@@ -749,7 +749,7 @@ static err_t icmp4_filter_with_wolfsentry(
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
     WOLFSENTRY_THREAD_HEADER_DECLS;
     if (wolfsentry == NULL)
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -783,7 +783,7 @@ static err_t icmp4_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
 
     remote.sa.sa_family = WOLFSENTRY_AF_INET;
@@ -808,7 +808,7 @@ static err_t icmp4_filter_with_wolfsentry(
     }
 
     if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -831,13 +831,13 @@ static err_t icmp4_filter_with_wolfsentry(
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef debug_packet_filter_glue
     fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%d.%d.%d.%d %s-%s raddr=%d.%d.%d.%d type=%d\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)icmp4_type);
 #endif
 
-    return ret;
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 #endif /* LWIP_ICMP */
@@ -867,7 +867,7 @@ static err_t icmp6_filter_with_wolfsentry(
     WOLFSENTRY_THREAD_HEADER_DECLS;
 
     if (wolfsentry == NULL)
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -901,7 +901,7 @@ static err_t icmp6_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        return ERR_OK;
+        WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
 
     remote.sa.sa_family = WOLFSENTRY_AF_INET6;
@@ -926,7 +926,7 @@ static err_t icmp6_filter_with_wolfsentry(
     }
 
     if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -949,9 +949,9 @@ static err_t icmp6_filter_with_wolfsentry(
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
-        return ERR_MEM;
+        WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
-  return ret;
+  WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 #endif /* LWIP_ICMP6 */
@@ -1087,15 +1087,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_callbacks(
 {
     wolfsentry_errcode_t ret;
     if ((ret = wolfsentry_install_lwip_filter_ethernet_callback(wolfsentry, ethernet_mask)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_install_lwip_filter_ip_callbacks(wolfsentry, ip_mask)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_install_lwip_filter_icmp_callbacks(wolfsentry, icmp_mask)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_install_lwip_filter_tcp_callback(wolfsentry, tcp_mask)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_install_lwip_filter_udp_callback(wolfsentry, udp_mask)) < 0)
-        return ret;
+        WOLFSENTRY_ERROR_RERETURN(ret);
     WOLFSENTRY_RETURN_OK;
 }
 

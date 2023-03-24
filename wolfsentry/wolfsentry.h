@@ -336,6 +336,7 @@ typedef enum {
     WOLFSENTRY_ACTION_RES_ERROR       = 1U << 11U,
     WOLFSENTRY_ACTION_RES_FALLTHROUGH = 1U << 12U, /* dispatch resolved to the fallthrough route. */
     WOLFSENTRY_ACTION_RES_UPDATE      = 1U << 13U, /* signals to subsequent actions and the caller that the route state was updated (e.g. penaltyboxed). */
+    WOLFSENTRY_ACTION_RES_PORT_RESET  = 1U << 14U, /* when an action returns this, send a TCP reset or ICMP port unreachable packet. */
     WOLFSENTRY_ACTION_RES_USER_BASE   = 1U << WOLFSENTRY_ACTION_RES_USER_SHIFT /* start of user-defined results, with user-defined scheme (bitfield, sequential, or other) */
 } wolfsentry_action_res_t;
 
@@ -398,7 +399,8 @@ typedef enum {
     WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED                   = 1U<<16U,
     WOLFSENTRY_ROUTE_FLAG_GREENLISTED                    = 1U<<17U,
     WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS                = 1U<<18U,
-    WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS = 1U<<19U
+    WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS = 1U<<19U,
+    WOLFSENTRY_ROUTE_FLAG_PORT_RESET                     = 1U<<20U
 } wolfsentry_route_flags_t;
 
 #define WOLFSENTRY_ROUTE_WILDCARD_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS - 1U)

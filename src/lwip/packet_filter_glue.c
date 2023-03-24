@@ -547,7 +547,9 @@ static err_t tcp_filter_with_wolfsentry(
     if (ws_ret < 0)
         ret = ERR_OK;
     else {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+            ret = ERR_RST;
+        else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
             ret = ERR_ABRT;
         else
             ret = ERR_OK;
@@ -704,7 +706,9 @@ static err_t udp_filter_with_wolfsentry(
             &action_results);
 
     if (ws_ret >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+            ret = ERR_RST;
+        else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
             ret = ERR_ABRT;
         else
             ret = ERR_OK;

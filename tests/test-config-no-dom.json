@@ -131,6 +131,24 @@
     },
     {
         "parent-event" : "static-route-parent",
+        "direction-in" : true,
+        "direction-out" : false,
+        "penalty-boxed" : true,
+        "port-reset" : true,
+        "dont-count-hits" : false,
+        "dont-count-current-connections" : false,
+        "family" : "inet",
+        "protocol" : "tcp",
+        "remote" : {
+            "address" : "1.2.3.4",
+            "prefix-bits" : 32
+        },
+        "local" : {
+            "port" : 13579
+        }
+    },
+    {
+        "parent-event" : "static-route-parent",
         "tcplike-port-numbers" : true,
         "direction-in" : true,
         "direction-out" : true,

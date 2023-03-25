@@ -107,7 +107,7 @@
             "port-reset" : true,
             "dont-count-hits" : false,
             "dont-count-current-connections" : false,
-            "family" : "inet",
+            "family" : 2,
             "protocol" : 6,
             "remote" : {
 		"address" : "1.2.3.4",

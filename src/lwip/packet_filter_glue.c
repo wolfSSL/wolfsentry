@@ -28,10 +28,34 @@
 
 #if LWIP_PACKET_FILTER_API
 
-#ifdef debug_packet_filter_glue
+#ifdef WOLFSENTRY_DEBUG_LWIP
     #define V4_FMT "%d.%d.%d.%d"
     #define V4_2_V4ARGS(x) (int)((x)->addr & 0xff), (int)(((x)->addr >> 8) & 0xff), (int)(((x)->addr >> 16) & 0xff), (int)(((x)->addr >> 24))
     #define V4V6_2_V4ARGS(x) (int)(ip_2_ip4(x)->addr & 0xff), (int)((ip_2_ip4(x)->addr >> 8) & 0xff), (int)((ip_2_ip4(x)->addr >> 16) & 0xff), (int)((ip_2_ip4(x)->addr >> 24))
+    static_assert(FILT_BINDING == 0, "unexpected value for FILT_BINDING");
+    static_assert(FILT_OUTBOUND_ERR == 13, "unexpected value for FILT_OUTBOUND_ERR");
+    static const char *lwip_event_reasons[] = {
+        "BINDING",
+        "DISSOCIATE",
+        "LISTENING",
+        "STOP_LISTENING",
+        "CONNECTING",
+        "ACCEPTING",
+        "CLOSED",
+        "REMOTE_RESET",
+        "RECEIVING",
+        "SENDING",
+        "ADDR_UNREACHABLE",
+        "PORT_UNREACHABLE",
+        "INBOUND_ERR",
+        "OUTBOUND_ERR"
+    };
+    static const char *lwip_event_reason(packet_filter_event_t reason) {
+        if ((unsigned)reason < length_of_array(lwip_event_reasons))
+            return lwip_event_reasons[reason];
+        else
+            return "(out-of-bounds reason!)";
+    }
 #endif
 
 #if LWIP_ARP || LWIP_ETHERNET
@@ -139,9 +163,9 @@ static err_t ethernet_filter_with_wolfsentry(
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
-#ifdef debug_packet_filter_glue
+#ifdef WOLFSENTRY_DEBUG_LWIP
 #define macargs(x) (unsigned)(x)->addr[0], (unsigned)(x)->addr[1], (unsigned)(x)->addr[2], (unsigned)(x)->addr[3], (unsigned)(x)->addr[4], (unsigned)(x)->addr[5]
-    fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%02x:%02x:%02x:%02x:%02x:%02x %s-%s raddr=%02x:%02x:%02x:%02x:%02x:%02x, type=0x%X\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), macargs(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", macargs(raddr), (int)type);
+    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%02x:%02x:%02x:%02x:%02x:%02x %s-%s raddr=%02x:%02x:%02x:%02x:%02x:%02x, type=0x%X\n",__FILE__,__LINE__, __FUNCTION__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), macargs(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", macargs(raddr), (int)type);
 #endif
 
     WOLFSENTRY_RETURN_VALUE(ret);
@@ -257,8 +281,8 @@ static err_t ip4_filter_with_wolfsentry(
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
-#ifdef debug_packet_filter_glue
-    fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=" V4_FMT " %s-%s raddr=" V4_FMT " proto=%d\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)proto);
+#ifdef WOLFSENTRY_DEBUG_LWIP
+    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=" V4_FMT " %s-%s raddr=" V4_FMT " proto=%d\n",__FILE__,__LINE__, __FUNCTION__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)proto);
 #endif
 
     WOLFSENTRY_RETURN_VALUE(ret);
@@ -449,6 +473,7 @@ static err_t tcp_filter_with_wolfsentry(
             WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
+        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         event_name = "bind";
         break;
     case FILT_LISTENING:
@@ -458,6 +483,7 @@ static err_t tcp_filter_with_wolfsentry(
             WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
+        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         event_name = "listen";
         break;
     case FILT_STOP_LISTENING:
@@ -468,6 +494,7 @@ static err_t tcp_filter_with_wolfsentry(
             WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
+        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
@@ -558,9 +585,9 @@ static err_t tcp_filter_with_wolfsentry(
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
-#ifdef debug_packet_filter_glue
+#ifdef WOLFSENTRY_DEBUG_LWIP
     if (laddr->type == IPADDR_TYPE_V4) {
-        fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport);
+        WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d\n",__FILE__,__LINE__, __FUNCTION__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport);
     }
 #endif
 
@@ -608,6 +635,7 @@ static err_t udp_filter_with_wolfsentry(
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
+        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         event_name = "bind";
         break;
     case FILT_CONNECTING:
@@ -718,9 +746,9 @@ static err_t udp_filter_with_wolfsentry(
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
-#ifdef debug_packet_filter_glue
+#ifdef WOLFSENTRY_DEBUG_LWIP
     if (laddr->type == IPADDR_TYPE_V4) {
-        fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport);
+        WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d\n",__FILE__,__LINE__, __FUNCTION__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport);
     }
 #endif
 
@@ -837,8 +865,8 @@ static err_t icmp4_filter_with_wolfsentry(
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
-#ifdef debug_packet_filter_glue
-    fprintf(stderr,"%s L %d %s, reason=%d, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%d.%d.%d.%d %s-%s raddr=%d.%d.%d.%d type=%d\n",__FILE__,__LINE__, __FUNCTION__, event->reason, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)icmp4_type);
+#ifdef WOLFSENTRY_DEBUG_LWIP
+    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%d.%d.%d.%d %s-%s raddr=%d.%d.%d.%d type=%d\n",__FILE__,__LINE__, __FUNCTION__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)icmp4_type);
 #endif
 
     WOLFSENTRY_RETURN_VALUE(ret);

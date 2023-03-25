@@ -23,7 +23,7 @@
 #ifndef WOLFSENTRY_H
 #define WOLFSENTRY_H
 
-#define WOLFSENTRY_VERSION_MAJOR 1
+#define WOLFSENTRY_VERSION_MAJOR 2
 #define WOLFSENTRY_VERSION_MINOR 1
 #define WOLFSENTRY_VERSION_TINY 0
 #define WOLFSENTRY_VERSION_ENCODE(major, minor, tiny) (((major) << 16U) | ((minor) << 8U) | (tiny))
@@ -337,7 +337,8 @@ typedef enum {
     WOLFSENTRY_ACTION_RES_FALLTHROUGH = 1U << 12U, /* dispatch resolved to the fallthrough route. */
     WOLFSENTRY_ACTION_RES_UPDATE      = 1U << 13U, /* signals to subsequent actions and the caller that the route state was updated (e.g. penaltyboxed). */
     WOLFSENTRY_ACTION_RES_PORT_RESET  = 1U << 14U, /* when an action returns this, send a TCP reset or ICMP port unreachable packet. */
-    WOLFSENTRY_ACTION_RES_USER_BASE   = 1U << WOLFSENTRY_ACTION_RES_USER_SHIFT /* start of user-defined results, with user-defined scheme (bitfield, sequential, or other) */
+    WOLFSENTRY_ACTION_RES_USER_BASE   = 1U << WOLFSENTRY_ACTION_RES_USER_SHIFT, /* start of user-defined results, with user-defined scheme (bitfield, sequential, or other) */
+    WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES = WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_COMMENDABLE /* overload used by wolfsentry_route_lookup_0() */
 } wolfsentry_action_res_t;
 
 #define WOLFSENTRY_ROUTE_DEFAULT_POLICY_MASK (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_STOP | WOLFSENTRY_ACTION_RES_ERROR)

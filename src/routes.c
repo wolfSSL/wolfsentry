@@ -962,6 +962,19 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     for (; i; i = (struct wolfsentry_route *)wolfsentry_table_cursor_prev(&cursor)) {
         if (WOLFSENTRY_CHECK_BITS(i->flags, WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE))
             continue;
+        /* if *action_results has _COMMENDABLE set on entry to
+         * wolfsentry_route_lookup_0(), it was set via
+         * wolfsentry_route_event_dispatch_with_inited_result() for a
+         * bind/listen query that should succeed if any routes can succeed.
+         * this requires ignoring routes with _PENALTYBOXED/_PORT_RESET set.
+         */
+        if (action_results &&
+            WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES) &&
+            WOLFSENTRY_MASKIN_BITS(i->flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED|WOLFSENTRY_ROUTE_FLAG_PORT_RESET))
+        {
+            continue;
+        }
+
         cursor_position = wolfsentry_route_key_cmp_1(i, target_route, 1 /* match_wildcards_p */, inexact_matches);
 
         if (cursor_position == 0) {
@@ -1021,6 +1034,9 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 
     if ((*found_route != NULL) && (ret >= 0) && (action_results != NULL))
         wolfsentry_route_increment_hitcount(WOLFSENTRY_CONTEXT_ARGS_OUT, *found_route, action_results);
+
+    if (action_results && WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES))
+        WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES);
 
     WOLFSENTRY_ERROR_RERETURN(ret);
 }

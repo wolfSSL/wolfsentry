@@ -935,8 +935,14 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     if ((ret = wolfsentry_table_cursor_seek(&table->header, &target_route->header, &cursor, &cursor_position)) < 0)
         goto out;
 
-    /* return exact match immediately. */
-    if ((cursor_position == 0) && (exact_p || (! WOLFSENTRY_CHECK_BITS(((struct wolfsentry_route *)cursor.point)->flags, WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)))) {
+    /* return exact match immediately if exact_p, or if ent is current and not excluded by _EXCLUDE_REJECT_ROUTES. */
+    if ((cursor_position == 0) &&
+        (exact_p ||
+         ((! WOLFSENTRY_CHECK_BITS(((struct wolfsentry_route *)cursor.point)->flags, WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
+          (! (action_results &&
+              WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES) &&
+              WOLFSENTRY_MASKIN_BITS(((struct wolfsentry_route *)cursor.point)->flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED|WOLFSENTRY_ROUTE_FLAG_PORT_RESET))))))
+    {
         *found_route = (struct wolfsentry_route *)cursor.point;
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
         goto out;

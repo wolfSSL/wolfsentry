@@ -454,6 +454,8 @@ static wolfsentry_errcode_t convert_default_policy(JSON_TYPE type, const unsigne
         *default_policy = WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_STOP;
     else if (streq(data, "reject", data_size))
         *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_STOP;
+    else if (streq(data, "reset", data_size))
+        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_PORT_RESET|WOLFSENTRY_ACTION_RES_STOP;
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -857,6 +859,8 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
         WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS));
     else if (! strcmp(jps->cur_keyname, "dont-count-current-connections"))
         WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS));
+    else if (! strcmp(jps->cur_keyname, "port-reset"))
+        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_PORT_RESET));
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 

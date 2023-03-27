@@ -80,6 +80,10 @@ ifdef RUNTIME
             LWIP := 1
         endif
         RUNTIME_CFLAGS += -DFREERTOS -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_POSIX_MEMALIGN -ffreestanding -I$(FREERTOS_TOP)/include -I$(FREERTOS_TOP)/portable/GCC/ARM_CM3
+    else ifeq "$(RUNTIME)" "Linux-lwIP"
+        ifndef LWIP
+            LWIP := 1
+        endif
     else
         $(error unrecognized runtime "$(RUNTIME)")
     endif
@@ -87,7 +91,7 @@ else
     RUNTIME := $(shell uname -s)
 endif
 
-RUNTIME_CFLAGS += -I./ports/$(RUNTIME)/include
+RUNTIME_CFLAGS += $(shell [ -d "$(SRC_TOP)/ports/$(RUNTIME)/include/" ] && echo -I$(SRC_TOP)/ports/$(RUNTIME)/include)
 
 ifdef LWIP
         ifndef LWIP_TOP
@@ -445,7 +449,7 @@ else
 	@rm $(CLEAN_RM_ARGS)
 endif
 	@rm -rf $(addsuffix .dSYM,$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST) $(UNITTEST_LIST_SHARED)))
-	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,ports,wolfsentry,examples,scripts,FreeRTOS,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir && rmdir "${BUILD_TOP}" || exit 0
+	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,ports,lwip,wolfsentry,examples,scripts,FreeRTOS,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir && rmdir "${BUILD_TOP}" || exit 0
 ifndef VERY_QUIET
 	@echo 'cleaned all targets and ephemera in $(BUILD_TOP).'
 endif

@@ -1,3 +1,68 @@
+# wolfSentry Release 1.2.0 (Mar 24, 2023)
+
+Production Release 1.2.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## New Features
+
+### lwIP full firewall integration
+
+When wolfSentry is built with make options `LWIP=1
+LWIP_TOP=<path-to-lwIP-source>`, the library is built with new APIs
+`wolfsentry_install_lwip_filter_ethernet_callback()`,
+`wolfsentry_install_lwip_filter_ip_callbacks()`,
+`wolfsentry_install_lwip_filter_icmp_callbacks()`,
+`wolfsentry_install_lwip_filter_tcp_callback()`,
+`wolfsentry_install_lwip_filter_udp_callback()`,
+and the all-on-one `wolfsentry_install_lwip_filter_callbacks()`.  For each
+layer/protocol, a simple bitmask, of type `packet_filter_event_mask_t`, allows
+events to be selectively filtered, with other traffic passed with negligible overhead.
+For example, TCP connection requests can be fully evaluated by wolfSentry, while
+traffic within established TCP connections can pass freely.
+
+`wolfSentry LWIP=1` relies on a patchset to lwIP, gated on the macro
+`LWIP_PACKET_FILTER_API`, that adds generic filter callback APIs to each layer
+and protocol.  See `lwip/README.md` for details.
+
+In addition to `LWIP_DEBUG` instrumentation, the new integration supports
+`WOLFSENTRY_DEBUG_PACKET_FILTER`, which renders the key attributes and outcome
+for all callout events.
+
+## Noteworthy Changes and Additions
+
+Routes and default actions can now be annotated to return
+`WOLFSENTRY_ACTION_RES_PORT_RESET` in their `action_results`.  This is used in
+the new lwIP integration to control whether TCP reset and ICMP port-unreachable
+packets are sent (versus dropping the rejected packet unacknowledged).
+
+A new `ports/` tree is added, and the former FreeRTOS/ tree is moved to
+`ports/FreeRTOS-lwIP`.
+
+New helper macros are added for managing thread state:
+`WOLFSENTRY_THREAD_HEADER_DECLS`, `WOLFSENTRY_THREAD_HEADER_INIT()`,
+`WOLFSENTRY_THREAD_HEADER_INIT_CHECKED()`.
+
+New flags `WOLFSENTRY_ROUTE_FLAG_PORT_RESET` and
+`WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES` to support firewall
+functionalities.
+
+## Bug Fixes
+
+Wildcard matching in the routes/rules table now works correctly even for
+non-contiguous wildcard matching.
+
+`struct wolfsentry_sockaddr` now aligns its `addr` member to a 4 byte boundary,
+for safe casting to `(int *)`, using a new `attr_align_to()` macro.
+
+The route lookup algorithm has been improved for correct results with
+non-contiguous wildcards, to correctly break ties using the new
+`compare_match_exactness()`, and to correctly give priority to routes with a
+matching event.
+
+When matching target routes (e.g. with `wolfsentry_route_event_dispatch()`),
+ignore failure in `wolfsentry_event_get_reference()` if
+`WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD` is set in the `flags`.
+
+
 # wolfSentry Release 1.1.0 (Feb 23, 2023)
 
 Production Release 1.1.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:

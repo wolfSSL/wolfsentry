@@ -2947,6 +2947,39 @@ static int test_json(const char *fname) {
         WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
     }
 
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } remote, local;
+        wolfsentry_route_flags_t inexact_matches;
+        wolfsentry_action_res_t action_results;
+
+        remote.sa.sa_family = local.sa.sa_family = AF_INET;
+        remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+        remote.sa.sa_port = 0;
+        local.sa.sa_port = 13579;
+        remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+        remote.sa.interface = local.sa.interface = 0;
+        memcpy(remote.sa.addr,"\1\2\3\4",sizeof remote.addr_buf);
+        memcpy(local.sa.addr,"\0\0\0\0",sizeof local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET));
+    }
+
+
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
     {
         unsigned char *test_json_document = NULL;

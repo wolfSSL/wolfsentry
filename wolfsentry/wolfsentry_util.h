@@ -33,6 +33,9 @@
 #ifndef container_of
 #define container_of(ptr, container_type, member_name) ((container_type *)(void *)(((byte *)(ptr)) - offsetof(container_type, member_name)))
 #endif
+#ifndef length_of_array
+#define length_of_array(x) (sizeof (x) / sizeof (x)[0])
+#endif
 
 #ifndef popcount32
 #ifdef __GNUC__

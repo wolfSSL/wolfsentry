@@ -306,7 +306,7 @@ endif
 ifdef LWIP_TOP
     LWIP_TOP_FOR_TEST := $(LWIP_TOP)
 else
-    LWIP_TOP_FOR_TEST := ../third/lwip/src
+    LWIP_TOP_FOR_TEST := $(SRC_TOP)/../third/lwip/src
 endif
 
 .PHONY: freertos-arm32-build-test
@@ -321,9 +321,9 @@ freertos-arm32-build-test:
 
 .PHONY: linux-lwip-test
 linux-lwip-test:
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" LWIP=1 LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" LWIP=1 LWIP_TOP=$(LWIP_TOP_FOR_TEST) test
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" LWIP=1 LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
 	@echo "passed: linux-lwip test."
 
 .PHONY: dist-check
@@ -341,9 +341,7 @@ export JSON_TEST_CORPUS_DIR
 endif
 
 .PHONY: check
-#ifneq "$(NO_JSON)" "1"
 check: override EXTRA_MAKE_FLAGS += UNITTEST_LIST_JSON_DOM_EXTRAS=test_json_corpus
-#endif
 check: analyze-all check-common static-build-test m32-test freertos-arm32-build-test linux-lwip-test dist-check lock-error-checking-test
 	@echo "passed: all checks."
 

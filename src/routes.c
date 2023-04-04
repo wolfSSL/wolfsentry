@@ -100,12 +100,20 @@ static inline int addr_prefix_match_size(
     int b_len)
 {
     int min_len = (a_len < b_len) ? a_len : b_len;
+    int min_len_whole_bytes = min_len >> 3;
     int ret;
 
     if (min_len == 0)
         return 0;
 
-    for (ret = 0; ret < min_len; ++ret) {
+    for (ret = 0; ret < min_len_whole_bytes; ++ret) {
+        if (a[ret] != b[ret])
+            break;
+    }
+
+    ret <<= 3;
+
+    for (; ret < min_len; ++ret) {
         int byte_number = ret / 8;
         int bit_number = ret % 8;
         if ((a[byte_number] & (1U << bit_number)) != (b[byte_number] & (1U << bit_number)))
@@ -167,40 +175,6 @@ static int wolfsentry_route_key_cmp_1(
             WOLFSENTRY_RETURN_VALUE(1);
     }
 
-    if ((left->parent_event == NULL) && (right->parent_event == NULL)) {
-        /* Intentionally left empty */
-    }
-    else if ((left->parent_event == NULL) || (right->parent_event == NULL)) {
-        /* null event acts like a priority of -1, so to speak. */
-        if (right->parent_event == NULL) {
-            if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
-                if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
-            } else
-                WOLFSENTRY_RETURN_VALUE(1);
-        } else if (left->parent_event == NULL) {
-            if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
-                if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
-            } else
-                WOLFSENTRY_RETURN_VALUE(-1);
-        }
-    } else {
-        if (left->parent_event->priority < right->parent_event->priority) {
-            if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
-                if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
-            } else
-                WOLFSENTRY_RETURN_VALUE(-1);
-        } else if (left->parent_event->priority > right->parent_event->priority) {
-            if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
-                if (inexact_matches)
-                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
-            } else
-                WOLFSENTRY_RETURN_VALUE(1);
-        }
-    }
-
     cmp = cmp_addrs(WOLFSENTRY_ROUTE_LOCAL_ADDR(left), left->local.addr_len,
                     WOLFSENTRY_ROUTE_LOCAL_ADDR(right), right->local.addr_len,
                     match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD),
@@ -241,16 +215,10 @@ static int wolfsentry_route_key_cmp_1(
             WOLFSENTRY_RETURN_VALUE(1);
     }
 
-    if (match_wildcards_p) {
-        if (right->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN) {
-            if (! (left->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN))
-                WOLFSENTRY_RETURN_VALUE(-1);
-        }
-        if (right->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT) {
-            if (! (left->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT))
-                WOLFSENTRY_RETURN_VALUE(-1);
-        }
-    } else {
+    /* when match_wildcards_p, caller is responsible for comparing/interpreting
+     * flags.
+     */
+    if (! match_wildcards_p) {
         wolfsentry_route_flags_t masked_left_flags = left->flags & WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS;
         wolfsentry_route_flags_t masked_right_flags = right->flags & WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS;
         if (masked_left_flags != masked_right_flags) {
@@ -261,12 +229,37 @@ static int wolfsentry_route_key_cmp_1(
         }
     }
 
-    /* do a final check on the name of the event, so that routes with
-     * different trigger events with same priority are nonetheless
-     * distinguishable.
-     */
+    {
+        /* treat null parent_event as maximum priority, for unsurprising results on simple routes. */
+        int left_effective_priority = left->parent_event ? left->parent_event->priority : 0;
+        int right_effective_priority = right->parent_event ? right->parent_event->priority : 0;
+        if (left_effective_priority != right_effective_priority) {
+            if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
+                if (inexact_matches)
+                    *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
+            } else if (left_effective_priority < right_effective_priority)
+                WOLFSENTRY_RETURN_VALUE(-1);
+            else
+                WOLFSENTRY_RETURN_VALUE(1);
+        }
+    }
 
-    if (! ((left->parent_event == NULL) || (right->parent_event == NULL) || (inexact_matches && (*inexact_matches & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)))) {
+    /* do a final check on the exact event, so that routes with different parent
+     * events with same priority are nonetheless distinguishable.
+     */
+    if (left->parent_event == right->parent_event)
+        WOLFSENTRY_RETURN_VALUE(0);
+    else if (inexact_matches && (*inexact_matches & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
+        WOLFSENTRY_RETURN_VALUE(0); /* previous test already determined they're different. */
+    else if ((left->parent_event == NULL) || (right->parent_event == NULL)) {
+        if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
+            if (inexact_matches)
+                *inexact_matches |= WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
+        } else if (left->parent_event == NULL)
+            WOLFSENTRY_RETURN_VALUE(-1);
+        else
+            WOLFSENTRY_RETURN_VALUE(1);
+    } else {
         cmp = wolfsentry_event_key_cmp(left->parent_event, right->parent_event);
         if (cmp) {
             if (match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
@@ -366,18 +359,7 @@ static wolfsentry_errcode_t wolfsentry_route_init(
     size_t data_addr_size,
     struct wolfsentry_route *new)
 {
-    size_t remote_addr_len, local_addr_len;
-
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)
-        remote_addr_len = 0;
-    else
-        remote_addr_len = remote->addr_len;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD)
-        local_addr_len = 0;
-    else
-        local_addr_len = local->addr_len;
-
-    if (data_addr_size < WOLFSENTRY_BITS_TO_BYTES(remote_addr_len) + WOLFSENTRY_BITS_TO_BYTES(local_addr_len))
+    if (data_addr_size < WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len))
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     if (data_addr_size > MAX_UINT_OF(uint16_t))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
@@ -400,42 +382,24 @@ static wolfsentry_errcode_t wolfsentry_route_init(
 
     new->parent_event = parent_event;
     new->flags = flags;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)
-        new->sa_family = 0;
-    else
-        new->sa_family = remote->sa_family;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)
-        new->sa_proto = 0;
-    else
-        new->sa_proto = remote->sa_proto;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)
-        new->remote.sa_port = 0;
-    else
-        new->remote.sa_port = remote->sa_port;
-    new->remote.addr_len = (wolfsentry_addr_bits_t)remote_addr_len;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)
-        new->remote.interface = 0;
-    else
-        new->remote.interface = remote->interface;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)
-        new->local.sa_port = 0;
-    else
-        new->local.sa_port = local->sa_port;
-    new->local.addr_len = (wolfsentry_addr_bits_t)local_addr_len;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD)
-        new->local.interface = 0;
-    else
-        new->local.interface = local->interface;
+    new->sa_family = remote->sa_family;
+    new->sa_proto = remote->sa_proto;
+    new->remote.sa_port = remote->sa_port;
+    new->remote.addr_len = remote->addr_len;
+    new->remote.interface = remote->interface;
+    new->local.sa_port = local->sa_port;
+    new->local.addr_len = local->addr_len;
+    new->local.interface = local->interface;
     new->data_addr_offset = (uint16_t)data_addr_offset;
     new->data_addr_size = (uint16_t)data_addr_size;
 
     if (data_addr_offset > 0)
         memset(new->data, 0, (size_t)data_addr_offset); /* zero private data. */
 
-    if (remote_addr_len > 0)
-        memcpy(WOLFSENTRY_ROUTE_REMOTE_ADDR(new), remote->addr, WOLFSENTRY_BITS_TO_BYTES(remote_addr_len));
-    if (local_addr_len > 0)
-        memcpy(WOLFSENTRY_ROUTE_LOCAL_ADDR(new), local->addr, WOLFSENTRY_BITS_TO_BYTES(local_addr_len));
+    if (remote->addr_len > 0)
+        memcpy(WOLFSENTRY_ROUTE_REMOTE_ADDR(new), remote->addr, WOLFSENTRY_BITS_TO_BYTES(remote->addr_len));
+    if (local->addr_len > 0)
+        memcpy(WOLFSENTRY_ROUTE_LOCAL_ADDR(new), local->addr, WOLFSENTRY_BITS_TO_BYTES(local->addr_len));
 
     /* make sure the pad bits in the addresses are zero. */
     {
@@ -472,18 +436,8 @@ static wolfsentry_errcode_t wolfsentry_route_new(
     size_t new_size;
     wolfsentry_errcode_t ret;
     struct wolfsentry_eventconfig_internal *config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
-    size_t remote_addr_len, local_addr_len;
 
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)
-        remote_addr_len = 0;
-    else
-        remote_addr_len = remote->addr_len;
-    if (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD)
-        local_addr_len = 0;
-    else
-        local_addr_len = local->addr_len;
-
-    new_size = WOLFSENTRY_BITS_TO_BYTES(remote_addr_len) + WOLFSENTRY_BITS_TO_BYTES(local_addr_len);
+    new_size = WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len);
     if (new_size > (size_t)(uint16_t)~0UL)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     new_size += offsetof(struct wolfsentry_route, data);
@@ -631,17 +585,6 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
     wolfsentry_errcode_t ret;
     struct wolfsentry_eventconfig_internal *config = (route_to_insert->parent_event && route_to_insert->parent_event->config) ? route_to_insert->parent_event->config : &wolfsentry->config;
 
-    /* make sure fields marked as wildcards are set to zero. */
-    if (((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD) && (route_to_insert->remote.interface != 0)) ||
-        ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) && (route_to_insert->local.interface != 0)) ||
-        ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD) && (route_to_insert->sa_family != 0)) ||
-        ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD) && (route_to_insert->remote.addr_len != 0)) ||
-        ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) && (route_to_insert->local.addr_len != 0)) ||
-        ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD) && (route_to_insert->sa_proto != 0)) ||
-        ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD) && (route_to_insert->remote.sa_port != 0)) ||
-        ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD) && (route_to_insert->local.sa_port != 0)))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-
     /* make sure wildcards are sensical. */
     if (((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD) &&
          ((! (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) ||
@@ -656,10 +599,30 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
         WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
 
     if (route_to_insert->parent_event && WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT))
-        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+        WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
 
     if ((ret = WOLFSENTRY_GET_TIME(&route_to_insert->meta.insert_time)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
+
+    /* fields marked as wildcards must be zeroed before insertion to meet
+     * assumptions of table lookup logic.
+     */
+    if ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD) && (route_to_insert->remote.addr_len != 0))
+        memset(WOLFSENTRY_ROUTE_REMOTE_ADDR(route_to_insert), 0, WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(route_to_insert));
+    if ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) && (route_to_insert->local.addr_len != 0))
+        memset(WOLFSENTRY_ROUTE_LOCAL_ADDR(route_to_insert), 0, WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(route_to_insert));
+    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)
+        route_to_insert->sa_family = 0;
+    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)
+        route_to_insert->sa_proto = 0;
+    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)
+        route_to_insert->remote.sa_port = 0;
+    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)
+        route_to_insert->remote.interface = 0;
+    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)
+        route_to_insert->local.sa_port = 0;
+    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD)
+        route_to_insert->local.interface = 0;
 
     if (config->config.route_idle_time_for_purge > 0) {
         wolfsentry_hitcount_t max_purgeable_routes;
@@ -706,14 +669,21 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
             (void)wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_to_insert->header);
             wolfsentry_route_update_flags_1(route_to_insert, WOLFSENTRY_ROUTE_FLAG_NONE, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, &flags_before, &flags_after);
         }
-        WOLFSENTRY_ERROR_RERETURN(ret);
     } else {
         if (route_to_insert->parent_event) {
             if (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT))
                 WOLFSENTRY_SET_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);
         }
-        WOLFSENTRY_RETURN_OK;
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
     }
+
+    {
+        wolfsentry_priority_t effective_priority = route_to_insert->parent_event ? route_to_insert->parent_event->priority : 0;
+        if (effective_priority < route_table->highest_priority_route_in_table)
+            route_table->highest_priority_route_in_table = effective_priority;
+    }
+
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 static wolfsentry_errcode_t wolfsentry_route_insert_2(
@@ -906,15 +876,44 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     wolfsentry_errcode_t ret;
     int contiguous_search;
     wolfsentry_route_flags_t inexact_matches_buf;
+#ifdef DEBUG_ROUTE_LOOKUP
+    struct wolfsentry_route *i_prev = NULL;
+#endif
+
+#ifdef DEBUG_ROUTE_LOOKUP
+    fprintf(stderr,"target: ");
+    if (wolfsentry_route_render(WOLFSENTRY_CONTEXT_ARGS_OUT, target_route, stderr) < 0) {}
+#endif
 
     *found_route = NULL;
 
     if ((ret = wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor)) < 0)
         goto out;
 
+#ifdef DEBUG_ROUTE_LOOKUP
+    fprintf(stderr,"\n------------------------------------------------------------------------\n");
+    wolfsentry_table_cursor_seek_to_head(&table->header, &cursor);
+    for (i = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
+         i;
+         i = (struct wolfsentry_route *)wolfsentry_table_cursor_next(&cursor))
+    {
+        if (i_prev)
+            fprintf(stderr,"   %d\n", wolfsentry_route_key_cmp_1(i_prev, i, 0, NULL));
+        i_prev = i;
+        if (wolfsentry_route_render(WOLFSENTRY_CONTEXT_ARGS_OUT, i, stderr) < 0) {}
+    }
+    fprintf(stderr,"------------------------------------------------------------------------\n\n");
+#endif
+
     if (inexact_matches == NULL)
         inexact_matches = &inexact_matches_buf;
     *inexact_matches = WOLFSENTRY_ROUTE_FLAG_NONE;
+
+    /* the event ID isn't an intrinsic attribute of network/bus traffic, so for
+     * !exact_p, it's always a wildcard.
+     */
+    if (! exact_p)
+        WOLFSENTRY_SET_BITS(target_route->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD);
 
     /* if the target has wildcard holes in it (not strictly prefix-matching),
      * then seek to the tail and skip straight to reverse iteration.
@@ -922,12 +921,18 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
      * the test for this depends on the wildcard bits in the flag word being
      * crowded at the bottom of the word, in order (lsb is leftmost search
      * field).
+     *
+     * the flag bits must be inverted, so that a no-wildcard lookup has all 1's
+     * in the positions masked by WOLFSENTRY_ROUTE_WILDCARD_FLAGS.
      */
     if (exact_p) {
         /* secondary search will be skipped. */
-    } else if (((target_route->flags & WOLFSENTRY_ROUTE_WILDCARD_FLAGS) + 1) & (target_route->flags & WOLFSENTRY_ROUTE_WILDCARD_FLAGS)) {
+    } else if (((~target_route->flags & WOLFSENTRY_ROUTE_WILDCARD_FLAGS) + 1) & (~target_route->flags & WOLFSENTRY_ROUTE_WILDCARD_FLAGS)) {
         contiguous_search = 0;
-        /* skip primary search for now -- once the table is a red-black tree, it will be worth doing both. */
+        /* skip primary search for now -- once the table is a red-black tree, it
+         * will be worth constructing a target_route_contiguous_wildcards and
+         * doing both, avoiding the need to traverse the entire table.
+         */
         goto just_seek_to_tail;
     } else
         contiguous_search = 1;
@@ -935,22 +940,39 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     if ((ret = wolfsentry_table_cursor_seek(&table->header, &target_route->header, &cursor, &cursor_position)) < 0)
         goto out;
 
-    /* return exact match immediately if exact_p, or if ent is current and not excluded by _EXCLUDE_REJECT_ROUTES. */
-    if ((cursor_position == 0) &&
-        (exact_p ||
-         ((! WOLFSENTRY_CHECK_BITS(((struct wolfsentry_route *)cursor.point)->flags, WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
-          (! (action_results &&
-              WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES) &&
-              WOLFSENTRY_MASKIN_BITS(((struct wolfsentry_route *)cursor.point)->flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED|WOLFSENTRY_ROUTE_FLAG_PORT_RESET))))))
-    {
-        *found_route = (struct wolfsentry_route *)cursor.point;
-        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+#ifdef DEBUG_ROUTE_LOOKUP
+    fprintf(stderr,"cursor.point: ");
+    if (cursor.point) {
+        if (wolfsentry_route_render(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_route *)cursor.point, stderr) < 0) {}
+    } else
+        fprintf(stderr, "(null)\n");
+    fprintf(stderr,"  res: %d\n",cursor_position);
+#endif
+
+    if (exact_p) {
+        if (cursor_position == 0) {
+            if (inexact_matches == NULL)
+                *inexact_matches = WOLFSENTRY_ROUTE_FLAG_NONE;
+            *found_route = (struct wolfsentry_route *)cursor.point;
+            ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        } else {
+            ret = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
+        }
         goto out;
     }
 
-    if (exact_p) {
-        ret = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
-        goto out;
+    /* short circuit if we know there can't be a higher priority
+     * match elsewhere in the table.
+     */
+    if (cursor_position == 0) {
+        int effective_priority = ((struct wolfsentry_route *)cursor.point)->parent_event ? ((struct wolfsentry_route *)cursor.point)->parent_event->priority : 0;
+        if (effective_priority <= table->highest_priority_route_in_table) {
+            if (inexact_matches != NULL)
+                *inexact_matches = WOLFSENTRY_ROUTE_FLAG_NONE;
+            *found_route = (struct wolfsentry_route *)cursor.point;
+            ret = WOLFSENTRY_ERROR_ENCODE(OK);
+            goto out;
+        }
     }
 
     if (cursor_position == -1) {
@@ -958,17 +980,16 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
         wolfsentry_table_cursor_seek_to_tail(&table->header, &cursor);
     }
 
-    if ((i = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor)) == NULL) {
-        ret = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
-        goto out;
-    }
-
-    WOLFSENTRY_SET_BITS(target_route->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD);
-
-    for (; i; i = (struct wolfsentry_route *)wolfsentry_table_cursor_prev(&cursor)) {
+    for (i = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
+         i;
+         i = (struct wolfsentry_route *)wolfsentry_table_cursor_prev(&cursor))
+    {
         if (WOLFSENTRY_CHECK_BITS(i->flags, WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE))
             continue;
-        /* if *action_results has _COMMENDABLE set on entry to
+        /* ignore routes that don't cover the direction of the target. */
+        if (! (i->flags & WOLFSENTRY_MASKIN_BITS(target_route->flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN|WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT)))
+            continue;
+        /* if *action_results has _EXCLUDE_REJECT_ROUTES set on entry to
          * wolfsentry_route_lookup_0(), it was set via
          * wolfsentry_route_event_dispatch_with_inited_result() for a
          * bind/listen query that should succeed if any routes can succeed.
@@ -983,48 +1004,41 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 
         cursor_position = wolfsentry_route_key_cmp_1(i, target_route, 1 /* match_wildcards_p */, inexact_matches);
 
+#ifdef DEBUG_ROUTE_LOOKUP
+        fprintf(stderr,"i: ");
+        if (wolfsentry_route_render(WOLFSENTRY_CONTEXT_ARGS_OUT, i, stderr) < 0) {}
+        fprintf(stderr,"\n  res: %d\n",cursor_position);
+        fputs("  inexact_matches: ", stderr);
+        if (wolfsentry_route_render_flags(*inexact_matches, stderr) < 0) {}
+        fputc('\n', stderr);
+#endif
+
         if (cursor_position == 0) {
-
-            /* preference is a match with parent event matching the trigger event, with ties broken using compare_match_exactness().
-             *
-             * fallback is a match with the highest-priority mismatched event (or null event), with ties broken using compare_match_exactness().
-             *
-             * a corollary of this is that perfect matches always take precedence.
+            /* preference is a match with the highest-priority event, with null
+             * events having highest priority, and ties broken using
+             * compare_match_exactness().
              */
-
-            if (i->parent_event == target_route->parent_event) {
-                /* this (perfect match) can only happen here if the
-                 * just_seek_to_tail code path is followed, i.e. the primary
-                 * wolfsentry_table_cursor_seek() is skipped.
-                 */
-                if (*inexact_matches == WOLFSENTRY_ROUTE_FLAG_NONE) {
-                    *found_route = i;
-                    ret = WOLFSENTRY_ERROR_ENCODE(OK);
-                    goto out;
-                }
-
-                if ((highest_priority_match_seen == NULL) ||
-                    (highest_priority_match_seen->parent_event != target_route->parent_event) ||
-                    (compare_match_exactness(target_route, i, *inexact_matches, highest_priority_match_seen, highest_priority_inexact_matches) < 0))
-                {
-                    highest_priority_match_seen = i;
-                    highest_priority_inexact_matches = *inexact_matches;
-                }
-            } else {
-                int effective_priority = i->parent_event ? i->parent_event->priority : -1;
-                if ((highest_priority_match_seen == NULL) ||
-                    (effective_priority < highest_priority_seen) ||
-                    ((effective_priority == highest_priority_seen) &&
-                     (compare_match_exactness(target_route, i, *inexact_matches, highest_priority_match_seen, highest_priority_inexact_matches) < 0)))
-                {
-                    highest_priority_match_seen = i;
-                    highest_priority_inexact_matches = *inexact_matches;
-                    highest_priority_seen = effective_priority;
-                }
+            int effective_priority = i->parent_event ? i->parent_event->priority : 0;
+            if ((highest_priority_match_seen == NULL) ||
+                (effective_priority < highest_priority_seen) ||
+                ((effective_priority == highest_priority_seen) &&
+                 (compare_match_exactness(target_route, i, *inexact_matches, highest_priority_match_seen, highest_priority_inexact_matches) < 0)))
+            {
+                highest_priority_match_seen = i;
+                highest_priority_inexact_matches = *inexact_matches;
+                highest_priority_seen = effective_priority;
             }
-        } else {
-            if (highest_priority_match_seen && contiguous_search)
-                break;
+        }
+
+        /* short circuit if we know there can't be a higher priority
+         * match in a later iteration.
+         */
+        if (contiguous_search &&
+            highest_priority_match_seen &&
+            ((highest_priority_inexact_matches & WOLFSENTRY_ROUTE_WILDCARD_FLAGS) == 0) &&
+            (highest_priority_seen <= table->highest_priority_route_in_table))
+        {
+            break;
         }
     }
 
@@ -1043,6 +1057,21 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 
     if (action_results && WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES))
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES);
+
+#ifdef DEBUG_ROUTE_LOOKUP
+    if (ret < 0)
+        fprintf(stderr, "ret: " WOLFSENTRY_ERROR_FMT, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    else {
+        fprintf(stderr,"exact_p=%d\n",exact_p);
+        if (*found_route == NULL)
+            fprintf(stderr, "*found_route == NULL!\n");
+        else {
+            fprintf(stderr,"matched: ");
+            if (wolfsentry_route_render(WOLFSENTRY_CONTEXT_ARGS_OUT, *found_route, stderr) < 0) {}
+            fputc('\n', stderr);
+        }
+    }
+#endif
 
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -1198,6 +1227,31 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
         wolfsentry_route_flags_t flags_before, flags_after;
         wolfsentry_route_update_flags_1(route, WOLFSENTRY_ROUTE_FLAG_NONE, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, &flags_before, &flags_after);
     }
+
+    {
+        wolfsentry_priority_t effective_priority = route->parent_event ? route->parent_event->priority : 0;
+        if (effective_priority == route_table->highest_priority_route_in_table) {
+            wolfsentry_priority_t new_highest_priority_route_in_table = MAX_UINT_OF(wolfsentry_priority_t);
+            struct wolfsentry_cursor cursor;
+            if ((ret = wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor)) >= 0) {
+                const struct wolfsentry_route *i;
+                wolfsentry_table_cursor_seek_to_head(&route_table->header, &cursor);
+                for (i = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
+                     i;
+                     i = (struct wolfsentry_route *)wolfsentry_table_cursor_next(&cursor))
+                {
+                    wolfsentry_priority_t i_effective_priority = i->parent_event ? i->parent_event->priority : 0;
+                    if (i_effective_priority < new_highest_priority_route_in_table) {
+                        new_highest_priority_route_in_table = i_effective_priority;
+                        if (i_effective_priority <= route_table->highest_priority_route_in_table)
+                            break;
+                    }
+                }
+            }
+            route_table->highest_priority_route_in_table = new_highest_priority_route_in_table;
+        }
+    }
+
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_drop_reference_1(WOLFSENTRY_CONTEXT_ARGS_OUT, route, action_results));
 
     WOLFSENTRY_RETURN_OK;
@@ -2633,6 +2687,60 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
     WOLFSENTRY_RETURN_OK;
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_route_flags_t flags, FILE *f) {
+    unsigned mask;
+    wolfsentry_route_flags_t masked_flags;
+    int already = 0;
+    if (! flags) {
+        fputs("{}", f);
+        WOLFSENTRY_RETURN_OK;
+    }
+    fputs("{", f);
+    for (mask = 1; mask; mask <<= 1) {
+        const char *rendername = NULL;
+        masked_flags = flags & mask;
+        if (! masked_flags)
+            continue;
+#define ROUTE_FLAG_CASE(enumname, renderval) case WOLFSENTRY_ROUTE_FLAG_ ## enumname: rendername = (renderval); break
+        switch (masked_flags) {
+            ROUTE_FLAG_CASE(SA_FAMILY_WILDCARD, "*F");
+            ROUTE_FLAG_CASE(SA_REMOTE_ADDR_WILDCARD, "*RA");
+            ROUTE_FLAG_CASE(SA_PROTO_WILDCARD, "*Pr");
+            ROUTE_FLAG_CASE(SA_LOCAL_PORT_WILDCARD, "*LP");
+            ROUTE_FLAG_CASE(SA_LOCAL_ADDR_WILDCARD, "*LA");
+            ROUTE_FLAG_CASE(SA_REMOTE_PORT_WILDCARD, "*RP");
+            ROUTE_FLAG_CASE(REMOTE_INTERFACE_WILDCARD, "*RI");
+            ROUTE_FLAG_CASE(LOCAL_INTERFACE_WILDCARD, "*LI");
+            ROUTE_FLAG_CASE(PARENT_EVENT_WILDCARD, "*E");
+            ROUTE_FLAG_CASE(TCPLIKE_PORT_NUMBERS, "Tcplike");
+            ROUTE_FLAG_CASE(DIRECTION_IN, "In");
+            ROUTE_FLAG_CASE(DIRECTION_OUT, "Out");
+            ROUTE_FLAG_CASE(IN_TABLE, "Res");
+            ROUTE_FLAG_CASE(PENDING_DELETE, "D");
+            ROUTE_FLAG_CASE(INSERT_ACTIONS_CALLED, "Ins");
+            ROUTE_FLAG_CASE(DELETE_ACTIONS_CALLED, "Da");
+            ROUTE_FLAG_CASE(PENALTYBOXED, "Pbox");
+            ROUTE_FLAG_CASE(GREENLISTED, "Glist");
+            ROUTE_FLAG_CASE(DONT_COUNT_HITS, "NoHits");
+            ROUTE_FLAG_CASE(DONT_COUNT_CURRENT_CONNECTIONS, "NoConnTrk");
+            ROUTE_FLAG_CASE(PORT_RESET, "PortRst");
+        case WOLFSENTRY_ROUTE_FLAG_NONE: /* silence -Wswitch */
+            break;
+        }
+#undef ROUTE_FLAG_CASE
+        if (already)
+            fputc(',', f);
+        else
+            already = 1;
+        if (rendername == NULL)
+            fprintf(stderr, "unk-0x%x", masked_flags);
+        else
+            fputs(rendername, f);
+    }
+    fputs("}", f);
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t wolfsentry_route_render_endpoint(WOLFSENTRY_CONTEXT_ARGS_IN, const struct wolfsentry_route *r, int sa_local_p, FILE *f) {
     const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
     size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
@@ -2672,11 +2780,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(WOLFSENTRY_CONTEXT_A
     if ((ret = wolfsentry_route_render_endpoint(WOLFSENTRY_CONTEXT_ARGS_OUT, r, 1 /* sa_local_p */, f)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
-    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
-        fprintf(f, ", ev = *");
-    else if (r->parent_event != NULL)
-        fprintf(f, ", ev = \"%.*s\"", (int)r->parent_event->label_len, r->parent_event->label);
-
     if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD))
         fprintf(f, ", AF = *");
     else {
@@ -2697,7 +2800,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(WOLFSENTRY_CONTEXT_A
 
     wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
 
-    fputc('\n',f);
+    if (r->parent_event != NULL)
+        fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event->label_len, r->parent_event->label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "");
+    else if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
+        fprintf(f, ", ev = [*]");
+    else
+        fprintf(f, ", ev = (none)");
+
+    fputs(", flags=", f);
+    WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_flags(r->flags, f));
+
+    fprintf(f, ", id=%u\n", (unsigned int)r->header.id);
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -2761,12 +2874,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_C
 
     wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
 
-    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
-        fprintf(f, ", ev = *");
-    else if (r->parent_event_label_len > 0)
-        fprintf(f, ", ev = \"%.*s\"", (int)r->parent_event_label_len, r->parent_event_label);
+    if (r->parent_event_label_len > 0)
+        fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event_label_len, r->parent_event_label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "");
+    else if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
+        fprintf(f, ", ev = [*]");
+    else
+        fprintf(f, ", ev = (none)");
 
-    fputc('\n',f);
+    fputs(", flags=", f);
+    WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_flags(r->flags, f));
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -2780,6 +2896,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_init(
     route_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_route_key_cmp;
     route_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_route_drop_reference;
     route_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ROUTE;
+    route_table->highest_priority_route_in_table = MAX_UINT_OF(wolfsentry_priority_t);
     WOLFSENTRY_RETURN_OK;
 }
 

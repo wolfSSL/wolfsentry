@@ -348,6 +348,7 @@ struct wolfsentry_route_table {
     struct wolfsentry_event *default_event; /* used as the parent_event by wolfsentry_route_dispatch() for a static route match with a null parent_event. */
     struct wolfsentry_route *fallthrough_route; /* used as the rule_route when no rule_route is matched or inserted. */
     wolfsentry_action_res_t default_policy;
+    wolfsentry_priority_t highest_priority_route_in_table;
 };
 
 struct wolfsentry_kv_pair_internal {

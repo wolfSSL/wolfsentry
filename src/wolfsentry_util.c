@@ -327,9 +327,9 @@ _Pragma("GCC diagnostic push");
 _Pragma("GCC diagnostic ignored \"-Wframe-address\"");
 
 #ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
-WOLFSENTRY_LOCAL const char *_wolfsentry_call_depth(void)
+WOLFSENTRY_API const char *_wolfsentry_call_depth(void)
 #else
-WOLFSENTRY_LOCAL unsigned int _wolfsentry_call_depth(void)
+WOLFSENTRY_API unsigned int _wolfsentry_call_depth(void)
 #endif
 {
     unsigned int i;

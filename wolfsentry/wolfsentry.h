@@ -23,9 +23,9 @@
 #ifndef WOLFSENTRY_H
 #define WOLFSENTRY_H
 
-#define WOLFSENTRY_VERSION_MAJOR 2
-#define WOLFSENTRY_VERSION_MINOR 1
-#define WOLFSENTRY_VERSION_TINY 0
+#define WOLFSENTRY_VERSION_MAJOR 1
+#define WOLFSENTRY_VERSION_MINOR 2
+#define WOLFSENTRY_VERSION_TINY 1
 #define WOLFSENTRY_VERSION_ENCODE(major, minor, tiny) (((major) << 16U) | ((minor) << 8U) | (tiny))
 #define WOLFSENTRY_VERSION WOLFSENTRY_VERSION_ENCODE(WOLFSENTRY_VERSION_MAJOR, WOLFSENTRY_VERSION_MINOR, WOLFSENTRY_VERSION_TINY)
 #define WOLFSENTRY_VERSION_GT(major, minor, tiny) (WOLFSENTRY_VERSION > WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
@@ -376,11 +376,11 @@ typedef enum {
     WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD        = 1U<<1U,
     WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD              = 1U<<2U,
     WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD         = 1U<<3U,
-    WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<4U,
-    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD         = 1U<<5U,
-    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<6U,
-    WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<7U,
-    WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD       = 1U<<8U,
+    WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD         = 1U<<4U,
+    WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD        = 1U<<5U,
+    WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD      = 1U<<6U,
+    WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD       = 1U<<7U,
+    WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD          = 1U<<8U,
     WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS           = 1U<<9U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN                   = 1U<<10U,
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT                  = 1U<<11U,
@@ -404,7 +404,8 @@ typedef enum {
     WOLFSENTRY_ROUTE_FLAG_PORT_RESET                     = 1U<<20U
 } wolfsentry_route_flags_t;
 
-#define WOLFSENTRY_ROUTE_WILDCARD_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS - 1U)
+/* note, _PARENT_EVENT_WILDCARD is excluded because it isn't an intrinsic attribute of network/bus traffic. */
+#define WOLFSENTRY_ROUTE_WILDCARD_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD - 1U)
 
 #define WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_IN_TABLE - 1U)
 
@@ -1024,6 +1025,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
     int *buflen);
 
 #ifndef WOLFSENTRY_NO_STDIO
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_route_flags_t flags, FILE *f);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(WOLFSENTRY_CONTEXT_ARGS_IN, const struct wolfsentry_route *r, FILE *f);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_CONTEXT_ARGS_IN, const struct wolfsentry_route_exports *r, FILE *f);
 #endif

@@ -424,7 +424,6 @@ endif
 .PHONY: com-bundle
 com-bundle:
 	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make commercial bundle -- version isn't known."; exit 1; fi
-	@if [[ ! -d "$(SRC_TOP)/../scripts/license_replace" ]]; then echo "license_replace script directory not found."; exit 1; fi
 ifndef VERY_QUIET
 	@echo "generating com-bundle $${PWD}/wolfsentry-$(RELEASE)-commercial.7z ..."
 endif

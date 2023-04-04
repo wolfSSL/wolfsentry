@@ -88,11 +88,11 @@ typedef int32_t wolfsentry_errcode_t;
     #define WOLFSENTRY_SUCCESS_RETURN(x) WOLFSENTRY_ERROR_RETURN_1(WOLFSENTRY_SUCCESS_ID_ ## x)
     #if defined(WOLFSENTRY_ERROR_STRINGS) && defined(__GNUC__) && !defined(__STRICT_ANSI__)
         #ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
-        extern const char *_wolfsentry_call_depth(void);
+        WOLFSENTRY_API const char *_wolfsentry_call_depth(void);
         #define _INDENT_FMT "%s"
         #define _INDENT_ARGS _wolfsentry_call_depth()
         #else
-        extern unsigned int _wolfsentry_call_depth(void);
+        WOLFSENTRY_API unsigned int _wolfsentry_call_depth(void);
         #define _INDENT_FMT "%*s"
         #define _INDENT_ARGS _wolfsentry_call_depth(), ""
         #endif

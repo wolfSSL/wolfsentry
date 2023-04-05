@@ -1,3 +1,28 @@
+# wolfSentry Release 1.2.1 (Apr 5, 2023)
+
+Release 1.2.1 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## Noteworthy Changes and Additions
+
+Added API `wolfsentry_route_render_flags()`, now used in `wolfsentry_route_render()` and `wolfsentry_route_exports_render()`.
+
+Refactored `wolfsentry_route_lookup_0()` to consistently return the highest-priority matching route, breaking ties using `compare_match_exactness()`.
+
+Added `DEBUG_ROUTE_LOOKUP` code paths in `wolfsentry_route_lookup_0()`, for verbose troubleshooting of configurations and internal logic.
+
+Added to `convert_hex_byte()` (and therefore to MAC address parsing) tolerance for single-hex-digit byte values, as in `a:b:c:1:2:3`.
+
+## Bug Fixes
+
+Removed several inappropriate wildcard flags on queries in lwIP event handlers, particularly `_SA_LOCAL_PORT_WILDCARD` for `FILT_PORT_UNREACHABLE` and `*_INTERFACE_WILDCARD` for `FILT_BINDING`/`FILT_LISTENING`/`FILT_STOP_LISTENING` and when `event->netif` is null.
+
+Added nullness checks for `laddr` and `raddr` in lwIP event handlers, and if null, set all-zeros address.
+
+Refactored wildcard handling in `wolfsentry_route_init()`, `wolfsentry_route_new()`, and `wolfsentry_route_insert_1()`, to zero out wildcard fields at insert time, rather than at init time, so that routes used as targets contain accurate information for `compare_match_exactness()`, regardless of wildcard bits.
+
+Fixed `WOLFSENTRY_VERSION_*` values, which were inadvertently swapped in release 1.2.0.
+
+
 # wolfSentry Release 1.2.0 (Mar 24, 2023)
 
 Production Release 1.2.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:

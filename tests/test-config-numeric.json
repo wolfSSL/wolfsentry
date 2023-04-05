@@ -155,6 +155,22 @@
 	    }
 	},
 	{
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : 118,
+            "remote" : {
+		"address" : "ab:cd:ef:0:1:2"
+            },
+            "local" : {
+		"address" : "54:32:10:fe:dc:ba"
+            }
+	},
+	{
 	    "parent-event" : "static-route-parent",
 	    "direction-in" : true,
 	    "direction-out" : true,

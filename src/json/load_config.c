@@ -549,16 +549,26 @@ static inline int convert_hex_digit(unsigned char digit) {
 
 static inline int convert_hex_byte(const unsigned char **in, size_t *in_len, byte *out) {
     int d1, d2;
-    if (*in_len < 2)
+    if (*in_len < 1)
         return -1;
-    d1 = convert_hex_digit(*(*in)++);
+    d1 = convert_hex_digit(**in);
     if (d1 < 0)
         return d1;
-    d2 = convert_hex_digit(*(*in)++);
-    if (d2 < 0)
-        return d2;
+    ++(*in);
+    --(*in_len);
+    if (*in_len == 1) {
+        *in_len = 0;
+        *out = (byte)d1;
+        return 0;
+    }
+    d2 = convert_hex_digit(**in);
+    if (d2 < 0) {
+        *out = (byte)d1;
+        return 0;
+    }
+    ++(*in);
+    --(*in_len);
     *out = (byte)((d1 << 4) | d2);
-    *in_len -= 2;
     return 0;
 }
 

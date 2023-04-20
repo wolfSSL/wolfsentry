@@ -170,6 +170,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_clone(
         if ((ret = clone_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, dest_context, &new, flags)) < 0)
             goto out;
         new->parent_table = dest_table;
+        new->prev = prev;
         if (prev)
             prev->next = new;
         else
@@ -524,7 +525,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONT
         ret = wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, i);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, NULL /* action_results */);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         i = next;
     }
     WOLFSENTRY_RETURN_OK;

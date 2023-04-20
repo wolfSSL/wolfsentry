@@ -2623,10 +2623,8 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
     // GCOV_EXCL_STOP
     }
 
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_init(
-        WOLFSENTRY_CONTEXT_ARGS_OUT,
-        flags,
-        &jps));
+    ret = wolfsentry_config_json_init(WOLFSENTRY_CONTEXT_ARGS_OUT, flags, &jps);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     for (;;) {
         size_t n = fread(buf, 1, sizeof buf, f);
@@ -2655,7 +2653,6 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
     if (fini_ret < 0) {
         // GCOV_EXCL_START
         fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-        WOLFSENTRY_EXIT_ON_FAILURE(fini_ret);
         // GCOV_EXCL_STOP
     }
     if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
@@ -2673,7 +2670,7 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
 }
 
 
-static int test_json(const char *fname) {
+static int test_json(const char *fname, const char *extra_fname) {
     wolfsentry_errcode_t ret;
     struct wolfsentry_context *wolfsentry;
     wolfsentry_ent_id_t id;
@@ -2772,7 +2769,6 @@ static int test_json(const char *fname) {
                 &kv_ref));
     }
 
-
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_insert(
                                    WOLFSENTRY_CONTEXT_ARGS_OUT,
                                    "handle-insert",
@@ -2841,6 +2837,61 @@ static int test_json(const char *fname) {
     WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT));
 
     WOLFSENTRY_EXIT_ON_SUCCESS(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT));
+
+    {
+        const char *value = NULL;
+        int value_len = -1;
+        struct wolfsentry_kv_pair_internal *kv_ref;
+
+        if (extra_fname)
+            WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, extra_fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT));
+        else {
+            static const char *trivial_test_json = "{ \"wolfsentry-config-version\" : 1, \"user-values\" : { \"extra-user-string\" : \"extra hello\" } }";
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_config_json_oneshot(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    (const unsigned char *)trivial_test_json,
+                    strlen(trivial_test_json),
+                    WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT,
+                    NULL,
+                    0));
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_string(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "user-string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value,
+                &value_len,
+                &kv_ref));
+
+        WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)strlen("hello"));
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(value, "hello") == 0);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_release_record(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &kv_ref));
+
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_string(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "extra-user-string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &value,
+                &value_len,
+                &kv_ref));
+
+        WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)strlen("extra hello"));
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(value, "extra hello") == 0);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_release_record(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &kv_ref));
+    }
 
     WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
 
@@ -3349,7 +3400,11 @@ int main (int argc, char* argv[]) {
 
 #ifdef TEST_JSON
 #if defined(WOLFSENTRY_PROTOCOL_NAMES) && !defined(WOLFSENTRY_NO_GETPROTOBY)
-    ret = test_json(TEST_JSON_CONFIG_PATH);
+#ifdef EXTRA_TEST_JSON_CONFIG_PATH
+    ret = test_json(TEST_JSON_CONFIG_PATH, EXTRA_TEST_JSON_CONFIG_PATH);
+#else
+    ret = test_json(TEST_JSON_CONFIG_PATH, NULL);
+#endif
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
     // GCOV_EXCL_START
         printf("test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -3357,7 +3412,7 @@ int main (int argc, char* argv[]) {
     // GCOV_EXCL_STOP
     }
 #endif
-    ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH);
+    ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH, NULL);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
     // GCOV_EXCL_START
         printf("test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));

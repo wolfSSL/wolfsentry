@@ -1458,6 +1458,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         .flags = JSON_NOSCALARROOT
     };
 
+#ifdef WOLFSENTRY_THREADSAFE
+    int got_promotable = 0;
+#endif
+
     if (json_config == NULL)
         json_config = &default_json_config;
 
@@ -1467,12 +1471,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+#ifdef WOLFSENTRY_THREADSAFE
     if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT))
         WOLFSENTRY_MUTEX_OR_RETURN();
     else if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN))
         WOLFSENTRY_SHARED_OR_RETURN();
-    else
+    else {
         WOLFSENTRY_PROMOTABLE_OR_RETURN();
+        got_promotable = 1;
+    }
+#endif
 
     if ((*jps = (struct wolfsentry_json_process_state *)wolfsentry_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT, sizeof **jps)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
@@ -1555,7 +1563,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         }
         wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_OUT, *jps);
         *jps = NULL;
-        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+#ifdef WOLFSENTRY_THREADSAFE
+        if (got_promotable) {
+            WOLFSENTRY_UNLOCK_AND_UNRESERVE_FOR_RETURN();
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        } else
+#endif
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     } else
         WOLFSENTRY_RETURN_OK; /* keeping lock! */
 }

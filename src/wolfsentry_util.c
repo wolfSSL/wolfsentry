@@ -3624,8 +3624,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
     wolfsentry_errcode_t ret;
 
 #ifdef WOLFSENTRY_THREADSAFE
-    int clone_is_locked = 0;
-
     WOLFSENTRY_SHARED_OR_RETURN();
 
     if ((ret = wolfsentry_context_alloc_1(&wolfsentry->hpi, thread, clone, wolfsentry->lock.flags)) < 0)
@@ -3633,9 +3631,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
 
     if ((ret = wolfsentry_context_lock_mutex_abstimed(*clone, thread, NULL)) < 0)
         goto out;
-
-    clone_is_locked = 1;
-
 #else
     if ((ret = wolfsentry_context_alloc_1(&wolfsentry->hpi, clone)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
@@ -3691,16 +3686,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
 
   out:
 
-    if ((ret < 0) && (*clone != NULL)) {
-#ifdef WOLFSENTRY_THREADSAFE
-        if (clone_is_locked) {
-            int ret2 = wolfsentry_context_unlock(*clone, thread);
-            if (ret2 < 0)
-                ret = ret2;
-        }
-#endif
+    if ((ret < 0) && (*clone != NULL))
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone)));
-    }
 
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }

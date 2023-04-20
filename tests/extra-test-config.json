@@ -1,0 +1,28 @@
+{
+    "wolfsentry-config-version" : 1,
+    "static-routes-insert" : [
+    {
+        "parent-event" : "static-route-parent",
+        "direction-in" : true,
+        "direction-out" : true,
+        "penalty-boxed" : false,
+        "green-listed" : true,
+        "dont-count-hits" : false,
+        "dont-count-current-connections" : false,
+        "family" : "inet",
+        "protocol" : "tcp",
+        "remote" : {
+            "address" : "10.20.30.40",
+            "prefix-bits" : 32
+        },
+        "local" : {
+            "address" : "50.60.70.80",
+            "prefix-bits" : 32,
+            "port" : 13579
+        }
+    }
+    ],
+    "user-values" : {
+        "extra-user-string" : "extra hello"
+    }
+}

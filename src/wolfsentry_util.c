@@ -581,8 +581,8 @@ static void *wolfsentry_builtin_memalign(
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t alignment,
     size_t size)
 {
-    (void)context;
     void *ptr = NULL;
+    (void)context;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
 
     if (alignment && size) {
@@ -1753,7 +1753,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
         {
             if (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID) {
                 if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_GET_ID) {
-                    ++lock->read2write_waiter_read_count;
+                    /* lock->read2write_waiter_read_count is incremented below, in the !store_reservation path. */
                     ret = 0;
                 } else if (flags & WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO)
                     ret = WOLFSENTRY_ERROR_ENCODE(BUSY);
@@ -2180,6 +2180,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct 
     ++thread->mutex_and_reservation_count;
     /* note, not incrementing write_waiter_count, to allow shared lockers to get locks until the redemption phase. */
     ++lock->holder_count.read; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
+    lock->read2write_waiter_read_count = thread->recursion_of_tracked_lock;
 
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
@@ -2428,6 +2429,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct 
     }
 
     --lock->holder_count.read;
+    lock->read2write_waiter_read_count = 0;
     WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_NO_ID);
     --thread->mutex_and_reservation_count;
 
@@ -2710,10 +2712,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
             (lock->holder_count.read + lock->write_waiter_count == 2))
         {
             if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_GET_ID)
-                ret = WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
-            else
+                flags |= WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO;
+            else {
                 ret = WOLFSENTRY_ERROR_ENCODE(INTERNAL_CHECK_FATAL);
-            goto out;
+                goto out;
+            }
         }
 
         if ((flags & WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO) &&
@@ -2780,6 +2783,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
                     if (flags & (WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO)) {
                         WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_GET_ID);
                         /* note, not incrementing write_waiter_count, to allow shared lockers to get locks until the redemption phase. */
+                        lock->read2write_waiter_read_count = lock->holder_count.read;
                         ++lock->holder_count.read; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
                         thread->mutex_and_reservation_count -= lock->holder_count.write - 1; /* -1 for the reservation */
                         thread->shared_count += lock->holder_count.read;
@@ -3575,7 +3579,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_free(WOLFSENTRY_CONTEXT_A
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_context **wolfsentry)) {
 #ifdef WOLFSENTRY_THREADSAFE
-
     wolfsentry_errcode_t ret = WOLFSENTRY_MUTEX_EX(*wolfsentry);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if ((*wolfsentry)->lock.holder_count.write != 1)
@@ -3601,8 +3604,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_inhibit_actions(WOLFSENTR
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_enable_actions(WOLFSENTRY_CONTEXT_ARGS_IN) {
-    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     wolfsentry_eventconfig_flags_t flags_before, flags_after;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
         wolfsentry->config.config.flags,
         (wolfsentry_eventconfig_flags_t)WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
@@ -3694,6 +3697,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_context *wolfsentry2) {
     struct wolfsentry_context scratch;
+    wolfsentry_errcode_t ret;
 
     if ((memcmp(&wolfsentry->hpi, &wolfsentry2->hpi, sizeof wolfsentry->hpi)) ||
         (wolfsentry->mk_id_cb != wolfsentry2->mk_id_cb))
@@ -3703,13 +3707,23 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTE
 
 #ifdef WOLFSENTRY_THREADSAFE
     {
-        wolfsentry_errcode_t ret;
         ret = wolfsentry_context_lock_mutex_abstimed(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         ret = wolfsentry_context_lock_mutex_abstimed(wolfsentry2, thread, NULL);
         WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
 #endif
+
+    /* now that we have a mutex on both contexts, coherently copy the route
+     * metadata from the current context to the new one to be swapped in.
+     */
+    ret = wolfsentry_route_copy_metadata(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        wolfsentry->routes,
+        wolfsentry2,
+        wolfsentry2->routes);
+    if (ret < 0)
+        goto out;
 
     scratch = *wolfsentry;
 
@@ -3740,6 +3754,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTE
 
     wolfsentry2->ents_by_id = scratch.ents_by_id;
 
+    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+out:
+
 #ifdef WOLFSENTRY_THREADSAFE
     {
         wolfsentry_errcode_t ret1, ret2;
@@ -3750,7 +3768,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTE
     }
 #endif
 
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_hitcount_t wolfsentry_table_n_inserts(struct wolfsentry_table_header *table) {

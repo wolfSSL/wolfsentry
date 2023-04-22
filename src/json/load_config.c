@@ -178,6 +178,7 @@ struct wolfsentry_json_process_state {
 #endif
 #ifdef WOLFSENTRY_THREADSAFE
     struct wolfsentry_thread_context *thread;
+    int got_reservation;
 #define JPS_WOLFSENTRY_CONTEXT_ARGS_OUT jps->wolfsentry, jps->thread
 #define JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT (*jps)->wolfsentry, (*jps)->thread
 #define JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT &(*jps)->wolfsentry, (*jps)->thread
@@ -527,9 +528,10 @@ static wolfsentry_errcode_t handle_defaultpolicy_clause(struct wolfsentry_json_p
         WOLFSENTRY_ERROR_RERETURN(convert_default_policy(type, data, data_size, &jps->default_policy));
     if (! strcmp(jps->cur_keyname, "default-event")) {
         struct wolfsentry_route_table *routes;
+        wolfsentry_errcode_t ret;
         if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
             WOLFSENTRY_RETURN_OK;
-        wolfsentry_errcode_t ret = wolfsentry_route_get_main_table(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, &routes);
+        ret = wolfsentry_route_get_main_table(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, &routes);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_table_set_default_event(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, routes, (const char *)data, (int)data_size));
     }
@@ -1458,10 +1460,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         .flags = JSON_NOSCALARROOT
     };
 
-#ifdef WOLFSENTRY_THREADSAFE
-    int got_promotable = 0;
-#endif
-
     if (json_config == NULL)
         json_config = &default_json_config;
 
@@ -1470,17 +1468,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 
     if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-
-#ifdef WOLFSENTRY_THREADSAFE
-    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT))
-        WOLFSENTRY_MUTEX_OR_RETURN();
-    else if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN))
-        WOLFSENTRY_SHARED_OR_RETURN();
-    else {
-        WOLFSENTRY_PROMOTABLE_OR_RETURN();
-        got_promotable = 1;
-    }
-#endif
 
     if ((*jps = (struct wolfsentry_json_process_state *)wolfsentry_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT, sizeof **jps)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
@@ -1515,6 +1502,21 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
 #endif
     }
+
+#ifdef WOLFSENTRY_THREADSAFE
+    if ((! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) ||
+        (thread == NULL))
+    {
+        WOLFSENTRY_MUTEX_OR_RETURN();
+    } else if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN))
+        WOLFSENTRY_SHARED_OR_RETURN();
+    else {
+        ret = WOLFSENTRY_PROMOTABLE_EX(wolfsentry);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (WOLFSENTRY_SUCCESS_CODE_IS(ret, LOCK_OK_AND_GOT_RESV))
+            (*jps)->got_reservation = 1;
+    }
+#endif
 
     (*jps)->wolfsentry_actual = wolfsentry;
 #ifdef WOLFSENTRY_THREADSAFE
@@ -1554,6 +1556,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
   out:
 
     if (ret < 0) {
+#ifdef WOLFSENTRY_THREADSAFE
+        {
+            wolfsentry_errcode_t _lock_ret;
+            if ((*jps)->got_reservation)
+                _lock_ret = wolfsentry_context_unlock_and_abandon_reservation(wolfsentry, thread);
+            else
+                _lock_ret = wolfsentry_context_unlock(wolfsentry, thread);
+            if (_lock_ret < 0)
+                ret = _lock_ret;
+        }
+#endif
         if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT) &&
             ((*jps)->wolfsentry != NULL))
         {
@@ -1563,13 +1576,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         }
         wolfsentry_free(WOLFSENTRY_CONTEXT_ARGS_OUT, *jps);
         *jps = NULL;
-#ifdef WOLFSENTRY_THREADSAFE
-        if (got_promotable) {
-            WOLFSENTRY_UNLOCK_AND_UNRESERVE_FOR_RETURN();
-            WOLFSENTRY_ERROR_RERETURN(ret);
-        } else
-#endif
-            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+        WOLFSENTRY_ERROR_RERETURN(ret);
     } else
         WOLFSENTRY_RETURN_OK; /* keeping lock! */
 }
@@ -1608,10 +1615,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
     size_t err_buf_size)
 {
     JSON_INPUT_POS json_pos;
+    int ret;
 
     if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    int ret = json_feed(&jps->parser, json_in, json_in_len);
+    ret = json_feed(&jps->parser, json_in, json_in_len);
     if (ret < 0) {
         jps->fini_ret = json_fini(&jps->parser, &json_pos);
         WOLFSENTRY_SET_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI);
@@ -1650,7 +1658,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
 
     if (WOLFSENTRY_CHECK_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI)) {
         if ((*jps)->fini_ret < 0) {
-            ret = WOLFSENTRY_ERROR_ENCODE(CONFIG_PARSER);
+            ret = wolfsentry_centijson_errcode_translate((*jps)->fini_ret);
             goto out;
         }
     } else {
@@ -1670,7 +1678,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
     }
 
     if (WOLFSENTRY_CHECK_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
-        int flush_routes_p = ! WOLFSENTRY_MASKIN_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH);
+        int full_cycle_of_insert_actions_p = ! WOLFSENTRY_MASKIN_BITS((*jps)->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH);
         struct wolfsentry_route_table *old_route_table, *new_route_table;
         if ((ret = wolfsentry_route_get_main_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &old_route_table)) < 0)
             goto out;
@@ -1679,17 +1687,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
         if (wolfsentry_table_n_deletes((struct wolfsentry_table_header *)new_route_table)
             != wolfsentry_table_n_deletes((struct wolfsentry_table_header *)old_route_table))
         {
-            wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-            if ((ret = wolfsentry_route_bulk_clear_insert_action_status(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT, &action_results)) < 0)
-                goto out;
-            flush_routes_p = 1;
+            full_cycle_of_insert_actions_p = 1;
         }
 
         ret = wolfsentry_context_exchange(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, (*jps)->wolfsentry);
         if (ret < 0)
             goto out;
 
-        if (flush_routes_p) {
+        if (full_cycle_of_insert_actions_p) {
+            wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
+            if ((ret = wolfsentry_route_bulk_clear_insert_action_status(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &action_results)) < 0)
+                goto out;
             if ((ret = wolfsentry_context_flush(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT)) < 0)
                 goto out;
         }
@@ -1717,7 +1725,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT));
 
 #ifdef WOLFSENTRY_THREADSAFE
-    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_unlock((*jps)->wolfsentry_actual, (*jps)->thread));
+    {
+        wolfsentry_errcode_t _lock_ret;
+        if ((*jps)->got_reservation)
+            _lock_ret = wolfsentry_context_unlock_and_abandon_reservation((*jps)->wolfsentry_actual, (*jps)->thread);
+        else
+            _lock_ret = wolfsentry_context_unlock((*jps)->wolfsentry_actual, (*jps)->thread);
+        if (_lock_ret < 0)
+            ret = _lock_ret;
+    }
 #endif
 
     wolfsentry_free(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, *jps);

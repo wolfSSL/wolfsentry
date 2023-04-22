@@ -488,6 +488,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
 WOLFSENTRY_LOCAL void wolfsentry_route_table_free(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table **route_table);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_copy_metadata(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *from_table,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_route_table *to_table);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_init(
     struct wolfsentry_kv_table *kv_table);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_clone_header(

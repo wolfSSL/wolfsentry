@@ -1148,8 +1148,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_
     struct wolfsentry_route_table *table,
     wolfsentry_hitcount_t max_purgeable_routes)
 {
-    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
     int need_purge_now = 0;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
 
     if (WOLFSENTRY_ATOMIC_LOAD(table->max_purgeable_routes) > max_purgeable_routes) {
         if (table->purge_list.len > max_purgeable_routes)
@@ -1699,15 +1699,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event, NULL /* action_results */));
 
     if (rule_route == NULL) {
-        /* set bits in inexact_matches to communicate that matching fell through to a default policy. */
         if (inexact_matches)
-            *inexact_matches = WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD | WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD;
-        if (action_results) {
+            *inexact_matches = WOLFSENTRY_ROUTE_WILDCARD_FLAGS | WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
+        if (action_results)
             *action_results = route_table->default_policy;
-            /* inform caller that no entry was found or added. */
-            WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERT|WOLFSENTRY_ACTION_RES_DELETE);
-        }
-        WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+        WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN(USED_FALLBACK);
     }
 
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
@@ -2949,7 +2945,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
     WOLFSENTRY_RETURN_OK;
 }
 
-void wolfsentry_route_table_free(
+WOLFSENTRY_LOCAL void wolfsentry_route_table_free(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table **route_table)
 {
@@ -2964,4 +2960,45 @@ void wolfsentry_route_table_free(
 
     WOLFSENTRY_FREE(*route_table);
     *route_table = NULL;
+}
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_copy_metadata(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *from_table,
+    struct wolfsentry_context *dest_context,
+    struct wolfsentry_route_table *to_table)
+{
+    struct wolfsentry_route *from_i, *to_i;
+
+    WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
+    WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(dest_context);
+
+    for (from_i = (struct wolfsentry_route *)from_table->header.head,
+             to_i = (struct wolfsentry_route *)to_table->header.head;
+         from_i && to_i;
+         /* pointers are advanced inside the loop. */)
+    {
+        if (from_i->header.id == to_i->header.id) {
+            to_i->flags = from_i->flags;
+            to_i->meta = from_i->meta;
+        } else {
+            int cmpret = wolfsentry_route_key_cmp_1(from_i, to_i, 0 /* match_wildcards_p */, NULL /* inexact_matches */);
+            if (cmpret < 0) {
+                from_i = (struct wolfsentry_route *)(from_i->header.next);
+                continue;
+            } else if (cmpret > 0) {
+                to_i = (struct wolfsentry_route *)(to_i->header.next);
+                continue;
+            }
+            /* else identical routes have different IDs, which means the new
+             * route was loaded from scratch and metadata shouldn't be
+             * copied.
+             */
+        }
+
+        from_i = (struct wolfsentry_route *)(from_i->header.next);
+        to_i = (struct wolfsentry_route *)(to_i->header.next);
+    }
+
+    WOLFSENTRY_RETURN_OK;
 }

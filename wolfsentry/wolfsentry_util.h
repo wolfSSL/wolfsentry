@@ -54,8 +54,8 @@
 #endif
 #endif
 
-#define streq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
-#define strcaseeq(vs,fs,vs_len) ((vs_len == strlen(fs)) && (strncasecmp(vs,fs,vs_len) == 0))
+#define streq(vs,fs,vs_len) (((vs_len) == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
+#define strcaseeq(vs,fs,vs_len) (((vs_len) == strlen(fs)) && (strncasecmp(vs,fs,vs_len) == 0))
 
 #define MAX_UINT_OF(x) (((1ULL << ((sizeof(x) * (unsigned long long)BITS_PER_BYTE) - 1ULL)) - 1ULL) | (1ULL << ((sizeof(x) * BITS_PER_BYTE) - 1ULL)))
 #define MAX_SINT_OF(x) (((1LL << ((sizeof(x) * (long long)BITS_PER_BYTE) - 2LL)) - 1LL) | (1LL << ((sizeof(x) * BITS_PER_BYTE) - 2LL)))

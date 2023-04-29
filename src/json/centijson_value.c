@@ -627,6 +627,7 @@ json_value_init_dict_ex(
     return 0;
 }
 
+/* NOLINTBEGIN(misc-no-recursion) */
 WOLFSENTRY_API int
 json_value_fini(
 #ifdef WOLFSENTRY
@@ -657,13 +658,14 @@ json_value_fini(
             return ret;
     }
 
-    if(v->data.data_bytes[0] & 0x80)
+    if(v->data.data_bytes[0] & IS_MALLOCED)
         free(json_value_payload(v));
 
-    v->data.data_bytes[0] = JSON_VALUE_NULL;
+    v->data.data_bytes[0] = JSON_VALUE_NULL; /* NOLINT(clang-analyzer-unix.Malloc) */
 
     return 0;
 }
+/* NOLINTEND(misc-no-recursion) */
 
 
 /**************************
@@ -795,7 +797,7 @@ json_value_float(const JSON_VALUE* v)
         case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (float) ret.u64;
         case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ret.f;
         case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return (float) ret.d;
-        default:            return -1.0f;   /* FIXME: NaN would be likely better but we do not include <math.h> */
+        default:            return -1.0F;   /* FIXME: NaN would be likely better but we do not include <math.h> */
     }
 }
 
@@ -1025,6 +1027,7 @@ json_value_array_remove_range(
     return 0;
 }
 
+/* NOLINTBEGIN(misc-no-recursion) */
 WOLFSENTRY_API int
 json_value_array_clean(
 #ifdef WOLFSENTRY
@@ -1054,6 +1057,7 @@ json_value_array_clean(
 
     return 0;
 }
+/* NOLINTEND(misc-no-recursion) */
 
 
 /******************
@@ -1091,7 +1095,10 @@ json_value_dict_default_cmp(const unsigned char* key1, size_t len1, const unsign
     size_t min_len = (len1 < len2) ? len1 : len2;
     int cmp;
 
-    cmp = memcmp(key1, key2, min_len);
+    if (min_len > 0)
+        cmp = memcmp(key1, key2, min_len);
+    else
+        cmp = 0;
     if(cmp == 0 && len1 != len2)
         cmp = (len1 < len2) ? -1 : +1;
 
@@ -1276,7 +1283,7 @@ json_value_dict_fix_after_insert(DICT* d, RBTREE** path, int path_len)
          *
          * Note grandparent has to exist (implied from red parent).
          */
-        grandparent = path[path_len-3];
+        grandparent = path[path_len-3]; /* NOLINT(clang-analyzer-core.uninitialized.Assign) */
         uncle = (grandparent->left == parent) ? grandparent->right : grandparent->left;
         if(uncle == NULL || IS_BLACK(uncle)) {
             /* Black uncle. */
@@ -1468,7 +1475,7 @@ json_value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
          * count as our subtree + 1. */
         sibling = (parent->left == node) ? parent->right : parent->left;
         grandparent = (path_len > 2) ? path[path_len-3] : NULL;
-        if(IS_RED(sibling)) {
+        if(IS_RED(sibling)) { /* NOLINT(clang-analyzer-core.NullDereference) */
             /* Red sibling: Convert to black sibling case. */
             if(parent->left == node)
                 json_value_dict_rotate_left(d, grandparent, parent);
@@ -1505,7 +1512,7 @@ json_value_dict_fix_after_remove(DICT* d, RBTREE** path, int path_len)
                 MAKE_BLACK(sibling->right);
                 json_value_dict_rotate_left(d, grandparent, parent);
             } else {
-                MAKE_BLACK(sibling->left);
+                MAKE_BLACK(sibling->left); /* NOLINT(clang-analyzer-core.NullDereference) */
                 json_value_dict_rotate_right(d, grandparent, parent);
             }
             break;
@@ -1737,6 +1744,7 @@ json_value_dict_walk_sorted(const JSON_VALUE* v, int (*visit_func)(const JSON_VA
     return 0;
 }
 
+/* NOLINTBEGIN(misc-no-recursion) */
 WOLFSENTRY_API int
 json_value_dict_clean(
 #ifdef WOLFSENTRY
@@ -1792,9 +1800,11 @@ json_value_dict_clean(
 
     return 0;
 }
+/* NOLINTEND(misc-no-recursion) */
 
 #ifdef WOLFSENTRY
 
+/* NOLINTBEGIN(misc-no-recursion) */
 WOLFSENTRY_API int
 json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator),
                  const JSON_VALUE* node, JSON_VALUE *clone)
@@ -1940,6 +1950,7 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
 
     return ret;
 }
+/* NOLINTEND(misc-no-recursion) */
 
 #endif /* WOLFSENTRY */
 

@@ -485,6 +485,7 @@ json_dom_dump_newline(JSON_DOM_DUMP_PARAMS* params)
         return params->write_func((const unsigned char *)"\n", 1, params->user_data);
 }
 
+/* NOLINTBEGIN(misc-no-recursion) */
 static int
 json_dom_dump_helper(
 #ifdef WOLFSENTRY
@@ -678,6 +679,7 @@ json_dom_dump_helper(
 
     return ret;
 }
+/* NOLINTEND(misc-no-recursion) */
 
 WOLFSENTRY_API int
 json_dom_dump(

@@ -302,6 +302,7 @@ enum wolfsentry_error_id {
     WOLFSENTRY_ERROR_ID_LACKING_READ_LOCK      =  -37,
     WOLFSENTRY_ERROR_ID_LIB_MISMATCH           =  -38,
     WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH     =  -39,
+    WOLFSENTRY_ERROR_ID_IO_FAILED              =  -40,
 
     WOLFSENTRY_ERROR_ID_USER_BASE              = -128,
 
@@ -314,7 +315,7 @@ enum wolfsentry_error_id {
 };
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id, const char *error_string);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *error_string);
 #define WOLFSENTRY_REGISTER_ERROR(err, msg) wolfsentry_user_error_string_set(WOLFSENTRY_ERROR_ID_ ## err, msg)
 #endif
 

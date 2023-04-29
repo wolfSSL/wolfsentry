@@ -199,7 +199,7 @@ typedef struct JSON_PARSER {
 
     size_t value_counter;
 
-    char* nesting_stack;
+    unsigned char* nesting_stack;
     size_t nesting_level;
     size_t nesting_stack_size;
 

@@ -491,7 +491,7 @@ json_number_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
         else
             json_raise_for_value(parser, JSON_ERR_SYNTAX);
     } else {
-        if(parser->errcode >= 0) {
+        if((parser->errcode >= 0) && (off > 0)) {
             if(json_buf_append(parser, input, off) < 0)
                 return 0;
         }
@@ -901,12 +901,12 @@ json_feed(JSON_PARSER* parser, const unsigned char* input, size_t size)
             }
 
             if(parser->nesting_level >= parser->nesting_stack_size) {
-                char* new_nesting_stack;
+                unsigned char* new_nesting_stack;
                 size_t new_nesting_stack_size = parser->nesting_stack_size * 2;
 
                 if(new_nesting_stack_size == 0)
                     new_nesting_stack_size = 32;
-                new_nesting_stack = (char *)realloc(parser->nesting_stack, new_nesting_stack_size);
+                new_nesting_stack = (unsigned char *)realloc(parser->nesting_stack, new_nesting_stack_size);
                 if(new_nesting_stack == NULL) {
                     json_raise(parser, JSON_ERR_OUTOFMEMORY);
                     break;
@@ -1400,7 +1400,7 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
          * We may do this safely: We reserved few bytes in the buffer exactly
          * for this purpose.
          */
-        memcpy(buffer + n, ".0", 2);
+        memcpy(buffer + n, ".0", 2); /* NOLINT(bugprone-not-null-terminated-result) */
         n += 2;
     }
 

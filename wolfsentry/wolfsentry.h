@@ -688,7 +688,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reserv
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
-#define WOLFSENTRY_LENGTH_NULL_TERMINATED -1
+#define WOLFSENTRY_LENGTH_NULL_TERMINATED (-1)
 
 WOLFSENTRY_API wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_checkout(void *object);

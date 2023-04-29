@@ -83,7 +83,7 @@ int lwip_inet_pton(int af, const char *restrict src, void *restrict dst) {
 #define WOLFSENTRY_EXIT_ON_FAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { WOLFSENTRY_WARN("%s: " WOLFSENTRY_ERROR_FMT "\n", #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
 #define WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(expected, ...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (! WOLFSENTRY_ERROR_CODE_IS(_retval, expected)) { WOLFSENTRY_WARN("%s: expected %s but got: " WOLFSENTRY_ERROR_FMT "\n", #expected, #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
 #define WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(expected, ...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (! WOLFSENTRY_SUCCESS_CODE_IS(_retval, expected)) { WOLFSENTRY_WARN("%s: expected %s but got: " WOLFSENTRY_ERROR_FMT "\n", #expected, #__VA_ARGS__, WOLFSENTRY_ERROR_FMT_ARGS(_retval)); return 1; }} while(0)
-#define WOLFSENTRY_EXIT_ON_SYSFAILURE(...) do { wolfsentry_errcode_t _retval = (__VA_ARGS__); if (_retval < 0) { perror(#__VA_ARGS__); exit(1); }} while(0)
+#define WOLFSENTRY_EXIT_ON_SYSFAILURE(...) do { int _retval = (__VA_ARGS__); if (_retval < 0) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SYSFALSE(...) do { if (! (__VA_ARGS__)) { perror(#__VA_ARGS__); exit(1); }} while(0)
 #define WOLFSENTRY_EXIT_ON_SUCCESS(...) do { if ((__VA_ARGS__) >= 0) { WOLFSENTRY_WARN("%s should have failed, but succeeded.\n", #__VA_ARGS__); return 1; }} while(0)
 #define WOLFSENTRY_EXIT_ON_FALSE(...) do { if (! (__VA_ARGS__)) { WOLFSENTRY_WARN("%s should have been true, but was false.\n", #__VA_ARGS__); return 1; }} while(0)
@@ -144,7 +144,7 @@ struct rwlock_args {
     volatile int thread_phase;
 };
 
-#define INCREMENT_PHASE(x) do { pthread_mutex_lock(&(x)->thread_phase_lock); ++(x)->thread_phase; pthread_mutex_unlock(&(x)->thread_phase_lock); } while(0)
+#define INCREMENT_PHASE(x) do { WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_lock(&(x)->thread_phase_lock)); ++(x)->thread_phase; WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_unlock(&(x)->thread_phase_lock)); } while(0)
 
 static void *rd_routine(struct rwlock_args *args) {
     int i;
@@ -245,7 +245,7 @@ static void *rd2wr_reserved_routine(struct rwlock_args *args) {
 }
 
 #define MAX_WAIT 100000
-#define WAIT_FOR_PHASE(x, atleast) do { int cur_phase; pthread_mutex_lock(&(x).thread_phase_lock); cur_phase = (x).thread_phase; pthread_mutex_unlock(&(x).thread_phase_lock); if (cur_phase >= (atleast)) break; usleep(1000); } while(1)
+#define WAIT_FOR_PHASE(x, atleast) do { int cur_phase; WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_lock(&(x).thread_phase_lock)); cur_phase = (x).thread_phase; WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_unlock(&(x).thread_phase_lock)); if (cur_phase >= (atleast)) break; usleep(1000); } while(1)
 
 static int test_rw_locks (void) {
     struct wolfsentry_context *wolfsentry;

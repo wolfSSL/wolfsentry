@@ -637,9 +637,8 @@ static wolfsentry_errcode_t convert_sockaddr_address(struct wolfsentry_json_proc
         }
     }
     else {
-        wolfsentry_errcode_t ret;
         wolfsentry_addr_family_parser_t parser;
-        if ((ret = wolfsentry_addr_family_get_parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, sa->sa_family, &parser)) < 0)
+        if (wolfsentry_addr_family_get_parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, sa->sa_family, &parser) < 0)
             WOLFSENTRY_ERROR_RETURN(CONFIG_MISSING_HANDLER);
         sa->addr_len = WOLFSENTRY_MAX_ADDR_BITS;
         WOLFSENTRY_ERROR_RERETURN(parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, (const char *)data, (int)data_size, sa->addr, &sa->addr_len));
@@ -1759,7 +1758,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
     struct wolfsentry_json_process_state *jps;
     if ((ret = wolfsentry_config_json_init_ex(WOLFSENTRY_CONTEXT_ARGS_OUT, load_flags, json_config, &jps)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    if ((ret = wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size)) < 0) {
+    if (wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size) < 0) {
         ret = wolfsentry_config_json_fini(&jps, NULL, 0);
         WOLFSENTRY_ERROR_RERETURN(ret);
     }

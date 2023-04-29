@@ -190,6 +190,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Library or plugin version mismatch";
     case WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH:
         return "Library built configuration is incompatible with caller";
+    case WOLFSENTRY_ERROR_ID_IO_FAILED:
+        return "Input/ouput failure";
 
     case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
         return "Lock request succeeded and reserved promotion";
@@ -305,6 +307,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
         return "LIB_MISMATCH";
     case WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH:
         return "LIBCONFIG_MISMATCH";
+    case WOLFSENTRY_ERROR_ID_IO_FAILED:
+        return "IO_FAILED";
 
     case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
         return "LOCK_OK_AND_GOT_RESV";
@@ -619,6 +623,9 @@ static void wolfsentry_builtin_free_aligned(
 #else
 
 #include <stdlib.h>
+#ifndef WOLFSENTRY_NO_POSIX_MEMALIGN
+#include <errno.h>
+#endif
 
 static void *wolfsentry_builtin_malloc(
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t size)
@@ -694,14 +701,21 @@ static void *wolfsentry_builtin_memalign(
     WOLFSENTRY_RETURN_VALUE(ptr);
 #else
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    if (alignment <= sizeof(void *))
-        WOLFSENTRY_RETURN_VALUE(malloc(size));
-    else {
-        void *ret = 0;
-        if (posix_memalign(&ret, alignment, size) < 0)
-            WOLFSENTRY_RETURN_VALUE(NULL);
+    if (alignment <= sizeof(void *)) {
+        void *ret = malloc(size);
 #ifdef WOLFSENTRY_MALLOC_DEBUG
-    if (ret != NULL)
+        if (ret != NULL)
+            WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+#endif
+        WOLFSENTRY_RETURN_VALUE(ret);
+    } else {
+        void *ret = 0;
+        int eret = posix_memalign(&ret, alignment, size);
+        if (eret != 0) {
+            errno = eret;
+            WOLFSENTRY_RETURN_VALUE(NULL);
+        }
+#ifdef WOLFSENTRY_MALLOC_DEBUG
         WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
 #endif
         WOLFSENTRY_RETURN_VALUE(ret);
@@ -2761,6 +2775,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
         else if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_GET_ID) {
             --lock->read2write_waiter_read_count;
         }
+        ret = WOLFSENTRY_ERROR_ENCODE(OK);
     } else if (lock->state == WOLFSENTRY_LOCK_EXCLUSIVE) {
         if (lock->write_lock_holder != WOLFSENTRY_THREAD_GET_ID) {
             ret = WOLFSENTRY_ERROR_ENCODE(NOT_PERMITTED);
@@ -2778,6 +2793,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
             WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_UNLOCKED);
             WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_NO_ID);
             lock->promoted_at_count = 0;
+            ret = WOLFSENTRY_ERROR_ENCODE(OK);
             /* fall through to waiter notification phase. */
         } else {
             if (lock->promoted_at_count == lock->holder_count.write) {
@@ -2822,7 +2838,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
                 goto out;
             }
         }
-        ret = WOLFSENTRY_ERROR_ENCODE(OK);
     } else if (lock->read_waiter_count > 0) {
         int i;
         lock->holder_count.read += lock->read_waiter_count;
@@ -2834,9 +2849,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
                 goto out;
             }
         }
-        ret = WOLFSENTRY_ERROR_ENCODE(OK);
-    } else
-        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    }
 
   out:
 
@@ -3858,7 +3871,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, si
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         pad_chars = (28U - decoded_bits) >> 3U;
         decoded <<= 24U - decoded_bits;
-        decoded_bits = 24U;
+        /* decoded_bits = 24U; */ /* commented out to silence analyzer */
     }
 
     switch (pad_chars) {

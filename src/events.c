@@ -355,6 +355,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_reference(WOLFSENTRY_CO
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
+/* NOLINTBEGIN(misc-no-recursion) */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_event *event, wolfsentry_action_res_t *action_results) {
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
@@ -399,6 +400,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_drop_reference(WOLFSENTRY_C
         WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED);
     WOLFSENTRY_RETURN_OK;
 }
+/* NOLINTEND(misc-no-recursion) */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_delete(
     WOLFSENTRY_CONTEXT_ARGS_IN,

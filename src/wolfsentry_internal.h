@@ -85,19 +85,19 @@ struct wolfsentry_thread_context {
 
 #define WOLFSENTRY_THREAD_GET_ID (thread ? thread->id : WOLFSENTRY_THREAD_GET_ID_HANDLER())
 
-#define WOLFSENTRY_THREAD_ASSERT_INITED(thread) do {                 \
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID)) \
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                        \
+#define WOLFSENTRY_THREAD_ASSERT_INITED(thread) do {                     \
+    if (((thread) == NULL) || ((thread)->id == WOLFSENTRY_THREAD_NO_ID)) \
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                            \
     } while (0)
 
-#define WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread) do {         \
-    if ((thread != NULL) && (thread->id == WOLFSENTRY_THREAD_NO_ID)) \
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                        \
+#define WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread) do {             \
+    if (((thread) != NULL) && ((thread)->id == WOLFSENTRY_THREAD_NO_ID)) \
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                            \
     } while (0)
 
-#define WOLFSENTRY_LOCK_ASSERT_INITED(lock) do {                     \
-    if ((lock == NULL) || (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)) \
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                        \
+#define WOLFSENTRY_LOCK_ASSERT_INITED(lock) do {                         \
+    if (((lock) == NULL) || (WOLFSENTRY_ATOMIC_LOAD((lock)->state) == WOLFSENTRY_LOCK_UNINITED)) \
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                            \
     } while (0)
 
 #if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
@@ -162,7 +162,7 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 #define WOLFSENTRY_REFCOUNT_DECREMENT(x, res, ret) \
     do {                                                                \
         WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY_BY_ONE(x, res);     \
-        if (res == MAX_UINT_OF(x))                                      \
+        if ((res) == MAX_UINT_OF(x))                                    \
             (ret) = WOLFSENTRY_ERROR_ENCODE(INTERNAL_CHECK_FATAL);      \
         else                                                            \
             (ret) = WOLFSENTRY_ERROR_ENCODE(OK);                        \
@@ -356,8 +356,8 @@ struct wolfsentry_route {
 #define WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r) (WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) + (r)->remote.extra_port_count)
 #define WOLFSENTRY_ROUTE_BUF_SIZE(r) (WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) + ((WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r)) & 1) + (WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) * sizeof(wolfsentry_port_t)) + (WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) * sizeof(wolfsentry_port_t)))
 
-#define WOLFSENTRY_ROUTE_REMOTE_PORT_GET(r, i) (i ? WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r)[i-1] : (r)->sa_remote_port)
-#define WOLFSENTRY_ROUTE_LOCAL_PORT_GET(r, i) (i ? WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r)[i-1] : (r)->sa_local_port)
+#define WOLFSENTRY_ROUTE_REMOTE_PORT_GET(r, i) ((i) ? WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r)[(i)-1] : (r)->sa_remote_port)
+#define WOLFSENTRY_ROUTE_LOCAL_PORT_GET(r, i) ((i) ? WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r)[(i)-1] : (r)->sa_local_port)
 
 struct wolfsentry_route_table {
     struct wolfsentry_table_header header;

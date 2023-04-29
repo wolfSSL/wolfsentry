@@ -263,21 +263,7 @@ typedef uint16_t wolfsentry_priority_t;
     #else
         #error Must supply WOLFSENTRY_THREAD_ID_T for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
-    /* note WOLFSENTRY_THREAD_NO_ID needs to be the value returned by a failed call
-     * to WOLFSENTRY_THREAD_GET_ID_HANDLER.
-     */
-    #ifdef WOLFSENTRY_THREAD_NO_ID
-    #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
-        #define WOLFSENTRY_THREAD_NO_ID 0
-    #elif defined(FREERTOS)
-        /* xTaskGetCurrentTaskHandle() returns NULL if no tasks have been created,
-         * and if that happens, we want wolfsentry_init_thread_context() to assign
-         * an internally generated ID.
-         */
-        #define WOLFSENTRY_THREAD_NO_ID ((TaskHandle_t)0)
-    #else
-        #error Must supply WOLFSENTRY_THREAD_NO_ID for WOLFSENTRY_THREADSAFE on non-POSIX targets.
-    #endif
+    /* note WOLFSENTRY_THREAD_GET_ID_HANDLER must return WOLFSENTRY_THREAD_NO_ID on failure. */
     #ifdef WOLFSENTRY_THREAD_GET_ID_HANDLER
     #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
        #define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self
@@ -289,9 +275,14 @@ typedef uint16_t wolfsentry_priority_t;
 
     struct wolfsentry_thread_context;
 
+    /* WOLFSENTRY_THREAD_NO_ID must be zero. */
+    #define WOLFSENTRY_THREAD_NO_ID 0
+
     struct wolfsentry_thread_context_public {
         uint64_t opaque[9];
     };
+
+    #define WOLFSENTRY_THREAD_CONTEXT_PUBLIC_INITIALIZER {0}
 #endif
 
 #ifdef BUILDING_LIBWOLFSENTRY

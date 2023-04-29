@@ -810,13 +810,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_alloc_thread_context(struct wolfs
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_id(struct wolfsentry_thread_context *thread, wolfsentry_thread_id_t *id) {
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
+    if (id == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     *id = WOLFSENTRY_THREAD_GET_ID;
     WOLFSENTRY_RETURN_OK;
 }
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_user_context(struct wolfsentry_thread_context *thread, void **user_context) {
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (thread->id == WOLFSENTRY_THREAD_NO_ID)
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
+    if (user_context == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (thread->user_context == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -825,9 +828,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_user_context(struct wo
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfsentry_thread_context *thread, struct timespec *deadline) {
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (thread->id == WOLFSENTRY_THREAD_NO_ID)
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
+    if (deadline == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
@@ -836,9 +838,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfse
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentry_thread_context *thread, wolfsentry_thread_flags_t *thread_flags) {
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (thread->id == WOLFSENTRY_THREAD_NO_ID)
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
+    if (thread_flags == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     *thread_flags = thread->current_thread_flags;
     WOLFSENTRY_RETURN_OK;
@@ -846,8 +847,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentr
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wolfsentry_thread_context *thread, wolfsentry_thread_flags_t thread_flags) {
     (void)thread_flags;
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
     if (thread->shared_count > 0)
         WOLFSENTRY_ERROR_RETURN(BUSY);
     else if (thread->shared_count < 0)
@@ -887,8 +887,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY
     wolfsentry_time_t now;
     wolfsentry_errcode_t ret;
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (usecs < 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -910,8 +909,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, time_t epoch_secs, long epoch_nsecs) {
     (void)wolfsentry;
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if ((epoch_nsecs < 0) || (epoch_nsecs >= 1000000000))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -927,8 +925,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTE
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN) {
     (void)wolfsentry;
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     thread->deadline.tv_sec = WOLFSENTRY_DEADLINE_NEVER;
     thread->deadline.tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
@@ -937,8 +934,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfsentry_thread_context *thread) {
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (thread->mutex_and_reservation_count > 0)
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
@@ -947,8 +943,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readonly(struct wolfse
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfsentry_thread_context *thread) {
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (thread->shared_count > thread->recursion_of_tracked_lock)
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
@@ -1428,7 +1423,10 @@ static const struct timespec timespec_deadline_now = {WOLFSENTRY_DEADLINE_NOW, W
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context *thread, struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
-    (void)thread;
+    if (lock == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
 
     if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -1478,6 +1476,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context *thread, struct wolfsentry_rwlock **lock, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
+
+    if (lock == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
+
     if ((*lock = (struct wolfsentry_rwlock *)hpi->allocator.malloc(hpi->allocator.context, thread, sizeof **lock)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if ((ret = wolfsentry_lock_init(hpi, thread, *lock, flags)) < 0) {
@@ -1490,6 +1494,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     int ret;
+
+    if (lock == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     (void)thread;
     (void)flags;
@@ -1555,6 +1562,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rw
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwlock **lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
+
+    if ((lock == NULL) || (*lock == NULL))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if ((*lock)->state != WOLFSENTRY_LOCK_UNINITED) {
         if ((ret = wolfsentry_lock_destroy(*lock, thread, flags)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
@@ -1571,11 +1582,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwloc
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
     int ret;
 
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID)
         WOLFSENTRY_ERROR_RERETURN(wolfsentry_lock_mutex_abstimed(lock, thread, abs_timeout, flags));
@@ -1827,11 +1836,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared(struct wolfsentry_rwl
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
+    if (lock == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if (thread) {
-        if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)
-            WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
         if (thread->id == WOLFSENTRY_THREAD_NO_ID)
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)
+            WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
     }
 
     switch (WOLFSENTRY_ATOMIC_LOAD(lock->state)) {
@@ -2033,11 +2045,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex(struct wolfsentry_rwlo
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (lock->state == WOLFSENTRY_LOCK_SHARED)
         WOLFSENTRY_ERROR_RETURN(ALREADY);
@@ -2135,11 +2145,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsent
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     (void)flags;
 
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)
         WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
@@ -2188,21 +2196,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct 
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    return wolfsentry_lock_shared2mutex_redeem_abstimed(lock, thread, NULL, flags);
-}
-
 /* if this returns BUSY or TIMED_OUT, the caller still owns a reservation, and must either retry the redemption, or abandon the reservation. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
     (void)flags;
 
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_EXCLUSIVE) {
         if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID)
@@ -2392,15 +2394,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_timed(st
         return wolfsentry_lock_shared2mutex_redeem_abstimed(lock, thread, &timespec_deadline_now, flags);
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
+    return wolfsentry_lock_shared2mutex_redeem_abstimed(lock, thread, NULL, flags);
+}
+
 /* note caller still holds its shared lock after return. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     (void)flags;
 
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_GET_ID) {
         if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_NO_ID)
@@ -2439,10 +2443,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abandon(struct 
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    return wolfsentry_lock_shared2mutex_abstimed(lock, thread, NULL, flags);
-}
-
 /* if another thread is already waiting for read2write, then this
  * returns BUSY, and the caller must _unlock() to resolve the
  * deadlock, then reattempt its transaction with a fresh lock (ideally
@@ -2451,8 +2451,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsent
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
+    if (lock == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
     if (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)
         WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
@@ -2656,6 +2658,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wo
         return wolfsentry_lock_shared2mutex_abstimed(lock, thread, &timespec_deadline_now, flags);
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
+    return wolfsentry_lock_shared2mutex_abstimed(lock, thread, NULL, flags);
+}
+
 /* note, if caller has a shared2mutex reservation, it must
  * _shared2mutex_abandon() it first, before _unlock()ing,
  * unless flags & WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO.
@@ -2663,14 +2669,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_timed(struct wo
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
 
     if ((thread == NULL) && (flags & WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (thread && (thread->id == WOLFSENTRY_THREAD_NO_ID))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
 
     /* unlocking a recursive mutex, like recursively locking one, can be done lock-free. */
     if ((WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID) &&
@@ -2842,12 +2846,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    uint32_t lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
+    uint32_t lock_state;
 
-    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID))
+    if (lock == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
+
     (void)flags;
+
+    lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
 
     if (lock_state != WOLFSENTRY_LOCK_SHARED) {
         if (lock_state == WOLFSENTRY_LOCK_UNINITED)
@@ -2875,7 +2883,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared(struct wolfsentr
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_mutex(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
-    uint32_t lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
+    uint32_t lock_state;
+
+    if (lock == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    lock_state = WOLFSENTRY_ATOMIC_LOAD(lock->state);
+
+    WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
 
     (void)flags;
 
@@ -2910,8 +2924,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_either(struct wolfsentr
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservation(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     (void)flags;
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
     if (WOLFSENTRY_ATOMIC_LOAD(lock->read2write_reservation_holder) == WOLFSENTRY_THREAD_GET_ID)
         WOLFSENTRY_RETURN_OK;
     else
@@ -2920,7 +2934,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservatio
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_get_flags(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t *flags) {
     (void)thread;
-    if (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
+    if (flags == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     *flags = lock->flags;
     WOLFSENTRY_RETURN_OK;

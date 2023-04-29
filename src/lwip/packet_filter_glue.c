@@ -80,7 +80,7 @@ static err_t ethernet_filter_with_wolfsentry(
         struct eth_addr addr_buf;
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
-    WOLFSENTRY_THREAD_HEADER_DECLS;
+    WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
     wolfsentry_ent_id_t match_id = 0;
     wolfsentry_route_flags_t inexact_matches = 0;
@@ -208,7 +208,7 @@ static err_t ip4_filter_with_wolfsentry(
         ip4_addr_t addr_buf;
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
-    WOLFSENTRY_THREAD_HEADER_DECLS;
+    WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
     wolfsentry_ent_id_t match_id = 0;
     wolfsentry_route_flags_t inexact_matches = 0;
@@ -339,7 +339,7 @@ static err_t ip6_filter_with_wolfsentry(
         ip6_addr_t addr_buf; /* note, includes extra byte for zone. */
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
-    WOLFSENTRY_THREAD_HEADER_DECLS;
+    WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
     wolfsentry_ent_id_t match_id = 0;
     wolfsentry_route_flags_t inexact_matches = 0;
@@ -474,7 +474,7 @@ static err_t tcp_filter_with_wolfsentry(
     remote, local;
     static_assert((void *)&remote.sa.addr == (void *)&remote.addr_buf, "unexpected layout in struct wolfsentry_sockaddr.");
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
-    WOLFSENTRY_THREAD_HEADER_DECLS;
+    WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
     wolfsentry_ent_id_t match_id = 0;
     wolfsentry_route_flags_t inexact_matches = 0;
@@ -604,8 +604,7 @@ static err_t tcp_filter_with_wolfsentry(
     else
         remote.sa.interface = local.sa.interface = NETIF_NO_INDEX; /* restricts matches to rules that have zero or wildcard interface ID. */
 
-    WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE);
-    if (WOLFSENTRY_THREAD_GET_ERROR < 0)
+    if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
     ws_ret = wolfsentry_route_event_dispatch_with_inited_result(
@@ -678,7 +677,7 @@ static err_t udp_filter_with_wolfsentry(
 #endif
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
-    WOLFSENTRY_THREAD_HEADER_DECLS;
+    WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
     wolfsentry_ent_id_t match_id = 0;
     wolfsentry_route_flags_t inexact_matches = 0;
@@ -853,7 +852,7 @@ static err_t icmp4_filter_with_wolfsentry(
         ip4_addr_t addr_buf;
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
-    WOLFSENTRY_THREAD_HEADER_DECLS;
+    WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
     wolfsentry_ent_id_t match_id = 0;
     wolfsentry_route_flags_t inexact_matches = 0;
@@ -984,7 +983,7 @@ static err_t icmp6_filter_with_wolfsentry(
         ip6_addr_t addr_buf; /* note, includes extra byte for zone. */
     } remote, local;
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
-    WOLFSENTRY_THREAD_HEADER_DECLS;
+    WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
     wolfsentry_ent_id_t match_id = 0;
     wolfsentry_route_flags_t inexact_matches = 0;

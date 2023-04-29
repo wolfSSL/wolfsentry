@@ -85,6 +85,21 @@ struct wolfsentry_thread_context {
 
 #define WOLFSENTRY_THREAD_GET_ID (thread ? thread->id : WOLFSENTRY_THREAD_GET_ID_HANDLER())
 
+#define WOLFSENTRY_THREAD_ASSERT_INITED(thread) do {                 \
+    if ((thread == NULL) || (thread->id == WOLFSENTRY_THREAD_NO_ID)) \
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                        \
+    } while (0)
+
+#define WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread) do {         \
+    if ((thread != NULL) && (thread->id == WOLFSENTRY_THREAD_NO_ID)) \
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                        \
+    } while (0)
+
+#define WOLFSENTRY_LOCK_ASSERT_INITED(lock) do {                     \
+    if ((lock == NULL) || (WOLFSENTRY_ATOMIC_LOAD(lock->state) == WOLFSENTRY_LOCK_UNINITED)) \
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);                        \
+    } while (0)
+
 #if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
 static_assert(sizeof(struct wolfsentry_thread_context_public) >= sizeof(struct wolfsentry_thread_context), "wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
 static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof__(struct wolfsentry_thread_context), "alignment of wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
@@ -121,6 +136,9 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 #define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(wolfsentry)
 
 #else /* !WOLFSENTRY_THREADSAFE */
+
+#define WOLFSENTRY_THREAD_ASSERT_INITED(thread) do {} while (0)
+#define WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread) do {} while (0)
 
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) (void)(ctx)
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() (void)wolfsentry

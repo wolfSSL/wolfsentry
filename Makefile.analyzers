@@ -406,10 +406,10 @@ dist-check:
 	echo 'passed: $@.'
 
 .PHONY: check
-check: dynamic-build-test c99-test c89-test no-inline-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
+check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
 
 .PHONY: check-extra
-check-extra: static-build-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check
+check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

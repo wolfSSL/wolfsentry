@@ -31,6 +31,31 @@
 #include <wolfsentry/wolfsentry_options.h>
 #endif
 
+#ifdef WOLFSENTRY_C89
+    #define WOLFSENTRY_NO_INLINE
+    #ifndef WOLFSENTRY_NO_POSIX_MEMALIGN
+        #define WOLFSENTRY_NO_POSIX_MEMALIGN
+    #endif
+    #define WOLFSENTRY_NO_DESIGNATED_INITIALIZERS
+    #define WOLFSENTRY_NO_LONG_LONG
+    #if !defined(WOLFSENTRY_USE_NONPOSIX_SEMAPHORES) && !defined(WOLFSENTRY_SINGLETHREADED)
+        /* sem_timedwait() was added in POSIX 200112L */
+        #define WOLFSENTRY_SINGLETHREADED
+    #endif
+#endif
+
+#ifndef __attribute_maybe_unused__
+#if defined(__GNUC__)
+#define __attribute_maybe_unused__ __attribute__((unused))
+#else
+#define __attribute_maybe_unused__
+#endif
+#endif
+
+#ifdef WOLFSENTRY_NO_INLINE
+#define inline __attribute_maybe_unused__
+#endif
+
 #ifdef FREERTOS
     #include <FreeRTOS.h>
     #define WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
@@ -38,8 +63,36 @@
         #define WOLFSENTRY_PRINTF_ERR(...) printf(__VA_ARGS__)
     #endif
 
-    #define FREERTOS_NANOSECONDS_PER_SECOND     1000000000LL
+    #define FREERTOS_NANOSECONDS_PER_SECOND     1000000000L
     #define FREERTOS_NANOSECONDS_PER_TICK       (FREERTOS_NANOSECONDS_PER_SECOND / configTICK_RATE_HZ)
+
+    #if !defined(SIZE_T_32) && !defined(SIZE_T_64)
+        /* size_t is "unsigned int" in STM32 FreeRTOS */
+        #define SIZE_T_32
+    #endif
+#endif
+
+#ifndef WOLFSENTRY_NO_INTTYPES_H
+#include <inttypes.h>
+#endif
+#ifndef WOLFSENTRY_NO_STDINT_H
+#include <stdint.h>
+#endif
+
+#if !defined(SIZE_T_32) && !defined(SIZE_T_64)
+    #if defined(__WORDSIZE) && (__WORDSIZE == 64)
+        #define SIZE_T_64
+    #elif defined(INTPTR_MAX) && defined(INT64_MAX) && (INTPTR_MAX == INT64_MAX)
+        #define SIZE_T_64
+    #elif defined(__WORDSIZE) && (__WORDSIZE == 32)
+        #define SIZE_T_32
+    #elif defined(INTPTR_MAX) && defined(INT32_MAX) && (INTPTR_MAX == INT32_MAX)
+        #define SIZE_T_32
+    #else
+        #error "must define SIZE_T_32 or SIZE_T_64 with user settings."
+    #endif
+#elif defined(SIZE_T_32) && defined(SIZE_T_64)
+    #error "must define SIZE_T_32 xor SIZE_T_64."
 #endif
 
 #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
@@ -50,14 +103,16 @@
 
 #define WOLFSENTRY_THREADSAFE
 
-#if defined(__MACH__)
-    #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-#elif defined(FREERTOS)
-    #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-    #define WOLFSENTRY_USE_NONPOSIX_THREADS
-#elif defined(_WIN32)
-    #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-    #define WOLFSENTRY_USE_NONPOSIX_THREADS
+#ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+    #if defined(__MACH__) || defined(FREERTOS) || defined(_WIN32)
+        #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+    #endif
+#endif
+
+#ifndef WOLFSENTRY_USE_NONPOSIX_THREADS
+    #if defined(FREERTOS) || defined(_WIN32)
+        #define WOLFSENTRY_USE_NONPOSIX_THREADS
+    #endif
 #endif
 
 #ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
@@ -102,6 +157,10 @@
 #endif
 #endif
 
+#if !defined(WOLFSENTRY_NO_POSIX_MEMALIGN) && (!defined(_POSIX_C_SOURCE) || (_POSIX_C_SOURCE < 200112L))
+    #define WOLFSENTRY_NO_POSIX_MEMALIGN
+#endif
+
 #if defined(__STRICT_ANSI__)
 #define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 1
 #elif defined(__GNUC__) && !defined(__clang__)
@@ -117,19 +176,14 @@
 #endif
 #endif
 
-#ifdef FREERTOS
-/* size_t is alias to "unsigned int" in STM32 FreeRTOS */
-#define SIZET_FMT "%d"
+#ifdef SIZE_T_32
+    #define SIZET_FMT "%u"
+#elif __STDC_VERSION__ >= 199901L
+    #define SIZET_FMT "%zu"
 #else
-#define SIZET_FMT "%zd"
+    #define SIZET_FMT "%lu"
 #endif
 
-#ifndef WOLFSENTRY_NO_INTTYPES_H
-#include <inttypes.h>
-#endif
-#ifndef WOLFSENTRY_NO_STDINT_H
-#include <stdint.h>
-#endif
 #ifndef WOLFSENTRY_NO_STDDEF_H
 #include <stddef.h>
 #endif
@@ -137,7 +191,14 @@
 #include <assert.h>
 #endif
 #ifndef WOLFSENTRY_NO_STDIO
+#ifndef __USE_ISOC99
+/* kludge to make glibc snprintf() prototype visible even when -std=c89 */
+#define __USE_ISOC99
 #include <stdio.h>
+#undef __USE_ISOC99
+#else
+#include <stdio.h>
+#endif
 #endif
 #ifndef WOLFSENTRY_NO_STRING_H
 #include <string.h>
@@ -194,14 +255,6 @@ typedef uint16_t wolfsentry_priority_t;
 #endif
 #endif
 
-#ifndef __attribute_maybe_unused__
-#if defined(__GNUC__)
-#define __attribute_maybe_unused__ __attribute__((unused))
-#else
-#define __attribute_maybe_unused__
-#endif
-#endif
-
 #ifndef __wolfsentry_wur
 #ifdef __wur
 #define __wolfsentry_wur __wur
@@ -216,9 +269,10 @@ typedef uint16_t wolfsentry_priority_t;
 
 #ifndef wolfsentry_static_assert
 #if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
-#define wolfsentry_static_assert(c, m) static_assert(c, m)
+/* note semicolon included in expansion, so that assert can completely disappear in ISO C builds. */
+#define wolfsentry_static_assert(c, m) static_assert(c, m);
 #else
-#define wolfsentry_static_assert(c, m) do {} while ()
+#define wolfsentry_static_assert(c, m)
 #endif
 #endif /* !wolfsentry_static_assert */
 
@@ -226,7 +280,14 @@ typedef uint16_t wolfsentry_priority_t;
 
 #ifdef WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
 
+#ifndef __USE_XOPEN2K
+/* kludge to force glibc sem_timedwait() prototype visible with -std=c99 */
+#define __USE_XOPEN2K
 #include <semaphore.h>
+#undef __USE_XOPEN2K
+#else
+#include <semaphore.h>
+#endif
 
 #elif defined(__MACH__)
 
@@ -263,21 +324,7 @@ typedef uint16_t wolfsentry_priority_t;
     #else
         #error Must supply WOLFSENTRY_THREAD_ID_T for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
-    /* note WOLFSENTRY_THREAD_NO_ID needs to be the value returned by a failed call
-     * to WOLFSENTRY_THREAD_GET_ID_HANDLER.
-     */
-    #ifdef WOLFSENTRY_THREAD_NO_ID
-    #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
-        #define WOLFSENTRY_THREAD_NO_ID 0
-    #elif defined(FREERTOS)
-        /* xTaskGetCurrentTaskHandle() returns NULL if no tasks have been created,
-         * and if that happens, we want wolfsentry_init_thread_context() to assign
-         * an internally generated ID.
-         */
-        #define WOLFSENTRY_THREAD_NO_ID ((TaskHandle_t)0)
-    #else
-        #error Must supply WOLFSENTRY_THREAD_NO_ID for WOLFSENTRY_THREADSAFE on non-POSIX targets.
-    #endif
+    /* note WOLFSENTRY_THREAD_GET_ID_HANDLER must return WOLFSENTRY_THREAD_NO_ID on failure. */
     #ifdef WOLFSENTRY_THREAD_GET_ID_HANDLER
     #elif defined(WOLFSENTRY_USE_NATIVE_POSIX_THREADS)
        #define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self
@@ -289,9 +336,14 @@ typedef uint16_t wolfsentry_priority_t;
 
     struct wolfsentry_thread_context;
 
+    /* WOLFSENTRY_THREAD_NO_ID must be zero. */
+    #define WOLFSENTRY_THREAD_NO_ID 0
+
     struct wolfsentry_thread_context_public {
         uint64_t opaque[9];
     };
+
+    #define WOLFSENTRY_THREAD_CONTEXT_PUBLIC_INITIALIZER {0}
 #endif
 
 #ifdef BUILDING_LIBWOLFSENTRY
@@ -331,8 +383,12 @@ typedef uint16_t wolfsentry_priority_t;
 #define WOLFSENTRY_API_VOID WOLFSENTRY_API_BASE void
 #define WOLFSENTRY_API WOLFSENTRY_API_BASE __wolfsentry_wur
 
-#ifdef WOLFSENTRY_NO_INLINE
-#define inline __attribute_maybe_unused__
+#ifndef WOLFSENTRY_NO_DESIGNATED_INITIALIZERS
+#define WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+#endif
+
+#ifndef WOLFSENTRY_NO_LONG_LONG
+#define WOLFSENTRY_HAVE_LONG_LONG
 #endif
 
 #ifndef WOLFSENTRY_MAX_ADDR_BYTES
@@ -390,8 +446,14 @@ struct wolfsentry_build_settings {
 
 #if !defined(BUILDING_LIBWOLFSENTRY) || defined(DEFINE_WOLFSENTRY_BUILD_SETTINGS)
 static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_build_settings = {
-    .version = WOLFSENTRY_VERSION,
-    .config = WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    .version =
+#endif
+    WOLFSENTRY_VERSION,
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    .config =
+#endif
+WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE
 #ifdef WOLFSENTRY_USER_DEFINED_TYPES
     | WOLFSENTRY_CONFIG_FLAG_USER_DEFINED_TYPES
 #endif

@@ -485,6 +485,7 @@ json_dom_dump_newline(JSON_DOM_DUMP_PARAMS* params)
         return params->write_func((const unsigned char *)"\n", 1, params->user_data);
 }
 
+/* NOLINTBEGIN(misc-no-recursion) */
 static int
 json_dom_dump_helper(
 #ifdef WOLFSENTRY
@@ -678,6 +679,7 @@ json_dom_dump_helper(
 
     return ret;
 }
+/* NOLINTEND(misc-no-recursion) */
 
 WOLFSENTRY_API int
 json_dom_dump(
@@ -687,8 +689,16 @@ json_dom_dump(
               const JSON_VALUE* root, JSON_DUMP_CALLBACK write_func,
               void* user_data, unsigned tab_width, unsigned flags)
 {
-    JSON_DOM_DUMP_PARAMS params = { write_func, user_data, tab_width, flags };
     int ret;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    JSON_DOM_DUMP_PARAMS params = { .write_func = write_func, .user_data = user_data, .tab_width = tab_width, .flags = flags };
+#else
+    JSON_DOM_DUMP_PARAMS params;
+    params.write_func = write_func;
+    params.user_data = user_data;
+    params.tab_width = tab_width;
+    params.flags = flags;
+#endif
 
     ret = json_dom_dump_helper(
 #ifdef WOLFSENTRY

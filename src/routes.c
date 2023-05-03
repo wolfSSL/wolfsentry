@@ -406,16 +406,16 @@ static wolfsentry_errcode_t wolfsentry_route_init(
         int left_over_bits = remote->addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *remote_lsb = WOLFSENTRY_ROUTE_REMOTE_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) - 1;
-            if (*remote_lsb & (0xffu >> (BITS_PER_BYTE - left_over_bits)))
-                *remote_lsb = (byte)(*remote_lsb & (0xffu << left_over_bits));
+            if (*remote_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
+                *remote_lsb = (byte)(*remote_lsb & (0xffU << left_over_bits));
         }
     }
     {
         int left_over_bits = local->addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *local_lsb = WOLFSENTRY_ROUTE_LOCAL_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len) - 1;
-            if (*local_lsb & (0xffu >> (BITS_PER_BYTE - left_over_bits)))
-                *local_lsb = (byte)(*local_lsb & (0xffu << left_over_bits));
+            if (*local_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
+                *local_lsb = (byte)(*local_lsb & (0xffU << left_over_bits));
         }
     }
 
@@ -951,8 +951,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 
     if (exact_p) {
         if (cursor_position == 0) {
-            if (inexact_matches == NULL)
-                *inexact_matches = WOLFSENTRY_ROUTE_FLAG_NONE;
+            *inexact_matches = WOLFSENTRY_ROUTE_FLAG_NONE;
             *found_route = (struct wolfsentry_route *)cursor.point;
             ret = WOLFSENTRY_ERROR_ENCODE(OK);
         } else {
@@ -1247,7 +1246,8 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
                             break;
                     }
                 }
-            }
+            } else
+                WOLFSENTRY_WARN("wolfsentry_table_cursor_init() returned " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
             route_table->highest_priority_route_in_table = new_highest_priority_route_in_table;
         }
     }
@@ -1390,13 +1390,16 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     wolfsentry_action_res_t *action_results
     )
 {
-    struct wolfsentry_event *parent_event = rule_route->parent_event ? rule_route->parent_event : route_table->default_event;
-    struct wolfsentry_eventconfig_internal *config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
+    struct wolfsentry_event *parent_event;
+    struct wolfsentry_eventconfig_internal *config;
     wolfsentry_route_flags_t current_rule_route_flags;
     wolfsentry_errcode_t ret;
 
     if ((target_route == NULL) || (route_table == NULL) || (rule_route == NULL) || (action_results == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    parent_event = rule_route->parent_event ? rule_route->parent_event : route_table->default_event;
+    config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
 
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
 
@@ -1659,7 +1662,6 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     }
     else if (trigger_event || route_table->default_event) {
         /* dynamic route insertion (or not -- plugins (if any) will decide). */
-        ret = WOLFSENTRY_ERROR_ENCODE(OK);
     }
     else {
         /* nothing to do. */
@@ -2653,7 +2655,7 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
         wolfsentry_errcode_t ret = formatter(WOLFSENTRY_CONTEXT_ARGS_OUT, addr, addr_bits, fmt_buf, &fmt_buf_len);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if (fwrite(fmt_buf, 1, (size_t)fmt_buf_len, f) != (size_t)fmt_buf_len)
-            WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         WOLFSENTRY_RETURN_OK;
     }
 
@@ -2662,22 +2664,27 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
 
     if (sa_family == WOLFSENTRY_AF_LINK) {
         unsigned int i;
-        for (i=0; i < (addr_bits >> 3); ++i)
-            fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]);
+        for (i=0; i < (addr_bits >> 3); ++i) {
+            if (fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        }
     } else if (sa_family == WOLFSENTRY_AF_INET) {
         memset(addr_buf, 0, sizeof addr_buf);
         memcpy(addr_buf, addr, addr_bytes);
         if (inet_ntop(AF_INET, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-        fprintf(f, "%s/%d", fmt_buf, addr_bits);
+        if (fprintf(f, "%s/%u", fmt_buf, addr_bits) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else if (sa_family == WOLFSENTRY_AF_INET6) {
         memset(addr_buf, 0, sizeof addr_buf);
         memcpy(addr_buf, addr, addr_bytes);
         if (inet_ntop(AF_INET6, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-        fprintf(f, "[%s]/%d", fmt_buf, addr_bits);
+        if (fprintf(f, "[%s]/%u", fmt_buf, addr_bits) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else if (sa_family == WOLFSENTRY_AF_LOCAL) {
-        fprintf(f, "\"%.*s\"", (int)addr_bytes, addr);
+        if (fprintf(f, "\"%.*s\"", (int)addr_bytes, addr) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else
         WOLFSENTRY_ERROR_RETURN(OP_NOT_SUPP_FOR_PROTO);
     WOLFSENTRY_RETURN_OK;
@@ -2688,10 +2695,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_rou
     wolfsentry_route_flags_t masked_flags;
     int already = 0;
     if (! flags) {
-        fputs("{}", f);
+        if (fputs("{}", f) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         WOLFSENTRY_RETURN_OK;
     }
-    fputs("{", f);
+    if (fputs("{", f) < 0)
+        WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     for (mask = 1; mask; mask <<= 1) {
         const char *rendername = NULL;
         masked_flags = flags & mask;
@@ -2724,16 +2733,22 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_rou
             break;
         }
 #undef ROUTE_FLAG_CASE
-        if (already)
-            fputc(',', f);
-        else
+        if (already) {
+            if (fputc(',', f) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        } else
             already = 1;
-        if (rendername == NULL)
-            fprintf(stderr, "unk-0x%x", masked_flags);
-        else
-            fputs(rendername, f);
+        if (rendername == NULL) {
+            if (fprintf(stderr, "unk-0x%x", masked_flags) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        } else {
+            if (fputs(rendername, f) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        }
     }
-    fputs("}", f);
+    if (fputs("}", f) < 0)
+        WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -2742,20 +2757,26 @@ static wolfsentry_errcode_t wolfsentry_route_render_endpoint(WOLFSENTRY_CONTEXT_
     size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
     const void *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
 
-    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD))
-        fputs("*", stdout);
-    else {
+    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
+        if (fputs("*", stdout) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
         wolfsentry_errcode_t ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len, addr, addr_bytes, f);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
-    if (! (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)))
-        fprintf(f, "%%%d", e->interface);
+    if (! (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD))) {
+        if (fprintf(f, "%%%d", e->interface) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    }
 
-    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD))
-        fprintf(f, ":*");
-    else
-        fprintf(f, ":%d", (int)e->sa_port);
+    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)) {
+        if (fprintf(f, ":*") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
+        if (fprintf(f, ":%d", (int)e->sa_port) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    }
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -2769,44 +2790,56 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(WOLFSENTRY_CONTEXT_A
 
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
-    fprintf(f, " %s-%s ",
-            (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT) ? "<" : "",
-            (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN) ? ">" : "");
+    if (fprintf(f, " %s-%s ",
+                (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT) ? "<" : "",
+                (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN) ? ">" : "") < 0)
+        WOLFSENTRY_ERROR_RETURN(IO_FAILED);
 
     if ((ret = wolfsentry_route_render_endpoint(WOLFSENTRY_CONTEXT_ARGS_OUT, r, 1 /* sa_local_p */, f)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
-    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD))
-        fprintf(f, ", AF = *");
-    else {
+    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)) {
+        if (fprintf(f, ", AF = *") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
         struct wolfsentry_addr_family_bynumber *addr_family;
         const char *family_name;
         ret = wolfsentry_addr_family_ntop(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, &addr_family, &family_name);
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-            fprintf(f, ", AF = %s", family_name);
+            if (fprintf(f, ", AF = %s", family_name) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
             if (addr_family) {
                 if ((ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ )) < 0)
                     WOLFSENTRY_ERROR_RERETURN(ret);
             }
         } else
 #endif
-            fprintf(f, ", AF = %d", r->sa_family);
+        {
+            if (fprintf(f, ", AF = %d", r->sa_family) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        }
     }
 
     wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
 
-    if (r->parent_event != NULL)
-        fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event->label_len, r->parent_event->label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "");
-    else if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
-        fprintf(f, ", ev = [*]");
-    else
-        fprintf(f, ", ev = (none)");
+    if (r->parent_event != NULL) {
+        if (fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event->label_len, r->parent_event->label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
+        if (fprintf(f, ", ev = [*]") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
+        if (fprintf(f, ", ev = (none)") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    }
 
-    fputs(", flags=", f);
+    if (fputs(", flags=", f) < 0)
+        WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_flags(r->flags, f));
 
-    fprintf(f, ", id=%u\n", (unsigned int)r->header.id);
+    if (fprintf(f, ", id=%u\n", (unsigned int)r->header.id) < 0)
+        WOLFSENTRY_ERROR_RETURN(IO_FAILED);
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -2816,20 +2849,26 @@ static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(WOLFSENTRY_
     size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
     const byte *addr = (sa_local_p ? r->local_address : r->remote_address);
 
-    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD))
-        fputs("*", stdout);
-    else {
+    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
+        if (fputs("*", stdout) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
         wolfsentry_errcode_t ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len, addr, addr_bytes, f);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
-    if (! (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)))
-        fprintf(f, "%%%d", e->interface);
+    if (! (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD))) {
+        if (fprintf(f, "%%%d", e->interface) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    }
 
-    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD))
-        fprintf(f, ":*");
-    else
-        fprintf(f, ":%d", (int)e->sa_port);
+    if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)) {
+        if (fprintf(f, ":*") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
+        if (fprintf(f, ":%d", (int)e->sa_port) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    }
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -2843,41 +2882,52 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_C
 
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
-    fprintf(f, " %s-%s ",
-            (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT) ? "<" : "",
-            (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN) ? ">" : "");
+    if (fprintf(f, " %s-%s ",
+                (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT) ? "<" : "",
+                (r->flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN) ? ">" : "") < 0)
+        WOLFSENTRY_ERROR_RETURN(IO_FAILED);
 
     if ((ret = wolfsentry_route_exports_render_endpoint(WOLFSENTRY_CONTEXT_ARGS_OUT, r, 1 /* sa_local_p */, f)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
-    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD))
-        fprintf(f, ", AF = *");
-    else {
+    if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)) {
+        if (fprintf(f, ", AF = *") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
         struct wolfsentry_addr_family_bynumber *addr_family;
         const char *family_name;
         ret = wolfsentry_addr_family_ntop(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, &addr_family, &family_name);
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-            fprintf(f, ", AF = %s", family_name);
+            if (fprintf(f, ", AF = %s", family_name) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
             if (addr_family) {
                 if ((ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ )) < 0)
                     WOLFSENTRY_ERROR_RERETURN(ret);
             }
         } else
 #endif
-            fprintf(f, ", AF = %d", r->sa_family);
+        {
+            if (fprintf(f, ", AF = %d", r->sa_family) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        }
     }
 
     wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
 
-    if (r->parent_event_label_len > 0)
-        fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event_label_len, r->parent_event_label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "");
-    else if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD))
-        fprintf(f, ", ev = [*]");
-    else
-        fprintf(f, ", ev = (none)");
+    if (r->parent_event_label_len > 0) {
+        if (fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event_label_len, r->parent_event_label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else if (WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD)) {
+        if (fprintf(f, ", ev = [*]") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else {
+        if (fprintf(f, ", ev = (none)") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    }
 
-    fputs(", flags=", f);
+    if (fputs(", flags=", f) < 0)
+        WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_flags(r->flags, f));
 
     WOLFSENTRY_RETURN_OK;

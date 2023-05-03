@@ -46,10 +46,10 @@ static int wolfsentry_action_key_cmp(struct wolfsentry_action *left, struct wolf
 
 static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int label_len, wolfsentry_action_flags_t flags, wolfsentry_action_callback_t handler, void *handler_arg, struct wolfsentry_action *action, size_t action_size) {
     if (label_len <= 0)
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG); // GCOV_EXCL_LINE
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (action_size < sizeof *action + (size_t)label_len + 1)
-        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL); // GCOV_EXCL_LINE
+        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     memset(&action->header, 0, sizeof action->header);
 
@@ -84,11 +84,11 @@ static wolfsentry_errcode_t wolfsentry_action_new_1(WOLFSENTRY_CONTEXT_ARGS_IN, 
     new_size = sizeof **action + (size_t)label_len + 1;
 
     if ((*action = (struct wolfsentry_action *)WOLFSENTRY_MALLOC(new_size)) == NULL)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED); // GCOV_EXCL_LINE
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     ret = wolfsentry_action_init_1(label, label_len, flags, handler, handler_arg, *action, new_size);
     if (ret < 0) {
-        WOLFSENTRY_FREE(*action); // GCOV_EXCL_LINE
-        *action = NULL; // GCOV_EXCL_LINE
+        WOLFSENTRY_FREE(*action);
+        *action = NULL;
     }
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -130,7 +130,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_insert(WOLFSENTRY_CONTEXT_
     if ((ret = wolfsentry_action_new_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, flags, handler, handler_arg, &new)) < 0)
         goto out;
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header)) < 0)
-        goto out; // GCOV_EXCL_LINE
+        goto out;
     if (id)
         *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header, &wolfsentry->actions->header, 1 /* unique_p */)) < 0) {
@@ -170,14 +170,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_delete(WOLFSENTRY_CONTEXT_
     }
 
     ret = wolfsentry_action_init_1(label, label_len, WOLFSENTRY_ACTION_FLAG_NONE, NULL, NULL, &target.action, sizeof target);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret); // GCOV_EXCL_LINE
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
     target.action.header.parent_table = &wolfsentry->actions->header;
 
     if ((ret = wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, &target_p)) < 0)
-        goto out; // GCOV_EXCL_LINE
+        goto out;
 
     ret = wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, target_p, action_results);
 
@@ -214,7 +214,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_get_reference(WOLFSENTRY_C
     if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     if ((action_template = (struct wolfsentry_action *)WOLFSENTRY_MALLOC(sizeof *action_template + (size_t)label_len)) == NULL)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED); // GCOV_EXCL_LINE
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     action_template->label_len = (byte)label_len;
     memcpy(action_template->label, label, (size_t)label_len);
     WOLFSENTRY_SHARED_OR_RETURN();
@@ -260,17 +260,17 @@ static inline int wolfsentry_action_list_find_1(
     struct wolfsentry_action *action,
     struct wolfsentry_action_list_ent **action_list_ent)
 {
-    struct wolfsentry_action_list_ent *i;
+    struct wolfsentry_list_ent_header *i;
     WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
-    for (wolfsentry_list_ent_get_first(&action_list->header, (struct wolfsentry_list_ent_header **)&i);
+    for (wolfsentry_list_ent_get_first(&action_list->header, &i);
          i;
-         wolfsentry_list_ent_get_next(&action_list->header, (struct wolfsentry_list_ent_header **)&i)) {
-        if (i->action == action)
+         wolfsentry_list_ent_get_next(&action_list->header, &i)) {
+    if (((struct wolfsentry_action_list_ent *)i)->action == action)
             break;
     }
     if (i) {
         if (action_list_ent)
-            *action_list_ent = i;
+            *action_list_ent = (struct wolfsentry_action_list_ent *)i;
         WOLFSENTRY_RETURN_OK;
     } else
         WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
@@ -405,7 +405,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_clone(
     wolfsentry_clone_flags_t flags)
 {
     wolfsentry_errcode_t ret;
-    struct wolfsentry_action_list_ent *ale_i;
+    struct wolfsentry_list_ent_header *i;
 
     WOLFSENTRY_SHARED_OR_RETURN();
     ret = WOLFSENTRY_MUTEX_EX(dest_context);
@@ -416,10 +416,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_clone(
 
     (void)flags;
 
-    for (wolfsentry_list_ent_get_first(&src_action_list->header, (struct wolfsentry_list_ent_header **)&ale_i);
-         ale_i && ale_i->action;
-         wolfsentry_list_ent_get_next(&src_action_list->header, (struct wolfsentry_list_ent_header **)&ale_i)) {
-        struct wolfsentry_action *new_action = ale_i->action;
+    for (wolfsentry_list_ent_get_first(&src_action_list->header, &i);
+         i && ((struct wolfsentry_action_list_ent *)i)->action;
+         wolfsentry_list_ent_get_next(&src_action_list->header, &i))
+    {
+        struct wolfsentry_action *new_action = ((struct wolfsentry_action_list_ent *)i)->action;
         struct wolfsentry_action_list_ent *new_ale;
         if ((ret = wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &dest_context->actions->header, (struct wolfsentry_table_ent_header **)&new_action)) < 0) {
             ret = WOLFSENTRY_ERROR_RECODE(ret);
@@ -453,26 +454,31 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_delete(
     const char *label,
     int label_len)
 {
-    struct wolfsentry_action_list_ent *action_list_ent;
+    struct wolfsentry_list_ent_header *i;
 
     if (label_len < 0)
         label_len = (int)strlen(label);
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
-    for (wolfsentry_list_ent_get_first(&action_list->header, (struct wolfsentry_list_ent_header **)&action_list_ent);
-         action_list_ent;
-         wolfsentry_list_ent_get_next(&action_list->header, (struct wolfsentry_list_ent_header **)&action_list_ent)) {
-        if (wolfsentry_action_key_cmp_1(action_list_ent->action->label, action_list_ent->action->label_len, label, (unsigned int)label_len) == 0)
+    for (wolfsentry_list_ent_get_first(&action_list->header, &i);
+         i;
+         wolfsentry_list_ent_get_next(&action_list->header, &i))
+    {
+        if (wolfsentry_action_key_cmp_1(
+                ((struct wolfsentry_action_list_ent *)i)->action->label,
+                ((struct wolfsentry_action_list_ent *)i)->action->label_len,
+                label, (unsigned int)label_len)
+            == 0)
             break;
     }
 
-    if (action_list_ent == NULL)
+    if (i == NULL)
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(ITEM_NOT_FOUND);
 
-    wolfsentry_list_ent_delete(&action_list->header, &action_list_ent->header);
-    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, action_list_ent->action, NULL /* action_results */));
-    WOLFSENTRY_FREE(action_list_ent);
+    wolfsentry_list_ent_delete(&action_list->header, i);
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, ((struct wolfsentry_action_list_ent *)i)->action, NULL /* action_results */));
+    WOLFSENTRY_FREE(i);
 
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
@@ -481,18 +487,19 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_delete_all(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_action_list *action_list)
 {
-    struct wolfsentry_action_list_ent *i, *next;
+    struct wolfsentry_list_ent_header *i, *next;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
-    for (wolfsentry_list_ent_get_first(&action_list->header, (struct wolfsentry_list_ent_header **)&i);
+    for (wolfsentry_list_ent_get_first(&action_list->header, &i);
          i;
-         i = next) {
+         i = next)
+    {
         next = i;
-        wolfsentry_list_ent_get_next(&action_list->header, (struct wolfsentry_list_ent_header **)&next);
+        wolfsentry_list_ent_get_next(&action_list->header, &next);
 
-        wolfsentry_list_ent_delete(&action_list->header, &i->header);
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, i->action, NULL /* action_results */));
+        wolfsentry_list_ent_delete(&action_list->header, i);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, ((struct wolfsentry_action_list_ent *)i)->action, NULL /* action_results */));
         WOLFSENTRY_FREE(i);
     }
 

@@ -428,10 +428,8 @@ static wolfsentry_errcode_t wolfsentry_addr_family_handler_delete_byname(
 
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0)
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
-#ifdef WOLFSENTRY_PROTOCOL_NAMES
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->byname_ent->header)) < 0)
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
-#endif
 
     ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, action_results);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
@@ -501,7 +499,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
             (int)family_name_len,
             &addr_family);
         WOLFSENTRY_UNLOCK_FOR_RETURN();
-        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        if (ret >= 0) {
             *family_number = addr_family->number;
             WOLFSENTRY_RETURN_OK;
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
@@ -813,7 +811,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_ntop(
             wolfsentry->addr_families_bynumber,
             family,
             addr_family);
-        if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        if (ret >= 0) {
             WOLFSENTRY_REFCOUNT_INCREMENT((*addr_family)->header.refcount, ret);
             WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
             *family_name = (*addr_family)->byname_ent->name;

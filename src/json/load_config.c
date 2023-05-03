@@ -243,7 +243,11 @@ static wolfsentry_errcode_t reset_o_u_c(struct wolfsentry_json_process_state *jp
 static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *data, size_t data_size, uint64_t *out) {
     char buf[24];
     char *endptr;
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
     unsigned long long conv;
+#else
+    unsigned long conv;
+#endif
 
     /* allow JSON_STRING to accommodate hex and octal values. */
     if ((type != JSON_NUMBER) && (type != JSON_STRING))
@@ -255,7 +259,11 @@ static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *
     buf[data_size] = 0;
 
     errno = 0;
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
     conv = strtoull(buf, &endptr, 0);
+#else
+    conv = strtoul(buf, &endptr, 0);
+#endif
     if (errno != 0)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -269,7 +277,11 @@ static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *
 static wolfsentry_errcode_t convert_sint64(JSON_TYPE type, const unsigned char *data, size_t data_size, int64_t *out) {
     char buf[24];
     char *endptr;
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
     long long conv;
+#else
+    long conv;
+#endif
 
     /* allow JSON_STRING to accommodate hex and octal values. */
     if ((type != JSON_NUMBER) && (type != JSON_STRING))
@@ -281,7 +293,11 @@ static wolfsentry_errcode_t convert_sint64(JSON_TYPE type, const unsigned char *
     buf[data_size] = 0;
 
     errno = 0;
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
     conv = strtoll(buf, &endptr, 0);
+#else
+    conv = strtol(buf, &endptr, 0);
+#endif
     if (errno != 0)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -637,9 +653,8 @@ static wolfsentry_errcode_t convert_sockaddr_address(struct wolfsentry_json_proc
         }
     }
     else {
-        wolfsentry_errcode_t ret;
         wolfsentry_addr_family_parser_t parser;
-        if ((ret = wolfsentry_addr_family_get_parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, sa->sa_family, &parser)) < 0)
+        if (wolfsentry_addr_family_get_parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, sa->sa_family, &parser) < 0)
             WOLFSENTRY_ERROR_RETURN(CONFIG_MISSING_HANDLER);
         sa->addr_len = WOLFSENTRY_MAX_ADDR_BITS;
         WOLFSENTRY_ERROR_RERETURN(parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, (const char *)data, (int)data_size, sa->addr, &sa->addr_len));
@@ -1447,10 +1462,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 {
     wolfsentry_errcode_t ret;
     static const JSON_CALLBACKS json_callbacks = {
-        .process = (int (*)(JSON_TYPE,  const unsigned char *, size_t,  void *))json_process
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+        .process =
+#endif
+        (int (*)(JSON_TYPE,  const unsigned char *, size_t,  void *))json_process
     };
 
     static const JSON_CONFIG default_json_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
         .max_total_len = 0,
         .max_total_values = 0,
         .max_number_len = 20,
@@ -1458,6 +1477,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         .max_key_len = WOLFSENTRY_MAX_LABEL_BYTES,
         .max_nesting_level = WOLFSENTRY_MAX_JSON_NESTING,
         .flags = JSON_NOSCALARROOT
+#else
+        0,
+        0,
+        20,
+        WOLFSENTRY_KV_MAX_VALUE_BYTES,
+        WOLFSENTRY_MAX_LABEL_BYTES,
+        WOLFSENTRY_MAX_JSON_NESTING,
+        JSON_NOSCALARROOT
+#endif
     };
 
     if (json_config == NULL)
@@ -1759,7 +1787,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_oneshot_ex(
     struct wolfsentry_json_process_state *jps;
     if ((ret = wolfsentry_config_json_init_ex(WOLFSENTRY_CONTEXT_ARGS_OUT, load_flags, json_config, &jps)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    if ((ret = wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size)) < 0) {
+    if (wolfsentry_config_json_feed(jps, json_in, json_in_len, err_buf, err_buf_size) < 0) {
         ret = wolfsentry_config_json_fini(&jps, NULL, 0);
         WOLFSENTRY_ERROR_RERETURN(ret);
     }

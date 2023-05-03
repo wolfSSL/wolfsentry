@@ -53,12 +53,12 @@ typedef int32_t wolfsentry_errcode_t;
                   "error code must be -"                                     \
                   _q(WOLFSENTRY_ERROR_ID_MAX)                                \
                   " <= e <= "                                                \
-                  _q(WOLFSENTRY_ERROR_ID_MAX) );                             \
+                  _q(WOLFSENTRY_ERROR_ID_MAX) )                              \
     wolfsentry_static_assert(__LINE__ <= WOLFSENTRY_LINE_NUMBER_MAX,         \
-                  "line number must be 1-" _q(WOLFSENTRY_LINE_NUMBER_MAX) ); \
+                  "line number must be 1-" _q(WOLFSENTRY_LINE_NUMBER_MAX) )  \
     wolfsentry_static_assert((WOLFSENTRY_SOURCE_ID >= 0)                     \
                   && (WOLFSENTRY_SOURCE_ID <= 0x7f),                         \
-                  "source file ID must be 0-" _q(WOLFSENTRY_SOURCE_ID_MAX) );\
+                  "source file ID must be 0-" _q(WOLFSENTRY_SOURCE_ID_MAX) ) \
     WOLFSENTRY_ERROR_ENCODE_0(x);                                            \
 })
 #else
@@ -240,6 +240,13 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 
 #endif /* !WOLFSENTRY_NO_STDIO && !WOLFSENTRY_NO_DIAG_MSGS */
 
+#ifdef WOLFSENTRY_CPPCHECK
+    #undef WOLFSENTRY_ERROR_ENCODE
+    #define WOLFSENTRY_ERROR_ENCODE(x) 0
+    #undef WOLFSENTRY_SUCCESS_ENCODE
+    #define WOLFSENTRY_SUCCESS_ENCODE(x) 0
+#endif
+
 enum wolfsentry_source_id {
     WOLFSENTRY_SOURCE_ID_UNSET      =  0,
     WOLFSENTRY_SOURCE_ID_ACTIONS_C  =  1,
@@ -302,6 +309,7 @@ enum wolfsentry_error_id {
     WOLFSENTRY_ERROR_ID_LACKING_READ_LOCK      =  -37,
     WOLFSENTRY_ERROR_ID_LIB_MISMATCH           =  -38,
     WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH     =  -39,
+    WOLFSENTRY_ERROR_ID_IO_FAILED              =  -40,
 
     WOLFSENTRY_ERROR_ID_USER_BASE              = -128,
 
@@ -314,7 +322,7 @@ enum wolfsentry_error_id {
 };
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id, const char *error_string);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *error_string);
 #define WOLFSENTRY_REGISTER_ERROR(err, msg) wolfsentry_user_error_string_set(WOLFSENTRY_ERROR_ID_ ## err, msg)
 #endif
 

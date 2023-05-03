@@ -235,7 +235,7 @@ analyze-all: valgrind-all-gcc sanitize-all-gcc sanitize-all-clang sanitize-all-n
 analyze-macosx: sanitize-all-clang-macosx
 	@echo 'passed: sanitizers found no defects.'
 
-.PHONY: c99-test-gcc
+.PHONY: c99-test
 c99-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c99-builds" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c99-builds" EXTRA_CFLAGS+='-std=c99 -pedantic'
@@ -244,12 +244,26 @@ c99-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c99-builds" clean
 	@echo "passed: std=c99 library build tests."
 
+.PHONY: c89-test
+c89-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c89-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c89-builds" EXTRA_CFLAGS+='-std=c89 -pedantic -DWOLFSENTRY_C89 -Wno-variadic-macros -Wno-overlength-strings' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c89-builds" clean
+	@echo "passed: std=c89 library build tests."
+
 .PHONY: m32-test
 m32-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-builds" clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-builds" EXTRA_CFLAGS+=-m32 EXTRA_LDFLAGS+=-m32 test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-builds" EXTRA_CFLAGS+='-m32' EXTRA_LDFLAGS+=-m32 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-builds" clean
 	@echo "passed: -m32 test."
+
+.PHONY: m32-c89-test
+m32-c89-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c89-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c89-builds" EXTRA_CFLAGS+='-m32 -std=c89 -pedantic -DWOLFSENTRY_C89 -Wno-variadic-macros -Wno-overlength-strings' EXTRA_LDFLAGS+=-m32 test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c89-builds" clean
+	@echo "passed: -m32-c89 test."
 
 .PHONY: singlethreaded-test
 singlethreaded-test:
@@ -362,10 +376,20 @@ freertos-arm32-singlethreaded-build-test:
 	@[ -d $(FREERTOS_TOP_FOR_TEST)/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST) not found.' >&2; exit 1)
 	@[ -d $(LWIP_TOP_FOR_TEST)/. ] || ( echo '$@: $(LWIP_TOP_FOR_TEST) not found.' >&2; exit 1)
 	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-singlethreaded-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' SINGLETHREADED=1 clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-singlethreaded-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' SINGLETHREADED=1
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-singlethreaded-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' SINGLETHREADED=1 clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-singlethreaded-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-singlethreaded-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) SINGLETHREADED=1 EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP -Wno-attributes'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-singlethreaded-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
 	@echo "passed: freertos-arm32-singlethreaded-build test."
+
+.PHONY: freertos-arm32-c89-build-test
+freertos-arm32-c89-build-test:
+	@[ -d $(FREERTOS_TOP_FOR_TEST)/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST) not found.' >&2; exit 1)
+	@[ -d $(LWIP_TOP_FOR_TEST)/. ] || ( echo '$@: $(LWIP_TOP_FOR_TEST) not found.' >&2; exit 1)
+	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-c89-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-c89-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-std=c89 -pedantic -DWOLFSENTRY_C89 -DWOLFSENTRY_USE_NONPOSIX_SEMAPHORES -Wno-variadic-macros -Wno-overlength-strings -mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP -Wno-attributes'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-c89-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
+	@echo "passed: freertos-arm32-c89-build test."
 
 .PHONY: linux-lwip-test
 linux-lwip-test:
@@ -382,10 +406,10 @@ dist-check:
 	echo 'passed: $@.'
 
 .PHONY: check
-check: dynamic-build-test c99-test no-inline-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
+check: dynamic-build-test c99-test c89-test no-inline-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
 
 .PHONY: check-extra
-check-extra: static-build-test m32-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test linux-lwip-test dist-check
+check-extra: static-build-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

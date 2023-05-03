@@ -53,12 +53,12 @@ typedef int32_t wolfsentry_errcode_t;
                   "error code must be -"                                     \
                   _q(WOLFSENTRY_ERROR_ID_MAX)                                \
                   " <= e <= "                                                \
-                  _q(WOLFSENTRY_ERROR_ID_MAX) );                             \
+                  _q(WOLFSENTRY_ERROR_ID_MAX) )                              \
     wolfsentry_static_assert(__LINE__ <= WOLFSENTRY_LINE_NUMBER_MAX,         \
-                  "line number must be 1-" _q(WOLFSENTRY_LINE_NUMBER_MAX) ); \
+                  "line number must be 1-" _q(WOLFSENTRY_LINE_NUMBER_MAX) )  \
     wolfsentry_static_assert((WOLFSENTRY_SOURCE_ID >= 0)                     \
                   && (WOLFSENTRY_SOURCE_ID <= 0x7f),                         \
-                  "source file ID must be 0-" _q(WOLFSENTRY_SOURCE_ID_MAX) );\
+                  "source file ID must be 0-" _q(WOLFSENTRY_SOURCE_ID_MAX) ) \
     WOLFSENTRY_ERROR_ENCODE_0(x);                                            \
 })
 #else

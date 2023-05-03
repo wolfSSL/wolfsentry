@@ -1067,7 +1067,6 @@ json_value_array_clean(
  ******************/
 
 #define MAKE_RED(node)      do { (node)->key.data.data_bytes[0] |= HAS_REDCOLOR; } while(0)
-//#define MAKE_BLACK(node)    do { (node)->key.data.data_bytes[0] &= ~HAS_REDCOLOR; } while(0)
 #define MAKE_BLACK(node)    do { (node)->key.data.data_bytes[0] = (uint8_t)((node)->key.data.data_bytes[0] & ~HAS_REDCOLOR); } while(0)
 #define TOGGLE_COLOR(node)  do { (node)->key.data.data_bytes[0] ^= HAS_REDCOLOR; } while(0)
 #define IS_RED(node)        ((node)->key.data.data_bytes[0] & HAS_REDCOLOR)

@@ -444,8 +444,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
         WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
     case WOLFSENTRY_KV_JSON: {
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
-        struct dump_buf_state dbs = { out, *out_len };
-        int ret = json_dom_dump(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)),
+        struct dump_buf_state dbs;
+        int ret;
+        dbs.out = out;
+        dbs.out_space = *out_len;
+        ret = json_dom_dump(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)),
                             WOLFSENTRY_KV_V_JSON(kv),
                             (JSON_DUMP_CALLBACK)_json_value_dump_writer,
                             &dbs /* user_data */,
@@ -564,12 +567,14 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set_validator(
 {
     WOLFSENTRY_MUTEX_OR_RETURN();
     if (validator) {
-        struct apply_validator_context context = { wolfsentry,
+        wolfsentry_errcode_t ret;
+        struct apply_validator_context context;
+        context.wolfsentry = wolfsentry;
 #ifdef WOLFSENTRY_THREADSAFE
-                                                   thread,
+        context.thread = thread;
 #endif
-                                                   validator };
-        wolfsentry_errcode_t ret = wolfsentry_table_map(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_table->header, (wolfsentry_map_function_t)apply_validator, (void *)&context, action_results);
+        context.validator = validator;
+        ret = wolfsentry_table_map(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_table->header, (wolfsentry_map_function_t)apply_validator, (void *)&context, action_results);
         WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
     wolfsentry->user_values->validator = validator;

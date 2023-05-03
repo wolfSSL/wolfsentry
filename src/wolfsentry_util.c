@@ -340,7 +340,7 @@ WOLFSENTRY_API unsigned int _wolfsentry_call_depth(void)
     void *p = __builtin_frame_address(0);
 #ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
     static const char spaces[] = "                ";
-    wolfsentry_static_assert(sizeof spaces == 17, "spaces for WOLFSENTRY_CALL_DEPTH_RETURNS_STRING must be 16 characters plus the terminating null.");
+    wolfsentry_static_assert(sizeof spaces == 17, "spaces for WOLFSENTRY_CALL_DEPTH_RETURNS_STRING must be 16 characters plus the terminating null.")
 #endif
     if (p == 0)
         return 0;
@@ -681,12 +681,12 @@ static void *wolfsentry_builtin_memalign(
     WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t alignment,
     size_t size)
 {
-    (void)context;
 #ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
     void *ptr = NULL;
+    (void)context;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (alignment && size) {
-        uint32_t hdr_size = sizeof(uint16_t) + (alignment - 1);
+        size_t hdr_size = sizeof(uint16_t) + (alignment - 1);
         void *p = malloc(size + hdr_size);
         if (p) {
             /* Align to powers of two */
@@ -700,6 +700,7 @@ static void *wolfsentry_builtin_memalign(
 #endif
     WOLFSENTRY_RETURN_VALUE(ptr);
 #else
+    (void)context;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (alignment <= sizeof(void *)) {
         void *ret = malloc(size);
@@ -729,9 +730,11 @@ static void wolfsentry_builtin_free_aligned(
     (void)context;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
 #ifdef WOLFSENTRY_NO_POSIX_MEMALIGN
-    uint16_t offset = *((uint16_t *)ptr - 1);
-    void *p = (void *)((uint8_t *)ptr - offset);
-    free(p);
+    {
+        uint16_t offset = *((uint16_t *)ptr - 1);
+        void *p = (void *)((uint8_t *)ptr - offset);
+        free(p);
+    }
 #else
     free(ptr);
 #endif
@@ -744,7 +747,7 @@ static void wolfsentry_builtin_free_aligned(
 #endif
 
 static const struct wolfsentry_allocator default_allocator = {
-#ifdef __GNUC__
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     .context = NULL,
     .malloc = wolfsentry_builtin_malloc,
     .free = wolfsentry_builtin_free,
@@ -3086,7 +3089,7 @@ static wolfsentry_errcode_t wolfsentry_builtin_from_epoch_time(time_t epoch_secs
 }
 
 static const struct wolfsentry_timecbs default_timecbs = {
-#ifdef __GNUC__
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     .context = NULL,
     .get_time = wolfsentry_builtin_get_time,
     .diff_time = wolfsentry_builtin_diff_time,

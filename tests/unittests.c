@@ -105,7 +105,11 @@ extern struct wolfsentry_host_platform_interface* WOLFSENTRY_TEST_HPI;
 
 static wolfsentry_errcode_t test_init (void) {
     struct wolfsentry_context *wolfsentry;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0 };
+#endif
     wolfsentry_errcode_t ret;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
@@ -696,12 +700,23 @@ static int test_static_routes (void) {
     } remote, local, remote_wildcard, local_wildcard;
 
     struct wolfsentry_eventconfig config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
         .route_private_data_size = PRIVATE_DATA_SIZE,
         .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
         .max_connection_count = 10,
         .derogatory_threshold_for_penaltybox = 4,
         .penaltybox_duration = 1, /* denominated in seconds when passing to wolfsentry_init(). */
+        .route_idle_time_for_purge = 0,
         .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#else
+        PRIVATE_DATA_SIZE,
+        PRIVATE_DATA_ALIGNMENT,
+        10,
+        4,
+        1, /* denominated in seconds when passing to wolfsentry_init(). */
+        0,
+        WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#endif
     };
 
     wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS, flags_wildcard;
@@ -809,16 +824,12 @@ static int test_static_routes (void) {
                                  &private_data_size));
 
     if (private_data_size < PRIVATE_DATA_SIZE) {
-    // GCOV_EXCL_START
-        printf("private_data_size is %zu but expected %d.\n",private_data_size,PRIVATE_DATA_SIZE);
+        printf("private_data_size is " SIZET_FMT " but expected %d.\n",private_data_size,PRIVATE_DATA_SIZE);
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
-    // GCOV_EXCL_STOP
     }
     if ((PRIVATE_DATA_ALIGNMENT > 0) && ((uintptr_t)private_data % (uintptr_t)PRIVATE_DATA_ALIGNMENT)) {
-    // GCOV_EXCL_START
         printf("private_data (%p) is not aligned to %d.\n",private_data,PRIVATE_DATA_ALIGNMENT);
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
-    // GCOV_EXCL_STOP
     }
 
     {
@@ -1239,7 +1250,7 @@ static int test_static_routes (void) {
             if (i == config.derogatory_threshold_for_penaltybox) {
                 WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
                 WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
-                printf("sleeping for %lld seconds to test penaltybox timeout...", (long long int)(config.penaltybox_duration + 1));
+                printf("sleeping for %ld seconds to test penaltybox timeout...", (long int)(config.penaltybox_duration + 1));
                 fflush(stdout);
                 sleep((unsigned int)config.penaltybox_duration + 1);
                 printf(" done.\n");
@@ -1383,7 +1394,6 @@ static int test_static_routes (void) {
 #define PRIVATE_DATA_SIZE 32
 #define PRIVATE_DATA_ALIGNMENT 8
 
-// GCOV_EXCL_START
 static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
@@ -1409,7 +1419,6 @@ static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
 
     WOLFSENTRY_RETURN_OK;
 }
-// GCOV_EXCL_STOP
 
 
 static int test_dynamic_rules (void) {
@@ -1427,8 +1436,13 @@ static int test_dynamic_rules (void) {
 
     wolfsentry_ent_id_t id;
 
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
     struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
+#else
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0 };
+#endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
@@ -2741,12 +2755,10 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
     if (strcmp(fname,"-"))
         f = fopen(fname, "r");
     else
-        f = stdin; // GCOV_EXCL_LINE
+        f = stdin;
     if (! f) {
-    // GCOV_EXCL_START
         fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
         WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
-    // GCOV_EXCL_STOP
     }
 
     ret = wolfsentry_config_json_init(WOLFSENTRY_CONTEXT_ARGS_OUT, flags, &jps);
@@ -2755,20 +2767,16 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
     for (;;) {
         size_t n = fread(buf, 1, sizeof buf, f);
         if ((n < sizeof buf) && ferror(f)) {
-        // GCOV_EXCL_START
             fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
             ret = WOLFSENTRY_ERROR_ENCODE(UNIT_TEST_FAILURE);
             goto out;
-        // GCOV_EXCL_STOP
         }
 
         ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
         if (ret < 0) {
-        // GCOV_EXCL_START
             if (verbose)
                 fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
             goto out;
-        // GCOV_EXCL_STOP
         }
         if ((n < sizeof buf) && feof(f))
             break;
@@ -2778,10 +2786,8 @@ static wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const cha
 
     fini_ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
     if (fini_ret < 0) {
-        // GCOV_EXCL_START
         if (verbose)
             fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-        // GCOV_EXCL_STOP
     }
     if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
         ret = fini_ret;
@@ -2803,7 +2809,11 @@ static int test_json(const char *fname, const char *extra_fname) {
     struct wolfsentry_context *wolfsentry;
     wolfsentry_ent_id_t id;
 
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0 };
+#endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
@@ -3489,60 +3499,48 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_INIT
     ret = test_init();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_RWLOCKS
     ret = test_rw_locks();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_rw_locks failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_STATIC_ROUTES
     ret = test_static_routes();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_static_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_DYNAMIC_RULES
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_USER_VALUES
     ret = test_user_values();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_USER_ADDR_FAMILIES
     ret = test_user_addr_families();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_addr_families failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 
@@ -3554,28 +3552,22 @@ int main (int argc, char* argv[]) {
     ret = test_json(TEST_JSON_CONFIG_PATH, NULL);
 #endif
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
     ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH, NULL);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 
 #ifdef TEST_JSON_CORPUS
     ret = test_json_corpus();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-    // GCOV_EXCL_START
         printf("test_json_corpus failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
-    // GCOV_EXCL_STOP
     }
 #endif
 

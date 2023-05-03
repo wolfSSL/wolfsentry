@@ -1312,7 +1312,11 @@ json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data)
 WOLFSENTRY_API int
 json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
+#if defined(FREERTOS) || (__STDC_VERSION__ < 199901L)
+    static const char fmt[] = "%.16f";
+#else
     static const char fmt[] = "%.16lg";
+#endif
     static const size_t extra_bytes = 2;    /* Space reserved for ".0" */
 #ifdef CENTIJSON_USE_LOCALE
     struct lconv* locale_info;

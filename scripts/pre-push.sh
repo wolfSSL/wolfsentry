@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # wolfsentry/scripts/pre-push.sh
 #
@@ -55,11 +55,11 @@ do
     fi
     git checkout -q "$local_oid" || exit $?
     if [ "$have_linux" = 'y' ]; then
-	echo "make --quiet -j check for ${local_ref} at ${local_oid} ..."
-	make --quiet -j FREERTOS_TOP="${REPO_ROOT}/../third/FreeRTOS/FreeRTOS/Source" LWIP_TOP="${REPO_ROOT}/../third/lwip/src" check || exit $?
+	echo "make --quiet -j check-all for ${local_ref} at ${local_oid} ..."
+	make --quiet -j $(($(nproc) / 2)) REPO_ROOT="${REPO_ROOT}" FREERTOS_TOP="${REPO_ROOT}/../third/FreeRTOS/FreeRTOS/Source" LWIP_TOP="${REPO_ROOT}/../third/lwip/src" check-all || exit $?
     else
-	echo "make --quiet -j test for ${local_ref} at ${local_oid} ..."
-	make --quiet -j test || exit $?
+	echo "make --quiet -j check for ${local_ref} at ${local_oid} ..."
+	make --quiet -j check || exit $?
     fi
 done
 

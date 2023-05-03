@@ -234,4 +234,12 @@ do {                                                                    \
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
+#ifdef WOLFSENTRY_CPPCHECK
+    /* work around internalAstError */
+    #undef WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY
+    #define WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(i, x, out) do { (out) = ((i) += (x)); } while (0)
+    #undef WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY
+    #define WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(i, x, out) do { (out) = ((i) += (x)); } while (0)
+#endif
+
 #endif /* WOLFSENTRY_UTIL_H */

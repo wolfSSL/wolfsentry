@@ -3463,7 +3463,7 @@ static int test_json_corpus(void) {
             }
         }
 
-        closedir(corpus_dir);
+        WOLFSENTRY_EXIT_ON_SYSFAILURE(closedir(corpus_dir));
     } while (0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

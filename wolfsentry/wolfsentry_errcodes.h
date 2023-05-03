@@ -240,6 +240,13 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 
 #endif /* !WOLFSENTRY_NO_STDIO && !WOLFSENTRY_NO_DIAG_MSGS */
 
+#ifdef WOLFSENTRY_CPPCHECK
+    #undef WOLFSENTRY_ERROR_ENCODE
+    #define WOLFSENTRY_ERROR_ENCODE(x) 0
+    #undef WOLFSENTRY_SUCCESS_ENCODE
+    #define WOLFSENTRY_SUCCESS_ENCODE(x) 0
+#endif
+
 enum wolfsentry_source_id {
     WOLFSENTRY_SOURCE_ID_UNSET      =  0,
     WOLFSENTRY_SOURCE_ID_ACTIONS_C  =  1,

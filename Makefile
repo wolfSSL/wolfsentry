@@ -315,16 +315,16 @@ test: $(BUILD_TOP)/.tested
 
 $(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
 ifdef VERY_QUIET
-	@for test in $(basename $(UNITTEST_LIST)); do $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then echo "$${test} failed" 1>&2; break; fi; done; exit $$exitcode
+	@for test in $(basename $(UNITTEST_LIST)); do $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then echo "$${test} failed" 1>&2; break; fi; done; exit $$exitcode
 else
 ifeq "$(V)" "1"
-	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
+	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; echo $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test"; $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
 else
-	@for test in $(basename $(UNITTEST_LIST)); do echo -n "$${test}..."; $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo ' succeeded'; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
+	@for test in $(basename $(UNITTEST_LIST)); do echo -n "$${test}..."; $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo ' succeeded'; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
 endif
 endif
 ifdef BUILD_DYNAMIC
-	@for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH=$(BUILD_TOP) $(TEST_ENV) $(VALGRIND) "$(BUILD_TOP)/tests/$$test" >/dev/null || exit $?; done
+	@for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH=$(BUILD_TOP) $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null || exit $?; done
 ifndef VERY_QUIET
 	@echo '$(UNITTEST_LIST_SHARED) succeeded.'
 endif

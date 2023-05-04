@@ -1,3 +1,62 @@
+# wolfSentry Release 1.2.2 (May 4, 2023)
+
+Release 1.2.2 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## Noteworthy Changes and Additions
+
+Added C89 pedantic compatibility in core codebase, including unit tests, via `-DWOLFSENTRY_C89`.
+
+Added error code `IO_FAILED`, returned for various stdio failures that previously returned `SYS_OP_FAILED` or went undetected.
+
+Refined `wolfsentry_lock_unlock()` so that final unlock while holding a promotion reservation is not an error and implicitly drops the reservation.
+
+## Bug Fixes and Cleanups
+
+Cleanups guided by `clang-tidy` and `cppcheck`: fixed a misused retval from `posix_memalign()`, fixed overwritten retvals in `wolfsentry_lock_unlock()`, and effected myriad cleanups to improve clarity and portability.
+
+Fixed missing assignment of `new->prev` in `wolfsentry_table_clone()`.
+
+Fixed route metadata coherency in transactional configuration updates: add `wolfsentry_route_copy_metadata()`, and call it from `wolfsentry_context_exchange()`.
+
+When `wolfsentry_route_event_dispatch*()` results in a default policy fallback, return `USED_FALLBACK` success code.
+
+Properly release lock promotion reservation in `wolfsentry_config_json_init_ex()` if obtained.
+
+Fixed several accounting bugs in the lock kernel related to promotion reservations.
+
+Copy `fallthrough_route` pointer in `wolfsentry_route_table_clone_header()`, rather than improperly trying to clone the fallthrough route.
+
+## Self-Test Enhancements
+
+Added new global compiler warnings to `Makefile`:
+
+  * `-Wmissing-prototypes`
+  * `-Wdeclaration-after-statement`
+  * `-Wnested-externs`
+  * `-Wlogical-not-parentheses`
+  * `-Wpacked-not-aligned`
+
+Added new targets to `Makefile.analyzers`:
+
+  * `clang-tidy-build-test`
+  * `cppcheck-analyze`
+  * `c89-test`
+  * `m32-c89-test`
+  * `freertos-arm32-c89-build-test`
+  * `freertos-arm32-singlethreaded-build-test`
+  * `sanitize-aarch64-be-test`
+  * `sanitize-all-no-inline-gcc`
+  * `no-inline-test`
+  * `no-alloca-test`
+  * `release-check`
+
+Added `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` coverage and an array of should-fail JSON objects to `unittests.c`:`test_json()`.
+
+Added more arg-not-null and thread-inited checks to thread/lock routines in `src/wolfsentry_util.c`, and corresponding unit test coverage for all null/uninited arg permutations.
+
+Added assert in release recipe to assure that wolfsentry.h has a version that matches the tagged version.
+
+
 # wolfSentry Release 1.2.1 (Apr 5, 2023)
 
 Release 1.2.1 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:

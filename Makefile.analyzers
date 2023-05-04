@@ -409,16 +409,26 @@ linux-lwip-test:
 
 .PHONY: dist-check
 dist-check:
-	@if [[ ! -d $(SRC_TOP)/.git ]]; then echo 'skipping dist-check in non-git source tree.'; exit 0; fi; \
+	@if [[ ! -d $(SRC_TOP)/.git ]]; then echo 'skipping $@ in non-git source tree.'; exit 0; fi; \
 	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 dist-test && \
 	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 dist-test-clean && \
 	echo 'passed: $@.'
+
+release-check:
+	@if [[ ! -d $(SRC_TOP)/.git ]]; then echo 'skipping $@ in non-git source tree.'; exit 0; fi; \
+	 mkdir release-test-$$$$ && \
+         cd release-test-$$$$ && \
+	 $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f ../$(THIS_MAKEFILE) VERY_QUIET=1 SRC_TOP="$(SRC_TOP)" release && \
+	 cd .. && \
+	 rm release-test-$$$$/*.zip && \
+	 rmdir release-test-$$$$ && \
+	 echo 'passed: $@.'
 
 .PHONY: check
 check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
 
 .PHONY: check-extra
-check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check
+check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check release-check
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

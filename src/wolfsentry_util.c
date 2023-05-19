@@ -459,7 +459,7 @@ WOLFSENTRY_API struct wolfsentry_build_settings wolfsentry_get_build_settings(vo
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_build_settings_compatible(struct wolfsentry_build_settings caller_build_settings) {
     if (caller_build_settings.version == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (caller_build_settings.version > WOLFSENTRY_VERSION)
+    if (caller_build_settings.version != WOLFSENTRY_VERSION)
         WOLFSENTRY_ERROR_RETURN(LIB_MISMATCH);
     if (~((WOLFSENTRY_CONFIG_FLAG_MAX << 1UL) - 1UL) & caller_build_settings.config)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);

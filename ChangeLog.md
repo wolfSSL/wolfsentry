@@ -1,3 +1,36 @@
+# wolfSentry Release 1.3 (May 19, 2023)
+
+Release 1.3 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## New Features
+
+### Route dump to JSON
+
+The route (rule) table can now be dumped in conformant JSON format to a byte stream, using wolfSentry intrinsics (no `stdio` dependencies), and subsequently reloaded.
+
+  * `wolfsentry_route_table_dump_json_start()`, `_next()`, `_end()`
+
+  * Byte streams using new `WOLFSENTRY_BYTE_STREAM_*()` macros, with stack and heap options.
+
+  * Retryable rendering on `_BUFFER_TOO_SMALL` error, by flushing the byte stream, calling `WOLFSENTRY_BYTE_STREAM_RESET()`, and retrying the `wolfsentry_route_table_dump_json_*()` call.
+
+  * New flag `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES`, to allow reloads that leave all event and key-value configuration intact, and only replace the routes.
+
+## Bug Fixes and Cleanups
+
+  * Non-threadsafe `get{proto,serv}by{name.number}()` calls (already configuration-gated) have been replaced by their `_r()` counterparts, and gated on compatible glibc.
+
+  * Fixed an underread bug in `convert_hex_byte()` that affected parsing of MAC addresses.
+
+## Self-Test Enhancements
+
+  * Added `__wolfsentry_wur` to `WOLFSENTRY_LOCAL`.
+
+  * Added new clauses in `test_json()` to verify bitwise idempotency of route table export-ingest cycles to/from JSON.
+
+  * Added new target `notification-demo-build-test`.
+
+
 # wolfSentry Release 1.2.2 (May 4, 2023)
 
 Release 1.2.2 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:

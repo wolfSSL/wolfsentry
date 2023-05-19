@@ -460,6 +460,11 @@ struct wolfsentry_route_exports {
 };
 
 typedef enum {
+    WOLFSENTRY_FORMAT_FLAG_NONE = 0,
+    WOLFSENTRY_FORMAT_FLAG_ALWAYS_NUMERIC = 1U << 0U
+} wolfsentry_format_flags_t;
+
+typedef enum {
     WOLFSENTRY_EVENT_FLAG_NONE = 0,
     WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT = 1U << 0U,
     WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT = 2U << 0U
@@ -633,7 +638,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_enable_actions(WOLFSENTRY
 
 typedef enum {
     WOLFSENTRY_CLONE_FLAG_NONE = 0U,
-    WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION = 1U << 0U
+    WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION = 1U << 0U,
+    WOLFSENTRY_CLONE_FLAG_NO_ROUTES = 2U << 0U
 } wolfsentry_clone_flags_t;
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_context **clone, wolfsentry_clone_flags_t flags);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_context *wolfsentry2);
@@ -1039,6 +1045,50 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
     unsigned int addr_bits,
     char *buf,
     int *buflen);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_flag_assoc_by_flag(
+    wolfsentry_route_flags_t flag,
+    const char **name);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_flag_assoc_by_name(
+    const char *name,
+    int len,
+    wolfsentry_route_flags_t *flag);
+
+#if !defined(WOLFSENTRY_NO_JSON) || defined(WOLFSENTRY_JSON_DUMP_UTILS)
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_route *r,
+    unsigned char **json_out,
+    size_t *json_out_len,
+    wolfsentry_format_flags_t flags);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_dump_json_start(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor **cursor,
+    unsigned char **json_out,
+    size_t *json_out_len,
+    wolfsentry_format_flags_t flags);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_dump_json_next(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor *cursor,
+    unsigned char **json_out,
+    size_t *json_out_len,
+    wolfsentry_format_flags_t flags);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_dump_json_end(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_route_table *table,
+    struct wolfsentry_cursor **cursor,
+    unsigned char **json_out,
+    size_t *json_out_len,
+    wolfsentry_format_flags_t flags);
+
+#endif /* !WOLFSENTRY_NO_JSON || WOLFSENTRY_JSON_DUMP_UTILS */
 
 #ifndef WOLFSENTRY_NO_STDIO
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_route_flags_t flags, FILE *f);

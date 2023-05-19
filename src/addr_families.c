@@ -151,7 +151,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
         goto out;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &byname->header, &bynumber_table->byname_table->header, 1 /* unique_p */)) < 0) {
-        (void)wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header));
         goto out;
     }
 #endif
@@ -163,13 +163,13 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
     if (ret < 0) {
         if (bynumber != NULL) {
             if (bynumber->header.id != WOLFSENTRY_ENT_ID_NONE)
-                (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header);
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header));
             WOLFSENTRY_FREE(bynumber);
         }
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
         if (byname != NULL) {
             if (byname->header.id != WOLFSENTRY_ENT_ID_NONE)
-                (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &byname->header);
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &byname->header));
             WOLFSENTRY_FREE(byname);
         }
 #endif

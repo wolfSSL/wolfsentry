@@ -210,6 +210,11 @@
 #include <time.h>
 #endif
 
+#if !defined(WOLFSENTRY_NO_GETPROTOBY) && (!defined(__GLIBC__) || !defined(__USE_MISC) || defined(WOLFSENTRY_C89))
+    /* get*by*_r() is non-standard. */
+    #define WOLFSENTRY_NO_GETPROTOBY
+#endif
+
 typedef unsigned char byte;
 
 typedef uint16_t wolfsentry_addr_family_t;
@@ -354,16 +359,16 @@ typedef uint16_t wolfsentry_priority_t;
         #else
             #define WOLFSENTRY_API_BASE
         #endif
-        #define WOLFSENTRY_LOCAL
+        #define WOLFSENTRY_LOCAL_BASE
     #elif defined(HAVE_VISIBILITY) && HAVE_VISIBILITY
         #define WOLFSENTRY_API_BASE   __attribute__ ((visibility("default")))
-        #define WOLFSENTRY_LOCAL __attribute__ ((visibility("hidden")))
+        #define WOLFSENTRY_LOCAL_BASE __attribute__ ((visibility("hidden")))
     #elif defined(__SUNPRO_C) && (__SUNPRO_C >= 0x550)
         #define WOLFSENTRY_API_BASE   __global
-        #define WOLFSENTRY_LOCAL __hidden
+        #define WOLFSENTRY_LOCAL_BASE __hidden
     #else
         #define WOLFSENTRY_API_BASE
-        #define WOLFSENTRY_LOCAL
+        #define WOLFSENTRY_LOCAL_BASE
     #endif /* HAVE_VISIBILITY */
 #else /* !BUILDING_LIBWOLFSENTRY */
     #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || \
@@ -373,15 +378,18 @@ typedef uint16_t wolfsentry_priority_t;
         #else
             #define WOLFSENTRY_API_BASE
         #endif
-        #define WOLFSENTRY_LOCAL
+        #define WOLFSENTRY_LOCAL_BASE
     #else
         #define WOLFSENTRY_API_BASE
-        #define WOLFSENTRY_LOCAL
+        #define WOLFSENTRY_LOCAL_BASE
     #endif
 #endif /* !BUILDING_LIBWOLFSENTRY */
 
 #define WOLFSENTRY_API_VOID WOLFSENTRY_API_BASE void
 #define WOLFSENTRY_API WOLFSENTRY_API_BASE __wolfsentry_wur
+
+#define WOLFSENTRY_LOCAL_VOID WOLFSENTRY_LOCAL_BASE void
+#define WOLFSENTRY_LOCAL WOLFSENTRY_LOCAL_BASE __wolfsentry_wur
 
 #ifndef WOLFSENTRY_NO_DESIGNATED_INITIALIZERS
 #define WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS

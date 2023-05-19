@@ -356,8 +356,8 @@ struct wolfsentry_route {
 #define WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r) (WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r) + (r)->remote.extra_port_count)
 #define WOLFSENTRY_ROUTE_BUF_SIZE(r) (WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) + ((WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r) + WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r)) & 1) + (WOLFSENTRY_ROUTE_REMOTE_PORT_COUNT(r) * sizeof(wolfsentry_port_t)) + (WOLFSENTRY_ROUTE_LOCAL_PORT_COUNT(r) * sizeof(wolfsentry_port_t)))
 
-#define WOLFSENTRY_ROUTE_REMOTE_PORT_GET(r, i) ((i) ? WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r)[(i)-1] : (r)->sa_remote_port)
-#define WOLFSENTRY_ROUTE_LOCAL_PORT_GET(r, i) ((i) ? WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r)[(i)-1] : (r)->sa_local_port)
+#define WOLFSENTRY_ROUTE_REMOTE_PORT_GET(r, i) ((i) ? WOLFSENTRY_ROUTE_REMOTE_EXTRA_PORTS(r)[(i)-1] : (r)->remote.sa_port)
+#define WOLFSENTRY_ROUTE_LOCAL_PORT_GET(r, i) ((i) ? WOLFSENTRY_ROUTE_LOCAL_EXTRA_PORTS(r)[(i)-1] : (r)->local.sa_port)
 
 struct wolfsentry_route_table {
     struct wolfsentry_table_header header;
@@ -503,7 +503,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_header *dest_table,
     wolfsentry_clone_flags_t flags);
-WOLFSENTRY_LOCAL void wolfsentry_route_table_free(
+WOLFSENTRY_LOCAL_VOID wolfsentry_route_table_free(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table **route_table);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_copy_metadata(
@@ -611,12 +611,35 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table);
 
+static inline __wolfsentry_wur struct wolfsentry_table_ent_header *wolfsentry_table_first(const struct wolfsentry_table_header *table) {
+    return table->head;
+}
+static inline __wolfsentry_wur struct wolfsentry_table_ent_header *wolfsentry_table_last(const struct wolfsentry_table_header *table) {
+    return table->tail;
+}
+static inline __wolfsentry_wur struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor) {
+    return cursor->point;
+}
+static inline void wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
+    cursor->point = table->head;
+}
+static inline void wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
+    cursor->point = table->tail;
+}
+static inline struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor) {
+    if (cursor->point == NULL)
+        return NULL;
+    cursor->point = cursor->point->prev;
+    return cursor->point;
+}
+static inline struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor) {
+    if (cursor->point == NULL)
+        return NULL;
+    cursor->point = cursor->point->next;
+    return cursor->point;
+}
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_cursor *cursor);
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor);
-WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor);
-WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor);
-WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek(const struct wolfsentry_table_header *table, const struct wolfsentry_table_ent_header *ent, struct wolfsentry_cursor *cursor, int *cursor_position);
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_filter(

@@ -41,7 +41,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert(WOLFSENTRY_CON
     if (i) {
         if ((cmpret == 0) && unique_p) {
             if (ent->id != WOLFSENTRY_ENT_ID_NONE)
-                (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, ent);
+                WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, ent));
             WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
         }
         ent->prev = i->prev;
@@ -534,34 +534,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_init(WOLFSENTRY_CO
     WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
     memset(cursor, 0, sizeof *cursor);
     WOLFSENTRY_RETURN_OK;
-}
-
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
-    cursor->point = table->head;
-    WOLFSENTRY_RETURN_OK;
-}
-
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
-    cursor->point = table->tail;
-    WOLFSENTRY_RETURN_OK;
-}
-
-WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_current(const struct wolfsentry_cursor *cursor) {
-    return cursor->point;
-}
-
-WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor) {
-    if (cursor->point == NULL)
-        return NULL;
-    cursor->point = cursor->point->prev;
-    return cursor->point;
-}
-
-WOLFSENTRY_LOCAL struct wolfsentry_table_ent_header * wolfsentry_table_cursor_next(struct wolfsentry_cursor *cursor) {
-    if (cursor->point == NULL)
-        return NULL;
-    cursor->point = cursor->point->next;
-    return cursor->point;
 }
 
 /* in a fashion analogous to the values returned by comparison

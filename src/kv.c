@@ -162,7 +162,7 @@ static wolfsentry_errcode_t wolfsentry_kv_insert_1(
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header, &kv_table->header, 1 /* unique_p */)) < 0)
-        (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header));
 
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -292,7 +292,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_2(
         WOLFSENTRY_ERROR_RERETURN(ret);
     kv_template->kv.v_type = type;
     ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
-    (void)wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL);
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
@@ -323,7 +323,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_reference(
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     kv_template->kv.v_type = type;
     ret = wolfsentry_kv_get_reference_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
-    (void)wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL);
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
 
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -341,7 +341,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_type(
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &kv);
-    (void)wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL);
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *type = WOLFSENTRY_KV_TYPE(&kv->kv);
     WOLFSENTRY_RETURN_OK;
@@ -601,8 +601,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_start(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if ((ret = wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_OUT, *cursor)) < 0)
         goto out;
-    if ((ret = wolfsentry_table_cursor_seek_to_head(&table->header, *cursor)) < 0)
-        goto out;
+    wolfsentry_table_cursor_seek_to_head(&table->header, *cursor);
   out:
     if (ret < 0)
         WOLFSENTRY_FREE(*cursor);
@@ -615,7 +614,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_head(
     struct wolfsentry_cursor *cursor)
 {
     WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_table_cursor_seek_to_head(&table->header, cursor));
+    wolfsentry_table_cursor_seek_to_head(&table->header, cursor);
+    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_tail(
@@ -624,7 +624,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_seek_to_tail(
     struct wolfsentry_cursor *cursor)
 {
     WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_table_cursor_seek_to_tail(&table->header, cursor));
+    wolfsentry_table_cursor_seek_to_tail(&table->header, cursor);
+    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_iterate_current(

@@ -574,11 +574,6 @@ static inline int convert_hex_byte(const unsigned char **in, size_t *in_len, byt
         return d1;
     ++(*in);
     --(*in_len);
-    if (*in_len == 1) {
-        *in_len = 0;
-        *out = (byte)d1;
-        return 0;
-    }
     d2 = convert_hex_digit(**in);
     if (d2 < 0) {
         *out = (byte)d1;
@@ -665,8 +660,10 @@ static wolfsentry_errcode_t convert_sockaddr_address(struct wolfsentry_json_proc
 
 static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_process_state *jps, const unsigned char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     char d_buf[64];
-    struct servent *s;
-    struct protoent *p;
+    char get_buf[256];
+    char p_name_buf[16], *p_name;
+    struct protoent protoent, *p;
+    struct servent servent, *s;
 
     if (! WOLFSENTRY_CHECK_BITS(jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS))
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -677,21 +674,42 @@ static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_pr
     memcpy(d_buf, data, data_size);
     d_buf[data_size] = 0;
 
-    if (sa->sa_proto != 0)
-        p = getprotobynumber(sa->sa_proto);
-    else
+    if (sa->sa_proto != 0) {
+        if (getprotobynumber_r(
+                sa->sa_proto,
+                &protoent,
+                get_buf, sizeof get_buf,
+                &p) != 0) {
+            if (errno == ERANGE)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            else
+                WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+        }
+    } else
         p = NULL;
 
-    s = getservbyname(d_buf, p ? p->p_name : NULL);
-    if (s == NULL)
-        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
-    else {
-        sa->sa_port = (wolfsentry_port_t)ntohs((uint16_t)s->s_port);
-        WOLFSENTRY_RETURN_OK;
+    if (p) {
+        size_t p_name_len = strlen(p->p_name) + 1;
+        if (p_name_len <= sizeof p_name_buf) {
+            memcpy(p_name_buf, p->p_name, p_name_len);
+            p_name = p_name_buf;
+        } else
+            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+    } else
+        p_name = NULL;
+
+    if (getservbyname_r(d_buf, p_name, &servent, get_buf, sizeof get_buf, &s) != 0) {
+        if (errno == ERANGE)
+            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+        else
+            WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
     }
+
+    sa->sa_port = (wolfsentry_port_t)ntohs((uint16_t)s->s_port);
+    WOLFSENTRY_RETURN_OK;
 }
 
-#endif
+#endif /* !WOLFSENTRY_NO_GETPROTOBY */
 
 static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_process_state *jps, JSON_TYPE type, const unsigned char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     if (! strcmp(jps->cur_keyname, "port")) {
@@ -769,7 +787,8 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
 #ifndef WOLFSENTRY_NO_GETPROTOBY
     else if (type == JSON_STRING) {
         char d_buf[64];
-        struct protoent *p;
+        char get_buf[256];
+        struct protoent protoent, *p;
 
         if ((jps->o_u_c.route.remote.sa_family != WOLFSENTRY_AF_INET) &&
             (jps->o_u_c.route.remote.sa_family != WOLFSENTRY_AF_INET6))
@@ -781,15 +800,21 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
         memcpy(d_buf, data, data_size);
         d_buf[data_size] = 0;
 
-        p = getprotobyname(d_buf);
-        if (p == NULL)
-            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
-        else {
-            jps->o_u_c.route.remote.sa_proto = (wolfsentry_proto_t)p->p_proto;
-            jps->o_u_c.route.local.sa_proto = (wolfsentry_proto_t)p->p_proto;
+        if (getprotobyname_r(
+                d_buf,
+                &protoent,
+                get_buf, sizeof get_buf,
+                &p) != 0) {
+            if (errno == ERANGE)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            else
+                WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
         }
+
+        jps->o_u_c.route.remote.sa_proto = (wolfsentry_proto_t)p->p_proto;
+        jps->o_u_c.route.local.sa_proto = (wolfsentry_proto_t)p->p_proto;
     }
-#endif
+#endif /* !WOLFSENTRY_NO_GETPROTOBY */
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -867,31 +892,24 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
         jps->o_u_c.route.event_label_len = (int)data_size;
         memcpy(jps->o_u_c.route.event_label, data, data_size);
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD);
+        WOLFSENTRY_RETURN_OK;
     }
     else if (! strcmp(jps->cur_keyname, "family"))
         WOLFSENTRY_ERROR_RERETURN(handle_route_family_clause(jps, type, data, data_size));
     else if (! strcmp(jps->cur_keyname, "protocol"))
         WOLFSENTRY_ERROR_RERETURN(handle_route_protocol_clause(jps, type, data, data_size));
-    else if (! strcmp(jps->cur_keyname, "tcplike-port-numbers"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS));
-    else if (! strcmp(jps->cur_keyname, "direction-in"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN));
-    else if (! strcmp(jps->cur_keyname, "direction-out"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT));
-    else if (! strcmp(jps->cur_keyname, "penalty-boxed"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED));
-    else if (! strcmp(jps->cur_keyname, "green-listed"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_GREENLISTED));
-    else if (! strcmp(jps->cur_keyname, "dont-count-hits"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS));
-    else if (! strcmp(jps->cur_keyname, "dont-count-current-connections"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS));
-    else if (! strcmp(jps->cur_keyname, "port-reset"))
-        WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_PORT_RESET));
-    else
-        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
-
-    WOLFSENTRY_RETURN_OK;
+    else {
+        wolfsentry_route_flags_t flag;
+        ret = wolfsentry_route_flag_assoc_by_name(jps->cur_keyname, WOLFSENTRY_LENGTH_NULL_TERMINATED, &flag);
+        if (ret >= 0)
+            WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, flag));
+        else {
+            if (WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
+            else
+                WOLFSENTRY_ERROR_RERETURN(ret);
+        }
+    }
 }
 
 static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_state *jps, JSON_TYPE type, const unsigned char *data, size_t data_size) {
@@ -1550,20 +1568,22 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 #ifdef WOLFSENTRY_THREADSAFE
     (*jps)->thread = thread;
 #endif
-    if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
-        (*jps)->wolfsentry = wolfsentry;
-    } else {
+    if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
         ret = wolfsentry_context_clone(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             &(*jps)->wolfsentry,
             WOLFSENTRY_CHECK_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH)
-            ? WOLFSENTRY_CLONE_FLAG_NONE
+            ? WOLFSENTRY_CLONE_FLAG_NONE :
+            WOLFSENTRY_CHECK_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES)
+            ? WOLFSENTRY_CLONE_FLAG_NO_ROUTES
             : WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION);
         if (ret < 0)
             goto out;
         ret = wolfsentry_context_inhibit_actions(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT);
         if (ret < 0)
             goto out;
+    } else {
+        (*jps)->wolfsentry = wolfsentry;
     }
 
     ret = json_init(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator((*jps)->wolfsentry)),
@@ -1577,7 +1597,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     }
 
     if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
-        if ((ret = wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_OUT)) < 0)
+        if (WOLFSENTRY_CHECK_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES)) {
+            struct wolfsentry_route_table *main_table;
+            wolfsentry_action_res_t action_results;
+            WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+            ret = wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_table);
+            if (ret < 0)
+                goto out;
+            ret = wolfsentry_route_flush_table(WOLFSENTRY_CONTEXT_ARGS_OUT, main_table, &action_results);
+        } else {
+            ret = wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_OUT);
+        }
+        if (ret < 0)
             goto out;
     }
 

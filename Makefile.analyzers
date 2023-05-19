@@ -205,6 +205,10 @@ sanitize-all-clang-macosx: clang-version-test
 	@echo "passed: no defects from any clang sanitizers."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds-clang" clean
 
+ifndef REPO_ROOT
+    REPO_ROOT:=$(SRC_TOP)
+endif
+
 .PHONY: clang-tidy-build-test
 clang-tidy-build-test:
 	@[ -x "$(REPO_ROOT)/../testing/git-hooks/clang-tidy-builder.sh" ] || { echo 'clang-tidy-builder.sh not found - skipping $@.'; exit 0; }; \
@@ -215,10 +219,6 @@ clang-tidy-build-test:
 	 CLANG=clang CLANG_TIDY=clang-tidy CLANG_TIDY_EXTRA_ARGS='--use-color=1' $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-clang-tidy-builds" CC="$(REPO_ROOT)/../testing/git-hooks/clang-tidy-builder.sh" test && \
 	 CLANG=clang CLANG_TIDY=clang-tidy CLANG_TIDY_EXTRA_ARGS='--use-color=1' $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-clang-tidy-builds" CC="$(REPO_ROOT)/../testing/git-hooks/clang-tidy-builder.sh" clean && \
 	 echo 'passed: $@.'
-
-ifndef REPO_ROOT
-    REPO_ROOT:=$(SRC_TOP)
-endif
 
 .PHONY: cppcheck-analyze
 cppcheck-analyze:
@@ -407,6 +407,20 @@ linux-lwip-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
 	@echo "passed: linux-lwip test."
 
+.PHONY: notification-demo-build-test
+notification-demo-build-test:
+	@rm -rf "$(BUILD_PARENT)/wolfssl-notification-demo-build"
+	@git clone -q --shared "$(REPO_ROOT)/../wolfssl" "$(BUILD_PARENT)/wolfssl-notification-demo-build"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" install INSTALL_DIR="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"
+	@cd examples/notification-demo/udp_to_dbus && $(MAKE) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' >/dev/null
+	@cd "$(BUILD_PARENT)/wolfssl-notification-demo-build" && bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) install >/dev/null'
+	@cd examples/notification-demo/log_server && $(MAKE) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' >/dev/null
+	@rm -rf "$(BUILD_PARENT)/wolfssl-notification-demo-build"
+	@rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" clean
+	@echo "passed: notification-demo-build test."
+
 .PHONY: dist-check
 dist-check:
 	@if [[ ! -d $(SRC_TOP)/.git ]]; then echo 'skipping $@ in non-git source tree.'; exit 0; fi; \
@@ -428,7 +442,7 @@ release-check:
 check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
 
 .PHONY: check-extra
-check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check release-check
+check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check release-check notification-demo-build-test
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

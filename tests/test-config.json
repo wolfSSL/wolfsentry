@@ -10,223 +10,222 @@
     },
     "events-insert" : [
         {
-        "label" : "event-on-insert",
-        "actions" : [ "handle-insert" ]
-    },
-    {
-        "label" : "event-on-delete",
-        "actions" : [ "handle-delete" ]
-    },
-    {
-        "label" : "event-on-match",
-        "actions" : [ "handle-match" ]
-    },
-    {
-        "label" : "event-on-update",
-        "actions" : [ "handle-update" ]
-    },
-    {
-        "label" : "event-on-decision",
-        "actions" : [ "notify-on-decision" ]
-    },
-    {
-        "label" : "static-route-parent",
-        "priority" : 1,
-        "config" : {
-        "max-connection-count" : 10,
-        "penalty-box-duration" : "10m",
-        "derog-thresh-for-penalty-boxing" : 4,
-        "derog-thresh-ignore-commendable" : false,
-        "commendable-clears-derogatory" : false
+            "label" : "event-on-insert",
+            "actions" : [ "handle-insert" ]
         },
-        "actions" : [ "handle-connect", "handle-connect2" ],
-        "insert-event" : "event-on-insert",
-        "match-event" : "event-on-match",
-        "update-event" : "event-on-update",
-        "delete-event" : "event-on-delete",
-        "decision-event" : "event-on-decision"
-    },
-    {
-        "label" : "dynamic-route-parent",
-        "priority" : 1,
-        "config" : {
-        "max-connection-count" : 10,
-        "penalty-box-duration" : "10m",
-        "derog-thresh-for-penalty-boxing" : 4,
-        "derog-thresh-ignore-commendable" : false,
-        "commendable-clears-derogatory" : false,
-        "route-idle-time-for-purge" : "1h"
+        {
+            "label" : "event-on-delete",
+            "actions" : [ "handle-delete" ]
         },
-        "actions" : [ "handle-connect", "handle-connect2" ],
-        "insert-event" : "event-on-insert",
-        "match-event" : "event-on-match",
-        "update-event" : "event-on-update",
-        "delete-event" : "event-on-delete",
-        "decision-event" : "event-on-decision"
-    },
-    {
-        "label" : "call-in-from-unit-test"
-    }
+        {
+            "label" : "event-on-match",
+            "actions" : [ "handle-match" ]
+        },
+        {
+            "label" : "event-on-update",
+            "actions" : [ "handle-update" ]
+        },
+        {
+            "label" : "event-on-decision",
+            "actions" : [ "notify-on-decision" ]
+        },
+        {
+            "label" : "static-route-parent",
+            "priority" : 1,
+            "config" : {
+                "max-connection-count" : 10,
+                "penalty-box-duration" : "10m",
+                "derog-thresh-for-penalty-boxing" : 4,
+                "derog-thresh-ignore-commendable" : false,
+                "commendable-clears-derogatory" : false
+            },
+            "actions" : [ "handle-connect", "handle-connect2" ],
+            "insert-event" : "event-on-insert",
+            "match-event" : "event-on-match",
+            "update-event" : "event-on-update",
+            "delete-event" : "event-on-delete",
+            "decision-event" : "event-on-decision"
+        },
+        {
+            "label" : "dynamic-route-parent",
+            "priority" : 1,
+            "config" : {
+            "max-connection-count" : 10,
+            "penalty-box-duration" : "10m",
+            "derog-thresh-for-penalty-boxing" : 4,
+            "derog-thresh-ignore-commendable" : false,
+            "commendable-clears-derogatory" : false,
+            "route-idle-time-for-purge" : "1h"
+            },
+            "actions" : [ "handle-connect", "handle-connect2" ],
+            "insert-event" : "event-on-insert",
+            "match-event" : "event-on-match",
+            "update-event" : "event-on-update",
+            "delete-event" : "event-on-delete",
+            "decision-event" : "event-on-decision"
+        },
+        {
+            "label" : "call-in-from-unit-test"
+        }
     ],
     "default-policies" : {
         "default-policy" : "reject",
         "default-event" : "static-route-parent"
     },
     "static-routes-insert" : [
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : false,
-        "green-listed" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "inet",
-        "remote" : {
-            "address" : "127.0.0.0",
-            "prefix-bits" : 8
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "inet",
+            "remote" : {
+                "address" : "127.0.0.0",
+                "prefix-bits" : 8
+            },
+            "local" : {
+                "address" : "127.0.0.0",
+                "prefix-bits" : 8
+            }
         },
-        "local" : {
-            "address" : "127.0.0.0",
-            "prefix-bits" : 8
-        }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : false,
-        "green-listed" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "inet6",
-        "remote" : {
-        "address" : "::1"
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "inet6",
+            "remote" : {
+                "address" : "::1"
+            },
+            "local" : {
+                "address" : "::1"
+            }
         },
-        "local" : {
-        "address" : "::1"
-        }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : false,
-        "green-listed" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "inet",
-        "protocol" : "tcp",
-        "remote" : {
-            "address" : "192.168.0.0",
-            "prefix-bits" : 16,
-            "interface" : 1
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "inet",
+            "protocol" : "tcp",
+            "remote" : {
+                "address" : "192.168.0.0",
+                "prefix-bits" : 16,
+                "interface" : 1
+            },
+            "local" : {
+                "port" : "smtp",
+                "address" : "192.168.0.0",
+                "prefix-bits" : 16,
+                "interface" : 1
+            }
         },
-        "local" : {
-            "port" : "smtp",
-            "address" : "192.168.0.0",
-            "prefix-bits" : 16,
-            "interface" : 1
-        }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : false,
-        "penalty-boxed" : true,
-        "port-reset" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "inet",
-        "protocol" : "tcp",
-        "remote" : {
-            "address" : "1.2.3.4",
-            "prefix-bits" : 32
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : false,
+            "penalty-boxed" : true,
+            "port-reset" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "inet",
+            "protocol" : "tcp",
+            "remote" : {
+                "address" : "1.2.3.4",
+                "prefix-bits" : 32
+            },
+            "local" : {
+                "port" : 13579
+            }
         },
-        "local" : {
-            "port" : 13579
-        }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "tcplike-port-numbers" : true,
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : false,
-        "green-listed" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "inet6",
-        "protocol" : "tcp",
-        "remote" : {
-            "address" : "fd00::",
-            "prefix-bits" : 8,
-            "interface" : 1
+        {
+            "parent-event" : "static-route-parent",
+            "tcplike-port-numbers" : true,
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "inet6",
+            "protocol" : "tcp",
+            "remote" : {
+                "address" : "fd00::",
+                "prefix-bits" : 8,
+                "interface" : 1
+            },
+            "local" : {
+                "port" : "ssh",
+                "interface" : 1
+            }
         },
-        "local" : {
-            "port" : "ssh",
-            "interface" : 1
-        }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : false,
-        "green-listed" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "link",
-        "remote" : {
-            "address" : "ab:cd:ef:01:23:45"
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "link",
+            "remote" : {
+                "address" : "ab:cd:ef:01:23:45"
+            },
+            "local" : {
+                "address" : "54:32:10:fe:dc:ba"
+            }
         },
-        "local" : {
-            "address" : "54:32:10:fe:dc:ba"
-        }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : false,
-        "green-listed" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "link",
-        "remote" : {
-            "address" : "ab:cd:ef:0:1:2"
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "link",
+            "remote" : {
+                "address" : "ab:cd:ef:0:1:2"
+            },
+            "local" : {
+                "address" : "54:32:10:fe:dc:ba"
+            }
         },
-        "local" : {
-            "address" : "54:32:10:fe:dc:ba"
-        }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : false,
-        "green-listed" : true,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "my_AF",
-        "remote" : {
-            "address" : "077/"
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "my_AF",
+            "remote" : {
+                "address" : "077/"
+            },
+            "local" : {
+                "address" : "001/002/003"
+            }
         },
-        "local" : {
-            "address" : "001/002/003"
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : true,
+            "green-listed" : false,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "my_AF"
         }
-    },
-    {
-        "parent-event" : "static-route-parent",
-        "direction-in" : true,
-        "direction-out" : true,
-        "penalty-boxed" : true,
-        "green-listed" : false,
-        "dont-count-hits" : false,
-        "dont-count-current-connections" : false,
-        "family" : "my_AF"
-    }
-
     ],
     "user-values" : {
         "user-null" : null,

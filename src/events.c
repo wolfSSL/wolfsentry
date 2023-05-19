@@ -70,7 +70,7 @@ static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label
 }
 
 static void wolfsentry_event_free(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_event *event) {
-    (void)wolfsentry_action_list_delete_all(WOLFSENTRY_CONTEXT_ARGS_OUT, &event->action_list);
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_delete_all(WOLFSENTRY_CONTEXT_ARGS_OUT, &event->action_list));
     if (event->config)
         WOLFSENTRY_FREE(event->config);
     WOLFSENTRY_FREE(event);
@@ -258,7 +258,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_insert(
     if (id)
         *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header, &wolfsentry->events->header, 1 /* unique_p */)) < 0) {
-        (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header));
         wolfsentry_event_free(WOLFSENTRY_CONTEXT_ARGS_OUT, new);
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_RECODED(ret);
     }

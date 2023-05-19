@@ -803,6 +803,8 @@ static int test_static_routes (void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &id, &action_results));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_reference(
@@ -816,6 +818,8 @@ static int test_static_routes (void) {
                                  1 /* exact_p */,
                                  &inexact_matches,
                                  &route_ref));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_private_data(
                                  WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -2458,11 +2462,11 @@ static wolfsentry_errcode_t my_addr_family_formatter(
     WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
 
     if (addr_internal_len <= 8)
-        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%o/",(unsigned int)addr_internal[0]);
+        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%03o/",(unsigned int)addr_internal[0]);
     else if (addr_internal_len <= 16)
-        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%o/%o/",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1]);
+        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%03o/%03o/",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1]);
     else
-        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%o/%o/%o",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1],(unsigned int)addr_internal[2]);
+        out_len = snprintf(addr_text, (size_t)*addr_text_len, "%03o/%03o/%03o",(unsigned int)addr_internal[0],(unsigned int)addr_internal[1],(unsigned int)addr_internal[2]);
     if (out_len >= *addr_text_len)
         ret = WOLFSENTRY_ERROR_ENCODE(BUFFER_TOO_SMALL);
     else
@@ -3054,6 +3058,168 @@ static int test_json(const char *fname, const char *extra_fname) {
     WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, 1));
 
     {
+        struct wolfsentry_route_table *main_routes;
+        struct wolfsentry_cursor *cursor;
+        WOLFSENTRY_BYTE_STREAM_DECLARE_STACK(json_out, 8192);
+        WOLFSENTRY_BYTE_STREAM_DECLARE_HEAP(json_out2, 8192);
+        wolfsentry_hitcount_t n_seen = 0;
+        char err_buf[512];
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_BYTE_STREAM_INIT_HEAP(json_out2) != NULL);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+
+        WOLFSENTRY_BYTE_STREAM_RESET(json_out);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_table_dump_json_start(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                main_routes,
+                &cursor,
+                WOLFSENTRY_BYTE_STREAM_PTR(json_out),
+                WOLFSENTRY_BYTE_STREAM_SPC(json_out),
+                WOLFSENTRY_FORMAT_FLAG_NONE));
+
+        for (;;) {
+            ret = wolfsentry_route_table_dump_json_next(
+                 WOLFSENTRY_CONTEXT_ARGS_OUT,
+                 main_routes,
+                 cursor,
+                 WOLFSENTRY_BYTE_STREAM_PTR(json_out),
+                 WOLFSENTRY_BYTE_STREAM_SPC(json_out),
+                 WOLFSENTRY_FORMAT_FLAG_NONE);
+            if (ret < 0) {
+                WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND));
+                WOLFSENTRY_EXIT_ON_FAILURE(
+                    wolfsentry_route_table_dump_json_end(
+                        WOLFSENTRY_CONTEXT_ARGS_OUT,
+                        main_routes,
+                        &cursor,
+                        WOLFSENTRY_BYTE_STREAM_PTR(json_out),
+                        WOLFSENTRY_BYTE_STREAM_SPC(json_out),
+                        WOLFSENTRY_FORMAT_FLAG_NONE));
+            } else
+                ++n_seen;
+            if (ret < 0)
+                break;
+        }
+
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes->header.n_ents);
+
+        ret = wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            WOLFSENTRY_BYTE_STREAM_HEAD(json_out),
+            WOLFSENTRY_BYTE_STREAM_LEN(json_out),
+            WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT | WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES,
+            err_buf,
+            sizeof err_buf);
+        if (ret < 0) {
+            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            WOLFSENTRY_EXIT_ON_FAILURE(ret);
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+
+        WOLFSENTRY_BYTE_STREAM_RESET(json_out2);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_table_dump_json_start(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                main_routes,
+                &cursor,
+                WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
+                WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
+                WOLFSENTRY_FORMAT_FLAG_NONE));
+
+        for (;;) {
+            ret = wolfsentry_route_table_dump_json_next(
+                 WOLFSENTRY_CONTEXT_ARGS_OUT,
+                 main_routes,
+                 cursor,
+                 WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
+                 WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
+                 WOLFSENTRY_FORMAT_FLAG_NONE);
+            if (ret < 0) {
+                WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND));
+                WOLFSENTRY_EXIT_ON_FAILURE(
+                    wolfsentry_route_table_dump_json_end(
+                        WOLFSENTRY_CONTEXT_ARGS_OUT,
+                        main_routes,
+                        &cursor,
+                        WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
+                        WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
+                        WOLFSENTRY_FORMAT_FLAG_NONE));
+            }
+            if (ret < 0)
+                break;
+        }
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_BYTE_STREAM_LEN(json_out2) == WOLFSENTRY_BYTE_STREAM_LEN(json_out));
+        WOLFSENTRY_EXIT_ON_FALSE(memcmp(json_out, json_out2, WOLFSENTRY_BYTE_STREAM_LEN(json_out)) == 0);
+
+        ret = wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            WOLFSENTRY_BYTE_STREAM_HEAD(json_out),
+            WOLFSENTRY_BYTE_STREAM_LEN(json_out),
+            WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES,
+            err_buf,
+            sizeof err_buf);
+        if (ret < 0) {
+            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            WOLFSENTRY_EXIT_ON_FAILURE(ret);
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+
+        WOLFSENTRY_BYTE_STREAM_RESET(json_out2);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_table_dump_json_start(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                main_routes,
+                &cursor,
+                WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
+                WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
+                WOLFSENTRY_FORMAT_FLAG_NONE));
+
+        for (;;) {
+            ret = wolfsentry_route_table_dump_json_next(
+                 WOLFSENTRY_CONTEXT_ARGS_OUT,
+                 main_routes,
+                 cursor,
+                 WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
+                 WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
+                 WOLFSENTRY_FORMAT_FLAG_NONE);
+            if (ret < 0) {
+                WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND));
+                WOLFSENTRY_EXIT_ON_FAILURE(
+                    wolfsentry_route_table_dump_json_end(
+                        WOLFSENTRY_CONTEXT_ARGS_OUT,
+                        main_routes,
+                        &cursor,
+                        WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
+                        WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
+                        WOLFSENTRY_FORMAT_FLAG_NONE));
+            }
+            if (ret < 0)
+                break;
+        }
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_BYTE_STREAM_LEN(json_out2) == WOLFSENTRY_BYTE_STREAM_LEN(json_out));
+        WOLFSENTRY_EXIT_ON_FALSE(memcmp(json_out, json_out2, WOLFSENTRY_BYTE_STREAM_LEN(json_out)) == 0);
+
+        WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes->header.n_ents);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+        WOLFSENTRY_BYTE_STREAM_FREE_HEAP(json_out2);
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, 1));
+
+    {
         struct wolfsentry_context *ctx_clone;
 
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &ctx_clone, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION));
@@ -3075,8 +3241,8 @@ static int test_json(const char *fname, const char *extra_fname) {
         struct wolfsentry_route *route;
         struct wolfsentry_route_exports route_exports;
         struct wolfsentry_route_table *main_routes;
-        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
         for (ret = wolfsentry_route_table_iterate_current(main_routes, cursor, &route);
              ret >= 0;

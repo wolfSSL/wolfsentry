@@ -134,7 +134,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_insert(WOLFSENTRY_CONTEXT_
     if (id)
         *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header, &wolfsentry->actions->header, 1 /* unique_p */)) < 0) {
-        (void)wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header));
         ret = WOLFSENTRY_ERROR_RECODE(ret);
         goto out;
     }
@@ -442,7 +442,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_clone(
   out:
 
     if (ret < 0)
-        (void)wolfsentry_action_list_delete_all(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(dest_context), dest_action_list);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_delete_all(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(dest_context), dest_action_list));
 
     WOLFSENTRY_UNLOCK_FOR_RETURN_EX(dest_context);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);

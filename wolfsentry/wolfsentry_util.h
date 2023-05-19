@@ -36,6 +36,9 @@
 #ifndef length_of_array
 #define length_of_array(x) (sizeof (x) / sizeof (x)[0])
 #endif
+#ifndef end_ptr_of_array
+#define end_ptr_of_array(x) (&(x)[length_of_array(x)])
+#endif
 
 #ifndef popcount32
 #ifdef __GNUC__
@@ -56,6 +59,16 @@
 
 #define streq(vs,fs,vs_len) (((vs_len) == strlen(fs)) && (memcmp(vs,fs,vs_len) == 0))
 #define strcaseeq(vs,fs,vs_len) (((vs_len) == strlen(fs)) && (strncasecmp(vs,fs,vs_len) == 0))
+
+#define WOLFSENTRY_BYTE_STREAM_DECLARE_STACK(buf, bufsiz) static const size_t buf ## siz = (bufsiz); unsigned char (buf)[bufsiz], *buf ## _p; size_t buf ## spc
+#define WOLFSENTRY_BYTE_STREAM_DECLARE_HEAP(buf, bufsiz) static const size_t buf ## siz = (bufsiz); unsigned char *(buf), *buf ## _p; size_t buf ## spc
+#define WOLFSENTRY_BYTE_STREAM_INIT_HEAP(buf) ((buf) = (unsigned char *)WOLFSENTRY_MALLOC(buf ## siz))
+#define WOLFSENTRY_BYTE_STREAM_FREE_HEAP(buf) WOLFSENTRY_FREE(buf)
+#define WOLFSENTRY_BYTE_STREAM_RESET(buf) do { (buf ## _p) = (buf); (buf ## spc) = (buf ## siz); } while (0)
+#define WOLFSENTRY_BYTE_STREAM_LEN(buf) ((buf ## siz) - (buf ## spc))
+#define WOLFSENTRY_BYTE_STREAM_HEAD(buf) (buf)
+#define WOLFSENTRY_BYTE_STREAM_PTR(buf) (&(buf ## _p))
+#define WOLFSENTRY_BYTE_STREAM_SPC(buf) (&(buf ## spc))
 
 #define MAX_UINT_OF(x) ((((uint64_t)1 << ((sizeof(x) * (uint64_t)BITS_PER_BYTE) - (uint64_t)1)) - (uint64_t)1) | ((uint64_t)1 << ((sizeof(x) * (uint64_t)BITS_PER_BYTE) - (uint64_t)1)))
 #define MAX_SINT_OF(x) ((int64_t)((((uint64_t)1 << ((sizeof(x) * (uint64_t)BITS_PER_BYTE) - (uint64_t)2)) - (uint64_t)1) | ((uint64_t)1 << ((sizeof(x) * (uint64_t)BITS_PER_BYTE) - (uint64_t)2))))

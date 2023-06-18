@@ -3004,10 +3004,74 @@ static int test_json(const char *fname, const char *extra_fname) {
         const char *value = NULL;
         int value_len = -1;
         struct wolfsentry_kv_pair_internal *kv_ref;
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } remote, local;
+        wolfsentry_ent_id_t route_id;
+        wolfsentry_route_flags_t inexact_matches;
+        wolfsentry_action_res_t action_results;
 
-        if (extra_fname)
+        if (extra_fname) {
+            remote.sa.sa_family = local.sa.sa_family = AF_INET;
+            remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+            remote.sa.sa_port = 12345;
+            local.sa.sa_port = 13579;
+            remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+            remote.sa.interface = local.sa.interface = 1;
+
+            memcpy(remote.sa.addr,"\12\24\36\50",sizeof remote.addr_buf);
+            memcpy(local.sa.addr,"\62\74\106\120",sizeof local.addr_buf);
+
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &remote.sa,
+                    &local.sa,
+                    WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id,
+                    &inexact_matches,
+                    &action_results));
+            WOLFSENTRY_EXIT_ON_FALSE(route_id == WOLFSENTRY_ENT_ID_NONE);
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == WOLFSENTRY_ACTION_RES_REJECT);
+
             WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, extra_fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT, 1));
-        else {
+
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &remote.sa,
+                    &local.sa,
+                    WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id,
+                    &inexact_matches,
+                    &action_results));
+            WOLFSENTRY_EXIT_ON_TRUE(route_id == WOLFSENTRY_ENT_ID_NONE);
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == WOLFSENTRY_ACTION_RES_ACCEPT);
+
+            memcpy(remote.sa.addr,"\13\24\36\50",sizeof remote.addr_buf);
+
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &remote.sa,
+                    &local.sa,
+                    WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id,
+                    &inexact_matches,
+                    &action_results));
+            WOLFSENTRY_EXIT_ON_FALSE(route_id == WOLFSENTRY_ENT_ID_NONE);
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == WOLFSENTRY_ACTION_RES_REJECT);
+        } else {
             static const char *trivial_test_json = "{ \"wolfsentry-config-version\" : 1, \"user-values\" : { \"extra-user-string\" : \"extra hello\" } }";
             WOLFSENTRY_EXIT_ON_FAILURE(
                 wolfsentry_config_json_oneshot(

@@ -531,7 +531,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONT
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_cursor_init(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_cursor *cursor) {
-    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
+
     memset(cursor, 0, sizeof *cursor);
     WOLFSENTRY_RETURN_OK;
 }

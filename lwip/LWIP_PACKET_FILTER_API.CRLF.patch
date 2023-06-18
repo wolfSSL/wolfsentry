@@ -1,5 +1,5 @@
 diff --git a/src/core/ipv4/icmp.c b/src/core/ipv4/icmp.c
-index 9810b9bb..d5d80e93 100644
+index 9810b9bb..5f06c0ca 100644
 --- a/src/core/ipv4/icmp.c
 +++ b/src/core/ipv4/icmp.c
 @@ -102,7 +102,16 @@ icmp_input(struct pbuf *p, struct netif *inp)
@@ -57,7 +57,7 @@ index 9810b9bb..d5d80e93 100644
    if (netif != NULL) {
      /* calculate checksum */
      icmphdr->chksum = 0;
-@@ -402,4 +435,88 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
+@@ -402,4 +435,84 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
    pbuf_free(q);
  }
  
@@ -91,8 +91,6 @@ index 9810b9bb..d5d80e93 100644
 +    return ERR_OK;
 +  if (filter_cb == NULL)
 +    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
-+    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
 +  LWIP_ASSERT_CORE_LOCKED();
@@ -120,8 +118,6 @@ index 9810b9bb..d5d80e93 100644
 +  struct packet_filter_event event;
 +  if (filter_cb == NULL)
 +    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
-+    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
 +  LWIP_ASSERT_CORE_LOCKED();
@@ -147,7 +143,7 @@ index 9810b9bb..d5d80e93 100644
 +
  #endif /* LWIP_IPV4 && LWIP_ICMP */
 diff --git a/src/core/ipv4/ip4.c b/src/core/ipv4/ip4.c
-index 36f32358..d36ba863 100644
+index 36f32358..d14a4762 100644
 --- a/src/core/ipv4/ip4.c
 +++ b/src/core/ipv4/ip4.c
 @@ -648,6 +648,17 @@ ip4_input(struct pbuf *p, struct netif *inp)
@@ -187,7 +183,7 @@ index 36f32358..d36ba863 100644
    IP_STATS_INC(ip.xmit);
  
    LWIP_DEBUGF(IP_DEBUG, ("ip4_output_if: %c%c%"U16_F"\n", netif->name[0], netif->name[1], (u16_t)netif->num));
-@@ -1163,4 +1186,85 @@ ip4_debug_print(struct pbuf *p)
+@@ -1163,4 +1186,81 @@ ip4_debug_print(struct pbuf *p)
  }
  #endif /* IP_DEBUG */
  
@@ -219,8 +215,6 @@ index 36f32358..d36ba863 100644
 +
 +  if (filter_cb == NULL)
 +    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
-+    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
 +  LWIP_ASSERT_CORE_LOCKED();
@@ -248,8 +242,6 @@ index 36f32358..d36ba863 100644
 +
 +  if (filter_cb == NULL)
 +    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
-+    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
 +  LWIP_ASSERT_CORE_LOCKED();
@@ -274,7 +266,7 @@ index 36f32358..d36ba863 100644
 +
  #endif /* LWIP_IPV4 */
 diff --git a/src/core/ipv6/icmp6.c b/src/core/ipv6/icmp6.c
-index ed0bd7b7..cf1b3721 100644
+index ed0bd7b7..f63da6f5 100644
 --- a/src/core/ipv6/icmp6.c
 +++ b/src/core/ipv6/icmp6.c
 @@ -99,6 +99,14 @@ icmp6_input(struct pbuf *p, struct netif *inp)
@@ -322,7 +314,7 @@ index ed0bd7b7..cf1b3721 100644
    /* ICMPv6 header + datalen (as much of the offending packet as possible) */
    q = pbuf_alloc(PBUF_IP, sizeof(struct icmp6_hdr) + datalen,
                   PBUF_RAM);
-@@ -422,4 +446,85 @@ icmp6_send_response_with_addrs_and_netif(struct pbuf *p, u8_t code, u32_t data,
+@@ -422,4 +446,81 @@ icmp6_send_response_with_addrs_and_netif(struct pbuf *p, u8_t code, u32_t data,
    pbuf_free(q);
  }
  
@@ -356,8 +348,6 @@ index ed0bd7b7..cf1b3721 100644
 +    return ERR_OK;
 +  if (filter_cb == NULL)
 +    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
-+    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
 +  LWIP_ASSERT_CORE_LOCKED();
@@ -384,8 +374,6 @@ index ed0bd7b7..cf1b3721 100644
 +
 +  if (filter_cb == NULL)
 +    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
-+    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
 +  LWIP_ASSERT_CORE_LOCKED();
@@ -409,7 +397,7 @@ index ed0bd7b7..cf1b3721 100644
 +
  #endif /* LWIP_ICMP6 && LWIP_IPV6 */
 diff --git a/src/core/ipv6/ip6.c b/src/core/ipv6/ip6.c
-index 90e90dda..ec423700 100644
+index 90e90dda..7ccaf84b 100644
 --- a/src/core/ipv6/ip6.c
 +++ b/src/core/ipv6/ip6.c
 @@ -679,6 +679,16 @@ netif_found:
@@ -447,7 +435,7 @@ index 90e90dda..ec423700 100644
    IP6_STATS_INC(ip6.xmit);
  
    LWIP_DEBUGF(IP6_DEBUG, ("ip6_output_if: %c%c%"U16_F"\n", netif->name[0], netif->name[1], (u16_t)netif->num));
-@@ -1491,4 +1512,85 @@ ip6_debug_print(struct pbuf *p)
+@@ -1491,4 +1512,81 @@ ip6_debug_print(struct pbuf *p)
  }
  #endif /* IP6_DEBUG */
  
@@ -479,8 +467,6 @@ index 90e90dda..ec423700 100644
 +
 +  if (filter_cb == NULL)
 +    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
-+    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
 +  LWIP_ASSERT_CORE_LOCKED();
@@ -507,8 +493,6 @@ index 90e90dda..ec423700 100644
 +  err_t ret;
 +
 +  if (filter_cb == NULL)
-+    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
 +    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
@@ -549,7 +533,7 @@ index ea5e026c..baa0b234 100644
  
  #define SIZEOF_STRUCT_PBUF        LWIP_MEM_ALIGN_SIZE(sizeof(struct pbuf))
 diff --git a/src/core/tcp.c b/src/core/tcp.c
-index 1abea8e0..e2b10cb5 100644
+index 1abea8e0..ba1d83fb 100644
 --- a/src/core/tcp.c
 +++ b/src/core/tcp.c
 @@ -367,6 +367,9 @@ tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
@@ -654,7 +638,7 @@ index 1abea8e0..e2b10cb5 100644
        tcp_free(pcb2);
      } else {
        prev = pcb;
-@@ -2692,4 +2727,103 @@ tcp_ext_arg_invoke_callbacks_passive_open(struct tcp_pcb_listen *lpcb, struct tc
+@@ -2692,4 +2727,99 @@ tcp_ext_arg_invoke_callbacks_passive_open(struct tcp_pcb_listen *lpcb, struct tc
  }
  #endif /* LWIP_TCP_PCB_NUM_EXT_ARGS */
  
@@ -685,8 +669,6 @@ index 1abea8e0..e2b10cb5 100644
 +  err_t ret;
 +
 +  if (filter_cb == NULL)
-+    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
 +    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
@@ -724,8 +706,6 @@ index 1abea8e0..e2b10cb5 100644
 +
 +err_t tcp_filter_dispatch_outgoing(packet_filter_event_t reason, struct tcp_pcb *pcb, struct netif *netif) {
 +  if (filter_cb == NULL)
-+    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
 +    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
@@ -879,7 +859,7 @@ index 64579ee5..b71f8956 100644
    if (lwip_ntohl(seg->tcphdr->seqno) - pcb->lastack + seg->len > wnd) {
      /* We need to start the persistent timer when the next unsent segment does not fit
 diff --git a/src/core/udp.c b/src/core/udp.c
-index db833d00..3250d1d2 100644
+index db833d00..9162d8ee 100644
 --- a/src/core/udp.c
 +++ b/src/core/udp.c
 @@ -363,6 +363,33 @@ udp_input(struct pbuf *p, struct netif *inp)
@@ -999,7 +979,7 @@ index db833d00..3250d1d2 100644
    mib2_udp_unbind(pcb);
    /* pcb to be removed is first in list? */
    if (udp_pcbs == pcb) {
-@@ -1317,4 +1365,95 @@ udp_debug_print(struct udp_hdr *udphdr)
+@@ -1317,4 +1365,91 @@ udp_debug_print(struct udp_hdr *udphdr)
  }
  #endif /* UDP_DEBUG */
  
@@ -1030,8 +1010,6 @@ index db833d00..3250d1d2 100644
 +  err_t ret;
 +
 +  if (filter_cb == NULL)
-+    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
 +    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;
@@ -1067,8 +1045,6 @@ index db833d00..3250d1d2 100644
 +  err_t ret;
 +
 +  if (filter_cb == NULL)
-+    return ERR_OK;
-+  if (reason >= (sizeof(packet_filter_event_t) * 8))
 +    return ERR_OK;
 +  if (! ((1U << reason) & filter_reason_mask))
 +    return ERR_OK;

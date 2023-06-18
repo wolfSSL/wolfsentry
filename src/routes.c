@@ -1190,17 +1190,19 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_reference(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *event = NULL;
+
+    WOLFSENTRY_SHARED_OR_RETURN();
+
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
     ret = wolfsentry_route_lookup_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, remote, local, flags, event, exact_p, inexact_matches, (struct wolfsentry_route **)route, NULL /* action_results */);
     if (event != NULL)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     WOLFSENTRY_REFCOUNT_INCREMENT((*route)->header.refcount, ret);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
@@ -3335,6 +3337,13 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
 
     if (src_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    ((struct wolfsentry_route_table *)dest_table)->max_purgeable_routes =
+        ((struct wolfsentry_route_table *)src_table)->max_purgeable_routes;
+    ((struct wolfsentry_route_table *)dest_table)->default_policy =
+        ((struct wolfsentry_route_table *)src_table)->default_policy;
+    ((struct wolfsentry_route_table *)dest_table)->highest_priority_route_in_table =
+        ((struct wolfsentry_route_table *)src_table)->highest_priority_route_in_table;
 
     if (((struct wolfsentry_route_table *)src_table)->default_event != NULL) {
         struct wolfsentry_event *default_event;

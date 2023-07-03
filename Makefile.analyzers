@@ -122,6 +122,8 @@ else
 endif
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds" EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds" EXTRA_CFLAGS+="-fno-sanitize-recover=all -fshort-enums" sanitize
 	@echo
 	@echo "sanitize thread"
 	@echo "==============="
@@ -159,6 +161,8 @@ valgrind-all-clang: clang-version-test
 sanitize-all-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds-gcc" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds-gcc" CC=$(GCC) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds-gcc" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds-gcc" CC=$(GCC) EXTRA_CFLAGS+="-fno-sanitize-recover=all -fshort-enums" sanitize
 	@echo "passed: no defects from gcc sanitize address, leak, undefined, float-cast-overflow, float-divide-by-zero, and bounds-strict"
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds-gcc" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-builds-gcc" CC=$(GCC) EXTRA_CFLAGS+="-fno-sanitize-recover=all" sanitize-thread
@@ -344,6 +348,13 @@ minimal-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-builds" clean
 	@echo "passed: minimal build test."
 
+.PHONY: short-enums-test
+short-enums-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" EXTRA_CFLAGS='-fshort-enums'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" clean
+	@echo "passed: short enums test."
+
 .PHONY: dynamic-build-test
 dynamic-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-dynamic-build-test" clean
@@ -439,7 +450,7 @@ release-check:
 	 echo 'passed: $@.'
 
 .PHONY: check
-check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test
+check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test short-enums-test
 
 .PHONY: check-extra
 check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check release-check notification-demo-build-test

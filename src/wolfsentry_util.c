@@ -3711,10 +3711,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
 
     if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->events->header, *clone, &(*clone)->events->header, flags)) < 0)
         goto out;
-    if (! WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_NO_ROUTES)) {
-        if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->routes->header, *clone, &(*clone)->routes->header, flags)) < 0)
-            goto out;
-    }
+    if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->routes->header, *clone, &(*clone)->routes->header, flags)) < 0)
+        goto out;
     if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->user_values->header, *clone, &(*clone)->user_values->header, flags)) < 0)
         goto out;
 

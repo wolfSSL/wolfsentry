@@ -583,8 +583,6 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_one_unconditionally(
     struct wolfsentry_route_table *table,
     wolfsentry_action_res_t *action_results);
 
-static void wolfsentry_route_purge_list_insert(struct wolfsentry_route_table *route_table, struct wolfsentry_route *route_to_insert);
-
 static wolfsentry_errcode_t wolfsentry_route_insert_1(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
@@ -1936,7 +1934,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_wit
 
 /* purge_list: least stale at the head, most stale at the tail. */
 
-static void wolfsentry_route_purge_list_insert(struct wolfsentry_route_table *route_table, struct wolfsentry_route *route_to_insert) {
+WOLFSENTRY_LOCAL_VOID wolfsentry_route_purge_list_insert(struct wolfsentry_route_table *route_table, struct wolfsentry_route *route_to_insert) {
     struct wolfsentry_list_ent_header *point_ent;
 
     for (wolfsentry_list_ent_get_first(&route_table->purge_list, &point_ent); point_ent; point_ent = point_ent->next) {
@@ -3333,7 +3331,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
     wolfsentry_errcode_t ret;
 
     (void)wolfsentry;
-    (void)flags;
 
     if (src_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -3342,8 +3339,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
         ((struct wolfsentry_route_table *)src_table)->max_purgeable_routes;
     ((struct wolfsentry_route_table *)dest_table)->default_policy =
         ((struct wolfsentry_route_table *)src_table)->default_policy;
-    ((struct wolfsentry_route_table *)dest_table)->highest_priority_route_in_table =
-        ((struct wolfsentry_route_table *)src_table)->highest_priority_route_in_table;
 
     if (((struct wolfsentry_route_table *)src_table)->default_event != NULL) {
         struct wolfsentry_event *default_event;
@@ -3375,6 +3370,12 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
         WOLFSENTRY_REFCOUNT_INCREMENT(((struct wolfsentry_route_table *)dest_table)->fallthrough_route->header.refcount, ret);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
+
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_NO_ROUTES))
+        WOLFSENTRY_RETURN_OK;
+
+    ((struct wolfsentry_route_table *)dest_table)->highest_priority_route_in_table =
+        ((struct wolfsentry_route_table *)src_table)->highest_priority_route_in_table;
 
     WOLFSENTRY_RETURN_OK;
 }

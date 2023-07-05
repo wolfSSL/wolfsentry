@@ -3001,6 +3001,7 @@ static int test_json(const char *fname, const char *extra_fname) {
     }
 
     {
+        struct wolfsentry_route_table *main_routes, main_routes_copy;
         const char *value = NULL;
         int value_len = -1;
         struct wolfsentry_kv_pair_internal *kv_ref;
@@ -3011,6 +3012,11 @@ static int test_json(const char *fname, const char *extra_fname) {
         wolfsentry_ent_id_t route_id;
         wolfsentry_route_flags_t inexact_matches;
         wolfsentry_action_res_t action_results;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+        main_routes_copy = *main_routes;
 
         if (extra_fname) {
             remote.sa.sa_family = local.sa.sa_family = AF_INET;
@@ -3083,6 +3089,13 @@ static int test_json(const char *fname, const char *extra_fname) {
                     0));
         }
 
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+
+        WOLFSENTRY_EXIT_ON_FALSE((main_routes->max_purgeable_routes == main_routes_copy.max_purgeable_routes) &&
+                                 (main_routes->default_policy == main_routes_copy.default_policy));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_user_value_get_string(
                 WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -3122,7 +3135,7 @@ static int test_json(const char *fname, const char *extra_fname) {
     WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, 1));
 
     {
-        struct wolfsentry_route_table *main_routes;
+        struct wolfsentry_route_table *main_routes, main_routes_copy;
         struct wolfsentry_cursor *cursor;
         WOLFSENTRY_BYTE_STREAM_DECLARE_STACK(json_out, 8192);
         WOLFSENTRY_BYTE_STREAM_DECLARE_HEAP(json_out2, 8192);
@@ -3172,6 +3185,8 @@ static int test_json(const char *fname, const char *extra_fname) {
 
         WOLFSENTRY_EXIT_ON_FALSE(n_seen == wolfsentry->routes->header.n_ents);
 
+        main_routes_copy = *main_routes;
+
         ret = wolfsentry_config_json_oneshot(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             WOLFSENTRY_BYTE_STREAM_HEAD(json_out),
@@ -3185,6 +3200,9 @@ static int test_json(const char *fname, const char *extra_fname) {
         }
 
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+
+        WOLFSENTRY_EXIT_ON_FALSE((main_routes->max_purgeable_routes == main_routes_copy.max_purgeable_routes) &&
+                                 (main_routes->default_policy == main_routes_copy.default_policy));
 
         WOLFSENTRY_BYTE_STREAM_RESET(json_out2);
 

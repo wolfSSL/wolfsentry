@@ -136,6 +136,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_clone(
     case WOLFSENTRY_OBJECT_TYPE_ROUTE:
         if ((ret = wolfsentry_route_table_clone_header(WOLFSENTRY_CONTEXT_ARGS_OUT, src_table, dest_context, dest_table, flags)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
+        if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_NO_ROUTES))
+            WOLFSENTRY_RETURN_OK;
         clone_fn = wolfsentry_route_clone;
         break;
     case WOLFSENTRY_OBJECT_TYPE_KV:
@@ -166,7 +168,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_clone(
 
     for (i = src_table->head;
          i;
-         i = i->next) {
+         i = i->next)
+    {
         if ((ret = clone_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, dest_context, &new, flags)) < 0)
             goto out;
         new->parent_table = dest_table;
@@ -178,6 +181,12 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_clone(
         prev = new;
         if ((ret = wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(dest_context), new)) < 0)
             goto out;
+
+        if ((src_table->ent_type == WOLFSENTRY_OBJECT_TYPE_ROUTE) &&
+            ((struct wolfsentry_route *)new)->meta.purge_after)
+        {
+            wolfsentry_route_purge_list_insert((struct wolfsentry_route_table *)dest_table, (struct wolfsentry_route *)new);
+        }
     }
     dest_table->tail = new;
 

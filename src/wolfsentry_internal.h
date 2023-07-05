@@ -609,6 +609,10 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
     struct wolfsentry_table_ent_header **new_ent,
     wolfsentry_clone_flags_t flags);
 
+WOLFSENTRY_LOCAL_VOID wolfsentry_route_purge_list_insert(
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *route_to_insert);
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table);
 
 static inline __wolfsentry_wur struct wolfsentry_table_ent_header *wolfsentry_table_first(const struct wolfsentry_table_header *table) {

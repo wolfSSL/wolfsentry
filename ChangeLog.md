@@ -1,3 +1,24 @@
+# wolfSentry Release 1.3.1 (July 5, 2023)
+
+Release 1.3.1 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## Bug Fixes and Cleanups
+
+Updated lwIP patches to fix `packet_filter_event_t` checking on short-enum targets.
+
+Fixed copying of route table header fields (table config) when cloning or rebuilding (preserve default policy etc when loading with `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT | WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` or `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES`).
+
+Implemented proper locking in `wolfsentry_route_get_reference()`, and corresponding lock assertion in `wolfsentry_table_cursor_init()`.
+
+## Self-Test Enhancements
+
+`Makefile.analyzers`: add `-fshort-enums` variants to `sanitize-all` and `sanitize-all-gcc` recipes, and add `short-enums-test` recipe.
+
+Added `wolfsentry_route_event_dispatch()` cases to `test_json()`.
+
+Added unit test coverage to confirm correct copying of route table header fields when cloning.
+
+
 # wolfSentry Release 1.3 (May 19, 2023)
 
 Release 1.3 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:

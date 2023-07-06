@@ -475,7 +475,9 @@ struct wolfsentry_context {
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 
-WOLFSENTRY_LOCAL int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_event *right);
+WOLFSENTRY_LOCAL int wolfsentry_event_key_cmp(
+    const struct wolfsentry_event *left,
+    const struct wolfsentry_event *right);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_table_init(
     struct wolfsentry_event_table *event_table);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_table_clone_header(

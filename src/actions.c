@@ -40,8 +40,12 @@ static inline int wolfsentry_action_key_cmp_1(const char *left_label, unsigned c
     WOLFSENTRY_RETURN_VALUE(ret);
 }
 
-static int wolfsentry_action_key_cmp(struct wolfsentry_action *left, struct wolfsentry_action *right) {
-    return wolfsentry_action_key_cmp_1(left->label, left->label_len, right->label, right->label_len);
+static int wolfsentry_action_key_cmp(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right) {
+    return wolfsentry_action_key_cmp_1(
+        ((const struct wolfsentry_action *)left)->label,
+        ((const struct wolfsentry_action *)left)->label_len,
+        ((const struct wolfsentry_action *)right)->label,
+        ((const struct wolfsentry_action *)right)->label_len);
 }
 
 static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int label_len, wolfsentry_action_flags_t flags, wolfsentry_action_callback_t handler, void *handler_arg, struct wolfsentry_action *action, size_t action_size) {
@@ -575,12 +579,16 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
+static wolfsentry_errcode_t wolfsentry_action_drop_reference_generic(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *action, wolfsentry_action_res_t *action_results) {
+    return wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_action *)action, action_results);
+}
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_table_init(
     struct wolfsentry_action_table *action_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(action_table->header);
-    action_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_action_key_cmp;
-    action_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_action_drop_reference;
+    action_table->header.cmp_fn = wolfsentry_action_key_cmp;
+    action_table->header.free_fn = wolfsentry_action_drop_reference_generic;
     action_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ACTION;
     WOLFSENTRY_RETURN_OK;
 }

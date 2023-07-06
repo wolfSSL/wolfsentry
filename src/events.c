@@ -40,8 +40,16 @@ static inline int wolfsentry_event_key_cmp_1(const char *left_label, const unsig
     WOLFSENTRY_RETURN_VALUE(ret);
 }
 
-int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_event *right) {
+WOLFSENTRY_LOCAL int wolfsentry_event_key_cmp(const struct wolfsentry_event *left, const struct wolfsentry_event *right) {
     return wolfsentry_event_key_cmp_1(left->label, left->label_len, right->label, right->label_len);
+}
+
+static int wolfsentry_event_key_cmp_generic(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right) {
+    return wolfsentry_event_key_cmp_1(
+        ((const struct wolfsentry_event *)left)->label,
+        ((const struct wolfsentry_event *)left)->label_len,
+        ((const struct wolfsentry_event *)right)->label,
+        ((const struct wolfsentry_event *)right)->label_len);
 }
 
 static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label_len, wolfsentry_priority_t priority, const struct wolfsentry_eventconfig *config, struct wolfsentry_event *event, size_t event_size) {
@@ -679,12 +687,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_action_list_done(
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t wolfsentry_event_drop_reference_generic(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *event, wolfsentry_action_res_t *action_results) {
+    return wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_event *)event, action_results);
+}
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_table_init(
     struct wolfsentry_event_table *event_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(event_table->header);
-    event_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_event_key_cmp;
-    event_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_event_drop_reference;
+    event_table->header.cmp_fn = wolfsentry_event_key_cmp_generic;
+    event_table->header.free_fn = wolfsentry_event_drop_reference_generic;
     event_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_EVENT;
     WOLFSENTRY_RETURN_OK;
 }

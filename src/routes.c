@@ -54,7 +54,7 @@ static inline int cmp_addrs(
     if (min_addr_len == 0) {
         if (left_addr_len == right_addr_len)
             return 0;
-        else if (wildcard_p) {
+        else if (wildcard_p || match_subnets_p) {
             *inexact_p = 1;
             return 0;
         } else if (left_addr_len != 0)

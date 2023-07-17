@@ -400,7 +400,7 @@ static wolfsentry_errcode_t wolfsentry_route_init(
           (! (flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)))))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    memset(new,0,offsetof(struct wolfsentry_route, data));
+    memset(new, 0, offsetof(struct wolfsentry_route, data));
 
     new->parent_event = parent_event;
     new->flags = flags;
@@ -475,7 +475,7 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
           (! (route_exports->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)))))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    memset(new,0,offsetof(struct wolfsentry_route, data));
+    memset(new, 0, offsetof(struct wolfsentry_route, data));
 
     new->parent_event = parent_event;
     new->flags = route_exports->flags;
@@ -504,10 +504,16 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
     new->meta.derogatory_count = route_exports->meta.derogatory_count;
     new->meta.commendable_count = route_exports->meta.commendable_count;
 
-    if (route_exports->remote.addr_len > 0)
-        memcpy(WOLFSENTRY_ROUTE_REMOTE_ADDR(new), route_exports->remote_address, WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len));
-    if (route_exports->local.addr_len > 0)
-        memcpy(WOLFSENTRY_ROUTE_LOCAL_ADDR(new), route_exports->local_address, WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len));
+    if (route_exports->remote.addr_len > 0) {
+        memcpy(WOLFSENTRY_ROUTE_REMOTE_ADDR(new),
+               route_exports->remote_address,
+               WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len));
+    }
+    if (route_exports->local.addr_len > 0) {
+        memcpy(WOLFSENTRY_ROUTE_LOCAL_ADDR(new),
+               route_exports->local_address,
+               WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len));
+    }
 
     /* make sure the pad bits in the addresses are zero. */
     {

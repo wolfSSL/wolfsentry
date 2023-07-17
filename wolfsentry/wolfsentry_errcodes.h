@@ -65,12 +65,19 @@ typedef int32_t wolfsentry_errcode_t;
 #define WOLFSENTRY_ERROR_ENCODE_1(x) WOLFSENTRY_ERROR_ENCODE_0(x)
 #endif
 
+#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
+#define WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) ({ wolfsentry_errcode_t _x = (x); ((int)((((_x) < 0) ? -(-(_x) & WOLFSENTRY_ERROR_ID_MAX) : ((_x) & WOLFSENTRY_ERROR_ID_MAX)))); })
+#define WOLFSENTRY_ERROR_DECODE_SOURCE_ID(x) ({ wolfsentry_errcode_t _x = (x); ((int)((((_x) < 0) ? ((-(_x)) >> 24) : ((_x) >> 24)))); })
+#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) ({ wolfsentry_errcode_t _x = (x); ((int)((((_x) < 0) ? (((-(_x)) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX) : (((_x) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX)))); })
+#else
 #define WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) ((int)((((x) < 0) ? -(-(x) & WOLFSENTRY_ERROR_ID_MAX) : ((x) & WOLFSENTRY_ERROR_ID_MAX))))
+#define WOLFSENTRY_ERROR_DECODE_SOURCE_ID(x) ((int)((((x) < 0) ? ((-(x)) >> 24) : ((x) >> 24))))
+#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) ((int)((((x) < 0) ? (((-(x)) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX) : (((x) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX))))
+#endif
+
 #define WOLFSENTRY_ERROR_RECODE(x) WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x))
 #define WOLFSENTRY_ERROR_CODE_IS(x, y) (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) == WOLFSENTRY_ERROR_ID_ ## y)
 #define WOLFSENTRY_SUCCESS_CODE_IS(x, y) (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) == WOLFSENTRY_SUCCESS_ID_ ## y)
-#define WOLFSENTRY_ERROR_DECODE_SOURCE_ID(x) ((int)((((x) < 0) ? ((-(x)) >> 24) : ((x) >> 24))))
-#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) ((int)((((x) < 0) ? (((-(x)) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX) : (((x) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX))))
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
 #define WOLFSENTRY_ERROR_FMT "code " WOLFSENTRY_ERRCODE_FMT " (%s), src " WOLFSENTRY_ERRCODE_FMT " (%s), line " WOLFSENTRY_ERRCODE_FMT

@@ -171,7 +171,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_insert(
     void *handler_arg,
     wolfsentry_ent_id_t *id)
 {
-    if (WOLFSENTRY_SUCCESS_CODE_IS(wolfsentry_label_is_builtin(label, label_len), YES))
+    wolfsentry_errcode_t ret = wolfsentry_label_is_builtin(label, label_len);
+    if (WOLFSENTRY_SUCCESS_CODE_IS(ret, YES))
         WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_action_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, flags, handler, handler_arg, id));
 }

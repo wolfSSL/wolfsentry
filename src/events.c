@@ -274,7 +274,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_insert(
     struct wolfsentry_event *new;
     wolfsentry_errcode_t ret;
 
-    if (WOLFSENTRY_SUCCESS_CODE_IS(wolfsentry_label_is_builtin(label, label_len), YES))
+    ret = wolfsentry_label_is_builtin(label, label_len);
+    if (WOLFSENTRY_SUCCESS_CODE_IS(ret, YES))
         WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
 
     WOLFSENTRY_MUTEX_OR_RETURN();

@@ -419,6 +419,10 @@ typedef uint16_t wolfsentry_priority_t;
 #error WOLFSENTRY_MAX_LABEL_BYTES must fit in a byte.
 #endif
 
+#ifndef WOLFSENTRY_BUILTIN_LABEL_PREFIX
+#define WOLFSENTRY_BUILTIN_LABEL_PREFIX "%"
+#endif
+
 #ifndef WOLFSENTRY_KV_MAX_VALUE_BYTES
 #define WOLFSENTRY_KV_MAX_VALUE_BYTES 16384
 #endif

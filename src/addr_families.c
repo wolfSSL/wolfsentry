@@ -128,7 +128,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
     bynumber->number = family_bynumber;
     bynumber->parser = parser;
     bynumber->formatter = formatter;
-    bynumber->max_addr_bits = max_addr_bits;
+    bynumber->max_addr_bits = (wolfsentry_addr_bits_t)max_addr_bits;
     bynumber->header.refcount = 1;
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES

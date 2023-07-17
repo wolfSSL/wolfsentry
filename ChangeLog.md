@@ -1,3 +1,112 @@
+# wolfSentry Release 1.4.0 (July 17, 2023)
+
+Release 1.4.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
+
+## New Features
+
+Routes can now be configured to match traffic with designated `action_results`
+bit constraints, and can be configured to update `action_results` bits, by
+inserting the route with a parent event that has the desired configuration.
+Parent events can now also be configured to add or clear route flags for all
+routes inserted with that parent event.
+
+Added new `aux_event` mechanism to facilitate distinct configurations for a
+static generator route and the narrower ephemeral routes dynamically created
+when it is matched.
+
+Added a new built-in action, `"%track-peer-v1"`, that can be used in combination
+with the above new facilities to dynamically spawn ephemeral routes, allowing
+for automatic pinhole routes, automatic adversary tracking, and easy
+implementation of dynamic blocks for port scanning adversaries.
+
+## Noteworthy Changes and Additions
+
+Added new APIs `wolfsentry_event_set_aux_event()` and
+`wolfsentry_event_get_aux_event()`.
+
+Added flag filters and controls to `struct wolfsentry_eventconfig`, and
+added corresponding clauses to JSON `"config"` sections:
+
+* `.action_res_filter_bits_set`, "action-res-filter-bits-set"
+* `.action_res_filter_bits_unset`, `"action-res-filter-bits-unset"`
+* `.action_res_bits_to_add`, `"action-res-bits-to-add"`
+* `.action_res_bits_to_clear`, `"action-res-bits-to-clear"`
+* `.route_flags_to_add_on_insert`, `"route-flags-to-add-on-insert"`
+* `.route_flags_to_clear_on_insert`, `"route-flags-to-clear-on-insert"`
+
+Added new `WOLFSENTRY_ACTION_RES_*` (action result) flags to support filtering
+matches by generic traffic type:
+
+* `WOLFSENTRY_ACTION_RES_SENDING`
+* `WOLFSENTRY_ACTION_RES_RECEIVED`
+* `WOLFSENTRY_ACTION_RES_BINDING`
+* `WOLFSENTRY_ACTION_RES_LISTENING`
+* `WOLFSENTRY_ACTION_RES_STOPPED_LISTENING`
+* `WOLFSENTRY_ACTION_RES_CONNECTING_OUT`
+* `WOLFSENTRY_ACTION_RES_CLOSED`
+* `WOLFSENTRY_ACTION_RES_UNREACHABLE`
+* `WOLFSENTRY_ACTION_RES_SOCK_ERROR`
+
+These flags are now passed by the lwIP
+integration code in `src/lwip/packet_filter_glue.c`.  Detailed descriptions of
+these and other `_ACTION_RES_` bits are in `wolfsentry/wolfsentry.h`.
+
+Added `wolfsentry_addr_family_max_addr_bits()`, to allow programmatic
+determination of whether a given address is a prefix or fully specified.
+
+Added a family of functions to let routes be inserted directly from a prepared
+`struct wolfsentry_route_exports`, and related helper functions to prepare it:
+
+* `wolfsentry_route_insert_by_exports_into_table()`
+* `wolfsentry_route_insert_by_exports()`
+* `wolfsentry_route_insert_by_exports_into_table_and_check_out()`
+* `wolfsentry_route_insert_by_exports_and_check_out()`
+* `wolfsentry_route_reset_metadata_exports()`
+
+Added convenience accessor/validator functions for routes:
+* `wolfsentry_route_get_addrs()`
+* `wolfsentry_route_check_flags_sensical()`
+
+Refactored the event action list implementation so that the various action lists
+(`WOLFSENTRY_ACTION_TYPE_POST`, `_INSERT`, `_MATCH`, `_UPDATE`, `_DELETE`, and
+`_DECISION`) are represented directly in the `struct wolfsentry_event`, rather
+than through a "subevent".  The related APIs
+(`wolfsentry_event_action_prepend()`, `wolfsentry_event_action_append()`,
+`wolfsentry_event_action_insert_after()`, `wolfsentry_event_action_delete()`,
+`wolfsentry_event_action_list_start()`) each gain an additional argument,
+`which_action_list`.  The old JSON grammar is still supported via internal
+emulation (still tested by test-config.json).  The JSON configuration for the
+new facility is `"post-actions"`, `"insert-actions"`, `"match-actions"`,
+`"update-actions"`, `"delete-actions"`, and `"decision-actions"`, each optional,
+and each expecting an array of zero or more actions.
+
+Added a restriction that user-defined action and event labels can't start with
+"%", and correspondingly, all built-in actions and events have labels that start
+with "%".  This can be overridden by predefining
+`WOLFSENTRY_BUILTIN_LABEL_PREFIX` in user settings.
+
+Eliminated unused flag `WOLFSENTRY_ACTION_RES_CONTINUE`, as it was semantically
+redundant relative to `WOLFSENTRY_ACTION_RES_STOP`.
+
+Reduced number of available user-defined `_ACTION_RESULT_` bits from 16 to 8, to
+accommodate new generic traffic bits (see above).
+
+In `struct wolfsentry_route_metadata_exports`, changed `.connection_count`,
+`.derogatory_count`, and `.commendable_count`, from `wolfsentry_hitcount_t` to
+`uint16_t`, to match internal representations.  Similarly, in ` struct
+wolfsentry_route_exports`, changed `.parent_event_label_len` from `size_t` to
+`int` to match `label_len` arg type.
+
+## Bug Fixes and Cleanups
+
+Refactored internal code to avoid function pointer casts, previously used to
+allow implementations with struct pointers where a handler pointer has a type
+that expects `void *`.  The refactored code has shim implementations with fully
+conformant signatures, that cast the arguments to pass them to the actual
+implementations.  This works around over-eager analysis by the `clang` UB
+sanitizer.
+
+
 # wolfSentry Release 1.3.1 (July 5, 2023)
 
 Release 1.3.1 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:

@@ -108,7 +108,7 @@ static wolfsentry_errcode_t test_init (void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
     wolfsentry_errcode_t ret;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -254,7 +254,11 @@ static void *rd2wr_reserved_routine(struct rwlock_args *args) {
 static int test_rw_locks (void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_rwlock *lock;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+#endif
 
     volatile int measured_sequence[8], measured_sequence_i = 0;
     int measured_sequence_transposed[8];
@@ -715,7 +719,13 @@ static int test_static_routes (void) {
         4,
         1, /* denominated in seconds when passing to wolfsentry_init(). */
         0,
-        WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+        WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
 #endif
     };
 
@@ -1457,8 +1467,8 @@ static int test_dynamic_rules (void) {
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
     struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
 #else
-    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0 };
-    struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -1902,6 +1912,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "del_from_greenlist",
             -1));
 
@@ -1910,6 +1921,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "del_from_greenlist",
             -1));
 
@@ -1918,6 +1930,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "add_to_greenlist",
             -1));
 
@@ -1926,6 +1939,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "check_counts",
             -1,
             "add_to_greenlist",
@@ -1945,6 +1959,7 @@ int wolfsentry_event_set_subevent(
                 WOLFSENTRY_CONTEXT_ARGS_OUT,
                 "match_side_effect_demo",
                 -1,
+                WOLFSENTRY_ACTION_TYPE_MATCH,
                 &cursor));
 
         while (wolfsentry_event_action_list_next(
@@ -1971,6 +1986,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "del_from_greenlist",
             -1));
 
@@ -2829,7 +2845,7 @@ static int test_json(const char *fname, const char *extra_fname) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
 #else
-    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);

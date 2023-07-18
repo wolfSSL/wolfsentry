@@ -1749,6 +1749,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         parent_event = route_table->default_event;
     }
 
+    if (*action_results & WOLFSENTRY_ACTION_RES_DELETE) {
+        ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING);
+        goto done;
+    }
+
     if (parent_event && (wolfsentry_list_ent_get_len(&parent_event->match_action_list.header) > 0)) {
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
                                        WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -1762,6 +1767,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        action_results));
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
         current_rule_route_flags = WOLFSENTRY_ATOMIC_LOAD(rule_route->flags);
+    }
+
+    if (*action_results & WOLFSENTRY_ACTION_RES_DELETE) {
+        ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING);
+        goto done;
     }
 
     if (! (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)) {

@@ -1911,6 +1911,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
     case WOLFSENTRY_LOCK_UNLOCKED:
         break; /* regular semantics */
     case WOLFSENTRY_LOCK_UNINITED:
+    case WOLFSENTRY_LOCK_MAX:
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 
@@ -2496,6 +2497,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct
     case WOLFSENTRY_LOCK_UNLOCKED:
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     case WOLFSENTRY_LOCK_UNINITED:
+    default:
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 

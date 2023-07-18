@@ -187,8 +187,6 @@ static inline int wolfsentry_kv_value_eq_1(struct wolfsentry_kv_pair *a, struct 
     if (WOLFSENTRY_KV_TYPE(a) != WOLFSENTRY_KV_TYPE(b))
         return 0;
     switch (WOLFSENTRY_KV_TYPE(a)) {
-    case WOLFSENTRY_KV_NONE:
-        return 0;
     case WOLFSENTRY_KV_NULL:
     case WOLFSENTRY_KV_TRUE:
     case WOLFSENTRY_KV_FALSE:
@@ -211,6 +209,9 @@ static inline int wolfsentry_kv_value_eq_1(struct wolfsentry_kv_pair *a, struct 
     case WOLFSENTRY_KV_JSON:
         return 0; /* don't try to recursively compare the json trees. */
 #endif
+    case WOLFSENTRY_KV_NONE:
+    default:
+        return 0;
     }
     return 0;
 }

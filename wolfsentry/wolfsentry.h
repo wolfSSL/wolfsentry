@@ -1253,8 +1253,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_reference(
     WOLFSENTRY_CONTEXT_ARGS_IN,
-    const char *trigger_label,
-    int trigger_label_len,
+    const char *label,
+    int label_len,
     struct wolfsentry_event **event);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_drop_reference(
@@ -1303,7 +1303,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_set_aux_event(
     const char *aux_event_label,
     int aux_event_label_len);
 
-WOLFSENTRY_API const struct wolfsentry_event *wolfsentry_event_get_aux_event(const struct wolfsentry_event *event);
+WOLFSENTRY_API const struct wolfsentry_event *wolfsentry_event_get_aux_event(
+    const struct wolfsentry_event *event);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_action_list_start(
     WOLFSENTRY_CONTEXT_ARGS_IN,

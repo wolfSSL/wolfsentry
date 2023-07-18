@@ -455,6 +455,8 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
     case 's':
         ++endptr;
         break;
+    default:
+        break;
     }
     if ((size_t)(endptr - (char *)data) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);

@@ -203,7 +203,16 @@ typedef struct JSON_PARSER {
     size_t nesting_level;
     size_t nesting_stack_size;
 
-    unsigned automaton;
+    enum {
+        AUTOMATON_MAIN = 0,
+        AUTOMATON_NULL = 1,
+        AUTOMATON_FALSE = 2,
+        AUTOMATON_TRUE = 3,
+        AUTOMATON_NUMBER = 4,
+        AUTOMATON_STRING = 6,
+        AUTOMATON_KEY = 7
+    } automaton;
+
     unsigned state;
     unsigned substate;
 

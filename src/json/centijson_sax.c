@@ -140,16 +140,6 @@ json_default_config(JSON_CONFIG* cfg)
 #define CAN_SEE_COLON           0x0010
 #define CAN_SEE_EOF             0x8000
 
-/* For JSON_PARSER::automaton. */
-#define AUTOMATON_MAIN          0
-#define AUTOMATON_NULL          1
-#define AUTOMATON_FALSE         2
-#define AUTOMATON_TRUE          3
-#define AUTOMATON_NUMBER        4
-#define AUTOMATON_STRING        6
-#define AUTOMATON_KEY           7
-
-
 int
 json_init(
 #ifdef WOLFSENTRY
@@ -837,6 +827,7 @@ json_dispatch(JSON_PARSER* parser, const unsigned char* input, size_t size)
         case AUTOMATON_NUMBER:  return json_number_automaton(parser, input, size);
         case AUTOMATON_STRING:  return json_string_automaton(parser, input, size, JSON_STRING);
         case AUTOMATON_KEY:     return json_string_automaton(parser, input, size, JSON_KEY);
+        case AUTOMATON_MAIN:    break;
     }
 
     json_raise(parser, JSON_ERR_INTERNAL);

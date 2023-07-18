@@ -42,7 +42,8 @@ enum wolfsentry_rwlock_state {
     WOLFSENTRY_LOCK_UNINITED = 0,
     WOLFSENTRY_LOCK_UNLOCKED,
     WOLFSENTRY_LOCK_SHARED,
-    WOLFSENTRY_LOCK_EXCLUSIVE
+    WOLFSENTRY_LOCK_EXCLUSIVE,
+    WOLFSENTRY_LOCK_MAX = 0x7fffffff /* force enum to be 32 bits, for intrinsic atomicity. */
 };
 
 struct wolfsentry_rwlock {
@@ -60,7 +61,7 @@ struct wolfsentry_rwlock {
     volatile int read_waiter_count;
     volatile int write_waiter_count;
     volatile int read2write_waiter_read_count; /* the recursion depth of the shared lock held by read2write_reservation_holder */
-    volatile uint32_t state;
+    volatile enum wolfsentry_rwlock_state state;
     volatile int promoted_at_count;
     wolfsentry_lock_flags_t flags;
 };

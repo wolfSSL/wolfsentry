@@ -40,8 +40,12 @@ static inline int wolfsentry_action_key_cmp_1(const char *left_label, unsigned c
     WOLFSENTRY_RETURN_VALUE(ret);
 }
 
-static int wolfsentry_action_key_cmp(struct wolfsentry_action *left, struct wolfsentry_action *right) {
-    return wolfsentry_action_key_cmp_1(left->label, left->label_len, right->label, right->label_len);
+static int wolfsentry_action_key_cmp(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right) {
+    return wolfsentry_action_key_cmp_1(
+        ((const struct wolfsentry_action *)left)->label,
+        ((const struct wolfsentry_action *)left)->label_len,
+        ((const struct wolfsentry_action *)right)->label,
+        ((const struct wolfsentry_action *)right)->label_len);
 }
 
 static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int label_len, wolfsentry_action_flags_t flags, wolfsentry_action_callback_t handler, void *handler_arg, struct wolfsentry_action *action, size_t action_size) {
@@ -121,7 +125,15 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_clone(
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, wolfsentry_action_flags_t flags, wolfsentry_action_callback_t handler, void *handler_arg, wolfsentry_ent_id_t *id) {
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_insert_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const char *label,
+    int label_len,
+    wolfsentry_action_flags_t flags,
+    wolfsentry_action_callback_t handler,
+    void *handler_arg,
+    wolfsentry_ent_id_t *id)
+{
     struct wolfsentry_action *new = NULL;
     wolfsentry_errcode_t ret;
 
@@ -148,6 +160,21 @@ out:
     }
 
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_insert(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const char *label,
+    int label_len,
+    wolfsentry_action_flags_t flags,
+    wolfsentry_action_callback_t handler,
+    void *handler_arg,
+    wolfsentry_ent_id_t *id)
+{
+    wolfsentry_errcode_t ret = wolfsentry_label_is_builtin(label, label_len);
+    if (WOLFSENTRY_SUCCESS_CODE_IS(ret, YES))
+        WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_action_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, flags, handler, handler_arg, id));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, wolfsentry_action_res_t *action_results) {
@@ -223,7 +250,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_get_reference(WOLFSENTRY_C
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, const struct wolfsentry_action *action, wolfsentry_action_res_t *action_results) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_action *action, wolfsentry_action_res_t *action_results) {
     if ((action->header.parent_table != NULL) &&
         (action->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ACTION))
         WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
@@ -519,6 +546,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_action_list_ent *i;
+    struct wolfsentry_action_list *w_a_l = NULL;
 
     if (action_results == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -560,13 +588,42 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
         (action_event->config && WOLFSENTRY_CHECK_BITS(action_event->config->config.flags, WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS)))
         WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 
-    for (i = (struct wolfsentry_action_list_ent *)action_event->action_list.header.head;
+    switch (action_type) {
+    case WOLFSENTRY_ACTION_TYPE_POST:
+        w_a_l = &action_event->post_action_list;
+        break;
+    case WOLFSENTRY_ACTION_TYPE_INSERT:
+        w_a_l = &action_event->insert_action_list;
+        break;
+    case WOLFSENTRY_ACTION_TYPE_MATCH:
+        w_a_l = &action_event->match_action_list;
+        break;
+    case WOLFSENTRY_ACTION_TYPE_UPDATE:
+        w_a_l = &action_event->update_action_list;
+        break;
+    case WOLFSENTRY_ACTION_TYPE_DELETE:
+        w_a_l = &action_event->delete_action_list;
+        break;
+    case WOLFSENTRY_ACTION_TYPE_DECISION:
+        w_a_l = &action_event->decision_action_list;
+        break;
+    case WOLFSENTRY_ACTION_TYPE_NONE:
+        break;
+    }
+
+    if (w_a_l == NULL)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(INVALID_ARG);
+
+    for (i = (struct wolfsentry_action_list_ent *)w_a_l->header.head;
          i;
          i = (struct wolfsentry_action_list_ent *)i->header.next) {
-        if (! (rule_route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS))
-            WOLFSENTRY_ATOMIC_INCREMENT(i->action->header.hitcount, 1);
         if (WOLFSENTRY_CHECK_BITS(i->action->flags, WOLFSENTRY_ACTION_FLAG_DISABLED))
             continue;
+        if (! (rule_route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS))
+            WOLFSENTRY_ATOMIC_INCREMENT(i->action->header.hitcount, 1);
+#ifdef WOLFSENTRY_DEBUG_ACTIONS
+        fprintf(stderr,"calling action %s for event %s and action type %u\n", wolfsentry_action_get_label(i->action), wolfsentry_event_get_label(trigger_event), action_type);
+#endif
         if ((ret = i->action->handler(WOLFSENTRY_CONTEXT_ARGS_OUT, i->action, i->action->handler_arg, caller_arg, trigger_event, action_type, target_route, route_table, rule_route, action_results)) < 0)
             WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
         if (WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP))
@@ -575,12 +632,16 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
+static wolfsentry_errcode_t wolfsentry_action_drop_reference_generic(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *action, wolfsentry_action_res_t *action_results) {
+    return wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_action *)action, action_results);
+}
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_table_init(
     struct wolfsentry_action_table *action_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(action_table->header);
-    action_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_action_key_cmp;
-    action_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_action_drop_reference;
+    action_table->header.cmp_fn = wolfsentry_action_key_cmp;
+    action_table->header.free_fn = wolfsentry_action_drop_reference_generic;
     action_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ACTION;
     WOLFSENTRY_RETURN_OK;
 }

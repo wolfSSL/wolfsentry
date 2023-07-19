@@ -42,7 +42,8 @@ enum wolfsentry_rwlock_state {
     WOLFSENTRY_LOCK_UNINITED = 0,
     WOLFSENTRY_LOCK_UNLOCKED,
     WOLFSENTRY_LOCK_SHARED,
-    WOLFSENTRY_LOCK_EXCLUSIVE
+    WOLFSENTRY_LOCK_EXCLUSIVE,
+    WOLFSENTRY_LOCK_MAX = 0x7fffffff /* force enum to be 32 bits, for intrinsic atomicity. */
 };
 
 struct wolfsentry_rwlock {
@@ -60,7 +61,7 @@ struct wolfsentry_rwlock {
     volatile int read_waiter_count;
     volatile int write_waiter_count;
     volatile int read2write_waiter_read_count; /* the recursion depth of the shared lock held by read2write_reservation_holder */
-    volatile uint32_t state;
+    volatile enum wolfsentry_rwlock_state state;
     volatile int promoted_at_count;
     wolfsentry_lock_flags_t flags;
 };
@@ -289,14 +290,17 @@ struct wolfsentry_event {
 
     struct wolfsentry_eventconfig_internal *config;
 
-    struct wolfsentry_action_list action_list; /* in parent/trigger events, this decides whether to insert the route, and/or updates route state.
+    struct wolfsentry_action_list post_action_list; /* in parent/trigger events, this decides whether to insert the route, and/or updates route state.
                                               * in child events, this does the work described immediately below.
                                               */
-    struct wolfsentry_event *insert_event; /* child event with setup routines (if any) for routes inserted with this as parent_event. */
-    struct wolfsentry_event *match_event; /* child event with state management for routes inserted with this as parent_event. */
-    struct wolfsentry_event *update_event; /* child event with logic to act on changes in the state of routes inserted with this as parent_event. */
-    struct wolfsentry_event *delete_event; /* child event with cleanup routines (if any) for routes inserted with this as parent_event. */
-    struct wolfsentry_event *decision_event; /* child event with logic for notifications and logging around decisions for routes inserted with this as parent_event. */
+
+    struct wolfsentry_action_list insert_action_list;
+    struct wolfsentry_action_list match_action_list;
+    struct wolfsentry_action_list update_action_list;
+    struct wolfsentry_action_list delete_action_list;
+    struct wolfsentry_action_list decision_action_list;
+
+    struct wolfsentry_event *aux_event; /* plugins that insert new routes can use this as parent, and autoinserted routes via WOLFSENTRY_ACTION_RES_INSERT use this. */
 
     wolfsentry_priority_t priority;
 
@@ -384,7 +388,7 @@ struct wolfsentry_addr_family_bynumber {
     wolfsentry_addr_family_t number;
     wolfsentry_addr_family_parser_t parser;
     wolfsentry_addr_family_formatter_t formatter;
-    int max_addr_bits;
+    wolfsentry_addr_bits_t max_addr_bits;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     struct wolfsentry_addr_family_byname *byname_ent; /* 1:1 mapping between _bynumber and _byname tables */
 #endif
@@ -475,7 +479,11 @@ struct wolfsentry_context {
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 
-WOLFSENTRY_LOCAL int wolfsentry_event_key_cmp(struct wolfsentry_event *left, struct wolfsentry_event *right);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_label_is_builtin(const char *label, int label_len);
+
+WOLFSENTRY_LOCAL int wolfsentry_event_key_cmp(
+    const struct wolfsentry_event *left,
+    const struct wolfsentry_event *right);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_table_init(
     struct wolfsentry_event_table *event_table);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_table_clone_header(
@@ -549,7 +557,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSE
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent);
 
@@ -568,6 +575,18 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_coupled_table_clone(
     struct wolfsentry_table_header *dest_table1,
     struct wolfsentry_table_header *dest_table2,
     wolfsentry_clone_flags_t flags);
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_insert_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const char *label,
+    int label_len,
+    wolfsentry_action_flags_t flags,
+    wolfsentry_action_callback_t handler,
+    void *handler_arg,
+    wolfsentry_ent_id_t *id);
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_insert_builtins(
+    WOLFSENTRY_CONTEXT_ARGS_IN);
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_clone(
     struct wolfsentry_context *src_context,

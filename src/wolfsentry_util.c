@@ -67,6 +67,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t
         return "json/json_util.c";
     case WOLFSENTRY_SOURCE_ID_LWIP_PACKET_FILTER_GLUE_C:
         return "lwip/packet_filter_glue.c";
+    case WOLFSENTRY_SOURCE_ID_ACTION_BUILTINS_C:
+        return "action_builtins.c";
 
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
         break;
@@ -201,7 +203,10 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Caller shares the designated lock";
     case WOLFSENTRY_SUCCESS_ID_USED_FALLBACK:
         return "Operation succeeded by fallback strategy";
-
+    case WOLFSENTRY_SUCCESS_ID_YES:
+        return "Result was Yes";
+    case WOLFSENTRY_SUCCESS_ID_NO:
+        return "Result was No";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
         break;
@@ -318,6 +323,10 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
         return "HAVE_READ_LOCK";
     case WOLFSENTRY_SUCCESS_ID_USED_FALLBACK:
         return "USED_FALLBACK";
+    case WOLFSENTRY_SUCCESS_ID_YES:
+        return "YES";
+    case WOLFSENTRY_SUCCESS_ID_NO:
+        return "NO";
 
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
     case WOLFSENTRY_ERROR_ID_USER_BASE:
@@ -377,80 +386,81 @@ _Pragma("GCC diagnostic pop");
 
 #endif /* WOLFSENTRY_DEBUG_CALL_TRACE __GNUC__ && !__STRICT_ANSI__ */
 
-WOLFSENTRY_API const char *wolfsentry_action_res_decode(wolfsentry_action_res_t res, unsigned int bit) {
+#endif /* WOLFSENTRY_ERROR_STRINGS */
+
+#if defined(WOLFSENTRY_PROTOCOL_NAMES) || !defined(WOLFSENTRY_NO_JSON)
+
+static const struct {
+    wolfsentry_action_res_t res;
+    const char *desc;
+} action_res_bit_map[] = {
+    { WOLFSENTRY_ACTION_RES_NONE, "none" },
+    { WOLFSENTRY_ACTION_RES_ACCEPT, "accept" },
+    { WOLFSENTRY_ACTION_RES_REJECT, "reject" },
+    { WOLFSENTRY_ACTION_RES_CONNECT, "connect" },
+    { WOLFSENTRY_ACTION_RES_DISCONNECT, "disconnect" },
+    { WOLFSENTRY_ACTION_RES_DEROGATORY, "derogatory" },
+    { WOLFSENTRY_ACTION_RES_COMMENDABLE, "commendable" },
+    { WOLFSENTRY_ACTION_RES_STOP, "stop" },
+    { WOLFSENTRY_ACTION_RES_DEALLOCATED, "deallocated" },
+    { WOLFSENTRY_ACTION_RES_INSERTED, "inserted" },
+    { WOLFSENTRY_ACTION_RES_ERROR, "error" },
+    { WOLFSENTRY_ACTION_RES_FALLTHROUGH, "fallthrough" },
+    { WOLFSENTRY_ACTION_RES_UPDATE, "update" },
+    { WOLFSENTRY_ACTION_RES_PORT_RESET, "port-reset" },
+    { WOLFSENTRY_ACTION_RES_SENDING, "sending" },
+    { WOLFSENTRY_ACTION_RES_RECEIVED, "received" },
+    { WOLFSENTRY_ACTION_RES_BINDING, "binding" },
+    { WOLFSENTRY_ACTION_RES_LISTENING, "listening" },
+    { WOLFSENTRY_ACTION_RES_STOPPED_LISTENING, "stopped-listening" },
+    { WOLFSENTRY_ACTION_RES_CONNECTING_OUT, "connecting-out" },
+    { WOLFSENTRY_ACTION_RES_CLOSED, "closed" },
+    { WOLFSENTRY_ACTION_RES_UNREACHABLE, "unreachable" },
+    { WOLFSENTRY_ACTION_RES_SOCK_ERROR, "sock-error" },
+    { WOLFSENTRY_ACTION_RES_RESERVED22, "reserved-22" },
+    { WOLFSENTRY_ACTION_RES_RESERVED23, "reserved-23" },
+    { WOLFSENTRY_ACTION_RES_USER_BASE, "user+0" },
+    { WOLFSENTRY_ACTION_RES_USER_BASE << 1U, "user+1" },
+    { WOLFSENTRY_ACTION_RES_USER_BASE << 2U, "user+2" },
+    { WOLFSENTRY_ACTION_RES_USER_BASE << 3U, "user+3" },
+    { WOLFSENTRY_ACTION_RES_USER_BASE << 4U, "user+4" },
+    { WOLFSENTRY_ACTION_RES_USER_BASE << 5U, "user+5" },
+    { WOLFSENTRY_ACTION_RES_USER_BASE << 6U, "user+6" },
+    { ((unsigned)WOLFSENTRY_ACTION_RES_USER_BASE) << 7U, "user+7" }
+};
+
+wolfsentry_static_assert(length_of_array(action_res_bit_map) == 1U + sizeof(wolfsentry_action_res_t) * BITS_PER_BYTE)
+
+WOLFSENTRY_API const char *wolfsentry_action_res_assoc_by_flag(wolfsentry_action_res_t res, unsigned int bit) {
     if (bit > 31)
         return "(out-of-range)";
     if (res & (1U << bit)) {
-        switch(1U << bit) {
-        case WOLFSENTRY_ACTION_RES_NONE: /* not reachable */
-            return "none";
-        case WOLFSENTRY_ACTION_RES_ACCEPT:
-            return "accept";
-        case WOLFSENTRY_ACTION_RES_REJECT:
-            return "reject";
-        case WOLFSENTRY_ACTION_RES_CONNECT:
-            return "connect";
-        case WOLFSENTRY_ACTION_RES_DISCONNECT:
-            return "disconnect";
-        case WOLFSENTRY_ACTION_RES_DEROGATORY:
-            return "derogatory";
-        case WOLFSENTRY_ACTION_RES_COMMENDABLE:
-            return "commendable";
-        case WOLFSENTRY_ACTION_RES_CONTINUE:
-            return "continue";
-        case WOLFSENTRY_ACTION_RES_STOP:
-            return "stop";
-        case WOLFSENTRY_ACTION_RES_INSERT:
-            return "insert";
-        case WOLFSENTRY_ACTION_RES_DELETE:
-            return "delete";
-        case WOLFSENTRY_ACTION_RES_DEALLOCATED:
-            return "deallocated";
-        case WOLFSENTRY_ACTION_RES_ERROR:
-            return "error";
-        case WOLFSENTRY_ACTION_RES_FALLTHROUGH:
-            return "fallthrough";
-        case WOLFSENTRY_ACTION_RES_UPDATE:
-            return "update";
-        case WOLFSENTRY_ACTION_RES_USER_BASE:
-            return "user+0";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 1U:
-            return "user+1";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 2U:
-            return "user+2";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 3U:
-            return "user+3";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 4U:
-            return "user+4";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 5U:
-            return "user+5";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 6U:
-            return "user+6";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 7U:
-            return "user+7";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 8U:
-            return "user+8";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 9U:
-            return "user+9";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 10U:
-            return "user+10";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 11U:
-            return "user+11";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 12U:
-            return "user+12";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 13U:
-            return "user+13";
-        case WOLFSENTRY_ACTION_RES_USER_BASE << 14U:
-            return "user+14";
-        case ((unsigned)WOLFSENTRY_ACTION_RES_USER_BASE) << 15U:
-            return "user+15";
+        unsigned int i;
+        for (i = 0; i < length_of_array(action_res_bit_map); ++i) {
+            if (action_res_bit_map[i].res == (1U << bit))
+                return action_res_bit_map[i].desc;
         }
         return "(?)";
     } else
-        WOLFSENTRY_RETURN_VALUE(NULL);
+        return NULL;
 }
 
-#endif /* WOLFSENTRY_ERROR_STRINGS */
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_res_assoc_by_name(const char *bit_name, size_t bit_name_len, wolfsentry_action_res_t *res) {
+    unsigned int i;
+    if (bit_name_len < 0)
+        bit_name_len = strlen(bit_name);
+    for (i = 0; i < length_of_array(action_res_bit_map); ++i) {
+        if ((strncmp(action_res_bit_map[i].desc, bit_name, bit_name_len) == 0) &&
+            (strlen(action_res_bit_map[i].desc) == bit_name_len))
+        {
+            *res = action_res_bit_map[i].res;
+            WOLFSENTRY_RETURN_OK;
+        }
+    }
+    WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+}
+
+#endif /* WOLFSENTRY_PROTOCOL_NAMES || !WOLFSENTRY_NO_JSON */
 
 WOLFSENTRY_API struct wolfsentry_build_settings wolfsentry_get_build_settings(void) {
     return wolfsentry_build_settings;
@@ -1905,6 +1915,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
     case WOLFSENTRY_LOCK_UNLOCKED:
         break; /* regular semantics */
     case WOLFSENTRY_LOCK_UNINITED:
+    case WOLFSENTRY_LOCK_MAX:
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 
@@ -2490,6 +2501,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct
     case WOLFSENTRY_LOCK_UNLOCKED:
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     case WOLFSENTRY_LOCK_UNINITED:
+    default:
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 
@@ -3227,8 +3239,20 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_init(
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
     const struct wolfsentry_eventconfig *config)
 {
+    wolfsentry_errcode_t ret;
+
     if (config == NULL)
         WOLFSENTRY_RETURN_OK;
+
+    if (config->route_flags_to_add_on_insert & config->route_flags_to_clear_on_insert)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (config->action_res_filter_bits_set & config->action_res_filter_bits_unset)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (config->action_res_bits_to_add & config->action_res_bits_to_clear)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    ret = wolfsentry_route_check_flags_sensical(config->route_flags_to_add_on_insert);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
     if (config->route_private_data_size == 0) {
         if (config->route_private_data_alignment != 0)
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -3254,11 +3278,16 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_load(
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal)
 {
+    wolfsentry_errcode_t ret;
     if (internal == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    memset(internal, 0, sizeof *internal);
     if (supplied == NULL)
         WOLFSENTRY_RETURN_OK;
+
+    ret = wolfsentry_eventconfig_check(supplied);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+    memset(internal, 0, sizeof *internal);
     memcpy(&internal->config, supplied, sizeof internal->config);
     if (internal->config.route_private_data_alignment > 0) {
         size_t private_data_slop = offsetof(struct wolfsentry_route, data) % internal->config.route_private_data_alignment;
@@ -3541,6 +3570,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
     (*wolfsentry)->config_at_creation = (*wolfsentry)->config;
 
     if ((ret = wolfsentry_route_table_fallthrough_route_alloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), (*wolfsentry)->routes)) < 0)
+        goto out;
+
+    if ((ret = wolfsentry_action_insert_builtins(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry))) < 0)
         goto out;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);

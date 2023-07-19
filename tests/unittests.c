@@ -108,7 +108,7 @@ static wolfsentry_errcode_t test_init (void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
     wolfsentry_errcode_t ret;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -254,7 +254,11 @@ static void *rd2wr_reserved_routine(struct rwlock_args *args) {
 static int test_rw_locks (void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_rwlock *lock;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+#endif
 
     volatile int measured_sequence[8], measured_sequence_i = 0;
     int measured_sequence_transposed[8];
@@ -715,7 +719,13 @@ static int test_static_routes (void) {
         4,
         1, /* denominated in seconds when passing to wolfsentry_init(). */
         0,
-        WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+        WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
 #endif
     };
 
@@ -1457,8 +1467,8 @@ static int test_dynamic_rules (void) {
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
     struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
 #else
-    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0 };
-    struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -1480,6 +1490,18 @@ static int test_dynamic_rules (void) {
             NULL /* config */,
             WOLFSENTRY_EVENT_FLAG_NONE,
             &id));
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_event_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                WOLFSENTRY_BUILTIN_LABEL_PREFIX "connect",
+                -1 /* label_len */,
+                10,
+                NULL /* config */,
+                WOLFSENTRY_EVENT_FLAG_NONE,
+                &id),
+            NOT_PERMITTED));
 
     /* track port scanning */
     WOLFSENTRY_EXIT_ON_FAILURE(
@@ -1515,16 +1537,6 @@ static int test_dynamic_rules (void) {
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_event_insert(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "authentication_failed",
-            -1 /* label_len */,
-            10,
-            NULL /* config */,
-            WOLFSENTRY_EVENT_FLAG_NONE,
-            &id));
-
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_event_insert(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
             "negotiation_abandoned",
             -1 /* label_len */,
             10,
@@ -1532,15 +1544,67 @@ static int test_dynamic_rules (void) {
             WOLFSENTRY_EVENT_FLAG_NONE,
             &id));
 
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_event_insert(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "insertion_side_effect_demo",
-            -1 /* label_len */,
-            10,
-            NULL /* config */,
-            WOLFSENTRY_EVENT_FLAG_NONE,
-            &id));
+    {
+        wolfsentry_ent_id_t auth_failed_id;
+        struct wolfsentry_event *auth_failed_event;
+        const struct wolfsentry_event *insertion_side_effect_demo_event;
+        const char *insertion_side_effect_demo_label;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "authentication_failed",
+                -1 /* label_len */,
+                10,
+                NULL /* config */,
+                WOLFSENTRY_EVENT_FLAG_NONE,
+                &id));
+
+        auth_failed_id = id;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "insertion_side_effect_demo",
+                -1 /* label_len */,
+                10,
+                NULL /* config */,
+                WOLFSENTRY_EVENT_FLAG_NONE,
+                &id));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_set_aux_event(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "authentication_failed",
+                -1,
+                "insertion_side_effect_demo",
+                -1));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_get_reference(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "authentication_failed",
+                -1,
+                &auth_failed_event));
+
+        WOLFSENTRY_EXIT_ON_FALSE(auth_failed_id == wolfsentry_get_object_id(auth_failed_event));
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            insertion_side_effect_demo_event = wolfsentry_event_get_aux_event(auth_failed_event)
+            );
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            insertion_side_effect_demo_label = wolfsentry_event_get_label(insertion_side_effect_demo_event)
+            );
+
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(insertion_side_effect_demo_label, "insertion_side_effect_demo") == 0);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_drop_reference(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                auth_failed_event,
+                NULL /* action_results */));
+    }
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_event_insert(
@@ -1609,16 +1673,6 @@ static int test_dynamic_rules (void) {
                 NULL /* action_results */));
     }
 
-#if 0
-int wolfsentry_event_set_subevent(
-    struct wolfsentry_context *WOLFSENTRY_CONTEXT_ARGS_OUT,
-    const char *event_label,
-    int event_label_len,
-    wolfsentry_action_type_t subevent_type,
-    const char *subevent_label,
-    int subevent_label_len);
-#endif
-
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_action_insert(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -1628,6 +1682,18 @@ int wolfsentry_event_set_subevent(
             wolfsentry_action_dummy_callback,
             NULL /* handler_context */,
             &id));
+
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                WOLFSENTRY_BUILTIN_LABEL_PREFIX "insert_always",
+                -1 /* label_len */,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                wolfsentry_action_dummy_callback,
+                NULL /* handler_context */,
+                &id),
+            NOT_PERMITTED));
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_action_insert(
@@ -1902,6 +1968,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "del_from_greenlist",
             -1));
 
@@ -1910,6 +1977,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "del_from_greenlist",
             -1));
 
@@ -1918,6 +1986,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "add_to_greenlist",
             -1));
 
@@ -1926,6 +1995,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "check_counts",
             -1,
             "add_to_greenlist",
@@ -1945,6 +2015,7 @@ int wolfsentry_event_set_subevent(
                 WOLFSENTRY_CONTEXT_ARGS_OUT,
                 "match_side_effect_demo",
                 -1,
+                WOLFSENTRY_ACTION_TYPE_MATCH,
                 &cursor));
 
         while (wolfsentry_event_action_list_next(
@@ -1971,6 +2042,7 @@ int wolfsentry_event_set_subevent(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "match_side_effect_demo",
             -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
             "del_from_greenlist",
             -1));
 
@@ -2031,6 +2103,8 @@ static wolfsentry_errcode_t test_kv_validator(
             WOLFSENTRY_ERROR_RETURN(BAD_VALUE);
         else
             WOLFSENTRY_RETURN_OK;
+    default:
+        break;
     }
     WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
 }
@@ -2702,6 +2776,49 @@ static int test_user_addr_families (void) {
         WOLFSENTRY_EXIT_ON_FALSE(formatter == my_addr_family_formatter);
     }
 
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    {
+        wolfsentry_addr_family_t family_number;
+        wolfsentry_addr_bits_t bits;
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_pton(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "inet",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &family_number));
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_max_addr_bits(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                family_number,
+                &bits));
+        WOLFSENTRY_EXIT_ON_FALSE(bits == 32);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_pton(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "inet6",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &family_number));
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_max_addr_bits(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                family_number,
+                &bits));
+        WOLFSENTRY_EXIT_ON_FALSE(bits == 128);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_pton(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "link",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &family_number));
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_max_addr_bits(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                family_number,
+                &bits));
+        WOLFSENTRY_EXIT_ON_FALSE(bits == 48);
+    }
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
@@ -2829,7 +2946,7 @@ static int test_json(const char *fname, const char *extra_fname) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
 #else
-    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -3055,7 +3172,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                     &inexact_matches,
                     &action_results));
             WOLFSENTRY_EXIT_ON_FALSE(route_id == WOLFSENTRY_ENT_ID_NONE);
-            WOLFSENTRY_EXIT_ON_FALSE(action_results == WOLFSENTRY_ACTION_RES_REJECT);
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_FALLTHROUGH));
 
             WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, extra_fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT, 1));
 
@@ -3089,7 +3206,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                     &inexact_matches,
                     &action_results));
             WOLFSENTRY_EXIT_ON_FALSE(route_id == WOLFSENTRY_ENT_ID_NONE);
-            WOLFSENTRY_EXIT_ON_FALSE(action_results == WOLFSENTRY_ACTION_RES_REJECT);
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_FALLTHROUGH));
         } else {
             static const char *trivial_test_json = "{ \"wolfsentry-config-version\" : 1, \"user-values\" : { \"extra-user-string\" : \"extra hello\" } }";
             WOLFSENTRY_EXIT_ON_FAILURE(
@@ -3533,6 +3650,209 @@ static int test_json(const char *fname, const char *extra_fname) {
             (void)close(fd);
     }
 #endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
+
+    /* test aux event, flag bit filters & frobbing, and good/bad route insertion by
+     * wolfsentry_builtin_action_track_peer()
+     */
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } remote, local;
+        wolfsentry_route_flags_t inexact_matches;
+        wolfsentry_action_res_t action_results;
+        struct wolfsentry_route *ephemeral_route;
+        wolfsentry_route_flags_t ephemeral_route_flags;
+        int i;
+
+        /* first, trigger insertion of DNS dynamic pinhole. */
+
+        remote.sa.sa_family = local.sa.sa_family = AF_INET;
+        remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_UDP;
+        remote.sa.sa_port = 53;
+        local.sa.sa_port = 65432;
+        remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+        remote.sa.interface = local.sa.interface = 0;
+        memcpy(remote.sa.addr,"\1\2\3\4",sizeof remote.addr_buf);
+        memcpy(local.sa.addr,"\0\0\0\0",sizeof local.addr_buf);
+
+        action_results = WOLFSENTRY_ACTION_RES_USER_BASE | (WOLFSENTRY_ACTION_RES_USER_BASE << 1U) | (WOLFSENTRY_ACTION_RES_USER_BASE << 3U);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_INSERTED | WOLFSENTRY_ACTION_RES_USER_BASE | (WOLFSENTRY_ACTION_RES_USER_BASE << 1U) | (WOLFSENTRY_ACTION_RES_USER_BASE << 3U)));
+
+        /* next, make sure the dynamic pinhole is live, by checking for an exact match. */
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_ACCEPT | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+        WOLFSENTRY_EXIT_ON_FALSE(inexact_matches == WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD);
+
+        /* make sure the pinhole route has the expected flags on it. */
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&ephemeral_route));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_flags(ephemeral_route, &ephemeral_route_flags));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route_flags ==
+                                 (WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD |
+                                  WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                                  WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT |
+                                  WOLFSENTRY_ROUTE_FLAG_IN_TABLE |
+                                  WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED |
+                                  WOLFSENTRY_ROUTE_FLAG_GREENLISTED));
+
+        /* make sure it's really ephemeral. */
+        WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route->meta.purge_after != 0);
+
+        /* now trigger insertion of a tracking rule to catch a simulated port scan. */
+
+        remote.sa.sa_family = local.sa.sa_family = AF_INET;
+        remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+        remote.sa.sa_port = 1234;
+        local.sa.sa_port = 65432;
+        remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+        remote.sa.interface = local.sa.interface = 0;
+        memcpy(remote.sa.addr,"\1\2\3\4",sizeof remote.addr_buf);
+        memcpy(local.sa.addr,"\0\0\0\0",sizeof local.addr_buf);
+
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_DEROGATORY;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_FALLTHROUGH | WOLFSENTRY_ACTION_RES_INSERTED | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 4U)));
+
+        /* iteratively increment the derog-thresh-for-penalty-boxing. */
+        for (i=0; i<3; ++i) {
+            action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_DEROGATORY;
+
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &remote.sa,
+                    &local.sa,
+                    WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                    "call-in-from-unit-test",
+                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                    (void *)0x12345678 /* caller_arg */,
+                    &id,
+                    &inexact_matches,
+                    &action_results));
+
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_FALLTHROUGH | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+        }
+
+        /* trigger the penalty boxing. */
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_DEROGATORY;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UPDATE | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+
+        /* confirm the penalty boxing. */
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_DEROGATORY;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+
+        /* force release from penalty box with explicit _RES_COMMENDABLE.
+         * note that the result will still be _REJECT because of the fallthrough policy in test-config.json.
+         * in practice, port scanning defenses are only needed on configurations that default open, in which
+         * case release from the penalty box would restore fallthrough to _ACCEPT.
+         * on the other hand, where port scanning is being tracked purely for purposes of IDS-type visibility,
+         * fallthrough to _REJECT is perfectly appropriate.
+         */
+        action_results = WOLFSENTRY_ACTION_RES_COMMENDABLE;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_COMMENDABLE | WOLFSENTRY_ACTION_RES_UPDATE | WOLFSENTRY_ACTION_RES_FALLTHROUGH | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+
+        /* recheck to confirm no update on a second match with zero initial action_results. */
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_FALLTHROUGH | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+    }
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

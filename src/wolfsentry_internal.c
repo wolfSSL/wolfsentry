@@ -331,6 +331,20 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_label_is_builtin(const char *label, int label_len) {
+    if ((label == NULL) || (label_len == 0))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (label_len < 0)
+        label_len = (int)strlen(label);
+    if (label_len > (int)strlen(WOLFSENTRY_BUILTIN_LABEL_PREFIX))
+        label_len = (int)strlen(WOLFSENTRY_BUILTIN_LABEL_PREFIX);
+    /* note this disallows partial matches on the prefix too. */
+    if (strncmp(label, WOLFSENTRY_BUILTIN_LABEL_PREFIX, (size_t)label_len) == 0)
+        WOLFSENTRY_SUCCESS_RETURN(YES);
+    else
+        WOLFSENTRY_SUCCESS_RETURN(NO);
+}
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
     struct wolfsentry_table_ent_header *i = wolfsentry->ents_by_id.head;
     int cmpret;
@@ -370,7 +384,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENT
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i;
 
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();

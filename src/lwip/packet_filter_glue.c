@@ -36,8 +36,8 @@
     #define V4_FMT "%d.%d.%d.%d"
     #define V4_2_V4ARGS(x) (int)((x)->addr & 0xff), (int)(((x)->addr >> 8) & 0xff), (int)(((x)->addr >> 16) & 0xff), (int)(((x)->addr >> 24))
     #define V4V6_2_V4ARGS(x) (int)(ip_2_ip4(x)->addr & 0xff), (int)((ip_2_ip4(x)->addr >> 8) & 0xff), (int)((ip_2_ip4(x)->addr >> 16) & 0xff), (int)((ip_2_ip4(x)->addr >> 24))
-    wolfsentry_static_assert(FILT_BINDING == 0, "unexpected value for FILT_BINDING")
-    wolfsentry_static_assert(FILT_OUTBOUND_ERR == 13, "unexpected value for FILT_OUTBOUND_ERR")
+    wolfsentry_static_assert(FILT_BINDING == 0)
+    wolfsentry_static_assert(FILT_OUTBOUND_ERR == 13)
     static const char *lwip_event_reasons[] = {
         "BINDING",
         "DISSOCIATE",
@@ -82,7 +82,6 @@ static err_t ethernet_filter_with_wolfsentry(
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD; /* makes wolfsentry_route_event_dispatch*() tolerant of event_label values that can't be found in the event table. */
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-    const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
         struct eth_addr addr_buf;
@@ -100,19 +99,19 @@ static err_t ethernet_filter_with_wolfsentry(
     switch(event->reason) {
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "receive";
+        action_results = WOLFSENTRY_ACTION_RES_RECEIVED;
         break;
     case FILT_SENDING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "send";
+        action_results = WOLFSENTRY_ACTION_RES_SENDING;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_ADDR_UNREACHABLE:
     case FILT_PORT_UNREACHABLE:
@@ -161,8 +160,8 @@ static err_t ethernet_filter_with_wolfsentry(
             &remote.sa,
             &local.sa,
             route_flags,
-            event_name,
-            -1,
+            NULL /* event_label */,
+            0,
             (void *)event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,
@@ -214,7 +213,6 @@ static err_t ip4_filter_with_wolfsentry(
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD; /* makes wolfsentry_route_event_dispatch*() tolerant of event_label values that can't be found in the event table. */
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-    const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
         ip4_addr_t addr_buf;
@@ -232,25 +230,24 @@ static err_t ip4_filter_with_wolfsentry(
     switch(event->reason) {
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "receive";
+        action_results = WOLFSENTRY_ACTION_RES_RECEIVED;
         break;
     case FILT_SENDING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "send";
+        action_results = WOLFSENTRY_ACTION_RES_SENDING;
         break;
     case FILT_ADDR_UNREACHABLE:
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results |= WOLFSENTRY_ACTION_RES_DEROGATORY;
-        event_name = "unreachable";
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_BINDING:
     case FILT_CONNECTING:
@@ -297,8 +294,8 @@ static err_t ip4_filter_with_wolfsentry(
             &remote.sa,
             &local.sa,
             route_flags,
-            event_name,
-            -1,
+            NULL /* event_label */,
+            0,
             (void *)event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,
@@ -345,7 +342,6 @@ static err_t ip6_filter_with_wolfsentry(
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD; /* makes wolfsentry_route_event_dispatch*() tolerant of event_label values that can't be found in the event table. */
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-    const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
         ip6_addr_t addr_buf; /* note, includes extra byte for zone. */
@@ -363,25 +359,24 @@ static err_t ip6_filter_with_wolfsentry(
     switch(event->reason) {
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "receive";
+        action_results = WOLFSENTRY_ACTION_RES_RECEIVED;
         break;
     case FILT_SENDING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "send";
+        action_results = WOLFSENTRY_ACTION_RES_SENDING;
         break;
     case FILT_ADDR_UNREACHABLE:
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results |= WOLFSENTRY_ACTION_RES_DEROGATORY;
-        event_name = "unreachable";
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_BINDING:
     case FILT_CONNECTING:
@@ -428,8 +423,8 @@ static err_t ip6_filter_with_wolfsentry(
             &remote.sa,
             &local.sa,
             route_flags,
-            event_name,
-            -1,
+            NULL /* event_label */,
+            0,
             (void *)event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,
@@ -478,7 +473,6 @@ static err_t tcp_filter_with_wolfsentry(
         WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS |
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD; /* makes wolfsentry_route_event_dispatch*() tolerant of event_label values that can't be found in the event table. */
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-    const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
 #if LWIP_IPV6
@@ -488,7 +482,7 @@ static err_t tcp_filter_with_wolfsentry(
 #endif
     }
     remote, local;
-    wolfsentry_static_assert((void *)&remote.sa.addr == (void *)&remote.addr_buf, "unexpected layout in struct wolfsentry_sockaddr.")
+    wolfsentry_static_assert2((void *)&remote.sa.addr == (void *)&remote.addr_buf, "unexpected layout in struct wolfsentry_sockaddr.")
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
     WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
@@ -504,7 +498,6 @@ static err_t tcp_filter_with_wolfsentry(
         action_results = WOLFSENTRY_ACTION_RES_CONNECT; /* lets wolfSentry increment the connection count for this peer. */
         route_flags |=
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "connect";
         break;
     case FILT_REMOTE_RESET:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
@@ -513,61 +506,60 @@ static err_t tcp_filter_with_wolfsentry(
         if (event->pcb.tcp_pcb->flags & TF_ACCEPTED) {
             route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
             action_results = WOLFSENTRY_ACTION_RES_DISCONNECT; /* lets wolfSentry decrement the connection count for this peer. */
-            event_name = "disconnect";
         } else {
-            route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-            event_name = "disconnect";
             /* connection wasn't accepted -- don't debit on disconnect. */
+            route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
+            action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         }
         break;
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results |= WOLFSENTRY_ACTION_RES_DEROGATORY;
-        event_name = "unreachable";
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_BINDING:
         route_flags |=
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
-        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
-        event_name = "bind";
+        action_results = WOLFSENTRY_ACTION_RES_BINDING |
+            WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
     case FILT_LISTENING:
         route_flags |=
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
-        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
-        event_name = "listen";
+        action_results = WOLFSENTRY_ACTION_RES_LISTENING |
+            WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
     case FILT_STOP_LISTENING:
-        event_name = "stop-listening";
         route_flags |=
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
-        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
+        action_results = WOLFSENTRY_ACTION_RES_STOPPED_LISTENING |
+            WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "receive";
+        action_results = WOLFSENTRY_ACTION_RES_RECEIVED;
         break;
     case FILT_CONNECTING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "connect";
+        action_results = WOLFSENTRY_ACTION_RES_CONNECTING_OUT;
         break;
     case FILT_SENDING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "send";
+        action_results = WOLFSENTRY_ACTION_RES_SENDING;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_DISSOCIATE:
     case FILT_ADDR_UNREACHABLE:
@@ -628,8 +620,8 @@ static err_t tcp_filter_with_wolfsentry(
             &remote.sa,
             &local.sa,
             route_flags,
-            event_name,
-            -1,
+            NULL /* event_label */,
+            0,
             (void *)&event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,
@@ -687,7 +679,6 @@ static err_t udp_filter_with_wolfsentry(
         WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS |
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD; /* makes wolfsentry_route_event_dispatch*() tolerant of event_label values that can't be found in the event table. */
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-    const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
 #if LWIP_IPV6
@@ -712,45 +703,45 @@ static err_t udp_filter_with_wolfsentry(
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
-        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
-        event_name = "bind";
+        action_results = WOLFSENTRY_ACTION_RES_BINDING |
+            WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
     case FILT_CONNECTING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN | WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "connect";
+        action_results = WOLFSENTRY_ACTION_RES_CONNECTING_OUT;
         break;
     case FILT_DISSOCIATE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN | WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "disconnect";
+        action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         break;
     case FILT_CLOSED:
         route_flags |=
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
             WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
-        action_results = WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
-        event_name = "unbind";
+        action_results = WOLFSENTRY_ACTION_RES_CLOSED |
+            WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results |= WOLFSENTRY_ACTION_RES_DEROGATORY;
-        event_name = "unreachable";
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "receive";
+        action_results = WOLFSENTRY_ACTION_RES_RECEIVED;
         break;
     case FILT_SENDING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "send";
+        action_results = WOLFSENTRY_ACTION_RES_SENDING;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_ACCEPTING:
     case FILT_REMOTE_RESET:
@@ -814,8 +805,8 @@ static err_t udp_filter_with_wolfsentry(
             &remote.sa,
             &local.sa,
             route_flags,
-            event_name,
-            -1,
+            NULL /* event_label */,
+            0,
             (void *)event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,
@@ -870,7 +861,6 @@ static err_t icmp4_filter_with_wolfsentry(
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD; /* makes wolfsentry_route_event_dispatch*() tolerant of event_label values that can't be found in the event table. */
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-    const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
         ip4_addr_t addr_buf;
@@ -888,25 +878,25 @@ static err_t icmp4_filter_with_wolfsentry(
     switch(event->reason) {
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "receive";
+        action_results = WOLFSENTRY_ACTION_RES_RECEIVED;
         break;
     case FILT_SENDING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "send";
+        action_results = WOLFSENTRY_ACTION_RES_SENDING;
         break;
     case FILT_ADDR_UNREACHABLE:
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results |= WOLFSENTRY_ACTION_RES_DEROGATORY;
-        event_name = "unreachable";
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_BINDING:
     case FILT_CONNECTING:
@@ -953,8 +943,8 @@ static err_t icmp4_filter_with_wolfsentry(
             &remote.sa,
             &local.sa,
             route_flags,
-            event_name,
-            -1,
+            NULL /* event_label */,
+            0,
             (void *)event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,
@@ -1001,7 +991,6 @@ static err_t icmp6_filter_with_wolfsentry(
     wolfsentry_route_flags_t route_flags =
         WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD; /* makes wolfsentry_route_event_dispatch*() tolerant of event_label values that can't be found in the event table. */
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-    const char *event_name = NULL;
     struct {
         struct wolfsentry_sockaddr sa;
         ip6_addr_t addr_buf; /* note, includes extra byte for zone. */
@@ -1019,25 +1008,25 @@ static err_t icmp6_filter_with_wolfsentry(
     switch(event->reason) {
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "receive";
+        action_results = WOLFSENTRY_ACTION_RES_RECEIVED;
         break;
     case FILT_SENDING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "send";
+        action_results = WOLFSENTRY_ACTION_RES_SENDING;
         break;
     case FILT_ADDR_UNREACHABLE:
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results |= WOLFSENTRY_ACTION_RES_DEROGATORY;
-        event_name = "unreachable";
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        event_name = "error";
+        action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     case FILT_BINDING:
     case FILT_CONNECTING:
@@ -1084,8 +1073,8 @@ static err_t icmp6_filter_with_wolfsentry(
             &remote.sa,
             &local.sa,
             route_flags,
-            event_name,
-            -1,
+            NULL /* event_label */,
+            0,
             (void *)event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,

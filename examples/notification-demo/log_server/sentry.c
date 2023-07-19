@@ -538,7 +538,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     msgbuf_ptr += msgbuf_len;
 
     for (res_bit = 0; res_bit < 32U; ++res_bit) {
-        if ((res_string = wolfsentry_action_res_decode(*action_results, res_bit)) != NULL) {
+        if ((res_string = wolfsentry_action_res_assoc_by_flag(*action_results, res_bit)) != NULL) {
             ++n_res_bits;
             if (n_res_bits > 1) {
                 *msgbuf_ptr++ = ',';

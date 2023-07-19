@@ -30,7 +30,7 @@ ifdef USER_MAKE_CONF
     include $(USER_MAKE_CONF)
 endif
 
-SRCS := wolfsentry_util.c wolfsentry_internal.c addr_families.c routes.c events.c actions.c kv.c
+SRCS := wolfsentry_util.c wolfsentry_internal.c addr_families.c routes.c events.c actions.c kv.c action_builtins.c
 
 ifndef SRC_TOP
     SRC_TOP := $(shell pwd -P)
@@ -124,7 +124,8 @@ AR_IS_GNU_AR := $(shell if [[ '$(AR_VERSION)' =~ 'GNU' ]]; then echo 1; else ech
 ifndef C_WARNFLAGS
     C_WARNFLAGS := -Wall -Wextra -Werror -Wformat=2 -Winit-self -Wmissing-include-dirs -Wunknown-pragmas -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Wconversion -Wstrict-prototypes -Wold-style-definition -Wmissing-prototypes -Wmissing-declarations -Wmissing-format-attribute -Wpointer-arith -Woverlength-strings -Wredundant-decls -Winline -Winvalid-pch -Wdouble-promotion -Wvla -Wno-type-limits -Wdeclaration-after-statement -Wnested-externs
     ifeq "$(CC_IS_GCC)" "1"
-        C_WARNFLAGS += -Wjump-misses-init -Wlogical-op -Wlogical-not-parentheses -Wpacked-not-aligned
+        MAYBE_WARN_PACKED_NOT_ALIGNED := $(shell $(CC) -E -Wpacked-not-aligned -x c /dev/null >/dev/null 2>&1 && echo -Wpacked-not-aligned)
+        C_WARNFLAGS += -Wjump-misses-init -Wlogical-op -Wlogical-not-parentheses $(MAYBE_WARN_PACKED_NOT_ALIGNED)
     endif
 endif
 

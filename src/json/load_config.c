@@ -206,6 +206,7 @@ struct wolfsentry_json_process_state {
             struct wolfsentry_eventconfig config;
             int configed;
             int inserted;
+            wolfsentry_action_type_t cur_action_list_under_construction;
         } event;
         struct {
             char label[WOLFSENTRY_MAX_LABEL_BYTES];
@@ -454,6 +455,8 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
     case 's':
         ++endptr;
         break;
+    default:
+        break;
     }
     if ((size_t)(endptr - (char *)data) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -468,11 +471,11 @@ static wolfsentry_errcode_t convert_default_policy(JSON_TYPE type, const unsigne
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
     if (streq(data, "accept", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_STOP;
+        *default_policy = WOLFSENTRY_ACTION_RES_ACCEPT;
     else if (streq(data, "reject", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_STOP;
+        *default_policy = WOLFSENTRY_ACTION_RES_REJECT;
     else if (streq(data, "reset", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_PORT_RESET|WOLFSENTRY_ACTION_RES_STOP;
+        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_PORT_RESET;
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -480,6 +483,60 @@ static wolfsentry_errcode_t convert_default_policy(JSON_TYPE type, const unsigne
 }
 
 static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_process_state *jps, JSON_TYPE type, const unsigned char *data, size_t data_size, struct wolfsentry_eventconfig *eventconfig) {
+    if (jps->cur_depth == 5) {
+        if ((! strcmp(jps->cur_keyname, "route-flags-to-add-on-insert")) ||
+            (! strcmp(jps->cur_keyname, "route-flags-to-clear-on-insert")))
+        {
+            wolfsentry_route_flags_t flag;
+            wolfsentry_errcode_t ret;
+
+            if (type == JSON_ARRAY_BEG)
+                WOLFSENTRY_RETURN_OK;
+
+            if (type != JSON_STRING)
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+
+            ret = wolfsentry_route_flag_assoc_by_name((const char *)data, (int)data_size, &flag);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+            if (! strcmp(jps->cur_keyname, "route-flags-to-add-on-insert"))
+                eventconfig->route_flags_to_add_on_insert |= flag;
+            else
+                eventconfig->route_flags_to_clear_on_insert |= flag;
+            WOLFSENTRY_RETURN_OK;
+
+        } else if ((! strcmp(jps->cur_keyname, "action-res-filter-bits-set")) ||
+                   (! strcmp(jps->cur_keyname, "action-res-filter-bits-unset")) ||
+                   (! strcmp(jps->cur_keyname, "action-res-bits-to-add")) ||
+                   (! strcmp(jps->cur_keyname, "action-res-bits-to-clear")))
+        {
+            wolfsentry_action_res_t flag;
+            wolfsentry_errcode_t ret;
+
+            if (type == JSON_ARRAY_BEG)
+                WOLFSENTRY_RETURN_OK;
+
+            if (type != JSON_STRING)
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+
+            ret = wolfsentry_action_res_assoc_by_name((const char *)data, data_size, &flag);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+            if (! strcmp(jps->cur_keyname, "action-res-filter-bits-set"))
+                eventconfig->action_res_filter_bits_set |= flag;
+            else if (! strcmp(jps->cur_keyname, "action-res-filter-bits-unset"))
+                eventconfig->action_res_filter_bits_unset |= flag;
+            else if (! strcmp(jps->cur_keyname, "action-res-bits-to-add"))
+                eventconfig->action_res_bits_to_add |= flag;
+            else
+                eventconfig->action_res_bits_to_clear |= flag;
+            WOLFSENTRY_RETURN_OK;
+        } else
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
+    }
+
+    if (type == JSON_ARRAY_END)
+        WOLFSENTRY_RETURN_OK;
+
     if (type == JSON_OBJECT_END) {
         wolfsentry_errcode_t ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
         jps->table_under_construction = T_U_C_NONE;
@@ -955,7 +1012,7 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
         WOLFSENTRY_RETURN_OK;
     }
 
-    if ((jps->cur_depth == 4) && (jps->section_under_construction == S_U_C_EVENTCONFIG))
+    if (((jps->cur_depth == 4) || (jps->cur_depth == 5)) && (jps->section_under_construction == S_U_C_EVENTCONFIG))
         WOLFSENTRY_ERROR_RERETURN(handle_eventconfig_clause(jps, type, data, data_size, &jps->o_u_c.event.config));
 
     if ((jps->cur_depth == 3) && (type == JSON_OBJECT_END) && (jps->section_under_construction == S_U_C_EVENTCONFIG)) {
@@ -990,8 +1047,24 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
         WOLFSENTRY_ERROR_RERETURN(reset_o_u_c(jps));
 
     if ((jps->cur_depth == 3) && (type == JSON_STRING)) {
+        wolfsentry_errcode_t ret;
         wolfsentry_action_type_t subevent_type = WOLFSENTRY_ACTION_TYPE_NONE;
 
+        if (! strcmp(jps->cur_keyname, "aux-parent-event")) {
+            if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
+                WOLFSENTRY_RETURN_OK;
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_set_aux_event(
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
+                jps->o_u_c.event.label,
+                jps->o_u_c.event.label_len,
+                (const char *)data,
+                (int)data_size));
+        }
+
+        /* in early versions (pre-1.4.0), there was only one action list in each
+         * event, and "subevents" held the lists for each type of action.
+         * emulate that here for backward compatibility.
+         */
         if (! strcmp(jps->cur_keyname, "insert-event"))
             subevent_type = WOLFSENTRY_ACTION_TYPE_INSERT;
         else if (! strcmp(jps->cur_keyname, "match-event"))
@@ -1004,23 +1077,70 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
             subevent_type = WOLFSENTRY_ACTION_TYPE_DECISION;
 
         if (subevent_type != WOLFSENTRY_ACTION_TYPE_NONE) {
+            struct wolfsentry_action_list_ent *subevent_action_cursor;
+            const char *action_label;
+            int action_label_len;
+
             if (data_size > WOLFSENTRY_MAX_LABEL_BYTES)
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
             if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS))
                 WOLFSENTRY_RETURN_OK;
-            WOLFSENTRY_ERROR_RERETURN(wolfsentry_event_set_subevent(
+
+            ret = wolfsentry_event_action_list_start(
                 JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
-                jps->o_u_c.event.label,
-                jps->o_u_c.event.label_len,
-                subevent_type,
                 (const char *)data,
-                (int)data_size));
+                (int)data_size,
+                WOLFSENTRY_ACTION_TYPE_POST,
+                &subevent_action_cursor);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+            while (wolfsentry_event_action_list_next(
+                       JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
+                       &subevent_action_cursor,
+                       &action_label,
+                       &action_label_len) >= 0)
+            {
+                ret = wolfsentry_event_action_append(
+                    JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    jps->o_u_c.event.label,
+                    jps->o_u_c.event.label_len,
+                    subevent_type,
+                    action_label,
+                    action_label_len);
+                WOLFSENTRY_RERETURN_IF_ERROR(ret);
+            }
+
+            ret = wolfsentry_event_action_list_done(
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &subevent_action_cursor);
+
+            WOLFSENTRY_ERROR_RERETURN(ret);
         }
 
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
     }
 
-    if ((jps->cur_depth == 4) && (type == JSON_ARRAY_BEG) && (jps->section_under_construction == S_U_C_NONE) && (! strcmp(jps->cur_keyname, "actions"))) {
+    if ((jps->cur_depth == 4) && (type == JSON_ARRAY_BEG) && (jps->section_under_construction == S_U_C_NONE)) {
+        if ((! strcmp(jps->cur_keyname, "actions")) ||
+            (! strcmp(jps->cur_keyname, "post-actions")))
+        {
+            jps->o_u_c.event.cur_action_list_under_construction = WOLFSENTRY_ACTION_TYPE_POST;
+        } else if (! strcmp(jps->cur_keyname, "insert-actions"))
+            jps->o_u_c.event.cur_action_list_under_construction = WOLFSENTRY_ACTION_TYPE_INSERT;
+        else if (! strcmp(jps->cur_keyname, "match-actions"))
+            jps->o_u_c.event.cur_action_list_under_construction = WOLFSENTRY_ACTION_TYPE_MATCH;
+        else if (! strcmp(jps->cur_keyname, "update-actions"))
+            jps->o_u_c.event.cur_action_list_under_construction = WOLFSENTRY_ACTION_TYPE_UPDATE;
+        else if (! strcmp(jps->cur_keyname, "delete-actions"))
+            jps->o_u_c.event.cur_action_list_under_construction = WOLFSENTRY_ACTION_TYPE_DELETE;
+        else if (! strcmp(jps->cur_keyname, "decision-actions"))
+            jps->o_u_c.event.cur_action_list_under_construction = WOLFSENTRY_ACTION_TYPE_DECISION;
+        else
+            jps->o_u_c.event.cur_action_list_under_construction = WOLFSENTRY_ACTION_TYPE_NONE;
+
+        if (jps->o_u_c.event.cur_action_list_under_construction == WOLFSENTRY_ACTION_TYPE_NONE)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
+
         jps->section_under_construction = S_U_C_ACTION_LIST;
         WOLFSENTRY_RETURN_OK;
     }
@@ -1034,6 +1154,7 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
                     JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                     jps->o_u_c.event.label,
                     jps->o_u_c.event.label_len,
+                    jps->o_u_c.event.cur_action_list_under_construction,
                     (const char *)data,
                     (int)data_size));
     }
@@ -1300,8 +1421,9 @@ static wolfsentry_errcode_t json_process(
     JSON_TYPE type,
     const unsigned char *data,
     size_t data_size,
-    struct wolfsentry_json_process_state *jps)
+    void *pre_jps)
 {
+    struct wolfsentry_json_process_state *jps = (struct wolfsentry_json_process_state *)pre_jps;
     wolfsentry_errcode_t ret;
 
 #ifdef DEBUG_JSON
@@ -1684,9 +1806,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
         WOLFSENTRY_SET_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI);
         if (err_buf) {
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, L%u, col %u, with centijson code " WOLFSENTRY_ERRCODE_FMT ": %s", (int)json_pos.offset, json_pos.line_number, json_pos.column_number, (int)jps->fini_ret, json_error_str(jps->fini_ret));
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, line %u, col %u, with centijson code " WOLFSENTRY_ERRCODE_FMT ": %s", (int)json_pos.offset, json_pos.line_number, json_pos.column_number, (int)jps->fini_ret, json_error_str(jps->fini_ret));
             else
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, L%u, col %u, with " WOLFSENTRY_ERROR_FMT, (int)json_pos.offset, json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
+                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, line %u, col %u, with " WOLFSENTRY_ERROR_FMT, (int)json_pos.offset, json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
         }
         WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(jps->fini_ret));
     }
@@ -1724,7 +1846,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
         (*jps)->fini_ret = json_fini(&(*jps)->parser, &json_pos);
         if ((*jps)->fini_ret < 0) {
             if (err_buf != NULL)
-                snprintf(err_buf, err_buf_size, "json_fini failed at offset %d, L%u, col %u, with code " WOLFSENTRY_ERRCODE_FMT ": %s.",
+                snprintf(err_buf, err_buf_size, "json_fini failed at offset %d, line %u, col %u, with code " WOLFSENTRY_ERRCODE_FMT ": %s.",
                          (int)json_pos.offset,json_pos.line_number, json_pos.column_number, (int)(*jps)->fini_ret, json_error_str((*jps)->fini_ret));
             ret = wolfsentry_centijson_errcode_translate((*jps)->fini_ret);
             goto out;

@@ -24,8 +24,9 @@
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_ADDR_FAMILIES_C
 
-static int wolfsentry_addr_family_bynumber_key_cmp(struct wolfsentry_addr_family_bynumber *left, struct wolfsentry_addr_family_bynumber *right) {
-    WOLFSENTRY_RETURN_VALUE(left->number - right->number);
+static int wolfsentry_addr_family_bynumber_key_cmp(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right) {
+    WOLFSENTRY_RETURN_VALUE(((const struct wolfsentry_addr_family_bynumber *)left)->number -
+                            ((const struct wolfsentry_addr_family_bynumber *)right)->number);
 }
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -45,8 +46,12 @@ static inline int wolfsentry_addr_family_byname_key_cmp_1(const char *left_label
     WOLFSENTRY_RETURN_VALUE(ret);
 }
 
-static int wolfsentry_addr_family_byname_key_cmp(struct wolfsentry_addr_family_byname *left, struct wolfsentry_addr_family_byname *right) {
-    return wolfsentry_addr_family_byname_key_cmp_1(left->name, left->name_len, right->name, right->name_len);
+static int wolfsentry_addr_family_byname_key_cmp(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right) {
+    return wolfsentry_addr_family_byname_key_cmp_1(
+        ((const struct wolfsentry_addr_family_byname *)left)->name,
+        ((const struct wolfsentry_addr_family_byname *)left)->name_len,
+        ((const struct wolfsentry_addr_family_byname *)right)->name,
+        ((const struct wolfsentry_addr_family_byname *)right)->name_len);
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_table_pair(
@@ -123,7 +128,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
     bynumber->number = family_bynumber;
     bynumber->parser = parser;
     bynumber->formatter = formatter;
-    bynumber->max_addr_bits = max_addr_bits;
+    bynumber->max_addr_bits = (wolfsentry_addr_bits_t)max_addr_bits;
     bynumber->header.refcount = 1;
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
@@ -826,12 +831,75 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_ntop(
 
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 
+static wolfsentry_errcode_t wolfsentry_addr_family_max_addr_bits_1(
+    wolfsentry_addr_family_t family,
+    wolfsentry_addr_bits_t *bits)
+{
+    switch(family) {
+    case WOLFSENTRY_AF_INET:
+        { *bits = 32; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_IPX:
+        { *bits = 80; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_APPLETALK:
+        { *bits = 32; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_INET6:
+        { *bits = 128; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_BLUETOOTH:
+        { *bits = 48; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_IEEE80211:
+        { *bits = 48; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_LINK:
+        /* assume EUI-48 as used in Ethernet, 802.11, and Bluetooth.  sometimes
+         * these are EUI-64, as with FireWire and Zigbee.
+         */
+        { *bits = 48; WOLFSENTRY_RETURN_OK; }
+    default:
+        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+    }
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_max_addr_bits(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_addr_family_t family,
+    wolfsentry_addr_bits_t *bits)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_addr_family_bynumber *addr_family;
+
+    ret = wolfsentry_addr_family_max_addr_bits_1(family, bits);
+    if (ret >= 0)
+        WOLFSENTRY_ERROR_RERETURN(ret);
+
+    WOLFSENTRY_SHARED_OR_RETURN();
+
+    ret = wolfsentry_addr_family_get_bynumber_1(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        wolfsentry->addr_families_bynumber,
+        family,
+        &addr_family);
+    if (ret >= 0)
+        *bits = addr_family->max_addr_bits;
+
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+}
+
+static wolfsentry_errcode_t wolfsentry_addr_family_drop_reference_generic(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_table_ent_header *family_bynumber,
+    wolfsentry_action_res_t *action_results)
+{
+    return wolfsentry_addr_family_drop_reference(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        (struct wolfsentry_addr_family_bynumber *)family_bynumber,
+        action_results);
+}
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init(
     struct wolfsentry_addr_family_bynumber_table *addr_family_bynumber_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(addr_family_bynumber_table->header);
-    addr_family_bynumber_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_addr_family_bynumber_key_cmp;
-    addr_family_bynumber_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_addr_family_drop_reference;
+    addr_family_bynumber_table->header.cmp_fn = wolfsentry_addr_family_bynumber_key_cmp;
+    addr_family_bynumber_table->header.free_fn = wolfsentry_addr_family_drop_reference_generic;
     addr_family_bynumber_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER;
     WOLFSENTRY_RETURN_OK;
 }
@@ -859,7 +927,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_byname_table_init(
     struct wolfsentry_addr_family_byname_table *addr_family_byname_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(addr_family_byname_table->header);
-    addr_family_byname_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_addr_family_byname_key_cmp;
+    addr_family_byname_table->header.cmp_fn = wolfsentry_addr_family_byname_key_cmp;
     addr_family_byname_table->header.free_fn = NULL;
     addr_family_byname_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNAME;
     WOLFSENTRY_RETURN_OK;

@@ -275,9 +275,11 @@ typedef uint16_t wolfsentry_priority_t;
 #ifndef wolfsentry_static_assert
 #if defined(__GNUC__) && defined(static_assert) && !defined(__STRICT_ANSI__)
 /* note semicolon included in expansion, so that assert can completely disappear in ISO C builds. */
-#define wolfsentry_static_assert(c, m) static_assert(c, m);
+#define wolfsentry_static_assert(c) static_assert(c, #c);
+#define wolfsentry_static_assert2(c, m) static_assert(c, m);
 #else
-#define wolfsentry_static_assert(c, m)
+#define wolfsentry_static_assert(c)
+#define wolfsentry_static_assert2(c, m)
 #endif
 #endif /* !wolfsentry_static_assert */
 
@@ -417,6 +419,10 @@ typedef uint16_t wolfsentry_priority_t;
 #define WOLFSENTRY_MAX_LABEL_BYTES 32
 #elif WOLFSENTRY_MAX_LABEL_BYTES > 0xff
 #error WOLFSENTRY_MAX_LABEL_BYTES must fit in a byte.
+#endif
+
+#ifndef WOLFSENTRY_BUILTIN_LABEL_PREFIX
+#define WOLFSENTRY_BUILTIN_LABEL_PREFIX "%"
 #endif
 
 #ifndef WOLFSENTRY_KV_MAX_VALUE_BYTES

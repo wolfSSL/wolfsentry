@@ -48,15 +48,15 @@ typedef int32_t wolfsentry_errcode_t;
 
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 #define WOLFSENTRY_ERROR_ENCODE_1(x) ({                                      \
-    wolfsentry_static_assert(((x) >= -WOLFSENTRY_ERROR_ID_MAX)               \
+    wolfsentry_static_assert2(((x) >= -WOLFSENTRY_ERROR_ID_MAX)              \
                    && ((x) <= WOLFSENTRY_ERROR_ID_MAX),                      \
                   "error code must be -"                                     \
                   _q(WOLFSENTRY_ERROR_ID_MAX)                                \
                   " <= e <= "                                                \
                   _q(WOLFSENTRY_ERROR_ID_MAX) )                              \
-    wolfsentry_static_assert(__LINE__ <= WOLFSENTRY_LINE_NUMBER_MAX,         \
+    wolfsentry_static_assert2(__LINE__ <= WOLFSENTRY_LINE_NUMBER_MAX,        \
                   "line number must be 1-" _q(WOLFSENTRY_LINE_NUMBER_MAX) )  \
-    wolfsentry_static_assert((WOLFSENTRY_SOURCE_ID >= 0)                     \
+    wolfsentry_static_assert2((WOLFSENTRY_SOURCE_ID >= 0)                    \
                   && (WOLFSENTRY_SOURCE_ID <= 0x7f),                         \
                   "source file ID must be 0-" _q(WOLFSENTRY_SOURCE_ID_MAX) ) \
     WOLFSENTRY_ERROR_ENCODE_0(x);                                            \
@@ -65,12 +65,19 @@ typedef int32_t wolfsentry_errcode_t;
 #define WOLFSENTRY_ERROR_ENCODE_1(x) WOLFSENTRY_ERROR_ENCODE_0(x)
 #endif
 
+#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
+#define WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) ({ wolfsentry_errcode_t _x = (x); ((int)((((_x) < 0) ? -(-(_x) & WOLFSENTRY_ERROR_ID_MAX) : ((_x) & WOLFSENTRY_ERROR_ID_MAX)))); })
+#define WOLFSENTRY_ERROR_DECODE_SOURCE_ID(x) ({ wolfsentry_errcode_t _x = (x); ((int)((((_x) < 0) ? ((-(_x)) >> 24) : ((_x) >> 24)))); })
+#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) ({ wolfsentry_errcode_t _x = (x); ((int)((((_x) < 0) ? (((-(_x)) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX) : (((_x) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX)))); })
+#else
 #define WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) ((int)((((x) < 0) ? -(-(x) & WOLFSENTRY_ERROR_ID_MAX) : ((x) & WOLFSENTRY_ERROR_ID_MAX))))
+#define WOLFSENTRY_ERROR_DECODE_SOURCE_ID(x) ((int)((((x) < 0) ? ((-(x)) >> 24) : ((x) >> 24))))
+#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) ((int)((((x) < 0) ? (((-(x)) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX) : (((x) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX))))
+#endif
+
 #define WOLFSENTRY_ERROR_RECODE(x) WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x))
 #define WOLFSENTRY_ERROR_CODE_IS(x, y) (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) == WOLFSENTRY_ERROR_ID_ ## y)
 #define WOLFSENTRY_SUCCESS_CODE_IS(x, y) (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(x) == WOLFSENTRY_SUCCESS_ID_ ## y)
-#define WOLFSENTRY_ERROR_DECODE_SOURCE_ID(x) ((int)((((x) < 0) ? ((-(x)) >> 24) : ((x) >> 24))))
-#define WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(x) ((int)((((x) < 0) ? (((-(x)) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX) : (((x) >> 8) & WOLFSENTRY_LINE_NUMBER_MAX))))
 
 #ifdef WOLFSENTRY_ERROR_STRINGS
 #define WOLFSENTRY_ERROR_FMT "code " WOLFSENTRY_ERRCODE_FMT " (%s), src " WOLFSENTRY_ERRCODE_FMT " (%s), line " WOLFSENTRY_ERRCODE_FMT
@@ -259,6 +266,7 @@ enum wolfsentry_source_id {
     WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C = 8,
     WOLFSENTRY_SOURCE_ID_JSON_JSON_UTIL_C = 9,
     WOLFSENTRY_SOURCE_ID_LWIP_PACKET_FILTER_GLUE_C = 10,
+    WOLFSENTRY_SOURCE_ID_ACTION_BUILTINS_C = 11,
 
     WOLFSENTRY_SOURCE_ID_USER_BASE  =  112
 };
@@ -318,6 +326,8 @@ enum wolfsentry_error_id {
     WOLFSENTRY_SUCCESS_ID_HAVE_MUTEX           =    2,
     WOLFSENTRY_SUCCESS_ID_HAVE_READ_LOCK       =    3,
     WOLFSENTRY_SUCCESS_ID_USED_FALLBACK        =    4,
+    WOLFSENTRY_SUCCESS_ID_YES                  =    5,
+    WOLFSENTRY_SUCCESS_ID_NO                   =    6,
     WOLFSENTRY_SUCCESS_ID_USER_BASE            =  128
 };
 

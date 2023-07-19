@@ -44,12 +44,12 @@ static inline int wolfsentry_kv_key_cmp_1(const char *left_label, const unsigned
     WOLFSENTRY_RETURN_VALUE(ret);
 }
 
-static int wolfsentry_kv_key_cmp(struct wolfsentry_kv_pair_internal *left, struct wolfsentry_kv_pair_internal *right) {
+static int wolfsentry_kv_key_cmp(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right) {
     return wolfsentry_kv_key_cmp_1(
-        WOLFSENTRY_KV_KEY(&left->kv),
-        (unsigned int)WOLFSENTRY_KV_KEY_LEN(&left->kv),
-        WOLFSENTRY_KV_KEY(&right->kv),
-        (unsigned int)WOLFSENTRY_KV_KEY_LEN(&right->kv));
+        WOLFSENTRY_KV_KEY(&((const struct wolfsentry_kv_pair_internal *)left)->kv),
+        (unsigned int)WOLFSENTRY_KV_KEY_LEN(&((const struct wolfsentry_kv_pair_internal *)left)->kv),
+        WOLFSENTRY_KV_KEY(&((const struct wolfsentry_kv_pair_internal *)right)->kv),
+        (unsigned int)WOLFSENTRY_KV_KEY_LEN(&((const struct wolfsentry_kv_pair_internal *)right)->kv));
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_new(
@@ -187,8 +187,6 @@ static inline int wolfsentry_kv_value_eq_1(struct wolfsentry_kv_pair *a, struct 
     if (WOLFSENTRY_KV_TYPE(a) != WOLFSENTRY_KV_TYPE(b))
         return 0;
     switch (WOLFSENTRY_KV_TYPE(a)) {
-    case WOLFSENTRY_KV_NONE:
-        return 0;
     case WOLFSENTRY_KV_NULL:
     case WOLFSENTRY_KV_TRUE:
     case WOLFSENTRY_KV_FALSE:
@@ -211,6 +209,9 @@ static inline int wolfsentry_kv_value_eq_1(struct wolfsentry_kv_pair *a, struct 
     case WOLFSENTRY_KV_JSON:
         return 0; /* don't try to recursively compare the json trees. */
 #endif
+    case WOLFSENTRY_KV_NONE:
+    default:
+        return 0;
     }
     return 0;
 }
@@ -396,12 +397,12 @@ struct dump_buf_state {
 };
 
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
-static wolfsentry_errcode_t _json_value_dump_writer(const char* str, size_t size, struct dump_buf_state *dbs) {
-    if (size > (size_t)dbs->out_space)
+static int _json_value_dump_writer(const unsigned char* str, size_t size, void *dbs) {
+    if (size > (size_t)((struct dump_buf_state *)dbs)->out_space)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-    memcpy(dbs->out, str, size);
-    dbs->out += size;
-    dbs->out_space -= (int)size;
+    memcpy(((struct dump_buf_state *)dbs)->out, str, size);
+    ((struct dump_buf_state *)dbs)->out += size;
+    ((struct dump_buf_state *)dbs)->out_space -= (int)size;
     return 0;
 }
 #endif
@@ -450,7 +451,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
         dbs.out_space = *out_len;
         ret = json_dom_dump(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)),
                             WOLFSENTRY_KV_V_JSON(kv),
-                            (JSON_DUMP_CALLBACK)_json_value_dump_writer,
+                            _json_value_dump_writer,
                             &dbs /* user_data */,
                             4 /* tab_width */,
                             0 /* flags */);
@@ -1140,12 +1141,23 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_end(
     WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, cursor));
 }
 
+static wolfsentry_errcode_t wolfsentry_kv_drop_reference_generic(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_table_ent_header *kv,
+    wolfsentry_action_res_t *action_results)
+{
+    return wolfsentry_kv_drop_reference(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        (struct wolfsentry_kv_pair_internal *)kv,
+        action_results);
+}
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_table_init(
     struct wolfsentry_kv_table *kv_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(kv_table->header);
-    kv_table->header.cmp_fn = (wolfsentry_ent_cmp_fn_t)wolfsentry_kv_key_cmp;
-    kv_table->header.free_fn = (wolfsentry_ent_free_fn_t)wolfsentry_kv_drop_reference;
+    kv_table->header.cmp_fn = wolfsentry_kv_key_cmp;
+    kv_table->header.free_fn = wolfsentry_kv_drop_reference_generic;
     kv_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_KV;
     WOLFSENTRY_RETURN_OK;
 }

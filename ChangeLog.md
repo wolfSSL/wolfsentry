@@ -111,6 +111,9 @@ wolfsentry_route_exports`, changed `.parent_event_label_len` from `size_t` to
 
 Added `wolfsentry_table_ent_get_by_id()` to the public API.
 
+Renamed public API `wolfsentry_action_res_decode()` as
+`wolfsentry_action_res_assoc_by_flag()` for clarity and consistency.
+
 ## Bug Fixes and Cleanups
 
 Consistently set the `WOLFSENTRY_ACTION_RES_FALLTHROUGH` flag in

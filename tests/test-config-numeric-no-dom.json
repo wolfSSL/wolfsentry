@@ -9,6 +9,92 @@
         "commendable-clears-derogatory" : false
     },
     "events-insert" : [
+	{
+            "label" : "static-route-parent",
+            "priority" : 5,
+            "config" : {
+                "max-connection-count" : 10,
+                "penalty-box-duration" : "10m",
+                "derog-thresh-for-penalty-boxing" : 4,
+                "derog-thresh-ignore-commendable" : false,
+                "commendable-clears-derogatory" : false
+            },
+            "post-actions" : [ "handle-connect", "handle-connect2" ],
+            "insert-actions" : [ "handle-insert" ],
+            "match-actions" : [ "handle-match" ],
+            "update-actions" : [ "handle-update" ],
+            "delete-actions" : [ "handle-delete" ],
+            "decision-actions" : [ "notify-on-decision" ]
+        },
+
+        {
+            "label" : "ephemeral-pinhole-parent",
+            "priority" : 1,
+            "config" : {
+                "max-connection-count" : 10,
+		"route-flags-to-add-on-insert" : [ "direction-in", "direction-out", "green-listed" ],
+		"route-flags-to-clear-on-insert" : [ "dont-count-hits", "dont-count-current-connections" ],
+                "route-idle-time-for-purge" : "10s",
+		"action-res-bits-to-add" : [ "user+5" ]
+            },
+            "post-actions" : [ "handle-connect", "handle-connect2" ],
+            "insert-actions" : [ "handle-insert" ],
+            "match-actions" : [ "handle-match" ],
+            "update-actions" : [ "handle-update" ],
+            "delete-actions" : [ "handle-delete" ],
+            "decision-actions" : [ "notify-on-decision" ]
+        },
+
+        {
+            "label" : "pinhole-generator-parent",
+            "priority" : 10,
+	    "config" : {
+		"action-res-filter-bits-set" : [ "user+1" ],
+                "action-res-filter-bits-unset" : [ "user+2" ],
+		"action-res-bits-to-add" : [ "user+3" ],
+		"action-res-bits-to-clear" : [ "user+4" ]
+	    },
+            "match-actions" : [ "%track-peer-v1" ],
+	    "aux-parent-event" : "ephemeral-pinhole-parent",
+            "decision-actions" : [ "notify-on-decision" ]
+        },
+
+        {
+            "label" : "ephemeral-port-scanner-parent",
+            "priority" : 1,
+            "config" : {
+                "max-connection-count" : 10,
+                "penalty-box-duration" : "10m",
+                "derog-thresh-for-penalty-boxing" : 4,
+                "derog-thresh-ignore-commendable" : false,
+                "commendable-clears-derogatory" : true,
+		"action-res-bits-to-add" : [ "user+5" ],
+		"route-flags-to-add-on-insert" : [ "direction-in", "laddr-wild", "rport-wild", "lport-wild" ],
+		"route-flags-to-clear-on-insert" : [ "direction-out", "dont-count-hits", "dont-count-current-connections", "green-listed" ],
+                "route-idle-time-for-purge" : "5m"
+            },
+            "post-actions" : [ "handle-connect", "handle-connect2" ],
+            "insert-actions" : [ "handle-insert" ],
+            "match-actions" : [ "handle-match" ],
+            "update-actions" : [ "handle-update" ],
+            "delete-actions" : [ "handle-delete" ],
+            "decision-actions" : [ "notify-on-decision" ]
+        },
+
+        {
+            "label" : "port-scanner-generator-parent",
+            "priority" : 10,
+            "config" : {
+		"action-res-filter-bits-set" : [ "unreachable" ],
+		"action-res-filter-bits-unset" : [ "commendable" ],
+		"action-res-bits-to-add" : [ "user+4" ],
+		"action-res-bits-to-clear" : [ "none" ]
+	    },
+            "match-actions" : [ "%track-peer-v1" ],
+	    "aux-parent-event" : "ephemeral-port-scanner-parent",
+            "decision-actions" : [ "notify-on-decision" ]
+        },
+
         {
             "label" : "event-on-insert",
             "actions" : [ "handle-insert" ]
@@ -30,24 +116,7 @@
             "actions" : [ "notify-on-decision" ]
         },
         {
-            "label" : "static-route-parent",
-            "priority" : 1,
-            "config" : {
-                "max-connection-count" : 10,
-                "penalty-box-duration" : "10m",
-                "derog-thresh-for-penalty-boxing" : 4,
-                "derog-thresh-ignore-commendable" : false,
-                "commendable-clears-derogatory" : false
-            },
-            "actions" : [ "handle-connect", "handle-connect2" ],
-            "insert-event" : "event-on-insert",
-            "match-event" : "event-on-match",
-            "update-event" : "event-on-update",
-            "delete-event" : "event-on-delete",
-            "decision-event" : "event-on-decision"
-        },
-        {
-            "label" : "dynamic-route-parent",
+            "label" : "old-dynamic-route-parent",
             "priority" : 1,
             "config" : {
             "max-connection-count" : 10,
@@ -215,7 +284,31 @@
             "local" : {
                 "address" : "001/002/003"
             }
-        }
+        },
+
+        {
+            "parent-event" : "pinhole-generator-parent",
+            "direction-in" : false,
+            "direction-out" : true,
+            "green-listed" : true,
+            "family" : 2,
+            "protocol" : 17,
+            "remote" : {
+                "port" : 53
+            }
+	},
+        {
+            "parent-event" : "port-scanner-generator-parent",
+            "direction-in" : true,
+            "direction-out" : false,
+            "family" : 2
+	},
+        {
+            "parent-event" : "port-scanner-generator-parent",
+            "direction-in" : true,
+            "direction-out" : false,
+            "family" : 10
+	}
     ],
     "user-values" : {
         "user-null" : null,
@@ -234,7 +327,7 @@
 
         "user-cert-string" : "-----BEGIN CERTIFICATE-----\nMIIDnzCCAyWgAwIBAgICEAEwCgYIKoZIzj0EAwMwgZcxCzAJBgNVBAYTAlVTMRMw\nEQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxlMRAwDgYDVQQKDAd3\nb2xmU1NMMRQwEgYDVQQLDAtEZXZlbG9wbWVudDEYMBYGA1UEAwwPd3d3LndvbGZz\nc2wuY29tMR8wHQYJKoZIhvcNAQkBFhBpbmZvQHdvbGZzc2wuY29tMCAXDTIyMDIx\nNTEyNTAyNFoYDzIwNTIwMjA4MTI1MDI0WjCBlTELMAkGA1UEBhMCVVMxEzARBgNV\nBAgMCldhc2hpbmd0b24xEDAOBgNVBAcMB1NlYXR0bGUxEDAOBgNVBAoMB0VsaXB0\naWMxEjAQBgNVBAsMCUVDQzM4NFNydjEYMBYGA1UEAwwPd3d3LndvbGZzc2wuY29t\nMR8wHQYJKoZIhvcNAQkBFhBpbmZvQHdvbGZzc2wuY29tMHYwEAYHKoZIzj0CAQYF\nK4EEACIDYgAE6s+TTywJuzkUD1Zkw0C03w5jruVxSwDMBJf/4ek4lrtfkbJqzLU5\nX49wWfEB9lorAWxoC89VJa9tmEgKqHTJqRegDMP70yNo/gQ8Y1CIO7lPfGc09zup\nc+cbw1FeIhjso4IBQDCCATwwCQYDVR0TBAIwADARBglghkgBhvhCAQEEBAMCBkAw\nHQYDVR0OBBYEFII78mUv87QAxrwG/XlCdUtl0c68MIHXBgNVHSMEgc8wgcyAFKvg\nwyZMGNRyu9KEjJwKBZKAElNSoYGdpIGaMIGXMQswCQYDVQQGEwJVUzETMBEGA1UE\nCAwKV2FzaGluZ3RvbjEQMA4GA1UEBwwHU2VhdHRsZTEQMA4GA1UECgwHd29sZlNT\nTDEUMBIGA1UECwwLRGV2ZWxvcG1lbnQxGDAWBgNVBAMMD3d3dy53b2xmc3NsLmNv\nbTEfMB0GCSqGSIb3DQEJARYQaW5mb0B3b2xmc3NsLmNvbYIUaiYbTQIaM//CRxT5\n51VgWi5/ESkwDgYDVR0PAQH/BAQDAgOoMBMGA1UdJQQMMAoGCCsGAQUFBwMBMAoG\nCCqGSM49BAMDA2gAMGUCMQCEPZBU/y/EetTYGOKzLbtCN0CmHwmD3rwEeoLcVRdC\nXBeqB0LcyPZQzRS3Bhk5HyQCMBNiS5/JoIzSac8WToa9nik4ROlKOmOgZjiV4n3j\nF+yUIbg9aV7K5ISc2mF9G1G/0Q==\n-----END CERTIFICATE-----\n",
 
-        "notification-dest-addr" : "192.168.3.1",
+        "notification-dest-addr" : "127.0.0.1",
         "notification-dest-port" : 55555,
         "admin-listen-addr" : "0.0.0.0",
         "admin-listen-port" : 10443,

@@ -346,28 +346,30 @@ typedef enum {
     WOLFSENTRY_ACTION_RES_COMMENDABLE = 1U << 5U, /* the caller or an action designated this event commendable for the peer. */
     WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES = WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_COMMENDABLE, /* overload used by wolfsentry_route_lookup_0() */
     WOLFSENTRY_ACTION_RES_STOP        = 1U << 6U, /* when an action returns this, don't evaluate any more actions in the current action list. */
-    WOLFSENTRY_ACTION_RES_INSERT      = 1U << 7U, /* when an action returns this, the target route should be added to the route table. */
-    WOLFSENTRY_ACTION_RES_DELETE      = 1U << 8U, /* when an action returns this, delete the route from the table. */
-    WOLFSENTRY_ACTION_RES_DEALLOCATED = 1U << 9U, /* when an API call returns this, the route and its associated ID were deallocated from the system. */
-    WOLFSENTRY_ACTION_RES_ERROR       = 1U << 10U, /* an error occurred while processing actions. */
-    WOLFSENTRY_ACTION_RES_FALLTHROUGH = 1U << 11U, /* dispatch resolved to the fallthrough route. */
-    WOLFSENTRY_ACTION_RES_UPDATE      = 1U << 12U, /* signals to subsequent actions and the caller that the route state was updated (e.g. penaltyboxed). */
-    WOLFSENTRY_ACTION_RES_PORT_RESET  = 1U << 13U, /* when an action returns this, send a TCP reset or ICMP port unreachable packet. */
-    WOLFSENTRY_ACTION_RES_SENDING     = 1U << 14U, /* caller-preinited bit signaling outbound traffic. */
-    WOLFSENTRY_ACTION_RES_RECEIVED    = 1U << 15U, /* caller-preinited bit signaling inbound traffic. */
-    WOLFSENTRY_ACTION_RES_BINDING     = 1U << 16U, /* caller-preinited bit signaling that a socket will be bound. */
-    WOLFSENTRY_ACTION_RES_LISTENING   = 1U << 17U, /* caller-preinited bit signaling that a socket will be listened. */
-    WOLFSENTRY_ACTION_RES_STOPPED_LISTENING = 1U << 18U, /* caller-preinited bit signaling that a socket will stop being listened. */
-    WOLFSENTRY_ACTION_RES_CONNECTING_OUT = 1U << 19U, /* caller-preinited bit signaling that an outbound connection will be attempted. */
-    WOLFSENTRY_ACTION_RES_CLOSED      = 1U << 20U, /* caller-preinited bit signaling that an association has closed/ended that wasn't created with _CONNECT. */
-    WOLFSENTRY_ACTION_RES_UNREACHABLE = 1U << 21U, /* caller-preinited bit signaling that traffic destination was unreachable (unbound/unlistened). */
-    WOLFSENTRY_ACTION_RES_SOCK_ERROR  = 1U << 22U, /* caller-preinited bit signaling that a transport error occurred. */
+    WOLFSENTRY_ACTION_RES_DEALLOCATED = 1U << 7U, /* when an API call returns this, an object and its associated ID were deallocated from the system. */
+    WOLFSENTRY_ACTION_RES_INSERTED    = 1U << 8U, /* a side-effect route insertion was performed. */
+    WOLFSENTRY_ACTION_RES_ERROR       = 1U << 9U, /* an error occurred while processing actions. */
+    WOLFSENTRY_ACTION_RES_FALLTHROUGH = 1U << 10U, /* dispatch classification (ACCEPT/REJECT) was by fallthrough policy. */
+    WOLFSENTRY_ACTION_RES_UPDATE      = 1U << 11U, /* signals to subsequent actions and the caller that the route state was updated (e.g. penaltyboxed). */
+    WOLFSENTRY_ACTION_RES_PORT_RESET  = 1U << 12U, /* when an action returns this, send a TCP reset or ICMP port unreachable packet. */
+    WOLFSENTRY_ACTION_RES_SENDING     = 1U << 13U, /* caller-preinited bit signaling outbound traffic. */
+    WOLFSENTRY_ACTION_RES_RECEIVED    = 1U << 14U, /* caller-preinited bit signaling inbound traffic. */
+    WOLFSENTRY_ACTION_RES_BINDING     = 1U << 15U, /* caller-preinited bit signaling that a socket will be bound. */
+    WOLFSENTRY_ACTION_RES_LISTENING   = 1U << 16U, /* caller-preinited bit signaling that a socket will be listened. */
+    WOLFSENTRY_ACTION_RES_STOPPED_LISTENING = 1U << 17U, /* caller-preinited bit signaling that a socket will stop being listened. */
+    WOLFSENTRY_ACTION_RES_CONNECTING_OUT = 1U << 18U, /* caller-preinited bit signaling that an outbound connection will be attempted. */
+    WOLFSENTRY_ACTION_RES_CLOSED      = 1U << 19U, /* caller-preinited bit signaling that an association has closed/ended that wasn't created with _CONNECT. */
+    WOLFSENTRY_ACTION_RES_UNREACHABLE = 1U << 20U, /* caller-preinited bit signaling that traffic destination was unreachable (unbound/unlistened). */
+    WOLFSENTRY_ACTION_RES_SOCK_ERROR  = 1U << 21U, /* caller-preinited bit signaling that a transport error occurred. */
+    WOLFSENTRY_ACTION_RES_RESERVED22  = 1U << 22U,
+    WOLFSENTRY_ACTION_RES_RESERVED23  = 1U << 23U,
     WOLFSENTRY_ACTION_RES_USER_BASE   = 1U << WOLFSENTRY_ACTION_RES_USER_SHIFT /* start of user-defined results, with user-defined scheme (bitfield, sequential, or other) */
 } wolfsentry_action_res_t;
 
 #define WOLFSENTRY_ROUTE_DEFAULT_POLICY_MASK (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_STOP | WOLFSENTRY_ACTION_RES_ERROR)
 
 struct wolfsentry_table_header;
+struct wolfsentry_table_ent_header;
 struct wolfsentry_route;
 struct wolfsentry_route_table;
 struct wolfsentry_event;
@@ -717,6 +719,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_unlock_and_abandon_reserv
 #define WOLFSENTRY_LENGTH_NULL_TERMINATED (-1)
 
 WOLFSENTRY_API wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_ent_id_t id,
+    struct wolfsentry_table_ent_header **ent);
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_checkout(void *object);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_check_flags_sensical(

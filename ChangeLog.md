@@ -17,7 +17,8 @@ when it is matched.
 Added a new built-in action, `"%track-peer-v1"`, that can be used in combination
 with the above new facilities to dynamically spawn ephemeral routes, allowing
 for automatic pinhole routes, automatic adversary tracking, and easy
-implementation of dynamic blocks for port scanning adversaries.
+implementation of dynamic blocks and/or notifications for port scanning
+adversaries.
 
 ## Noteworthy Changes and Additions
 
@@ -64,6 +65,7 @@ Added a family of functions to let routes be inserted directly from a prepared
 * `wolfsentry_route_reset_metadata_exports()`
 
 Added convenience accessor/validator functions for routes:
+
 * `wolfsentry_route_get_addrs()`
 * `wolfsentry_route_check_flags_sensical()`
 
@@ -75,7 +77,7 @@ than through a "subevent".  The related APIs
 `wolfsentry_event_action_insert_after()`, `wolfsentry_event_action_delete()`,
 `wolfsentry_event_action_list_start()`) each gain an additional argument,
 `which_action_list`.  The old JSON grammar is still supported via internal
-emulation (still tested by test-config.json).  The JSON configuration for the
+emulation (still tested by `test-config.json`).  The JSON configuration for the
 new facility is `"post-actions"`, `"insert-actions"`, `"match-actions"`,
 `"update-actions"`, `"delete-actions"`, and `"decision-actions"`, each optional,
 and each expecting an array of zero or more actions.
@@ -85,8 +87,18 @@ Added a restriction that user-defined action and event labels can't start with
 with "%".  This can be overridden by predefining
 `WOLFSENTRY_BUILTIN_LABEL_PREFIX` in user settings.
 
-Eliminated unused flag `WOLFSENTRY_ACTION_RES_CONTINUE`, as it was semantically
+Removed unused flag `WOLFSENTRY_ACTION_RES_CONTINUE`, as it was semantically
 redundant relative to `WOLFSENTRY_ACTION_RES_STOP`.
+
+Removed flags `WOLFSENTRY_ACTION_RES_INSERT` and `WOLFSENTRY_ACTION_RES_DELETE`,
+as the former is superseded by the new builtin action facility, and the latter
+will be implemented later with another builtin action.
+
+Added flag `WOLFSENTRY_ACTION_RES_INSERTED`, to indicate when a side-effect
+route insertion was performed.  This flag is now always set by the route insert
+routines when they succeed.  Action plugins must copy this flag as shown in the
+new `wolfsentry_builtin_action_track_peer()` to assure proper internal
+accounting.
 
 Reduced number of available user-defined `_ACTION_RESULT_` bits from 16 to 8, to
 accommodate new generic traffic bits (see above).
@@ -97,7 +109,13 @@ In `struct wolfsentry_route_metadata_exports`, changed `.connection_count`,
 wolfsentry_route_exports`, changed `.parent_event_label_len` from `size_t` to
 `int` to match `label_len` arg type.
 
+Added `wolfsentry_table_ent_get_by_id()` to the public API.
+
 ## Bug Fixes and Cleanups
+
+Consistently set the `WOLFSENTRY_ACTION_RES_FALLTHROUGH` flag in
+`action_results` when dispatch classification (`_ACCEPT`/`_REJECT`) was by
+fallthrough policy.
 
 Refactored internal code to avoid function pointer casts, previously used to
 allow implementations with struct pointers where a handler pointer has a type
@@ -105,6 +123,23 @@ that expects `void *`.  The refactored code has shim implementations with fully
 conformant signatures, that cast the arguments to pass them to the actual
 implementations.  This works around over-eager analysis by the `clang` UB
 sanitizer.
+
+Fix missing default cases in non-`enum` `switch()` constructs.
+
+## Self-Test Enhancements
+
+Added new clauses to `test-config*.json` for
+`wolfsentry_builtin_action_track_peer()` (events "ephemeral-pinhole-parent",
+"pinhole-generator-parent", "ephemeral-port-scanner-parent",
+"port-scanner-generator-parent", and related routes), and added full dynamic
+workout for them to `test_json()`.
+
+Add unit test coverage:
+
+* `wolfsentry_event_set_aux_event()`
+* `wolfsentry_event_get_aux_event()`
+* `wolfsentry_event_get_label()`
+* `wolfsentry_addr_family_max_addr_bits()`
 
 
 # wolfSentry Release 1.3.1 (July 5, 2023)

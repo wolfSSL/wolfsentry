@@ -384,7 +384,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENT
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_ent_id_t id, struct wolfsentry_table_ent_header **ent) {
     struct wolfsentry_table_ent_header *i;
 
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();

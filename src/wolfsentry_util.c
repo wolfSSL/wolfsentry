@@ -402,12 +402,12 @@ static const struct {
     { WOLFSENTRY_ACTION_RES_DEROGATORY, "derogatory" },
     { WOLFSENTRY_ACTION_RES_COMMENDABLE, "commendable" },
     { WOLFSENTRY_ACTION_RES_STOP, "stop" },
-    { WOLFSENTRY_ACTION_RES_INSERT, "insert" },
-    { WOLFSENTRY_ACTION_RES_DELETE, "delete" },
     { WOLFSENTRY_ACTION_RES_DEALLOCATED, "deallocated" },
+    { WOLFSENTRY_ACTION_RES_INSERTED, "inserted" },
     { WOLFSENTRY_ACTION_RES_ERROR, "error" },
     { WOLFSENTRY_ACTION_RES_FALLTHROUGH, "fallthrough" },
     { WOLFSENTRY_ACTION_RES_UPDATE, "update" },
+    { WOLFSENTRY_ACTION_RES_PORT_RESET, "port-reset" },
     { WOLFSENTRY_ACTION_RES_SENDING, "sending" },
     { WOLFSENTRY_ACTION_RES_RECEIVED, "received" },
     { WOLFSENTRY_ACTION_RES_BINDING, "binding" },
@@ -417,6 +417,8 @@ static const struct {
     { WOLFSENTRY_ACTION_RES_CLOSED, "closed" },
     { WOLFSENTRY_ACTION_RES_UNREACHABLE, "unreachable" },
     { WOLFSENTRY_ACTION_RES_SOCK_ERROR, "sock-error" },
+    { WOLFSENTRY_ACTION_RES_RESERVED22, "reserved-22" },
+    { WOLFSENTRY_ACTION_RES_RESERVED23, "reserved-23" },
     { WOLFSENTRY_ACTION_RES_USER_BASE, "user+0" },
     { WOLFSENTRY_ACTION_RES_USER_BASE << 1U, "user+1" },
     { WOLFSENTRY_ACTION_RES_USER_BASE << 2U, "user+2" },
@@ -426,6 +428,8 @@ static const struct {
     { WOLFSENTRY_ACTION_RES_USER_BASE << 6U, "user+6" },
     { ((unsigned)WOLFSENTRY_ACTION_RES_USER_BASE) << 7U, "user+7" }
 };
+
+wolfsentry_static_assert(length_of_array(action_res_bit_map) == 1U + sizeof(wolfsentry_action_res_t) * BITS_PER_BYTE)
 
 WOLFSENTRY_API const char *wolfsentry_action_res_assoc_by_flag(wolfsentry_action_res_t res, unsigned int bit) {
     if (bit > 31)

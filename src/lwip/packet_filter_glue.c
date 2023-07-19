@@ -36,8 +36,8 @@
     #define V4_FMT "%d.%d.%d.%d"
     #define V4_2_V4ARGS(x) (int)((x)->addr & 0xff), (int)(((x)->addr >> 8) & 0xff), (int)(((x)->addr >> 16) & 0xff), (int)(((x)->addr >> 24))
     #define V4V6_2_V4ARGS(x) (int)(ip_2_ip4(x)->addr & 0xff), (int)((ip_2_ip4(x)->addr >> 8) & 0xff), (int)((ip_2_ip4(x)->addr >> 16) & 0xff), (int)((ip_2_ip4(x)->addr >> 24))
-    wolfsentry_static_assert(FILT_BINDING == 0, "unexpected value for FILT_BINDING")
-    wolfsentry_static_assert(FILT_OUTBOUND_ERR == 13, "unexpected value for FILT_OUTBOUND_ERR")
+    wolfsentry_static_assert(FILT_BINDING == 0)
+    wolfsentry_static_assert(FILT_OUTBOUND_ERR == 13)
     static const char *lwip_event_reasons[] = {
         "BINDING",
         "DISSOCIATE",
@@ -482,7 +482,7 @@ static err_t tcp_filter_with_wolfsentry(
 #endif
     }
     remote, local;
-    wolfsentry_static_assert((void *)&remote.sa.addr == (void *)&remote.addr_buf, "unexpected layout in struct wolfsentry_sockaddr.")
+    wolfsentry_static_assert2((void *)&remote.sa.addr == (void *)&remote.addr_buf, "unexpected layout in struct wolfsentry_sockaddr.")
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
     WOLFSENTRY_THREAD_HEADER_DECLS
 #ifdef WOLFSENTRY_DEBUG_LWIP
@@ -514,7 +514,8 @@ static err_t tcp_filter_with_wolfsentry(
         break;
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE;
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_BINDING:
         route_flags |=
@@ -723,7 +724,8 @@ static err_t udp_filter_with_wolfsentry(
         break;
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE;
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_RECEIVING:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
@@ -885,7 +887,8 @@ static err_t icmp4_filter_with_wolfsentry(
     case FILT_ADDR_UNREACHABLE:
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE;
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
@@ -1014,7 +1017,8 @@ static err_t icmp6_filter_with_wolfsentry(
     case FILT_ADDR_UNREACHABLE:
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
-        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE;
+        action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE |
+            WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     case FILT_INBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;

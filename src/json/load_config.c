@@ -471,11 +471,11 @@ static wolfsentry_errcode_t convert_default_policy(JSON_TYPE type, const unsigne
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
     if (streq(data, "accept", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_STOP;
+        *default_policy = WOLFSENTRY_ACTION_RES_ACCEPT;
     else if (streq(data, "reject", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_STOP;
+        *default_policy = WOLFSENTRY_ACTION_RES_REJECT;
     else if (streq(data, "reset", data_size))
-        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_PORT_RESET|WOLFSENTRY_ACTION_RES_STOP;
+        *default_policy = WOLFSENTRY_ACTION_RES_REJECT|WOLFSENTRY_ACTION_RES_PORT_RESET;
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
@@ -503,8 +503,6 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
             else
                 eventconfig->route_flags_to_clear_on_insert |= flag;
             WOLFSENTRY_RETURN_OK;
-
-
 
         } else if ((! strcmp(jps->cur_keyname, "action-res-filter-bits-set")) ||
                    (! strcmp(jps->cur_keyname, "action-res-filter-bits-unset")) ||

@@ -47,6 +47,7 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     wolfsentry_addr_bits_t rule_local_addr_len, rule_remote_addr_len;
     struct wolfsentry_route_exports target_exports;
     wolfsentry_errcode_t ret;
+    wolfsentry_action_res_t insert_action_results;
 
     (void)action;
     (void)handler_arg;
@@ -74,18 +75,10 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
                                      NULL);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
-    /* check if this was a fallthrough, in which case the caller will insert it. */
-    if ((! WOLFSENTRY_MASKIN_BITS(rule_flags, WOLFSENTRY_ROUTE_WILDCARD_FLAGS)) &&
-        (rule_remote_addr_len == target_exports.remote.addr_len))
-    {
-        WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERT);
-        WOLFSENTRY_RETURN_OK;
-    }
-
     /* export the target, and set it up for insertion as a new rule by switching
      * its parent event to the rule_route's aux_event.
      *
-     * the dynamics for shifting the event from the electric rule to the
+     * the dynamics for shifting the event from the generator rule to the
      * ephemeral one are handled by the wolfSentry core -- in particular,
      * setting and clearing of route and action_res flags per the event config,
      * and accounting around connection_count, derogatory_count, and
@@ -109,9 +102,13 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
         target_exports.parent_event_label_len = 0;
     }
 
+    target_exports.private_data = NULL;
+    target_exports.private_data_size = 0;
+
     ret = wolfsentry_route_reset_metadata_exports(&target_exports);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
+    /* can't pass action_results directly to _route_insert -- it would get zeroed. */
     WOLFSENTRY_WARN_ON_FAILURE(
         ret = wolfsentry_route_insert_by_exports_into_table(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -119,7 +116,11 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
             NULL /* void *caller_arg*/,
             &target_exports,
             NULL /* id */,
-            action_results));
+            &insert_action_results));
+    *action_results |= insert_action_results; /* crucial to inhibit double-accounting for
+                                               * connection_count, derogatory_count, and
+                                               * commendable_count.
+                                               */
 
     WOLFSENTRY_RETURN_OK;
 }

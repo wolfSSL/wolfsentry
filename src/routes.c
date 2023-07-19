@@ -763,9 +763,6 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
     if (WOLFSENTRY_CHECK_BITS(route_to_insert->flags, WOLFSENTRY_ROUTE_FLAG_IN_TABLE))
         WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
 
-    if (route_to_insert->parent_event && WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT))
-        WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
-
     if ((ret = WOLFSENTRY_GET_TIME(&route_to_insert->meta.insert_time)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
@@ -796,7 +793,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
         ++route_to_insert->meta.derogatory_count;
     if (*action_results & WOLFSENTRY_ACTION_RES_COMMENDABLE)
         ++route_to_insert->meta.commendable_count;
-    if (*action_results & WOLFSENTRY_ACTION_RES_CONNECT)
+    if ((*action_results & WOLFSENTRY_ACTION_RES_CONNECT) && (! (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)))
         ++route_to_insert->meta.connection_count;
 
     if ((config->config.route_idle_time_for_purge > 0) && (route_to_insert->meta.purge_after == 0))
@@ -826,7 +823,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
 
-    WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_COMMENDABLE | WOLFSENTRY_ACTION_RES_CONNECT);
+    WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED); /* signals to _dispatch_0() that counts were assigned to the newly inserted route. */
 
     if (route_to_insert->meta.purge_after)
         wolfsentry_route_purge_list_insert(route_table, route_to_insert);
@@ -1308,15 +1305,8 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     if (action_results && WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES))
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES);
 
-    if ((*found_route != NULL) && (ret >= 0) && (action_results != NULL)) {
+    if ((*found_route != NULL) && (ret >= 0) && (action_results != NULL))
         wolfsentry_route_increment_hitcount(WOLFSENTRY_CONTEXT_ARGS_OUT, *found_route, action_results);
-        if ((*found_route)->parent_event && (*found_route)->parent_event->config) {
-            if ((*found_route)->parent_event->config->config.action_res_bits_to_add)
-                WOLFSENTRY_SET_BITS(*action_results, (*found_route)->parent_event->config->config.action_res_bits_to_add);
-            if ((*found_route)->parent_event->config->config.action_res_bits_to_clear)
-                WOLFSENTRY_CLEAR_BITS(*action_results, (*found_route)->parent_event->config->config.action_res_bits_to_clear);
-        }
-    }
 
 #ifdef DEBUG_ROUTE_LOOKUP
     if (ret < 0)
@@ -1710,34 +1700,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         current_rule_route_flags = WOLFSENTRY_ATOMIC_LOAD(rule_route->flags);
     }
 
-    /* note that this builtin handling for WOLFSENTRY_ACTION_RES_INSERT is not
-     * very useful, as it is only reachable in fallthrough scenarios where
-     * rule_route is a clone of target_route.
-     *
-     * i.e., in general, dynamic insertions need to be done as side-effects of actions.
-     */
-    if ((*action_results & WOLFSENTRY_ACTION_RES_INSERT) &&
-        (! WOLFSENTRY_CHECK_BITS(current_rule_route_flags, WOLFSENTRY_ROUTE_FLAG_IN_TABLE)))
-    {
-        if (rule_route->parent_event) {
-            if (target_route->parent_event)
-                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, target_route->parent_event, NULL /* action_results */));
-            if (rule_route->parent_event->aux_event)
-                target_route->parent_event = rule_route->parent_event->aux_event;
-            else
-                target_route->parent_event = rule_route->parent_event;
-            WOLFSENTRY_REFCOUNT_INCREMENT(target_route->parent_event->header.refcount, ret);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        }
-        ret = wolfsentry_route_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, target_route, route_table, rule_route, trigger_event, action_results);
-        if (ret < 0) {
-            WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERT);
-            WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_ERROR);
-        }
-    } else {
-        /* tell the caller that no new entry was needed. */
-        WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERT);
-    }
+    if (config->config.action_res_bits_to_add)
+        WOLFSENTRY_SET_BITS(*action_results, config->config.action_res_bits_to_add);
+    if (config->config.action_res_bits_to_clear)
+        WOLFSENTRY_CLEAR_BITS(*action_results, config->config.action_res_bits_to_clear);
 
     /* if the rule_route still isn't in the table at this point, then switch to the fallthrough rule. */
     if ((! WOLFSENTRY_CHECK_BITS(current_rule_route_flags, WOLFSENTRY_ROUTE_FLAG_IN_TABLE)) && (route_table->fallthrough_route != NULL)) {
@@ -1747,11 +1713,6 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
             wolfsentry_route_increment_hitcount(WOLFSENTRY_CONTEXT_ARGS_OUT, rule_route, action_results);
         }
         parent_event = route_table->default_event;
-    }
-
-    if (*action_results & WOLFSENTRY_ACTION_RES_DELETE) {
-        ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING);
-        goto done;
     }
 
     if (parent_event && (wolfsentry_list_ent_get_len(&parent_event->match_action_list.header) > 0)) {
@@ -1769,41 +1730,59 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         current_rule_route_flags = WOLFSENTRY_ATOMIC_LOAD(rule_route->flags);
     }
 
-    if (*action_results & WOLFSENTRY_ACTION_RES_DELETE) {
-        ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING);
-        goto done;
-    }
-
-    if (! (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)) {
-        if (*action_results & WOLFSENTRY_ACTION_RES_CONNECT) {
-            if (rule_route->meta.connection_count >= config->config.max_connection_count) {
-                *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-                ret = WOLFSENTRY_ERROR_ENCODE(OK);
-                goto done;
-            }
-            if (WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(rule_route->meta.connection_count) > config->config.max_connection_count) {
+    /* if _RES_INSERTED signals that a side-effect route was created within this
+     * dispatch, assume any counts were assigned to the new route, and ignore
+     * them here.
+     */
+    if (! WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED)) {
+        if (! (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)) {
+            if (*action_results & WOLFSENTRY_ACTION_RES_CONNECT) {
+                if (rule_route->meta.connection_count >= config->config.max_connection_count) {
+                    *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
+                    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+                    goto done;
+                }
+                if (WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(rule_route->meta.connection_count) > config->config.max_connection_count) {
+                    WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(rule_route->meta.connection_count);
+                    *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
+                    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+                    goto done;
+                }
+            } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT)
                 WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(rule_route->meta.connection_count);
-                *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-                ret = WOLFSENTRY_ERROR_ENCODE(OK);
-                goto done;
-            }
-        } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT)
-            WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(rule_route->meta.connection_count);
-    }
+        }
 
-    if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY) {
-        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.derogatory_count, ret);
-        (void)ret;
-    }
-    if (*action_results & WOLFSENTRY_ACTION_RES_COMMENDABLE) {
-        WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.commendable_count, ret);
-        (void)ret;
-        if (config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY)
-            WOLFSENTRY_ATOMIC_STORE(rule_route->meta.derogatory_count, 0);
+        if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY) {
+            WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.derogatory_count, ret);
+            (void)ret;
+        }
+        if (*action_results & WOLFSENTRY_ACTION_RES_COMMENDABLE) {
+            WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.commendable_count, ret);
+            (void)ret;
+            if (config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY)
+                WOLFSENTRY_ATOMIC_STORE(rule_route->meta.derogatory_count, 0);
+        }
     }
 
     if (((current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)) &&
-        ((config->config.penaltybox_duration > 0) && (rule_route->meta.last_penaltybox_time != 0))) {
+        WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_COMMENDABLE) &&
+        WOLFSENTRY_CHECK_BITS(config->config.flags, WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY))
+    {
+        wolfsentry_route_flags_t flags_before;
+        WOLFSENTRY_WARN_ON_FAILURE(
+            wolfsentry_route_update_flags(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                rule_route,
+                WOLFSENTRY_ROUTE_FLAG_NONE,
+                WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED,
+                &flags_before,
+                &current_rule_route_flags,
+                action_results));
+    }
+
+    if (((current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED)) &&
+        ((config->config.penaltybox_duration > 0) && (rule_route->meta.last_penaltybox_time != 0)))
+    {
         wolfsentry_time_t now;
         ret = WOLFSENTRY_GET_TIME(&now);
         if (ret < 0) {
@@ -1864,7 +1843,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     }
 
     if (! WOLFSENTRY_MASKIN_BITS(*action_results, WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_REJECT))
-        *action_results |= route_table->default_policy;
+        *action_results |= WOLFSENTRY_ACTION_RES_FALLTHROUGH | route_table->default_policy;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
@@ -1959,6 +1938,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     }
 
     if (rule_route == NULL) {
+        *action_results |= WOLFSENTRY_ACTION_RES_FALLTHROUGH;
         if ((ret = wolfsentry_route_clone(
                  WOLFSENTRY_CONTEXT_ARGS_OUT,
                  &target_route->header,

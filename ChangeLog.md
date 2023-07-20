@@ -1,4 +1,29 @@
-# wolfSentry Release 1.4.0 (July 17, 2023)
+# wolfSentry Release 1.4.1 (July 20, 2023)
+
+Release 1.4.1 of the wolfSentry embedded firewall/IDPS has bug fixes including:
+
+## Bug Fixes and Cleanups
+
+Add inline implementations of
+`WOLFSENTRY_ERROR_DECODE_{ERROR_CODE,SOURCE_ID,LINE_NUMBER}()` for portable
+protection from multiple argument evaluation, and refactor
+`WOLFSENTRY_ERROR_ENCODE()` and `WOLFSENTRY_SUCCESS_ENCODE()` to avoid
+unnecessary dependence on non-portable (gnu-specific) construct.
+
+Use a local stack variable in `WOLFSENTRY_ERROR_ENCODE_1()` to assure a single
+evaluation of the argument.
+
+Add `-Wno-inline` to `CALL_TRACE` `CFLAGS`.
+
+Correct the release date of 1.4.0 in ChangeLog.
+
+## Self-Test Enhancements
+
+Add `CALL_TRACE-test` to `Makefile.analyzers`, and include it in the
+`check-extra` dep list.
+
+
+# wolfSentry Release 1.4.0 (July 19, 2023)
 
 Release 1.4.0 of the wolfSentry embedded firewall/IDPS has bug fixes and improvements including:
 

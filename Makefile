@@ -155,7 +155,7 @@ else
 endif
 
 ifdef CALL_TRACE
-    CFLAGS += -DWOLFSENTRY_DEBUG_CALL_TRACE -fno-omit-frame-pointer
+    CFLAGS += -DWOLFSENTRY_DEBUG_CALL_TRACE -fno-omit-frame-pointer -Wno-inline
 endif
 
 ifdef USER_SETTINGS_FILE

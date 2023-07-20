@@ -278,6 +278,13 @@ m32-c89-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c89-builds" clean
 	@echo "passed: -m32-c89 test."
 
+.PHONY: CALL_TRACE-test
+CALL_TRACE-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentryCALL_TRACE-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentryCALL_TRACE-builds" CALL_TRACE=1 test >/dev/null 2>&1
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentryCALL_TRACE-builds" clean
+	@echo "passed: CALL_TRACE test."
+
 .PHONY: singlethreaded-test
 singlethreaded-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-singlethreaded-builds" clean
@@ -453,7 +460,7 @@ release-check:
 check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test short-enums-test
 
 .PHONY: check-extra
-check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check release-check notification-demo-build-test
+check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test CALL_TRACE-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test dist-check release-check notification-demo-build-test
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

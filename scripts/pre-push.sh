@@ -61,7 +61,7 @@ do
 	else
 	    jflags=(-j $(($(nproc) / 2)))
 	fi
-	make --quiet "${jflags[@]}" REPO_ROOT="${REPO_ROOT}" FREERTOS_TOP="${REPO_ROOT}/../third/FreeRTOS/FreeRTOS/Source" LWIP_TOP="${REPO_ROOT}/../third/lwip/src" check-all || exit $?
+	make --quiet "${jflags[@]}" REPO_ROOT="${REPO_ROOT}" FREERTOS_TOP="${REPO_ROOT}/../third/FreeRTOS" LWIP_TOP="${REPO_ROOT}/../third/lwip" check-all || exit $?
     else
 	echo "make --quiet -j check for ${local_ref} at ${local_oid} ..."
 	if [[ -v MAKEFLAGS && "$MAKEFLAGS" =~ \ -j ]]; then

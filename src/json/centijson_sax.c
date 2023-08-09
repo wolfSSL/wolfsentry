@@ -1381,6 +1381,8 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
     fp = strchr(buffer, ',');
     if(fp != NULL) {
         *fp = '.';
+    } else if (strchr(buffer, '.') != NULL) {
+        /* do nothing */
 #endif
 
     } else if(strchr(buffer, 'e') == NULL) {

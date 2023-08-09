@@ -79,7 +79,7 @@ ifdef RUNTIME
         ifndef LWIP
             LWIP := 1
         endif
-        RUNTIME_CFLAGS += -DFREERTOS -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_POSIX_MEMALIGN -ffreestanding -I$(FREERTOS_TOP)/include -I$(FREERTOS_TOP)/portable/GCC/ARM_CM3
+        RUNTIME_CFLAGS += -DFREERTOS -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_POSIX_MEMALIGN -ffreestanding -I$(FREERTOS_TOP)/FreeRTOS/Source/include -I$(FREERTOS_TOP)/FreeRTOS/Source/portable/GCC/ARM_CM3
     else ifeq "$(RUNTIME)" "Linux-lwIP"
         ifndef LWIP
             LWIP := 1
@@ -97,7 +97,7 @@ ifdef LWIP
         ifndef LWIP_TOP
             $(error LWIP_TOP not supplied with LWIP enabled)
         endif
-        LWIP_CFLAGS += -DWOLFSENTRY_LWIP -I$(LWIP_TOP)/include -D_NETINET_IN_H -DWOLFSENTRY_NO_GETPROTOBY
+        LWIP_CFLAGS += -DWOLFSENTRY_LWIP -I$(LWIP_TOP)/src/include -D_NETINET_IN_H -DWOLFSENTRY_NO_GETPROTOBY
         SRCS += lwip/packet_filter_glue.c
 endif
 
@@ -129,7 +129,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) -MMD $(C_WARNFLAGS) $(LWIP_CFLAGS) $(RUNTIME_CFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) $(C_WARNFLAGS) $(LWIP_CFLAGS) $(RUNTIME_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
@@ -220,7 +220,7 @@ $(BUILD_TOP)/wolfsentry/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentr
 
 $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(SRC_TOP)/Makefile
 
-INTERNAL_CFLAGS := -DBUILDING_LIBWOLFSENTRY
+INTERNAL_CFLAGS := -DBUILDING_LIBWOLFSENTRY -MMD
 
 $(BUILD_TOP)/src/%.o: $(SRC_TOP)/src/%.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
@@ -283,12 +283,12 @@ $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basen
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
+	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h,$^)
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(LIB_NAME)
+	@$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h,$^)
 endif
 
 
@@ -450,9 +450,9 @@ else
 	@rm $(CLEAN_RM_ARGS)
 endif
 	@rm -rf $(addsuffix .dSYM,$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST) $(UNITTEST_LIST_SHARED)))
-	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,ports,lwip,wolfsentry,examples,scripts,FreeRTOS,.github} -depth -type d -print0 2>/dev/null | xargs -0 rmdir && rmdir "${BUILD_TOP}" || exit 0
+	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,ports,lwip,wolfsentry,examples,scripts,FreeRTOS,.github,doc} -depth -type d -print0 2>/dev/null | xargs -0 rmdir && rmdir "${BUILD_TOP}" || exit 0
 ifndef VERY_QUIET
-	@echo 'cleaned all targets and ephemera in $(BUILD_TOP).'
+	@echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
 endif
 
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))

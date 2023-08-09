@@ -119,4 +119,11 @@
 
 #define LWIP_PACKET_FILTER_API 1
 
+#define LWIP_TCPIP_CORE_LOCKING    1
+
+#if !NO_SYS
+void sys_check_core_locking(void);
+#define LWIP_ASSERT_CORE_LOCKED()  sys_check_core_locking()
+#endif
+
 #endif /* __LWIPOPTS_H__ */

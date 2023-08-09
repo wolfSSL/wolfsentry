@@ -68,10 +68,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     const JSON_CONFIG *json_config,
     struct wolfsentry_json_process_state **jps);
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_set_default_config(
-    struct wolfsentry_json_process_state *jps,
-    struct wolfsentry_eventconfig *config);
-
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
     struct wolfsentry_json_process_state *jps,
     const unsigned char *json_in,

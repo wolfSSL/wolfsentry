@@ -200,16 +200,17 @@ static inline int wolfsentry_kv_value_eq_1(struct wolfsentry_kv_pair *a, struct 
     case WOLFSENTRY_KV_STRING:
         if (WOLFSENTRY_KV_V_STRING_LEN(a) != WOLFSENTRY_KV_V_STRING_LEN(b))
             return 0;
-        return memcmp(WOLFSENTRY_KV_V_STRING(a), WOLFSENTRY_KV_V_STRING(b), WOLFSENTRY_KV_V_STRING_LEN(a));
+        return (memcmp(WOLFSENTRY_KV_V_STRING(a), WOLFSENTRY_KV_V_STRING(b), WOLFSENTRY_KV_V_STRING_LEN(a)) == 0);
     case WOLFSENTRY_KV_BYTES:
         if (WOLFSENTRY_KV_V_BYTES_LEN(a) != WOLFSENTRY_KV_V_BYTES_LEN(b))
             return 0;
-        return memcmp(WOLFSENTRY_KV_V_BYTES(a), WOLFSENTRY_KV_V_BYTES(b), WOLFSENTRY_KV_V_BYTES_LEN(a));
+        return (memcmp(WOLFSENTRY_KV_V_BYTES(a), WOLFSENTRY_KV_V_BYTES(b), WOLFSENTRY_KV_V_BYTES_LEN(a)) == 0);
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
     case WOLFSENTRY_KV_JSON:
         return 0; /* don't try to recursively compare the json trees. */
 #endif
     case WOLFSENTRY_KV_NONE:
+        return 1;
     default:
         return 0;
     }
@@ -438,9 +439,25 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     case WOLFSENTRY_KV_FLOAT:
         *out_len = snprintf(out, out_space, "%.10f", WOLFSENTRY_KV_V_FLOAT(kv));
         break;
-    case WOLFSENTRY_KV_STRING:
+    case WOLFSENTRY_KV_STRING: {
+#ifndef HAVE_JSON_DOM
         *out_len = snprintf(out, out_space, "\"%.*s\"", (int)WOLFSENTRY_KV_V_STRING_LEN(kv), WOLFSENTRY_KV_V_STRING(kv));
         break;
+#else
+        struct dump_buf_state dbs;
+        int ret;
+        dbs.out = out;
+        dbs.out_space = *out_len;
+        ret = json_dump_string((const unsigned char *)WOLFSENTRY_KV_V_STRING(kv), (size_t)WOLFSENTRY_KV_V_STRING_LEN(kv), _json_value_dump_writer, &dbs);
+        if (ret < 0)
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
+        if (dbs.out_space <= 0)
+            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+        *out_len = *out_len - dbs.out_space;
+        out[*out_len] = 0;
+        WOLFSENTRY_RETURN_OK;
+#endif
+    }
     case WOLFSENTRY_KV_BYTES:
         WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
     case WOLFSENTRY_KV_JSON: {
@@ -454,7 +471,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
                             _json_value_dump_writer,
                             &dbs /* user_data */,
                             4 /* tab_width */,
-                            0 /* flags */);
+                            JSON_DOM_DUMP_PREFERDICTORDER /* flags */);
         if (ret < 0)
             WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
         if (dbs.out_space <= 0)
@@ -993,13 +1010,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_bytes_base64(
     int overwrite_p)
 {
     wolfsentry_errcode_t ret;
+    int decoded_len;
     struct wolfsentry_kv_pair_internal *kv;
     if (value_len < 0)
         value_len = (int)strlen(value);
-    if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, WOLFSENTRY_BASE64_DECODED_BUFSPC(value_len), &kv)) < 0)
+    decoded_len = WOLFSENTRY_BASE64_DECODED_BUFSPC(value, value_len);
+    if (decoded_len > WOLFSENTRY_KV_MAX_VALUE_BYTES)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+    if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, decoded_len, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     kv->kv.v_type = WOLFSENTRY_KV_BYTES;
-    WOLFSENTRY_KV_V_BYTES_LEN(&kv->kv) = (size_t)WOLFSENTRY_BASE64_DECODED_BUFSPC(value_len);
+    WOLFSENTRY_KV_V_BYTES_LEN(&kv->kv) = (size_t)decoded_len;
     if ((ret = wolfsentry_base64_decode(value, (size_t)value_len, WOLFSENTRY_KV_V_BYTES(&kv->kv), &WOLFSENTRY_KV_V_BYTES_LEN(&kv->kv), 1 /* ignore_junk_p */)) < 0)
         goto out;
 

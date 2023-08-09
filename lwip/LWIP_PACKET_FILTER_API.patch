@@ -1336,7 +1336,7 @@ index 08c2628a..6f455e30 100644
 +
  #endif /* LWIP_HDR_OPT_H */
 diff --git a/src/include/lwip/tcp.h b/src/include/lwip/tcp.h
-index 3991fd6e..8a4aff4a 100644
+index 3991fd6e..3d4df334 100644
 --- a/src/include/lwip/tcp.h
 +++ b/src/include/lwip/tcp.h
 @@ -50,6 +50,9 @@
@@ -1375,9 +1375,9 @@ index 3991fd6e..8a4aff4a 100644
 +void tcp_filter_mask(packet_filter_event_mask_t mask);
 +void tcp_filter_arg(void *arg);
 +err_t tcp_filter_dispatch_incoming(packet_filter_event_t reason, struct tcp_pcb *pcb, struct netif *netif, struct tcp_hdr *hdr);
-+#define TCP_FILTER_ASSERT_INCOMING(reason, pcb, netif, hdr) do { int ret = tcp_filter_dispatch_incoming(reason, pcb, netif, hdr); if (ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("tcp_filter_dispatch_incoming rejected packet.\n")); return ret; }} while (0)
++#define TCP_FILTER_ASSERT_INCOMING(reason, pcb, netif, hdr) do { err_t __ret = tcp_filter_dispatch_incoming(reason, pcb, netif, hdr); if (__ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("tcp_filter_dispatch_incoming rejected packet.\n")); return __ret; }} while (0)
 +err_t tcp_filter_dispatch_outgoing(packet_filter_event_t reason, struct tcp_pcb *pcb, struct netif *netif);
-+#define TCP_FILTER_ASSERT_OUTGOING(reason, pcb, netif) do { int ret = tcp_filter_dispatch_outgoing(reason, pcb, netif); if (ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("tcp_filter_dispatch_outgoing rejected packet.\n")); return ret; }} while (0)
++#define TCP_FILTER_ASSERT_OUTGOING(reason, pcb, netif) do { err_t __ret = tcp_filter_dispatch_outgoing(reason, pcb, netif); if (__ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("tcp_filter_dispatch_outgoing rejected packet.\n")); return __ret; }} while (0)
 +
 +#else /* !LWIP_PACKET_FILTER_API */
 +
@@ -1407,7 +1407,7 @@ index 018790f1..37fe0ff2 100644
  #define TCP_WRITE_FLAG_COPY 0x01
  #define TCP_WRITE_FLAG_MORE 0x02
 diff --git a/src/include/lwip/udp.h b/src/include/lwip/udp.h
-index f1deae3e..e9e2abf2 100644
+index f1deae3e..46a123a4 100644
 --- a/src/include/lwip/udp.h
 +++ b/src/include/lwip/udp.h
 @@ -48,6 +48,9 @@
@@ -1436,9 +1436,9 @@ index f1deae3e..e9e2abf2 100644
 +void udp_filter_mask(packet_filter_event_mask_t mask);
 +void udp_filter_arg(void *arg);
 +err_t udp_filter_dispatch_incoming(packet_filter_event_t reason, struct udp_pcb *pcb, const struct netif *netif, const struct udp_hdr *hdr);
-+#define UDP_FILTER_ASSERT_INCOMING(reason, pcb, netif, hdr) do { int ret = udp_filter_dispatch_incoming(reason, pcb, netif, hdr); if (ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("udp_filter_dispatch_incoming rejected packet.\n")); return ret; }} while (0)
++#define UDP_FILTER_ASSERT_INCOMING(reason, pcb, netif, hdr) do { err_t __ret = udp_filter_dispatch_incoming(reason, pcb, netif, hdr); if (__ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("udp_filter_dispatch_incoming rejected packet.\n")); return __ret; }} while (0)
 +err_t udp_filter_dispatch_outgoing(packet_filter_event_t reason, struct udp_pcb *pcb, const struct netif *netif, const ip_addr_t *laddr, u16_t lport, const ip_addr_t *raddr, u16_t rport);
-+#define UDP_FILTER_ASSERT_OUTGOING(reason, pcb, netif, laddr, lport, raddr, rport) do { int ret = udp_filter_dispatch_outgoing(reason, pcb, netif, laddr, lport, raddr, rport); if (ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("udp_filter_dispatch_outgoing rejected packet.\n")); return ret; }} while (0)
++#define UDP_FILTER_ASSERT_OUTGOING(reason, pcb, netif, laddr, lport, raddr, rport) do { err_t __ret = udp_filter_dispatch_outgoing(reason, pcb, netif, laddr, lport, raddr, rport); if (__ret != 0) { LWIP_DEBUGF(IP_DEBUG, ("udp_filter_dispatch_outgoing rejected packet.\n")); return __ret; }} while (0)
 +
 +#else /* !LWIP_PACKET_FILTER_API */
 +

@@ -390,9 +390,9 @@ route = "{"
 	*(route_flag_clause ",")
     [ family_clause ","
       [ route_protocol_clause "," ]
-      [ route_remote_endpoint_clause "," ]
-      [ route_local_endpoint_clause "," ]
     ]
+    [ route_remote_endpoint_clause "," ]
+    [ route_local_endpoint_clause "," ]
     -","
 "}"
 

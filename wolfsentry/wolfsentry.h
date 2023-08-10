@@ -491,7 +491,7 @@ struct wolfsentry_eventconfig {
     size_t route_private_data_size;
     size_t route_private_data_alignment;
     uint32_t max_connection_count;
-    wolfsentry_hitcount_t derogatory_threshold_for_penaltybox;
+    uint16_t derogatory_threshold_for_penaltybox;
     wolfsentry_time_t penaltybox_duration; /* zero means time-unbounded. */
     wolfsentry_time_t route_idle_time_for_purge; /* zero means no automatic purge. */
     wolfsentry_eventconfig_flags_t flags;
@@ -1583,7 +1583,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_end(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_cursor **cursor);
 
-#define WOLFSENTRY_BASE64_DECODED_BUFSPC(x) ((((x)+3)/4)*3)
+#define WOLFSENTRY_BASE64_DECODED_BUFSPC(buf, len) (((((len)+3)/4)*3) - ((len) > 1 ? ((buf)[(len)-1] == '=') : 0) - ((len) > 2 ? ((buf)[(len)-2] == '=') : 0))
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(
     const char *src,

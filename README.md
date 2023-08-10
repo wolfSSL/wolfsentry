@@ -77,7 +77,13 @@ Build and test with user settings:
 
 Build for FreeRTOS on ARM32, assuming FreeRTOS and lwIP source trees are located as shown:
 
-`make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00/FreeRTOS/Source LWIP_TOP=../third/lwip/src EXTRA_CFLAGS='-mcpu=cortex-m7'`
+`make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00 LWIP_TOP=../third/lwip EXTRA_CFLAGS='-mcpu=cortex-m7'`
+
+
+## Documentation
+
+The JSON configuration file is documented in [doc/json_configuration.md](doc/json_configuration.md).
+
 
 ## Examples
 
@@ -101,9 +107,8 @@ Example JSON configuration files are at `tests/test-config.json` and
 numbers rather than names for address families and protocols.
 
 In the wolfsentry/examples/ directory are a set of example ports and
-applications, including a port to FreeRTOS-LWIP (integrated directly in the IP
-stack) and a demo pop-up notification system integrating with the Linux D-Bus
-facility.
+applications, including a demo pop-up notification system integrating with the
+Linux D-Bus facility.
 
 
 ## Change Log

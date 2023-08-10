@@ -163,7 +163,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
     case WOLFSENTRY_ERROR_ID_CONFIG_INVALID_VALUE:
         return "Configuration contains an invalid value";
     case WOLFSENTRY_ERROR_ID_CONFIG_OUT_OF_SEQUENCE:
-        return "Configuration clause is not in the correct sequence";
+        return "Configuration clause in wrong sequence or missing dependency";
     case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
         return "Configuration has unexpected or invalid structure";
     case WOLFSENTRY_ERROR_ID_CONFIG_MISPLACED_KEY:
@@ -3561,11 +3561,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
     if ((ret = wolfsentry_eventconfig_load(config, &(*wolfsentry)->config)) < 0)
         goto out;
 
-    /* config->penaltybox_duration is passed to wolfsentry_init_ex() in seconds,
+    /* times in config are passed to wolfsentry_init_ex() in seconds,
      * because wolfsentry_interval_from_seconds() needs a valid
      * wolfsentry_context (circular dependency).  fix it now that we can.
      */
     hpi.timecbs.interval_from_seconds((long int)(*wolfsentry)->config.config.penaltybox_duration, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.penaltybox_duration));
+    hpi.timecbs.interval_from_seconds((long int)(*wolfsentry)->config.config.route_idle_time_for_purge, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.route_idle_time_for_purge));
 
     (*wolfsentry)->config_at_creation = (*wolfsentry)->config;
 
@@ -3869,7 +3870,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, si
     const char *src_end = src + src_len;
     size_t dest_len = 0;
 
-    if (*dest_spc < ((src_len + 3) / 4) * 3)
+    if (WOLFSENTRY_BASE64_DECODED_BUFSPC(src, src_len) > *dest_spc)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     for (; src < src_end; ++src) {

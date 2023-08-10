@@ -1953,7 +1953,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         }
     }
 
-    ret = wolfsentry_route_event_dispatch_0(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event, caller_arg, target_route, route_table, rule_route, action_results);
+    ret = wolfsentry_route_event_dispatch_0(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event ? trigger_event : route_table->default_event, caller_arg, target_route, route_table, rule_route, action_results);
 
     if (id && WOLFSENTRY_CHECK_BITS(rule_route->flags, WOLFSENTRY_ROUTE_FLAG_IN_TABLE))
         *id = rule_route->header.id;
@@ -2076,6 +2076,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_id_1(
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *trigger_event = NULL;
     struct wolfsentry_route *route;
+    struct wolfsentry_route_table *route_table;
 
     WOLFSENTRY_SHARED_OR_RETURN();
 
@@ -2095,7 +2096,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_id_1(
         goto out;
     }
 
-    ret = wolfsentry_route_event_dispatch_0(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event, caller_arg, NULL /* target_route */, (struct wolfsentry_route_table *)route->header.parent_table, route, action_results);
+    route_table = (struct wolfsentry_route_table *)route->header.parent_table;
+
+    ret = wolfsentry_route_event_dispatch_0(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event ? trigger_event : route_table->default_event, caller_arg, NULL /* target_route */, (struct wolfsentry_route_table *)route->header.parent_table, route, action_results);
 
   out:
     if (trigger_event)
@@ -2141,6 +2144,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_1(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_event *trigger_event = NULL;
+    struct wolfsentry_route_table *route_table;
 
     WOLFSENTRY_SHARED_OR_RETURN();
 
@@ -2154,7 +2158,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_1(
         goto out;
     }
 
-    ret = wolfsentry_route_event_dispatch_0(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event, caller_arg, NULL /* target_route */, (struct wolfsentry_route_table *)route->header.parent_table, route, action_results);
+    route_table = (struct wolfsentry_route_table *)route->header.parent_table;
+
+    ret = wolfsentry_route_event_dispatch_0(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event ? trigger_event : route_table->default_event, caller_arg, NULL /* target_route */, (struct wolfsentry_route_table *)route->header.parent_table, route, action_results);
 
   out:
     if (trigger_event)

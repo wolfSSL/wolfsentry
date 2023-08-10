@@ -178,7 +178,7 @@ sanitize-all-no-inline-gcc:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-no-inline-builds-gcc" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-no-inline-builds-gcc" CC=$(GCC) EXTRA_CFLAGS+="-fno-sanitize-recover=all -DWOLFSENTRY_NO_INLINE -fno-inline" sanitize-thread
 	@echo "passed: no defects from gcc no-inline sanitize thread"
-	@echo "passed: no defects from any gcc no-online sanitizers."
+	@echo "passed: no defects from any gcc no-inline sanitizers."
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-sanitizer-no-inline-builds-gcc" clean
 
 .PHONY: sanitize-aarch64-be-test
@@ -231,7 +231,7 @@ cppcheck-analyze:
 	 $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-cppcheck-analyzer-builds" clean; \
 	 . $(REPO_ROOT)/scripts/analyzer-config.sh && \
 	 $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-cppcheck-analyzer-builds" "$(BUILD_PARENT)/wolfsentry-cppcheck-analyzer-builds/wolfsentry/wolfsentry_options.h" && \
-	 CPPCHECK_COMMON_ARGS+=(-I/usr/include -I"$$($(CC) -print-file-name=include)") && \
+	 CPPCHECK_COMMON_ARGS+=(--suppress=legacyUninitvar -I"$(BUILD_PARENT)/wolfsentry-cppcheck-analyzer-builds" -I/usr/include -I"$$($(CC) -print-file-name=include)" -I$(LWIP_TOP_FOR_TEST)/src/include -I$(SRC_TOP)/ports/Linux-lwIP/include) && \
 	 cd "$(SRC_TOP)" && \
 	 cppcheck -j $$(($$(nproc) / 2)) $(QUIET_FLAG) "$${CPPCHECK_COMMON_ARGS[@]}" -DWOLFSENTRY_CPPCHECK -DTEST_INIT -DTEST_STATIC_ROUTES -DTEST_DYNAMIC_RULES -DTEST_USER_VALUES -DTEST_USER_ADDR_FAMILIES -DTEST_JSON -DTEST_JSON_CORPUS -D__linux__ -D__GNUC__ -U__STRICT_ANSI__ -UWOLFSENTRY_SINGLETHREADED -DWOLFSENTRY_THREADSAFE -DWOLFSENTRY_NO_ALLOCA --include="$(BUILD_PARENT)/wolfsentry-cppcheck-analyzer-builds/wolfsentry/wolfsentry_options.h" --include=wolfsentry/wolfsentry_settings.h --include=wolfsentry/wolfsentry_util.h --include=wolfsentry/wolfsentry_errcodes.h --include=wolfsentry/wolfsentry.h "$${CPPCHECK_EXTRA_ARGS[@]}" $(addprefix $(SRC_TOP)/src/,$(SRCS)) $(SRC_TOP)/tests/unittests.c && \
 	 cppcheck -j $$(($$(nproc) / 2)) --force $(QUIET_FLAG) "$${CPPCHECK_COMMON_ARGS[@]}" -DWOLFSENTRY_CPPCHECK -D__linux__ -UFREERTOS -D'__attribute__(x)=' -D__GNUC__ -U__STRICT_ANSI__ -UWOLFSENTRY_SINGLETHREADED -DWOLFSENTRY_THREADSAFE -DWOLFSENTRY_NO_ALLOCA --include="$(BUILD_PARENT)/wolfsentry-cppcheck-analyzer-builds/wolfsentry/wolfsentry_options.h" --include=wolfsentry/wolfsentry_settings.h --include=wolfsentry/wolfsentry_util.h --include=wolfsentry/wolfsentry_errcodes.h --include=wolfsentry/wolfsentry.h "$${CPPCHECK_EXTRA_ARGS[@]}" $(addprefix $(SRC_TOP)/src/,$(SRCS)) $(SRC_TOP)/tests/unittests.c && \
@@ -380,17 +380,17 @@ static-build-test:
 ifdef FREERTOS_TOP
     FREERTOS_TOP_FOR_TEST := $(FREERTOS_TOP)
 else
-    FREERTOS_TOP_FOR_TEST := ../third/FreeRTOS/FreeRTOS/Source
+    FREERTOS_TOP_FOR_TEST := ../third/FreeRTOS
 endif
 ifdef LWIP_TOP
     LWIP_TOP_FOR_TEST := $(LWIP_TOP)
 else
-    LWIP_TOP_FOR_TEST := $(SRC_TOP)/../third/lwip/src
+    LWIP_TOP_FOR_TEST := $(SRC_TOP)/../third/lwip
 endif
 
 .PHONY: freertos-arm32-build-test
 freertos-arm32-build-test:
-	@[ -d $(FREERTOS_TOP_FOR_TEST)/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST) not found.' >&2; exit 1)
+	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
 	@[ -d $(LWIP_TOP_FOR_TEST)/. ] || ( echo '$@: $(LWIP_TOP_FOR_TEST) not found.' >&2; exit 1)
 	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' clean
@@ -400,7 +400,7 @@ freertos-arm32-build-test:
 
 .PHONY: freertos-arm32-singlethreaded-build-test
 freertos-arm32-singlethreaded-build-test:
-	@[ -d $(FREERTOS_TOP_FOR_TEST)/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST) not found.' >&2; exit 1)
+	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
 	@[ -d $(LWIP_TOP_FOR_TEST)/. ] || ( echo '$@: $(LWIP_TOP_FOR_TEST) not found.' >&2; exit 1)
 	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-singlethreaded-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
@@ -410,7 +410,7 @@ freertos-arm32-singlethreaded-build-test:
 
 .PHONY: freertos-arm32-c89-build-test
 freertos-arm32-c89-build-test:
-	@[ -d $(FREERTOS_TOP_FOR_TEST)/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST) not found.' >&2; exit 1)
+	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
 	@[ -d $(LWIP_TOP_FOR_TEST)/. ] || ( echo '$@: $(LWIP_TOP_FOR_TEST) not found.' >&2; exit 1)
 	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-c89-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
@@ -418,11 +418,63 @@ freertos-arm32-c89-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-c89-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
 	@echo "passed: freertos-arm32-c89-build test."
 
+LWIP_SRC_LIST := \
+  $(LWIP_TOP)/src/core/def.c \
+  $(LWIP_TOP)/src/core/init.c \
+  $(LWIP_TOP)/src/core/mem.c \
+  $(LWIP_TOP)/src/core/memp.c \
+  $(LWIP_TOP)/src/core/netif.c \
+  $(LWIP_TOP)/src/core/pbuf.c \
+  $(LWIP_TOP)/src/core/raw.c \
+  $(LWIP_TOP)/src/core/stats.c \
+  $(LWIP_TOP)/src/core/sys.c \
+  $(LWIP_TOP)/src/core/tcp.c \
+  $(LWIP_TOP)/src/core/tcp_in.c \
+  $(LWIP_TOP)/src/core/tcp_out.c \
+  $(LWIP_TOP)/src/core/ip.c \
+  $(LWIP_TOP)/src/core/inet_chksum.c \
+  $(LWIP_TOP)/src/core/timeouts.c \
+  $(LWIP_TOP)/src/core/ipv4/ip4.c \
+  $(LWIP_TOP)/src/core/ipv4/ip4_addr.c \
+  $(LWIP_TOP)/src/core/ipv4/icmp.c \
+  $(LWIP_TOP)/src/core/ipv4/etharp.c \
+  $(LWIP_TOP)/src/core/ipv6/ip6.c \
+  $(LWIP_TOP)/src/core/ipv6/ip6_addr.c \
+  $(LWIP_TOP)/src/core/ipv6/mld6.c \
+  $(LWIP_TOP)/src/core/ipv6/ip6_frag.c \
+  $(LWIP_TOP)/src/core/ipv6/icmp6.c \
+  $(LWIP_TOP)/src/core/ipv6/nd6.c \
+  $(LWIP_TOP)/src/api/tcpip.c \
+  $(LWIP_TOP)/src/api/api_msg.c \
+  $(LWIP_TOP)/src/api/err.c \
+  $(LWIP_TOP)/src/api/api_lib.c \
+  $(LWIP_TOP)/src/api/sockets.c \
+  $(LWIP_TOP)/src/api/netbuf.c \
+  $(LWIP_TOP)/src/netif/ethernet.c \
+  $(LWIP_TOP)/src/core/udp.c \
+  $(LWIP_TOP)/src/core/ipv4/ip4_frag.c \
+  $(LWIP_TOP)/contrib/ports/unix/port/sys_arch.c
+
+$(BUILD_TOP)/tests/lwip/%.o: $(LWIP_TOP)/%.c
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+ifeq "$(V)" "1"
+	$(CC) $(CFLAGS) -Wno-conversion -c $< -o $@
+else
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
+	@$(CC) $(CFLAGS) -Wno-conversion -c $< -o $@
+endif
+
+$(BUILD_TOP)/tests/test_lwip: $(patsubst $(LWIP_TOP)/%.c,$(BUILD_TOP)/tests/lwip/%.o,$(LWIP_SRC_LIST))
+
+ANALYZER_BUILD_ARTIFACTS+=$(patsubst $(LWIP_TOP)/%.c,$(BUILD_TOP)/tests/lwip/%.o,$(LWIP_SRC_LIST))
+
 .PHONY: linux-lwip-test
 linux-lwip-test:
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) test
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip clean
 	@echo "passed: linux-lwip test."
 
 .PHONY: notification-demo-build-test
@@ -432,8 +484,9 @@ notification-demo-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" install INSTALL_DIR="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"
 	@cd examples/notification-demo/udp_to_dbus && $(MAKE) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' >/dev/null
-	@cd "$(BUILD_PARENT)/wolfssl-notification-demo-build" && bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) install >/dev/null'
-	@cd examples/notification-demo/log_server && $(MAKE) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' >/dev/null
+	@cd "$(BUILD_PARENT)/wolfssl-notification-demo-build" && bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry CPPFLAGS="-pedantic -DNO_WOLFSSL_CIPHER_SUITE_TEST -DWOLFSSL_OLD_PRIME_CHECK" --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) V=1 check >/dev/null && $(MAKE) $(QUIET_FLAG) install >/dev/null'
+	@cp -rs '$(SRC_TOP)/examples/notification-demo' '$(BUILD_PARENT)/wolfssl-notification-demo-build'
+	@cd '$(BUILD_PARENT)/wolfssl-notification-demo-build/notification-demo/log_server' && $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' clean && $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed'
 	@rm -rf "$(BUILD_PARENT)/wolfssl-notification-demo-build"
 	@rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" clean

@@ -297,6 +297,16 @@
         },
 
         {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "green-listed" : true,
+            "remote" : {
+                "interface" : 2
+            }
+	},
+
+        {
             "parent-event" : "pinhole-generator-parent",
             "direction-in" : false,
             "direction-out" : true,
@@ -329,12 +339,16 @@
         "user-float" : 1.0,
         "user-string" : "hello",
 
-        "user-uint2" : { "uint" : 1 },
-        "user-sint2" : { "sint" : -1 },
+        "user-uint2" : { "uint" : 65535 },
+        "user-uint-hex" : { "uint" : "0xffff" },
+        "user-uint-octal" : { "uint" : "0177777" },
+        "user-sint2" : { "sint" : -65535 },
+        "user-sint-hex" : { "sint" : "-0xffff" },
+        "user-sint-octal" : { "sint" : "-0177777" },
         "user-float2" : { "float" : 1.0 },
         "user-string2" : { "string" : "hello" },
         "user-base64" : { "base64" : "aGVsbG8=" },
-        "user-json" : { "json" : { "jsdhfgjkld" : [ "aGVsbG8", "sfgghsd", "vxbnvxbn", 4567346, null, true, false, { "sdfgsdg" : "123", "8796578" : "opuyi" } ] } },
+        "user-json" : { "json" : { "jsdhfgjkld" : [ "aGVsbG8", "sfg\nghsd", "vxbnvxbn", 4567346, 4.567346, 456734e6, 456734e-10, 456734e20, null, true, false, { "sdfgsdg" : "123", "8796578" : "opuyi", "z" : 26, "y" : 25, "x" : 24 } ] } },
 
         "user-cert-string" : "-----BEGIN CERTIFICATE-----\nMIIDnzCCAyWgAwIBAgICEAEwCgYIKoZIzj0EAwMwgZcxCzAJBgNVBAYTAlVTMRMw\nEQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxlMRAwDgYDVQQKDAd3\nb2xmU1NMMRQwEgYDVQQLDAtEZXZlbG9wbWVudDEYMBYGA1UEAwwPd3d3LndvbGZz\nc2wuY29tMR8wHQYJKoZIhvcNAQkBFhBpbmZvQHdvbGZzc2wuY29tMCAXDTIyMDIx\nNTEyNTAyNFoYDzIwNTIwMjA4MTI1MDI0WjCBlTELMAkGA1UEBhMCVVMxEzARBgNV\nBAgMCldhc2hpbmd0b24xEDAOBgNVBAcMB1NlYXR0bGUxEDAOBgNVBAoMB0VsaXB0\naWMxEjAQBgNVBAsMCUVDQzM4NFNydjEYMBYGA1UEAwwPd3d3LndvbGZzc2wuY29t\nMR8wHQYJKoZIhvcNAQkBFhBpbmZvQHdvbGZzc2wuY29tMHYwEAYHKoZIzj0CAQYF\nK4EEACIDYgAE6s+TTywJuzkUD1Zkw0C03w5jruVxSwDMBJf/4ek4lrtfkbJqzLU5\nX49wWfEB9lorAWxoC89VJa9tmEgKqHTJqRegDMP70yNo/gQ8Y1CIO7lPfGc09zup\nc+cbw1FeIhjso4IBQDCCATwwCQYDVR0TBAIwADARBglghkgBhvhCAQEEBAMCBkAw\nHQYDVR0OBBYEFII78mUv87QAxrwG/XlCdUtl0c68MIHXBgNVHSMEgc8wgcyAFKvg\nwyZMGNRyu9KEjJwKBZKAElNSoYGdpIGaMIGXMQswCQYDVQQGEwJVUzETMBEGA1UE\nCAwKV2FzaGluZ3RvbjEQMA4GA1UEBwwHU2VhdHRsZTEQMA4GA1UECgwHd29sZlNT\nTDEUMBIGA1UECwwLRGV2ZWxvcG1lbnQxGDAWBgNVBAMMD3d3dy53b2xmc3NsLmNv\nbTEfMB0GCSqGSIb3DQEJARYQaW5mb0B3b2xmc3NsLmNvbYIUaiYbTQIaM//CRxT5\n51VgWi5/ESkwDgYDVR0PAQH/BAQDAgOoMBMGA1UdJQQMMAoGCCsGAQUFBwMBMAoG\nCCqGSM49BAMDA2gAMGUCMQCEPZBU/y/EetTYGOKzLbtCN0CmHwmD3rwEeoLcVRdC\nXBeqB0LcyPZQzRS3Bhk5HyQCMBNiS5/JoIzSac8WToa9nik4ROlKOmOgZjiV4n3j\nF+yUIbg9aV7K5ISc2mF9G1G/0Q==\n-----END CERTIFICATE-----\n",
 

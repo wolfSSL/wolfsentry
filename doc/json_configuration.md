@@ -377,6 +377,8 @@ event_config_item =
   (DQUOTE (%s"route-flags-to-add-on-insert" / %s"route-flags-to-clear-on-insert") DQUOTE ":" route_flag_list) /
   (DQUOTE (%s"action-res-filter-bits-set" / %s"action-res-filter-bits-unset" / %s"action-res-bits-to-add" / %s"action-res-bits-to-clear") DQUOTE ":" action_res_flag_list)
 
+duration = number_sint64 / (DQUOTE number_sint64 [ %s"d" / %s"h" / %s"m" / %s"s" ] DQUOTE)
+
 max_purgeable_routes_clause = DQUOTE %s"max-purgeable-routes" DQUOTE ":" uint32
 
 route_flag_list = "[" route_flag *("," route_flag) "]"
@@ -495,13 +497,15 @@ action_res_flag = DQUOTE (
   %s"user+7"
 ) DQUOTE
 
-user_item = label ":" ( null / true / false / number_sint64 / number_float / string /
-  "{" DQUOTE %s"uint" DQUOTE ":" number_uint64 "}" /
-  "{" DQUOTE %s"sint" DQUOTE ":" number_sint64 "}" /
-  "{" DQUOTE %s"float" DQUOTE ":" number_float "}" /
-  "{" DQUOTE %s"string" DQUOTE ":" string_value "}" /
-  "{" DQUOTE %s"base64" DQUOTE ":" base64_value "}" /
-  json_value_clause )
+user_item = label ":" ( null / true / false / number_sint64_decimal / number_float / string / strongly_typed_user_item )
+
+strongly_typed_user_item =
+  ( "{" DQUOTE %s"uint" DQUOTE ":" number_uint64 "}" ) /
+  ( "{" DQUOTE %s"sint" DQUOTE ":" number_sint64 "}" ) /
+  ( "{" DQUOTE %s"float" DQUOTE ":" number_float "}" ) /
+  ( "{" DQUOTE %s"string" DQUOTE ":" string_value "}" ) /
+  ( "{" DQUOTE %s"base64" DQUOTE ":" base64_value "}" ) /
+  json_value_clause
 
 json_value_clause = "{" DQUOTE %s"json" DQUOTE ":" json_value "}"
 
@@ -511,21 +515,23 @@ true = %s"true"
 
 false = %s"false"
 
-boolean = (true / false)
+boolean = true / false
 
 number_uint64 = < decimal number in the range 0...18446744073709551615 > /
-                < hexadecimal number in the range 0x0...0xffffffffffffffff > /
-                < octal number in the range 00...01777777777777777777777 >
+                ( DQUOTE < hexadecimal number in the range 0x0...0xffffffffffffffff > DQUOTE ) /
+                ( DQUOTE < octal number in the range 00...01777777777777777777777 > DQUOTE )
 
-number_sint64 = < decimal number in the range -9223372036854775808...9223372036854775807 > /
-                < hexadecimal number in the range -0x8000000000000000...0x7fffffffffffffff > /
-                < octal number in the range -01000000000000000000000...0777777777777777777777 >
+number_sint64_decimal = < decimal number in the range -9223372036854775808...9223372036854775807 >
+
+number_sint64 = number_sint64_decimal /
+                ( DQUOTE < hexadecimal number in the range -0x8000000000000000...0x7fffffffffffffff > DQUOTE ) /
+                ( DQUOTE < octal number in the range -01000000000000000000000...0777777777777777777777 > DQUOTE )
 
 number_float = < floating point value in a form and range recognized by the linked strtod() implementation >
 
 string_value = DQUOTE < any RFC 8259 JSON-valid string that decodes to at most 16384 octets > DQUOTE
 
-base64_value = DQUOTE < any valid RFC 4648 base64 encoding, decoding to at most 16384 octets > DQUOTE
+base64_value = DQUOTE < any valid RFC 4648 base64 encoding that decodes to at most 16384 octets > DQUOTE
 
 json_value = < any valid, complete and balanced RFC 8259 JSON expression, with
                keys limited to WOLFSENTRY_MAX_LABEL_BYTES (default 32 bytes),
@@ -535,13 +541,11 @@ json_value = < any valid, complete and balanced RFC 8259 JSON expression, with
                levels
              >
 
-label = DQUOTE < any valid JSON string that decodes to at at least 1 and at most 32 octets > DQUOTE
+label = DQUOTE < any RFC 8259 JSON-valid string that decodes to at at least 1 and at most 32 octets > DQUOTE
 
 uint32 = < decimal integral number in the range 0...4294967295 >
 
 uint16 = < decimal integral number in the range 0...65535 >
 
 uint8 = < decimal integral number in the range 0...255 >
-
-duration = number_sint64 / (DQUOTE number_sint64 [ %s"d" / %s"h" / %s"m" / %s"s" ] DQUOTE)
 ```

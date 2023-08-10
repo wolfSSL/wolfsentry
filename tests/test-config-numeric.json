@@ -287,6 +287,16 @@
         },
 
         {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
+            "green-listed" : true,
+            "remote" : {
+                "interface" : 2
+            }
+	},
+
+        {
             "parent-event" : "pinhole-generator-parent",
             "direction-in" : false,
             "direction-out" : true,
@@ -319,8 +329,12 @@
         "user-float" : 1.0,
         "user-string" : "hello",
 
-        "user-uint2" : { "uint" : 1 },
-        "user-sint2" : { "sint" : -1 },
+        "user-uint2" : { "uint" : 65535 },
+        "user-uint-hex" : { "uint" : "0xffff" },
+        "user-uint-octal" : { "uint" : "0177777" },
+        "user-sint2" : { "sint" : -65535 },
+        "user-sint-hex" : { "sint" : "-0xffff" },
+        "user-sint-octal" : { "sint" : "-0177777" },
         "user-float2" : { "float" : 1.0 },
         "user-string2" : { "string" : "hello" },
         "user-base64" : { "base64" : "aGVsbG8=" },

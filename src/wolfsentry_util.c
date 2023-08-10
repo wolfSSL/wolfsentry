@@ -163,7 +163,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
     case WOLFSENTRY_ERROR_ID_CONFIG_INVALID_VALUE:
         return "Configuration contains an invalid value";
     case WOLFSENTRY_ERROR_ID_CONFIG_OUT_OF_SEQUENCE:
-        return "Configuration clause is not in the correct sequence";
+        return "Configuration clause in wrong sequence or missing dependency";
     case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
         return "Configuration has unexpected or invalid structure";
     case WOLFSENTRY_ERROR_ID_CONFIG_MISPLACED_KEY:

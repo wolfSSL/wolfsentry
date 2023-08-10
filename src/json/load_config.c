@@ -45,103 +45,9 @@
 /* note that the order of objects in the JSON is semantically significant.
  * Thus, any application-level JSON preprocessing must be ES5-compliant
  * (preserve the order of pairs exactly).
+ *
+ * see doc/json_configuration.md
  */
-
-/*
-
-{
-
-"wolfsentry-config-version" : 1,
-
-"config-update" : {
-    "max-connection-count" : number,
-    "penaltybox-duration" : number|string, // allow suffixes s,m,h,d
-    "derog-thresh-for-penalty-boxing" : number,
-    "derog-thresh-ignore-commendable" : true|false,
-    "commendable-clears-derogatory" : true|false,
-},
-
-"events-insert" : [
-{
-    "priority" : number,
-    "label" : string,
-    "config" : {
-        "max-connection-count" : number
-        "penalty-box-duration" : number|string // allow suffixes s,m,h,d
-        "derog-thresh-for-penalty-boxing" : number,
-        "derog-thresh-ignore-commendable" : true|false,
-        "commendable-clears-derogatory" : true|false,
-    }
-    "actions" : [ string ... ],
-    "insert-event" : string,
-    "match-event" : string,
-    "update-event" : string,
-    "delete-event" : string
-    "decision-event" : string
-
-}
-],
-
-"default-policies" : {
-    "default-policy" : "accept" | "reject",
-    "default-event" : string
-},
-
-"static-routes-insert" : [
-{
-    "parent-event" : string,
-    "tcplike-port-numbers" : true|false,
-    "direction-in" : true|false,
-    "direction-out" : true|false,
-    "penalty-boxed" : true|false,
-    "green-listed" : true|false,
-    "dont-count-hits" : true|false,
-    "dont-count-current-connections" : true|false,
-    "family" : string|number,
-    "protocol" : string|number,
-    "remote" : {
-        "port" : string|number,
-        "address" : string,
-        "prefix-bits" : number,
-        "interface" : number,
-    },
-    "local" : {
-        "port" : string|number,
-        "address" : string,
-        "prefix-bits" : number,
-        "interface" : number,
-    }
-}
-],
-
-"actions-update" : [
-{
-    "label" : string,
-    "flags" : {
-        "disabled" : true|false
-    }
-}
-]
-
-"user-values" : {
-    "user-null" : null,
-    "user-bool" : true,
-    "user-bool2" : false,
-    "user-uint" : 1,
-    "user-sint" : -1,
-    "user-float" : 1.0,
-    "user-string" : "hello",
-
-    "user-uint2" : { "uint" : 1 },
-    "user-sint2" : { "sint", -1 },
-    "user-float2" : { "float", 1.0 },
-    "user-string2" : { "string", "hello" },
-    "user-base64" : { "base64", "aGVsbG8K" }
-}
-}
-
-*/
-
 
 struct wolfsentry_json_process_state {
     uint32_t config_version;
@@ -779,6 +685,8 @@ static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_pr
 
 static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_process_state *jps, JSON_TYPE type, const unsigned char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     if (! strcmp(jps->cur_keyname, "port")) {
+        if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
                               WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD :
@@ -792,13 +700,18 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     } else if (! strcmp(jps->cur_keyname, "address")) {
+        if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
                               WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD :
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD);
         WOLFSENTRY_ERROR_RERETURN(convert_sockaddr_address(jps, type, data, data_size, sa));
-    } else if (! strcmp(jps->cur_keyname, "prefix-bits"))
+    } else if (! strcmp(jps->cur_keyname, "prefix-bits")) {
+        if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
         WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &sa->addr_len));
+    }
     else if (! strcmp(jps->cur_keyname, "interface")) {
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?

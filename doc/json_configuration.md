@@ -17,7 +17,7 @@ After initialization and installation of application-supplied callbacks (if any)
 * streaming API:
     * `wolfsentry_config_json_init()` or `wolfsentry_config_json_init_ex()`
     * `wolfsentry_config_json_feed()`
-	* `wolfsentry_config_json_fini()`
+    * `wolfsentry_config_json_fini()`
 
 See `wolfsentry/wolfsentry_json.h` for details on arguments.
 
@@ -99,20 +99,20 @@ allowed values are as in the ABNF formal syntax later in this document.
 {
     "wolfsentry-config-version" : 1,
     "config-update" : {
-		"max-connection-count" : uint32,
-		"penalty-box-duration" : duration,
-		"route-idle-time-for-purge" : duration,
-		"derog-thresh-for-penalty-boxing" : uint16,
-		"derog-thresh-ignore-commendable" : boolean,
-		"commendable-clears-derogatory" : boolean,
-		"route-flags-to-add-on-insert" : route_flag_list,
-		"route-flags-to-clear-on-insert" : route_flag_list,
-		"action-res-filter-bits-set" : action_res_flag_list,
-		"action-res-filter-bits-unset" : action_res_flag_list,
-		"action-res-bits-to-add" : action_res_flag_list,
-		"action-res-bits-to-clear" : action_res_flag_list,
-		"max-purgeable-routes" : uint32
-	},
+        "max-connection-count" : uint32,
+        "penalty-box-duration" : duration,
+        "route-idle-time-for-purge" : duration,
+        "derog-thresh-for-penalty-boxing" : uint16,
+        "derog-thresh-ignore-commendable" : boolean,
+        "commendable-clears-derogatory" : boolean,
+        "route-flags-to-add-on-insert" : route_flag_list,
+        "route-flags-to-clear-on-insert" : route_flag_list,
+        "action-res-filter-bits-set" : action_res_flag_list,
+        "action-res-filter-bits-unset" : action_res_flag_list,
+        "action-res-bits-to-add" : action_res_flag_list,
+        "action-res-bits-to-clear" : action_res_flag_list,
+        "max-purgeable-routes" : uint32
+    },
     "events" : [
        { "label" : label,
          "priority" : uint16,
@@ -166,16 +166,16 @@ allowed values are as in the ABNF formal syntax later in this document.
         "protocol" : route_protocol,
         "remote" : {
           "interface" : uint8,
-		  "address" : route_address,
+          "address" : route_address,
           "prefix-bits" : uint16,
           "port" : endpoint_port
-	    },
+        },
         "local" : {
           "interface" : uint8,
-		  "address" : route_address,
+          "address" : route_address,
           "prefix-bits" : uint16,
           "port" : endpoint_port
-	    }
+        }
       }
     ],
     "user-values" : {
@@ -325,7 +325,7 @@ values can be overridden at build time with user-supplied values.
        event *("," event)
     "]")
     [ "," DQUOTE %s"default-policies" DQUOTE ":" "{"
-	    default_policy_item *("," default_policy_item)
+        default_policy_item *("," default_policy_item)
     "}" ]
     *("," DQUOTE %s"routes" DQUOTE ":" "["
         route *("," route)
@@ -337,9 +337,9 @@ values can be overridden at build time with user-supplied values.
 
 event = "{" label_clause
         [ "," priority_clause ]
-		[ "," event_config_clause ]
+        [ "," event_config_clause ]
         [ "," aux_parent_event_clause ]
-		*("," action_list_clause) "}"
+        *("," action_list_clause) "}"
 
 default_policy_item =
         (DQUOTE %s"default-policy" DQUOTE ":" default_policy_value) /
@@ -387,7 +387,7 @@ action_res_flag_list = "[" action_res_flag *("," action_res_flag) "]"
 
 route = "{"
     [ parent_event_clause "," ]
-	*(route_flag_clause ",")
+    *(route_flag_clause ",")
     [ family_clause ","
       [ route_protocol_clause "," ]
     ]
@@ -407,10 +407,10 @@ route_local_endpoint_clause = DQUOTE %s"local" DQUOTE ":" route_endpoint
 route_endpoint = "{"
     [ route_interface_clause "," ]
     [ route_address_clause ","
-	  [ route_address_prefix_bits_clause "," ]
+      [ route_address_prefix_bits_clause "," ]
     ]
     [ route_port_clause "," ]
-	-","
+    -","
 "}"
 
 route_interface_clause = DQUOTE %s"interface" DQUOTE ":" uint8

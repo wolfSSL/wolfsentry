@@ -26,7 +26,22 @@
 #define WOLFSENTRY_ERROR_ID_UNIT_TEST_FAILURE WOLFSENTRY_ERROR_ID_USER_BASE
 #define UNIT_TEST_FAILURE_MSG "failure within unit test"
 
+#ifndef PRIVATE_DATA_SIZE
+#define PRIVATE_DATA_SIZE 32
+#endif
+#ifndef PRIVATE_DATA_ALIGNMENT
+#define PRIVATE_DATA_ALIGNMENT 16
+#endif
+
 #include "src/wolfsentry_internal.h"
+
+#ifdef _POSIX_C_SOURCE
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <sys/mman.h>
+#endif
 
 #ifdef WOLFSENTRY_LWIP
 
@@ -40,15 +55,15 @@
  * currently building/linking any lwIP objects for the unit tests.
  */
 #undef inet_ntop
-const char *inet_ntop(int af, const void *restrict src,
-                             char *restrict dst, socklen_t size);
-const char *lwip_inet_ntop(int af, const void *restrict src,
-                             char *restrict dst, socklen_t size) {
+const char *inet_ntop(int af, const void *src,
+                             char *dst, socklen_t size);
+const char *lwip_inet_ntop(int af, const void *src,
+                             char *dst, socklen_t size) {
     return inet_ntop(af, src, dst, size);
 }
 #undef inet_pton
-int inet_pton(int af, const char *restrict src, void *restrict dst);
-int lwip_inet_pton(int af, const char *restrict src, void *restrict dst) {
+int inet_pton(int af, const char *src, void *dst);
+int lwip_inet_pton(int af, const char *src, void *dst) {
     return inet_pton(af, src, dst);
 }
 
@@ -97,10 +112,80 @@ int lwip_inet_pton(int af, const char *restrict src, void *restrict dst) {
 #endif /* WOLFSENTRY_THREADSAFE */
 
 /* If not defined use default allocators */
-#ifndef WOLFSENTRY_TEST_HPI
-#  define WOLFSENTRY_TEST_HPI NULL
-#else
+#ifdef WOLFSENTRY_TEST_HPI
+
 extern struct wolfsentry_host_platform_interface* WOLFSENTRY_TEST_HPI;
+
+#elif defined(WOLFSENTRY_TEST_HPI_POSIX_VANILLA)
+
+static void *my_malloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t size) {
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    return malloc(size);
+}
+static void my_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr) {
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    free(ptr);
+    WOLFSENTRY_RETURN_VOID;
+}
+static void *my_realloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr, size_t size) {
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    return realloc(ptr, size);
+}
+static void *my_memalign(WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t alignment, size_t size) {
+    void *ret = 0;
+    int eret;
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    eret = posix_memalign(&ret, alignment, size);
+    if (eret != 0) {
+        errno = eret;
+        WOLFSENTRY_RETURN_VALUE(NULL);
+    }
+    WOLFSENTRY_RETURN_VALUE(ret);
+}
+static void my_free_aligned(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr)
+{
+    (void)context;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    free(ptr);
+    WOLFSENTRY_RETURN_VOID;
+}
+
+static const struct wolfsentry_host_platform_interface vanilla_posix_hpi = {
+    .caller_build_settings = {
+        .version = WOLFSENTRY_VERSION,
+        .config = __wolfsentry_config
+    },
+    .allocator = {
+        .context = NULL,
+        .malloc = my_malloc,
+        .free = my_free,
+        .realloc = my_realloc,
+        .memalign = my_memalign,
+        .free_aligned = my_free_aligned
+    }
+    /* not bothering to test timecbs. */
+#ifdef WOLFSENTRY_THREADSAFE
+    ,
+    .semcbs = {
+        .sem_init = sem_init,
+        .sem_post = sem_post,
+        .sem_wait = sem_wait,
+        .sem_timedwait = sem_timedwait,
+        .sem_trywait = sem_trywait,
+        .sem_destroy = sem_destroy
+    }
+#endif
+};
+
+#define WOLFSENTRY_TEST_HPI (&vanilla_posix_hpi)
+
+#else
+#define WOLFSENTRY_TEST_HPI NULL
 #endif
 
 #define TEST_SKIP(name) static int name (void) { printf("[  skipping " #name "  ]\n"); return 0; }
@@ -108,12 +193,30 @@ extern struct wolfsentry_host_platform_interface* WOLFSENTRY_TEST_HPI;
 
 #ifdef TEST_INIT
 
-static wolfsentry_errcode_t test_init (void) {
+static wolfsentry_errcode_t test_init(void) {
     struct wolfsentry_context *wolfsentry;
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
-    struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
+    struct wolfsentry_eventconfig config = {
+        .route_private_data_size = PRIVATE_DATA_SIZE,
+        .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+        .max_connection_count = 10
+    };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = {
+        32,
+        0,
+        10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+    };
 #endif
     wolfsentry_errcode_t ret;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -397,66 +500,160 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
 #error TEST_LWIP requires WOLFSENTRY_LWIP
 #endif
 
+/* note this code is substantially identical to the demo code in doc/freertos-lwip-app.md */
+
+/* #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_USER_BASE */
+#define WOLFSENTRY_ERROR_ID_USER_APP_ERR0 (WOLFSENTRY_ERROR_ID_USER_BASE-1)
+
+#include <wolfsentry/wolfsentry_json.h>
 #include <wolfsentry/wolfsentry_lwip.h>
 
 static struct wolfsentry_context *wolfsentry_lwip_ctx = NULL;
 
-static wolfsentry_errcode_t activate_wolfsentry_lwip(const char *json_path)
+static const struct wolfsentry_eventconfig demo_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+        .route_private_data_size = 64,
+        .route_private_data_alignment = 0,         /* default alignment -- same as sizeof(void *). */
+        .max_connection_count = 10,                /* by default, don't allow more than 10 simultaneous connections that match the same route. */
+        .derogatory_threshold_for_penaltybox = 4,  /* after 4 derogatory events matching the same route, put the route in penalty box status. */
+        .penaltybox_duration = 300,                /* keep routes in penalty box status for 5 minutes.  denominated in seconds when passing to wolfsentry_init(). */
+        .route_idle_time_for_purge = 0,            /* 0 to disable -- autopurge doesn't usually make much sense as a default config. */
+        .flags = WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY, /* automatically clear derogatory count for a route when a commendable event matches the route. */
+        .route_flags_to_add_on_insert = 0,
+        .route_flags_to_clear_on_insert = 0,
+        .action_res_filter_bits_set = 0,
+        .action_res_filter_bits_unset = 0,
+        .action_res_bits_to_add = 0,
+        .action_res_bits_to_clear = 0
+#else
+        64,
+        0,
+        10,
+        4,
+        300,
+        0,
+        WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+#endif
+    };
+
+/* This routine is to be called once by the application before any direct calls
+ * to lwIP -- i.e., before lwip_init() or tcpip_init().
+ */
+static wolfsentry_errcode_t activate_wolfsentry_lwip(const char *json_config, int json_config_len)
 {
     wolfsentry_errcode_t ret;
+    char err_buf[512]; /* buffer for detailed error messages from
+                        * wolfsentry_config_json_oneshot().
+                        */
+
+    /* Allocate a thread state struct on the stack.  Note that the final
+     * semicolon is supplied by the macro definition, so that in single-threaded
+     * application builds this expands to nothing at all.
+     */
     WOLFSENTRY_THREAD_HEADER_DECLS
 
     if (wolfsentry_lwip_ctx != NULL) {
-        fprintf(stderr, "activate_wolfsentry_lwip() called multiple times.\n");
+        printf("activate_wolfsentry_lwip() called multiple times.\n");
         WOLFSENTRY_ERROR_RETURN(ALREADY);
     }
 
+#ifdef WOLFSENTRY_ERROR_STRINGS
+#if 0
+    /* Enable pretty-printing of the app source code filename for
+     * WOLFSENTRY_ERROR_FMT/WOLFSENTRY_ERROR_FMT_ARGS().
+     */
+    ret = WOLFSENTRY_REGISTER_SOURCE();
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+#endif /* 0 */
+
+    /* Enable pretty-printing of an app-specific error code. */
+    ret = WOLFSENTRY_REGISTER_ERROR(USER_APP_ERR0, "failure in application code");
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+#endif
+
+    /* Initialize the thread state struct -- this sets the thread ID. */
     WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
+    /* Call the main wolfSentry initialization routine.
+     *
+     * WOLFSENTRY_CONTEXT_ARGS_OUT() is a macro that abstracts away
+     * conditionally passing the thread struct pointer to APIs that need it.  If
+     * this is a single-threaded build (!defined(WOLFSENTRY_THREADSAFE)), then
+     * the thread arg is omitted entirely.
+     *
+     * WOLFSENTRY_CONTEXT_ARGS_OUT_EX() is a variant that allows the caller to
+     * supply the first arg explicitly, when "wolfsentry" is not the correct arg
+     * to pass.  This is used here to pass a null pointer for the host platform
+     * interface ("hpi").
+     */
     ret = wolfsentry_init(
         wolfsentry_build_settings,
-        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
-        NULL /* default config */,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(NULL /* hpi */),
+        &demo_config,
         &wolfsentry_lwip_ctx);
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_init() failed: " WOLFSENTRY_ERROR_FMT "\n",
+        printf("wolfsentry_init() failed: " WOLFSENTRY_ERROR_FMT "\n",
                WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        WOLFSENTRY_ERROR_RERETURN(ret);
+        goto out;
     }
 
-    /* Insert user-defined address parsers-formatter pairs here. */
-    ret = wolfsentry_addr_family_handler_install(
+    /* Insert user-defined actions here, if any. */
+#if 0
+    ret = wolfsentry_action_insert(
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_lwip_ctx),
-        WOLFSENTRY_AF_USER_OFFSET,
-        "my_AF",
+        "my-action",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
-        my_addr_family_parser,
-        my_addr_family_formatter,
-        24 /* max_addr_bits */);
-    if (ret < 0) {
-        fprintf(stderr, "wolfsentry_addr_family_handler_install() failed: " WOLFSENTRY_ERROR_FMT "\n",
-               WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        goto out;
-    }
-
-    /* Insert user-defined action here, if any. */
-#ifndef WOLFSENTRY_NO_JSON
+        WOLFSENTRY_ACTION_FLAG_NONE,
+        my_action_handler,
+        NULL,
+        NULL);
+#else
     ret = load_test_action_handlers(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_lwip_ctx));
+#endif
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_action_insert() failed: " WOLFSENTRY_ERROR_FMT "\n",
+        printf("wolfsentry_action_insert() failed: " WOLFSENTRY_ERROR_FMT "\n",
                WOLFSENTRY_ERROR_FMT_ARGS(ret));
         goto out;
     }
 
-    if (json_path) {
-        ret = json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_lwip_ctx), json_path, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, 1);
+    if (json_config) {
+        if (json_config_len < 0)
+            json_config_len = (int)strlen(json_config);
+
+        /* Do the initial load of the policy. */
+        ret = wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_lwip_ctx),
+            (unsigned char *)json_config,
+            (size_t)json_config_len,
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+            err_buf,
+            sizeof err_buf);
         if (ret < 0) {
-            fprintf(stderr, "json_feed_file() failed: " WOLFSENTRY_ERROR_FMT "\n",
-                   WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            printf("wolfsentry_config_json_oneshot() failed: %s\n", err_buf);
             goto out;
         }
-    }
-#endif
+    } /* else the application will need to set up the policy programmatically,
+       * or itself call wolfsentry_config_json_oneshot() or sibling APIs.
+       */
+
+    /* Install lwIP callbacks.  Once this call returns with success, all lwIP
+     * traffic designated for filtration by the mask arguments shown below will
+     * be subject to filtering (or other supplementary processing) according to
+     * the policy loaded above.
+     *
+     * Note that if a given protocol is gated out of LWIP, its mask argument
+     * must be passed as zero here, else the call will return
+     * IMPLEMENTATION_MISSING error will occur.
+     *
+     * The callback installation also registers a cleanup routine that will be
+     * called automatically by wolfsentry_shutdown().
+     */
 
 #define LWIP_ALL_EVENTS (                       \
         (1U << FILT_BINDING) |                  \
@@ -475,47 +672,44 @@ static wolfsentry_errcode_t activate_wolfsentry_lwip(const char *json_path)
         (1U << FILT_OUTBOUND_ERR))
 
     ret = wolfsentry_install_lwip_filter_callbacks(
-        wolfsentry_lwip_ctx,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_lwip_ctx),
+
 #if LWIP_ARP || LWIP_ETHERNET
-        LWIP_ALL_EVENTS
+        LWIP_ALL_EVENTS, /* ethernet_mask */
 #else
-        0
+        0,
 #endif
-        ,
 #if LWIP_IPV4 || LWIP_IPV6
-        LWIP_ALL_EVENTS
+        LWIP_ALL_EVENTS, /* ip_mask */
 #else
-        0
+        0,
 #endif
-        ,
 #if LWIP_ICMP || LWIP_ICMP6
-        LWIP_ALL_EVENTS
+        LWIP_ALL_EVENTS, /* icmp_mask */
 #else
-        0
+        0,
 #endif
-        ,
 #if LWIP_TCP
-        LWIP_ALL_EVENTS
+        LWIP_ALL_EVENTS, /* tcp_mask */
 #else
-        0
+        0,
 #endif
-        ,
 #if LWIP_UDP
-        LWIP_ALL_EVENTS
+        LWIP_ALL_EVENTS /* udp_mask */
 #else
         0
 #endif
         );
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_install_lwip_filter_callbacks: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        goto out;
+        printf("wolfsentry_install_lwip_filter_callbacks: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
 out:
     if (ret < 0) {
+        /* Clean up if initialization failed. */
         wolfsentry_errcode_t shutdown_ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry_lwip_ctx));
         if (shutdown_ret < 0)
-            fprintf(stderr, "wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(shutdown_ret));
+            printf("wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(shutdown_ret));
     }
 
     WOLFSENTRY_THREAD_TAILER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -523,6 +717,7 @@ out:
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
+/* to be called once by the application after any final calls to lwIP. */
 static wolfsentry_errcode_t shutdown_wolfsentry_lwip(void)
 {
     wolfsentry_errcode_t ret;
@@ -530,18 +725,10 @@ static wolfsentry_errcode_t shutdown_wolfsentry_lwip(void)
         printf("shutdown_wolfsentry_lwip() called before successful activation.\n");
         return -1;
     }
-    ret = wolfsentry_install_lwip_filter_callbacks(
-        wolfsentry_lwip_ctx,
-        0 /* ethernet_mask */,
-        0 /* ip_mask */,
-        0 /* icmp_mask */,
-        0 /* tcp_mask */,
-        0 /* udp_mask */);
-    if (ret < 0) {
-        printf("wolfsentry_install_lwip_filter_callbacks for shutdown: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        return ret;
-    }
 
+    /* after successful shutdown, wolfsentry_lwip_ctx will once again be a null
+     * pointer as it was before init.
+     */
     ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&wolfsentry_lwip_ctx, NULL));
     if (ret < 0) {
         printf("wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -550,8 +737,31 @@ static wolfsentry_errcode_t shutdown_wolfsentry_lwip(void)
     return ret;
 }
 
+
+
 static int test_lwip(const char *json_path) {
-    WOLFSENTRY_EXIT_ON_FAILURE(activate_wolfsentry_lwip(json_path));
+    if (json_path) {
+        struct stat st;
+        const char *json;
+        int fd = open(json_path, O_RDONLY);
+        if (fd < 0) {
+            perror(json_path);
+            exit(1);
+        }
+        if (fstat(fd, &st) < 0) {
+            perror(json_path);
+            exit(1);
+        }
+        json = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+        if (json == MAP_FAILED) {
+            perror(json_path);
+            exit(1);
+        }
+        (void)close(fd);
+        WOLFSENTRY_EXIT_ON_FAILURE(activate_wolfsentry_lwip(json, (int)st.st_size));
+        munmap((void *)json, (size_t)st.st_size);
+    } else
+        WOLFSENTRY_EXIT_ON_FAILURE(activate_wolfsentry_lwip(NULL, 0));
     WOLFSENTRY_EXIT_ON_FAILURE(shutdown_wolfsentry_lwip());
     return 0;
 }
@@ -678,11 +888,11 @@ static void *rd2wr_reserved_routine(struct rwlock_args *args) {
 #define MAX_WAIT 100000
 #define WAIT_FOR_PHASE(x, atleast) do { int cur_phase; WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_lock(&(x).thread_phase_lock)); cur_phase = (x).thread_phase; WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_unlock(&(x).thread_phase_lock)); if (cur_phase >= (atleast)) break; usleep(1000); } while(1)
 
-static int test_rw_locks (void) {
+static int test_rw_locks(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_rwlock *lock;
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
-    struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .max_connection_count = 10 };
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
     struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
 #endif
@@ -1112,12 +1322,7 @@ TEST_SKIP(test_rw_locks)
 
 #ifdef TEST_STATIC_ROUTES
 
-#define PRIVATE_DATA_SIZE 32
-#ifndef PRIVATE_DATA_ALIGNMENT
-#define PRIVATE_DATA_ALIGNMENT 16
-#endif
-
-static int test_static_routes (void) {
+static int test_static_routes(void) {
 
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
@@ -1269,7 +1474,7 @@ static int test_static_routes (void) {
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
     }
     if ((PRIVATE_DATA_ALIGNMENT > 0) && ((uintptr_t)private_data % (uintptr_t)PRIVATE_DATA_ALIGNMENT)) {
-        printf("private_data (%p) is not aligned to %d.\n",private_data,PRIVATE_DATA_ALIGNMENT);
+        printf("private_data (%p) is not aligned to %d.\n", private_data, PRIVATE_DATA_ALIGNMENT);
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
     }
 
@@ -1452,6 +1657,9 @@ static int test_static_routes (void) {
                                                            &route_id, &inexact_matches, &action_results));
     WOLFSENTRY_EXIT_ON_FALSE(route_id == id);
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(inexact_matches, WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD));
+
+    /* make sure the fixup (clamp_wildcard_fields_to_zero()) works as expected. */
+    local_wildcard.sa.sa_port = 123;
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote_wildcard.sa, &local_wildcard.sa, flags_wildcard, 0 /* event_label_len */, 0 /* event_label */, &action_results, &n_deleted));
     WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
@@ -1838,15 +2046,9 @@ static int test_static_routes (void) {
     WOLFSENTRY_RETURN_OK;
 }
 
-#undef PRIVATE_DATA_SIZE
-#undef PRIVATE_DATA_ALIGNMENT
-
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
-
-#define PRIVATE_DATA_SIZE 32
-#define PRIVATE_DATA_ALIGNMENT 8
 
 static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     WOLFSENTRY_CONTEXT_ARGS_IN,
@@ -1875,7 +2077,7 @@ static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
 }
 
 
-static int test_dynamic_rules (void) {
+static int test_dynamic_rules(void) {
 
     struct wolfsentry_context *wolfsentry;
 #if 0
@@ -1891,11 +2093,11 @@ static int test_dynamic_rules (void) {
     wolfsentry_ent_id_t id;
 
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
-    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
-    struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+    static const struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
 #else
-    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -2481,9 +2683,6 @@ static int test_dynamic_rules (void) {
     WOLFSENTRY_RETURN_OK;
 }
 
-#undef PRIVATE_DATA_SIZE
-#undef PRIVATE_DATA_ALIGNMENT
-
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -2536,7 +2735,7 @@ static wolfsentry_errcode_t test_kv_validator(
     WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
 }
 
-static int test_user_values (void) {
+static int test_user_values(void) {
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
 
@@ -2927,7 +3126,7 @@ static int test_user_values (void) {
 
 #ifdef TEST_USER_ADDR_FAMILIES
 
-static int test_user_addr_families (void) {
+static int test_user_addr_families(void) {
 
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
@@ -3194,13 +3393,7 @@ static int test_user_addr_families (void) {
 #include "wolfsentry/wolfsentry_json.h"
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
 #include <wolfsentry/centijson_dom.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
 #endif
-
-#define PRIVATE_DATA_SIZE 32
-#define PRIVATE_DATA_ALIGNMENT 16
 
 static int test_json(const char *fname, const char *extra_fname) {
     wolfsentry_errcode_t ret;
@@ -4099,11 +4292,6 @@ static int test_json(const char *fname, const char *extra_fname) {
 
 #include "wolfsentry/wolfsentry_json.h"
 #include <wolfsentry/centijson_dom.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <sys/mman.h>
 
 static int dump_string_for_json(const unsigned char* str, size_t size, void* user_data) {
     (void)user_data;
@@ -4312,7 +4500,7 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_INIT
     ret = test_init();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4324,7 +4512,7 @@ int main (int argc, char* argv[]) {
     ret = test_lwip(NULL);
     #endif
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_lwip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_lwip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4332,7 +4520,7 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_RWLOCKS
     ret = test_rw_locks();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_rw_locks failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_rw_locks failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4340,7 +4528,7 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_STATIC_ROUTES
     ret = test_static_routes();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_static_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_static_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4348,7 +4536,7 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_DYNAMIC_RULES
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4356,7 +4544,7 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_USER_VALUES
     ret = test_user_values();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4364,7 +4552,7 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_USER_ADDR_FAMILIES
     ret = test_user_addr_families();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_addr_families failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_addr_families failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4377,13 +4565,13 @@ int main (int argc, char* argv[]) {
     ret = test_json(TEST_JSON_CONFIG_PATH, NULL);
 #endif
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
     ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH, NULL);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -4391,7 +4579,7 @@ int main (int argc, char* argv[]) {
 #ifdef TEST_JSON_CORPUS
     ret = test_json_corpus();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        printf("test_json_corpus failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "test_json_corpus failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

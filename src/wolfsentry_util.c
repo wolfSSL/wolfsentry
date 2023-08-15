@@ -207,6 +207,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Result was Yes";
     case WOLFSENTRY_SUCCESS_ID_NO:
         return "Result was No";
+    case WOLFSENTRY_SUCCESS_ID_ALREADY_OK:
+        return "Operation skipped due to idempotency";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
         break;
@@ -327,7 +329,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
         return "YES";
     case WOLFSENTRY_SUCCESS_ID_NO:
         return "NO";
-
+    case WOLFSENTRY_SUCCESS_ID_ALREADY_OK:
+        return "ALREADY_OK";
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
@@ -1439,13 +1442,56 @@ static int freertos_sem_destroy( sem_t * sem )
 
 #else
 
-#error semaphore shim set missing for target
+#define NO_BUILTIN_SEM_API
 
 #endif
 
 #endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
 static const struct timespec timespec_deadline_now = {WOLFSENTRY_DEADLINE_NOW, WOLFSENTRY_DEADLINE_NOW};
+
+#ifndef NO_BUILTIN_SEM_API
+static const struct wolfsentry_semcbs builtin_sem_methods =
+{
+    sem_init,
+    sem_post,
+    sem_wait,
+    sem_timedwait,
+    sem_trywait,
+    sem_destroy
+};
+#endif /* !NO_BUILTIN_SEM_API */
+
+#undef sem_init
+#undef sem_post
+#undef sem_wait
+#undef sem_timedwait
+#undef sem_trywait
+#undef sem_destroy
+
+static wolfsentry_errcode_t get_sem_methods(struct wolfsentry_host_platform_interface *hpi, const struct wolfsentry_semcbs **sem_methods) {
+    if (hpi && hpi->semcbs.sem_init) {
+        *sem_methods = &hpi->semcbs;
+        WOLFSENTRY_RETURN_OK;
+    } else {
+#ifndef NO_BUILTIN_SEM_API
+        *sem_methods = &builtin_sem_methods;
+        WOLFSENTRY_RETURN_OK;
+#else
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+#endif
+    }
+}
+
+static const struct wolfsentry_semcbs *semcbs = NULL;
+static wolfsentry_refcount_t semcbs_refcount = 0;
+
+#define sem_init semcbs->sem_init
+#define sem_post semcbs->sem_post
+#define sem_wait semcbs->sem_wait
+#define sem_timedwait semcbs->sem_timedwait
+#define sem_trywait semcbs->sem_trywait
+#define sem_destroy semcbs->sem_destroy
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context *thread, struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
@@ -1457,6 +1503,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
 
     if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    if (semcbs == NULL) {
+        ret = get_sem_methods(hpi, &semcbs);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    }
+    WOLFSENTRY_REFCOUNT_INCREMENT(semcbs_refcount, ret);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     memset(lock,0,sizeof *lock);
 
@@ -1583,6 +1636,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rw
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
 
     lock->state = WOLFSENTRY_LOCK_UNINITED;
+    {
+        wolfsentry_refcount_t res;
+        WOLFSENTRY_REFCOUNT_DECREMENT(semcbs_refcount, res, ret);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (res == 0)
+            semcbs = NULL;
+    }
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -1603,7 +1663,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwloc
 }
 
 #ifndef SHARED_LOCKER_LIST_ASSERT_CONSISTENCY
-#define SHARED_LOCKER_LIST_ASSERT_CONSISTENCY(lock) do {} while (0)
+#define SHARED_LOCKER_LIST_ASSERT_CONSISTENCY(lock) DO_NOTHING
 #endif
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, const struct timespec *abs_timeout, wolfsentry_lock_flags_t flags) {
@@ -3259,7 +3319,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
     } else {
         if ((config->route_private_data_alignment != 0) &&
             ((config->route_private_data_alignment < sizeof(void *)) ||
-             ((config->route_private_data_alignment & (config->route_private_data_alignment - 1)) != 0)))
+             ((config->route_private_data_alignment & (config->route_private_data_alignment - 1)) != 0) ||
+             (config->route_private_data_alignment > config->route_private_data_size)))
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 
@@ -3322,6 +3383,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
     if (exported == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     *exported = internal->config;
+    exported->route_private_data_size -= internal->route_private_data_padding;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -3601,6 +3663,66 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init(
             WOLFSENTRY_INIT_FLAG_NONE));
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_cleanup_push(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_cleanup_callback_t handler,
+    void *arg)
+{
+    struct wolfsentry_cleanup_hook_ent *i = NULL; /* without initing, compiler gripes with maybe-uninitialized in no-inline builds. */
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
+    wolfsentry_list_ent_get_first(&wolfsentry->cleanup_hooks, (struct wolfsentry_list_ent_header **)&i);
+    while (i) {
+        if ((i->handler == handler) && (i->arg == arg))
+            WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN(ALREADY_OK);
+        wolfsentry_list_ent_get_next(&wolfsentry->cleanup_hooks, (struct wolfsentry_list_ent_header **)&i);
+    }
+
+    i = WOLFSENTRY_MALLOC(sizeof *i);
+    if (i == NULL)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(SYS_RESOURCE_FAILED);
+    i->handler = handler;
+    i->arg = arg;
+    wolfsentry_list_ent_prepend(&wolfsentry->cleanup_hooks, (struct wolfsentry_list_ent_header *)i);
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_cleanup_pop(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    int execute_p)
+{
+    struct wolfsentry_cleanup_hook_ent *i = NULL; /* without initing, compiler gripes with maybe-uninitialized in no-inline builds. */
+
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
+    wolfsentry_list_ent_get_first(&wolfsentry->cleanup_hooks, (struct wolfsentry_list_ent_header **)&i);
+    if (i == NULL)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(ITEM_NOT_FOUND);
+    if (execute_p)
+        i->handler(WOLFSENTRY_CONTEXT_ARGS_OUT, i->arg);
+    wolfsentry_list_ent_delete(&wolfsentry->cleanup_hooks, (struct wolfsentry_list_ent_header *)i);
+    WOLFSENTRY_FREE(i);
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_cleanup_all(
+    WOLFSENTRY_CONTEXT_ARGS_IN)
+{
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
+    for (;;) {
+        ret = wolfsentry_cleanup_pop(WOLFSENTRY_CONTEXT_ARGS_OUT, 1);
+        if (ret < 0)
+            break;
+    }
+    if (WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
+        WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+    else
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_IN) {
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
@@ -3623,6 +3745,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_free(WOLFSENTRY_CONTEXT_A
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
 
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(*wolfsentry);
+
+    ret = wolfsentry_cleanup_all(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry));
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     ret = wolfsentry_route_flush_table(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), (*wolfsentry)->routes, &action_results);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
@@ -3702,6 +3827,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
     if ((ret = wolfsentry_context_alloc_1(&wolfsentry->hpi, clone)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 #endif
+
+    /* note that wolfsentry->lock and wolfsentry->cleanup_hooks are not copied
+     * to the clone.  these follow the context pointer itself, which is
+     * necessarily invariant once allocated by wolfsentry_init(), until final
+     * deallocation by wolfsentry_shutdown().
+     */
 
     /* note that the ID generation state is copied verbatim.  in the
      * wolfsentry_table_clone() operations below, objects are copied with their
@@ -3817,6 +3948,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTE
 #endif
 
     wolfsentry2->ents_by_id = scratch.ents_by_id;
+
+    /* note that wolfsentry->lock and wolfsentry->cleanup_hooks are not copied.
+     * both of these follow the context pointer itself, which is necessarily
+     * invariant once allocated by wolfsentry_init(), until final deallocation
+     * by wolfsentry_shutdown().
+     */
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 

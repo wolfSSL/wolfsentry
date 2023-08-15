@@ -138,8 +138,8 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 
 #else /* !WOLFSENTRY_THREADSAFE */
 
-#define WOLFSENTRY_THREAD_ASSERT_INITED(thread) do {} while (0)
-#define WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread) do {} while (0)
+#define WOLFSENTRY_THREAD_ASSERT_INITED(thread) DO_NOTHING
+#define WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread) DO_NOTHING
 
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) (void)(ctx)
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() (void)wolfsentry
@@ -415,6 +415,12 @@ struct wolfsentry_addr_family_byname_table {
 };
 #endif
 
+struct wolfsentry_cleanup_hook_ent {
+    struct wolfsentry_list_ent_header header;
+    wolfsentry_cleanup_callback_t handler;
+    void *arg;
+};
+
 struct wolfsentry_context {
     struct wolfsentry_host_platform_interface hpi;
 #ifdef WOLFSENTRY_THREADSAFE
@@ -435,6 +441,7 @@ struct wolfsentry_context {
     struct wolfsentry_addr_family_byname_table *addr_families_byname;
 #endif
     struct wolfsentry_table_header ents_by_id;
+    struct wolfsentry_list_header cleanup_hooks;
 };
 
 #ifdef WOLFSENTRY_THREADSAFE

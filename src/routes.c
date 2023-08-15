@@ -304,6 +304,25 @@ static int compare_match_exactness(const struct wolfsentry_route *target, const 
         return 0;
 }
 
+static void clamp_wildcard_fields_to_zero(struct wolfsentry_route *route) {
+    if ((route->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD) && (route->remote.addr_len != 0))
+        memset(WOLFSENTRY_ROUTE_REMOTE_ADDR(route), 0, WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(route));
+    if ((route->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) && (route->local.addr_len != 0))
+        memset(WOLFSENTRY_ROUTE_LOCAL_ADDR(route), 0, WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(route));
+    if (route->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)
+        route->sa_family = 0;
+    if (route->flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)
+        route->sa_proto = 0;
+    if (route->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)
+        route->remote.sa_port = 0;
+    if (route->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)
+        route->remote.interface = 0;
+    if (route->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)
+        route->local.sa_port = 0;
+    if (route->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD)
+        route->local.interface = 0;
+}
+
 static int wolfsentry_route_key_cmp(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right) {
     return wolfsentry_route_key_cmp_1((struct wolfsentry_route *)left, (struct wolfsentry_route *)right, 0 /* match_wildcards_p */, NULL /* inexact_matches */);
 }
@@ -772,22 +791,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
     /* fields marked as wildcards must be zeroed before insertion to meet
      * assumptions of table lookup logic.
      */
-    if ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD) && (route_to_insert->remote.addr_len != 0))
-        memset(WOLFSENTRY_ROUTE_REMOTE_ADDR(route_to_insert), 0, WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(route_to_insert));
-    if ((route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) && (route_to_insert->local.addr_len != 0))
-        memset(WOLFSENTRY_ROUTE_LOCAL_ADDR(route_to_insert), 0, WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(route_to_insert));
-    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)
-        route_to_insert->sa_family = 0;
-    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)
-        route_to_insert->sa_proto = 0;
-    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD)
-        route_to_insert->remote.sa_port = 0;
-    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD)
-        route_to_insert->remote.interface = 0;
-    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD)
-        route_to_insert->local.sa_port = 0;
-    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD)
-        route_to_insert->local.interface = 0;
+    clamp_wildcard_fields_to_zero(route_to_insert);
 
     if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY)
         ++route_to_insert->meta.derogatory_count;
@@ -1346,6 +1350,9 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_1(
 
     if ((ret = wolfsentry_route_init(parent_event, remote, local, flags, 0 /* data_addr_offset */, sizeof target.buf, &target.route)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
+
+    /* fix any nonzero wildcard fields, to avoid spurious mismatches. */
+    clamp_wildcard_fields_to_zero(&target.route);
 
     ret = wolfsentry_route_lookup_0(WOLFSENTRY_CONTEXT_ARGS_OUT, table, &target.route, exact_p, inexact_matches, found_route, action_results);
     WOLFSENTRY_ERROR_RERETURN(ret);

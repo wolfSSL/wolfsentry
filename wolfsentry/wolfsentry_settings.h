@@ -56,6 +56,10 @@
 #define inline __attribute_maybe_unused__
 #endif
 
+#ifndef DO_NOTHING
+#define DO_NOTHING do {} while (0)
+#endif
+
 #ifdef FREERTOS
     #include <FreeRTOS.h>
     #define WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
@@ -459,15 +463,8 @@ struct wolfsentry_build_settings {
 };
 
 #if !defined(BUILDING_LIBWOLFSENTRY) || defined(DEFINE_WOLFSENTRY_BUILD_SETTINGS)
-static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_build_settings = {
-#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
-    .version =
-#endif
-    WOLFSENTRY_VERSION,
-#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
-    .config =
-#endif
-WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE
+
+static const __attribute_maybe_unused__ uint32_t __wolfsentry_config = WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE
 #ifdef WOLFSENTRY_USER_DEFINED_TYPES
     | WOLFSENTRY_CONFIG_FLAG_USER_DEFINED_TYPES
 #endif
@@ -501,6 +498,17 @@ WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE
 #ifdef WOLFSENTRY_LWIP
     | WOLFSENTRY_CONFIG_FLAG_LWIP
 #endif
+    ;
+
+static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_build_settings = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    .version =
+#endif
+    WOLFSENTRY_VERSION,
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    .config =
+#endif
+    __wolfsentry_config
 };
 
 #endif /* !BUILDING_LIBWOLFSENTRY || DEFINE_WOLFSENTRY_BUILD_SETTINGS */

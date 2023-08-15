@@ -356,7 +356,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_config(WOLFSENTRY_CONTE
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, struct wolfsentry_eventconfig *config) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, const struct wolfsentry_eventconfig *config) {
     struct wolfsentry_event *event;
     wolfsentry_errcode_t ret;
 

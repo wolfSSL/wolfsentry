@@ -35,7 +35,7 @@
 
 #include "src/wolfsentry_internal.h"
 
-#ifdef _POSIX_C_SOURCE
+#if defined(_POSIX_C_SOURCE) || defined(__MACH__)
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>

@@ -1469,29 +1469,25 @@ static const struct wolfsentry_semcbs builtin_sem_methods =
 #undef sem_trywait
 #undef sem_destroy
 
-static wolfsentry_errcode_t get_sem_methods(struct wolfsentry_host_platform_interface *hpi, const struct wolfsentry_semcbs **sem_methods) {
-    if (hpi && hpi->semcbs.sem_init) {
-        *sem_methods = &hpi->semcbs;
-        WOLFSENTRY_RETURN_OK;
-    } else {
-#ifndef NO_BUILTIN_SEM_API
-        *sem_methods = &builtin_sem_methods;
-        WOLFSENTRY_RETURN_OK;
+#ifdef NO_BUILTIN_SEM_API
+
+#define sem_init (hpi->semcbs->sem_init)
+#define sem_post (hpi->semcbs->sem_post)
+#define sem_wait (hpi->emcbs->sem_wait)
+#define sem_timedwait (hpi->semcbs->sem_timedwait)
+#define sem_trywait (hpi->semcbs->sem_trywait)
+#define sem_destroy (hpi->semcbs->sem_destroy)
+
 #else
-        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+
+#define sem_init (hpi->semcbs.sem_init ? hpi->semcbs.sem_init : builtin_sem_methods.sem_init)
+#define sem_post (hpi->semcbs.sem_post ? hpi->semcbs.sem_post : builtin_sem_methods.sem_post)
+#define sem_wait (hpi->emcbs->sem_wait ? hpi->emcbs->sem_wait : builtin_sem_methods.sem_wait)
+#define sem_timedwait (hpi->semcbs.sem_timedwait ? hpi->semcbs.sem_timedwait : builtin_sem_methods.sem_timedwait)
+#define sem_trywait (hpi->semcbs.sem_trywait ? hpi->semcbs.sem_trywait : builtin_sem_methods.sem_trywait)
+#define sem_destroy (hpi->semcbs.sem_destroy ? hpi->semcbs.sem_destroy : builtin_sem_methods.sem_destroy)
+
 #endif
-    }
-}
-
-static const struct wolfsentry_semcbs *semcbs = NULL;
-static wolfsentry_refcount_t semcbs_refcount = 0;
-
-#define sem_init semcbs->sem_init
-#define sem_post semcbs->sem_post
-#define sem_wait semcbs->sem_wait
-#define sem_timedwait semcbs->sem_timedwait
-#define sem_trywait semcbs->sem_trywait
-#define sem_destroy semcbs->sem_destroy
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context *thread, struct wolfsentry_rwlock *lock, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
@@ -1503,13 +1499,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
 
     if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-
-    if (semcbs == NULL) {
-        ret = get_sem_methods(hpi, &semcbs);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    }
-    WOLFSENTRY_REFCOUNT_INCREMENT(semcbs_refcount, ret);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     memset(lock,0,sizeof *lock);
 
@@ -1571,6 +1560,33 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host
     }
     WOLFSENTRY_RETURN_OK;
 }
+
+#undef sem_init
+#undef sem_post
+#undef sem_wait
+#undef sem_timedwait
+#undef sem_trywait
+#undef sem_destroy
+
+#ifdef NO_BUILTIN_SEM_API
+
+#define sem_init (lock->hpi->semcbs->sem_init)
+#define sem_post (lock->hpi->semcbs->sem_post)
+#define sem_wait (lock->hpi->emcbs->sem_wait)
+#define sem_timedwait (lock->hpi->semcbs->sem_timedwait)
+#define sem_trywait (lock->hpi->semcbs->sem_trywait)
+#define sem_destroy (lock->hpi->semcbs->sem_destroy)
+
+#else
+
+#define sem_init (lock->hpi->semcbs.sem_init ? lock->hpi->semcbs.sem_init : builtin_sem_methods.sem_init)
+#define sem_post (lock->hpi->semcbs.sem_post ? lock->hpi->semcbs.sem_post : builtin_sem_methods.sem_post)
+#define sem_wait (lock->hpi->semcbs.sem_wait ? lock->hpi->semcbs.sem_wait : builtin_sem_methods.sem_wait)
+#define sem_timedwait (lock->hpi->semcbs.sem_timedwait ? lock->hpi->semcbs.sem_timedwait : builtin_sem_methods.sem_timedwait)
+#define sem_trywait (lock->hpi->semcbs.sem_trywait ? lock->hpi->semcbs.sem_trywait : builtin_sem_methods.sem_trywait)
+#define sem_destroy (lock->hpi->semcbs.sem_destroy ? lock->hpi->semcbs.sem_destroy : builtin_sem_methods.sem_destroy)
+
+#endif
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
     int ret;
@@ -1636,13 +1652,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rw
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
 
     lock->state = WOLFSENTRY_LOCK_UNINITED;
-    {
-        wolfsentry_refcount_t res;
-        WOLFSENTRY_REFCOUNT_DECREMENT(semcbs_refcount, res, ret);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        if (res == 0)
-            semcbs = NULL;
-    }
 
     WOLFSENTRY_RETURN_OK;
 }

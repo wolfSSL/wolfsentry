@@ -26,8 +26,8 @@
 #define TCP_MSS                      1500
 #define TCP_WND                     65535
 #define NO_SYS                          0
-//#define LWIP_NOASSERT                   1
-//#define SYS_LIGHTWEIGHT_PROT            1
+/* #define LWIP_NOASSERT                   1 */
+/* #define SYS_LIGHTWEIGHT_PROT            1 */
 #define SYS_LIGHTWEIGHT_PROT            0
 
 #define MEM_LIBC_MALLOC                 1
@@ -47,10 +47,10 @@
 
 #define LWIP_DEBUG			0
 #define ECHO_DEBUG                      LWIP_DBG_ON
-//#define IP4_DEBUG                       LWIP_DBG_ON
-//#define NETIF_DEBUG                     LWIP_DBG_ON
-//#define TCP_DEBUG                       LWIP_DBG_ON
-//#define ETHARP_DEBUG                    LWIP_DBG_ON
+/* #define IP4_DEBUG                       LWIP_DBG_ON */
+/* #define NETIF_DEBUG                     LWIP_DBG_ON */
+/* #define TCP_DEBUG                       LWIP_DBG_ON */
+/* #define ETHARP_DEBUG                    LWIP_DBG_ON */
 
 #define PPP_SUPPORT                     0
 #define LWIP_SOCKET                     1
@@ -62,7 +62,7 @@
 
 #define LWIP_CHECKSUM_CTRL_PER_NETIF    1
 
-//#define LWIP_PROVIDE_ERRNO 1
+/* #define LWIP_PROVIDE_ERRNO 1 */
 #undef LWIP_PROVIDE_ERRNO
 
 #define TCPIP_THREAD_PRIO               3
@@ -79,7 +79,7 @@
 #define MEMP_NUM_NETBUF                 4
 #define MEMP_NUM_NETCONN                4
 #define MEMP_NUM_API_MSG                8
-//#define MEMP_NUM_TCPIP_MSG              8
+/* #define MEMP_NUM_TCPIP_MSG              8 */
 
 #define MEM_RECLAIM                     1
 #define MEMP_RECLAIM                    1
@@ -101,7 +101,7 @@
 #define DHCP_DOES_ARP_CHECK             1
 #define UDP_TTL                       255
 
-//#define STATS
+/* #define STATS */
 #undef STATS
 
 #ifdef STATS

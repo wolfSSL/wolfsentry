@@ -1101,12 +1101,20 @@ static err_t icmp6_filter_with_wolfsentry(
 
 #endif /* LWIP_ICMP6 */
 
+WOLFSENTRY_API_VOID wolfsentry_cleanup_lwip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_IN, void *cleanup_arg) {
+    (void)cleanup_arg;
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_OUT, 0, 0, 0, 0, 0));
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ethernet_callback(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     packet_filter_event_mask_t ethernet_mask)
 {
 #if LWIP_ARP || LWIP_ETHERNET
+    WOLFSENTRY_MUTEX_OR_RETURN();
     if (ethernet_mask) {
+        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
         ethernet_filter(ethernet_filter_with_wolfsentry);
         ethernet_filter_mask(ethernet_mask);
         ethernet_filter_arg((void *)wolfsentry);
@@ -1115,24 +1123,36 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ethernet_call
         ethernet_filter_mask(0);
         ethernet_filter_arg(NULL);
     }
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 #else
     if (ethernet_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+    else
+        WOLFSENTRY_RETURN_OK;
 #endif /* LWIP_ARP || LWIP_ETHERNET */
-    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ip_callbacks(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     packet_filter_event_mask_t ip_mask)
 {
+#if LWIP_IPV4 || LWIP_IPV6
+    WOLFSENTRY_MUTEX_OR_RETURN();
+    if (ip_mask) {
+        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+    }
+#endif
 #if LWIP_IPV4
     if (ip_mask) {
         ip4_filter(ip4_filter_with_wolfsentry);
         ip4_filter_mask(ip_mask);
         ip4_filter_arg((void *)wolfsentry);
-    } else
+    } else {
         ip4_filter(NULL);
+        ip4_filter_mask(0);
+        ip4_filter_arg(NULL);
+    }
 #endif /* LWIP_IPV4 */
 
 #if LWIP_IPV6
@@ -1147,18 +1167,27 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ip_callbacks(
     }
 #endif /* LWIP_IPV6 */
 
-#if ! (LWIP_IPV4 || LWIP_IPV6)
+#if LWIP_IPV4 || LWIP_IPV6
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+#else
     if (ip_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+    else
+        WOLFSENTRY_RETURN_OK;
 #endif
-
-    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_icmp_callbacks(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     packet_filter_event_mask_t icmp_mask)
 {
+#if LWIP_ICMP || LWIP_ICMP6
+    WOLFSENTRY_MUTEX_OR_RETURN();
+    if (icmp_mask) {
+        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    }
+#endif
 #if LWIP_ICMP
     if (icmp_mask) {
         icmp_filter(icmp4_filter_with_wolfsentry);
@@ -1180,20 +1209,25 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_icmp_callback
     }
 #endif /* LWIP_ICMP6 */
 
-#if ! (LWIP_ICMP || LWIP_ICMP6)
+#if LWIP_ICMP || LWIP_ICMP6
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+#else
     if (icmp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+    else
+        WOLFSENTRY_RETURN_OK;
 #endif
-
-    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_tcp_callback(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     packet_filter_event_mask_t tcp_mask)
 {
 #if LWIP_TCP
+    WOLFSENTRY_MUTEX_OR_RETURN();
     if (tcp_mask) {
+        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         tcp_filter(tcp_filter_with_wolfsentry);
         /* make sure wolfSentry sees the close/reset events that balance earlier
          * accepts, for concurrent-connection accounting purposes.
@@ -1207,20 +1241,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_tcp_callback(
         tcp_filter_mask(0);
         tcp_filter_arg(NULL);
     }
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 #else
     if (tcp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+    else
+        WOLFSENTRY_RETURN_OK;
 #endif /* LWIP_TCP */
-
-    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_udp_callback(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     packet_filter_event_mask_t udp_mask)
 {
 #if LWIP_UDP
+    WOLFSENTRY_MUTEX_OR_RETURN();
     if (udp_mask) {
+        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
         udp_filter(udp_filter_with_wolfsentry);
         udp_filter_mask(udp_mask);
         udp_filter_arg((void *)wolfsentry);
@@ -1229,16 +1267,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_udp_callback(
         udp_filter_mask(0);
         udp_filter_arg(NULL);
     }
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 #else
     if (udp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+    else
+        WOLFSENTRY_RETURN_OK;
 #endif /* LWIP_UDP */
 
-    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_callbacks(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     packet_filter_event_mask_t ethernet_mask,
     packet_filter_event_mask_t ip_mask,
     packet_filter_event_mask_t icmp_mask,
@@ -1247,28 +1287,31 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_callbacks(
 {
     wolfsentry_errcode_t ret;
 
-    if ((ret = wolfsentry_install_lwip_filter_ethernet_callback(wolfsentry, ethernet_mask)) < 0)
+    WOLFSENTRY_MUTEX_OR_RETURN();
+
+    if ((ret = wolfsentry_install_lwip_filter_ethernet_callback(WOLFSENTRY_CONTEXT_ARGS_OUT, ethernet_mask)) < 0)
         goto out;
-    if ((ret = wolfsentry_install_lwip_filter_ip_callbacks(wolfsentry, ip_mask)) < 0)
+    if ((ret = wolfsentry_install_lwip_filter_ip_callbacks(WOLFSENTRY_CONTEXT_ARGS_OUT, ip_mask)) < 0)
         goto out;
-    if ((ret = wolfsentry_install_lwip_filter_icmp_callbacks(wolfsentry, icmp_mask)) < 0)
+    if ((ret = wolfsentry_install_lwip_filter_icmp_callbacks(WOLFSENTRY_CONTEXT_ARGS_OUT, icmp_mask)) < 0)
         goto out;
-    if ((ret = wolfsentry_install_lwip_filter_tcp_callback(wolfsentry, tcp_mask)) < 0)
+    if ((ret = wolfsentry_install_lwip_filter_tcp_callback(WOLFSENTRY_CONTEXT_ARGS_OUT, tcp_mask)) < 0)
         goto out;
-    if ((ret = wolfsentry_install_lwip_filter_udp_callback(wolfsentry, udp_mask)) < 0)
+    if ((ret = wolfsentry_install_lwip_filter_udp_callback(WOLFSENTRY_CONTEXT_ARGS_OUT, udp_mask)) < 0)
         goto out;
 
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
 out:
     if (ret < 0) {
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_ethernet_callback(wolfsentry, 0));
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_ip_callbacks(wolfsentry, 0));
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_icmp_callbacks(wolfsentry, 0));
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_tcp_callback(wolfsentry, 0));
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_udp_callback(wolfsentry, 0));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_ethernet_callback(WOLFSENTRY_CONTEXT_ARGS_OUT, 0));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_ip_callbacks(WOLFSENTRY_CONTEXT_ARGS_OUT, 0));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_icmp_callbacks(WOLFSENTRY_CONTEXT_ARGS_OUT, 0));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_tcp_callback(WOLFSENTRY_CONTEXT_ARGS_OUT, 0));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_udp_callback(WOLFSENTRY_CONTEXT_ARGS_OUT, 0));
     }
-    WOLFSENTRY_ERROR_RERETURN(ret);
+
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 #endif /* LWIP_PACKET_FILTER_API */

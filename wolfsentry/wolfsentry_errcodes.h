@@ -210,8 +210,8 @@ static inline int WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(wolfsentry_errcode_t x) {
     } while (0)
 
 #else
-    #define WOLFSENTRY_UNLOCK_FOR_RETURN() do {} while (0)
-    #define WOLFSENTRY_UNLOCK_FOR_RETURN_EX(ctx) do {} while (0)
+    #define WOLFSENTRY_UNLOCK_FOR_RETURN() DO_NOTHING
+    #define WOLFSENTRY_UNLOCK_FOR_RETURN_EX(ctx) DO_NOTHING
     #define WOLFSENTRY_MUTEX_EX(ctx) ((void)(ctx), WOLFSENTRY_ERROR_ENCODE(OK))
     #define WOLFSENTRY_MUTEX_OR_RETURN() (void)wolfsentry
     #define WOLFSENTRY_SHARED_EX(ctx) (void)(ctx)
@@ -262,7 +262,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 
 #else
 
-#define WOLFSENTRY_WARN(fmt,...) do {} while (0)
+#define WOLFSENTRY_WARN(fmt,...) DO_NOTHING
 #define WOLFSENTRY_WARN_ON_FAILURE(...) do { if ((__VA_ARGS__) < 0) {} } while (0)
 #define WOLFSENTRY_WARN_ON_FAILURE_LIBC(...) do { if ((__VA_ARGS__) < 0) {}} while (0)
 
@@ -349,6 +349,7 @@ enum wolfsentry_error_id {
     WOLFSENTRY_SUCCESS_ID_USED_FALLBACK        =    4,
     WOLFSENTRY_SUCCESS_ID_YES                  =    5,
     WOLFSENTRY_SUCCESS_ID_NO                   =    6,
+    WOLFSENTRY_SUCCESS_ID_ALREADY_OK           =    7,
     WOLFSENTRY_SUCCESS_ID_USER_BASE            =  128
 };
 

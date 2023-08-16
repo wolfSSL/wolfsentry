@@ -82,7 +82,9 @@ Build for FreeRTOS on ARM32, assuming FreeRTOS and lwIP source trees are located
 
 ## Documentation
 
-The JSON configuration file is documented in [doc/json_configuration.md](doc/json_configuration.md).
+Basic application integration on FreeRTOS-lwIP is documented, with usable code fragments, by [doc/freertos-lwip-app.md](doc/freertos-lwip-app.md).
+
+The JSON configuration blob is documented in detail by [doc/json_configuration.md](doc/json_configuration.md).
 
 
 ## Examples

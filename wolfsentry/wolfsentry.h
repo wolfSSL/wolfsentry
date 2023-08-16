@@ -46,10 +46,6 @@ struct wolfsentry_allocator;
 struct wolfsentry_context;
 struct wolfsentry_thread_context;
 
-#ifdef WOLFSENTRY_LWIP
-    #include "wolfsentry/wolfsentry_lwip.h"
-#endif
-
 typedef enum {
     WOLFSENTRY_INIT_FLAG_NONE = 0,
     WOLFSENTRY_INIT_FLAG_LOCK_SHARED_ERROR_CHECKING = 1<<0
@@ -106,7 +102,7 @@ struct wolfsentry_timecbs {
 typedef int (*sem_init_cb_t)(sem_t *sem, int pshared, unsigned int value);
 typedef int (*sem_post_cb_t)(sem_t *sem);
 typedef int (*sem_wait_cb_t)(sem_t *sem);
-typedef int (*sem_timedwait_cb_t)(sem_t *sem, struct timespec *abs_timeout);
+typedef int (*sem_timedwait_cb_t)(sem_t *sem, const struct timespec *abs_timeout);
 typedef int (*sem_trywait_cb_t)(sem_t *sem);
 typedef int (*sem_destroy_cb_t)(sem_t *sem);
 
@@ -269,17 +265,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_free(struct wolfsentry_rwloc
 #define WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(x, y) (x)->y
 #define WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(x, y) x
 #define WOLFSENTRY_CONTEXT_ARGS_NOT_USED (void)wolfsentry
-#define WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED do {} while (0)
+#define WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED DO_NOTHING
 
 #define WOLFSENTRY_THREAD_HEADER_DECLS
-#define WOLFSENTRY_THREAD_HEADER(flags) do {} while (0)
+#define WOLFSENTRY_THREAD_HEADER(flags) DO_NOTHING
 #define WOLFSENTRY_THREAD_HEADER_INIT(flags) 0
-#define WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(flags) do {} while (0)
-#define WOLFSENTRY_THREAD_HEADER_CHECKED(flags) do {} while (0)
-#define WOLFSENTRY_THREAD_HEADER_CHECK() do {} while (0)
+#define WOLFSENTRY_THREAD_HEADER_INIT_CHECKED(flags) DO_NOTHING
+#define WOLFSENTRY_THREAD_HEADER_CHECKED(flags) DO_NOTHING
+#define WOLFSENTRY_THREAD_HEADER_CHECK() DO_NOTHING
 #define WOLFSENTRY_THREAD_GET_ERROR 0
 #define WOLFSENTRY_THREAD_TAILER(flags) 0
-#define WOLFSENTRY_THREAD_TAILER_CHECKED(flags) do {} while (0)
+#define WOLFSENTRY_THREAD_TAILER_CHECKED(flags) DO_NOTHING
 
 #define wolfsentry_lock_init(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
 #define wolfsentry_lock_alloc(x, y, z, w) WOLFSENTRY_ERROR_ENCODE(OK)
@@ -552,6 +548,22 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_res_assoc_by_name(const ch
 WOLFSENTRY_API struct wolfsentry_host_platform_interface *wolfsentry_get_hpi(struct wolfsentry_context *wolfsentry);
 WOLFSENTRY_API struct wolfsentry_allocator *wolfsentry_get_allocator(struct wolfsentry_context *wolfsentry);
 WOLFSENTRY_API struct wolfsentry_timecbs *wolfsentry_get_timecbs(struct wolfsentry_context *wolfsentry);
+
+typedef void (*wolfsentry_cleanup_callback_t)(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    void *cleanup_arg);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_cleanup_push(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_cleanup_callback_t handler,
+    void *arg);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_cleanup_pop(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    int execute_p);
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_cleanup_all(
+    WOLFSENTRY_CONTEXT_ARGS_IN);
 
 /* must return _BUFFER_TOO_SMALL and set *addr_internal_bits to an
  * accurate value when supplied with a NULL output buf ptr.
@@ -1255,7 +1267,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *label,
     int label_len,
-    struct wolfsentry_eventconfig *config);
+    const struct wolfsentry_eventconfig *config);
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_reference(
     WOLFSENTRY_CONTEXT_ARGS_IN,
@@ -1591,6 +1603,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(
     byte *dest,
     size_t *dest_spc,
     int ignore_junk_p);
+
+#ifdef WOLFSENTRY_LWIP
+    #include "wolfsentry/wolfsentry_lwip.h"
+#endif
 
 /* conditionally include wolfsentry_util.h last -- none of the above rely on it.
  */

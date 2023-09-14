@@ -385,8 +385,6 @@ ifndef RELEASE
     RELEASE := $(shell cd "$(SRC_TOP)" && git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1 2>/dev/null)" 2>/dev/null)
 endif
 
-RELEASE_PER_HEADERS := $(shell cd "$(SRC_TOP)" && echo -e '#include <stdio.h>\n#include <stdlib.h>\n#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) $(LDFLAGS) -x c - -o "$(BUILD_TOP)/print_version" 1>/dev/null 2>&1 && "$(BUILD_TOP)/print_version"; rm -f "$(BUILD_TOP)/print_version")
-
 .PHONY: dist
 dist:
 	@if [[ ! -d "$(SRC_TOP)/.git" ]]; then echo 'dist target requires git artifacts.' 1>&2; exit 1; fi
@@ -459,7 +457,8 @@ DOXYGEN_EXCLUDE := wolfsentry/wolfsentry_options.h
 .PHONY: doc-html
 doc-html:
 	@command -v doxygen >/dev/null || doxygen
-	@mkdir -p '$(BUILD_TOP)/doc' && \
+	@RELEASE_PER_HEADERS=$$(cd '$(SRC_TOP)' && echo -e '#include <stdio.h>\n#include <stdlib.h>\n#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version' 1>/dev/null 2>&1 && '$(BUILD_TOP)/print_version' && rm -f '$(BUILD_TOP)/print_version') && \
+	mkdir -p '$(BUILD_TOP)/doc' && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf html && \
 	cp -rs $(SRC_TOP)/doc/doxy-formats/html . && \
@@ -467,7 +466,7 @@ doc-html:
 	cp -rs $(SRC_TOP)/wolfsentry . && \
 	cp -s $(SRC_TOP)/*.md $(SRC_TOP)/doc/*.md . && \
 	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'Running doxygen...'; } && \
-	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION='$(RELEASE_PER_HEADERS)' doxygen Doxyfile && \
+	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/html/doxygen_warnings not found.' 1>&2 && false; }; } && \
 	{ [[ ! -s doxygen_warnings ]] || { echo '$(BUILD_TOP)/doc/html/doxygen_warnings has nonzero length.' 1>&2 && false; }; } && \
 	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'HTML manual generated; top index is $(BUILD_TOP)/doc/html/html/index.html'; }
@@ -481,7 +480,8 @@ doc-pdf:
 	@command -v doxygen >/dev/null || doxygen
 	@command -v pdflatex >/dev/null || pdflatex
 	@command -v makeindex >/dev/null || makeindex
-	@mkdir -p '$(BUILD_TOP)/doc' && \
+	@RELEASE_PER_HEADERS=$$(cd '$(SRC_TOP)' && echo -e '#include <stdio.h>\n#include <stdlib.h>\n#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version' 1>/dev/null 2>&1 && '$(BUILD_TOP)/print_version' && rm -f '$(BUILD_TOP)/print_version') && \
+	mkdir -p '$(BUILD_TOP)/doc' && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf pdf && \
 	cp -rs $(SRC_TOP)/doc/doxy-formats/pdf . && \
@@ -489,7 +489,7 @@ doc-pdf:
 	cp -rs $(SRC_TOP)/wolfsentry . && \
 	cp -s $(SRC_TOP)/*.md $(SRC_TOP)/doc/*.md . && \
 	echo 'Running doxygen...' && \
-	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION='$(RELEASE_PER_HEADERS)' doxygen Doxyfile && \
+	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings not found.' 1>&2 && false; }; } && \
 	{ [[ ! -s doxygen_warnings ]] || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings has nonzero length.' 1>&2 && false; }; } && \
 	cd latex && \

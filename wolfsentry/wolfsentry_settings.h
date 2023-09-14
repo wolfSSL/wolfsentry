@@ -662,59 +662,112 @@ enum wolfsentry_build_flags {
 /*! \brief struct for passing the build version and configuration */
 struct wolfsentry_build_settings {
     uint32_t version;
-        /*!< Must be initialized to `WOLFSENTRY_VERSION`. */
+        /*!< Must be initialized to #WOLFSENTRY_VERSION. */
     uint32_t config;
-        /*!< Must be initialized to `__wolfsentry_config`. */
+        /*!< Must be initialized to #WOLFSENTRY_CONFIG_SIGNATURE. */
 };
 
 #if !defined(BUILDING_LIBWOLFSENTRY) || defined(WOLFSENTRY_DEFINE_BUILD_SETTINGS)
 
-static const __attribute_maybe_unused__ uint32_t __wolfsentry_config = WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE
+/*! @cond doxygen_all */
+
 #ifdef WOLFSENTRY_USER_DEFINED_TYPES
-    | WOLFSENTRY_CONFIG_FLAG_USER_DEFINED_TYPES
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_USER_DEFINED_TYPES WOLFSENTRY_CONFIG_FLAG_USER_DEFINED_TYPES
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_USER_DEFINED_TYPES 0
 #endif
+
 #ifdef WOLFSENTRY_THREADSAFE
-    | WOLFSENTRY_CONFIG_FLAG_THREADSAFE
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_THREADSAFE WOLFSENTRY_CONFIG_FLAG_THREADSAFE
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_THREADSAFE 0
 #endif
+
 #ifdef WOLFSENTRY_CLOCK_BUILTINS
-    | WOLFSENTRY_CONFIG_FLAG_CLOCK_BUILTINS
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_CLOCK_BUILTINS WOLFSENTRY_CONFIG_FLAG_CLOCK_BUILTINS
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_CLOCK_BUILTINS 0
 #endif
+
 #ifdef WOLFSENTRY_MALLOC_BUILTINS
-    | WOLFSENTRY_CONFIG_FLAG_MALLOC_BUILTINS
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_MALLOC_BUILTINS WOLFSENTRY_CONFIG_FLAG_MALLOC_BUILTINS
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_MALLOC_BUILTINS 0
 #endif
+
 #ifdef WOLFSENTRY_ERROR_STRINGS
-    | WOLFSENTRY_CONFIG_FLAG_ERROR_STRINGS
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_ERROR_STRINGS WOLFSENTRY_CONFIG_FLAG_ERROR_STRINGS
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_ERROR_STRINGS 0
 #endif
+
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-    | WOLFSENTRY_CONFIG_FLAG_PROTOCOL_NAMES
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_PROTOCOL_NAMES WOLFSENTRY_CONFIG_FLAG_PROTOCOL_NAMES
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_PROTOCOL_NAMES 0
 #endif
+
 #ifdef WOLFSENTRY_NO_STDIO
-    | WOLFSENTRY_CONFIG_FLAG_NO_STDIO
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO WOLFSENTRY_CONFIG_FLAG_NO_STDIO
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO 0
 #endif
+
 #ifdef WOLFSENTRY_NO_JSON
-    | WOLFSENTRY_CONFIG_FLAG_NO_JSON
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_JSON WOLFSENTRY_CONFIG_FLAG_NO_JSON
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_JSON 0
 #endif
+
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
-    | WOLFSENTRY_CONFIG_FLAG_HAVE_JSON_DOM
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_HAVE_JSON_DOM WOLFSENTRY_CONFIG_FLAG_HAVE_JSON_DOM
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_HAVE_JSON_DOM 0
 #endif
+
 #ifdef WOLFSENTRY_DEBUG_CALL_TRACE
-    | WOLFSENTRY_CONFIG_FLAG_DEBUG_CALL_TRACE
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_DEBUG_CALL_TRACE WOLFSENTRY_CONFIG_FLAG_DEBUG_CALL_TRACE
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_DEBUG_CALL_TRACE 0
 #endif
+
 #ifdef WOLFSENTRY_LWIP
-    | WOLFSENTRY_CONFIG_FLAG_LWIP
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_LWIP WOLFSENTRY_CONFIG_FLAG_LWIP
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_LWIP 0
 #endif
+
 /* with compilers that can't evaluate the below expression as a compile-time
  * constant, WOLFSENTRY_SHORT_ENUMS can be defined in user settings to 0 or
  * 1 to avoid the dependency.
  */
 #ifdef WOLFSENTRY_SHORT_ENUMS
 #if WOLFSENTRY_SHORT_ENUMS == 0
-    | WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS 0
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS
 #endif
 #else
-    | ((sizeof(wolfsentry_init_flags_t) < sizeof(int)) ? WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS : 0)
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS ((sizeof(wolfsentry_init_flags_t) < sizeof(int)) ? WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS : 0)
 #endif
-    ;
+
+/*! @endcond */
+
+#define WOLFSENTRY_CONFIG_SIGNATURE ( \
+    WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_USER_DEFINED_TYPES | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_THREADSAFE | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_CLOCK_BUILTINS | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_MALLOC_BUILTINS | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_ERROR_STRINGS | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_PROTOCOL_NAMES | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_JSON | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_HAVE_JSON_DOM | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_DEBUG_CALL_TRACE | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_LWIP | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS)
+    /*!< \brief Macro to use as the initializer for ::wolfsentry_build_settings.config and ::wolfsentry_host_platform_interface.caller_build_settings.  @hideinitializer */
 
 static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_build_settings = {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
@@ -724,9 +777,9 @@ static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_bu
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     .config =
 #endif
-    __wolfsentry_config
+    WOLFSENTRY_CONFIG_SIGNATURE
 };
-/*!< \brief Convenience constant struct, with properly initialized `wolfsentry_build_settings` values, to be passed to `wolfsentry_init()` @hideinitializer */
+    /*!< \brief Convenience constant struct, with properly initialized `wolfsentry_build_settings` values, to be passed to wolfsentry_init().  @hideinitializer */
 
 #endif /* !BUILDING_LIBWOLFSENTRY || WOLFSENTRY_DEFINE_BUILD_SETTINGS */
 

@@ -172,7 +172,7 @@ static void my_free_aligned(
 static const struct wolfsentry_host_platform_interface vanilla_posix_hpi = {
     .caller_build_settings = {
         .version = WOLFSENTRY_VERSION,
-        .config = __wolfsentry_config
+        .config = WOLFSENTRY_CONFIG_SIGNATURE
     },
     .allocator = {
         .context = NULL,

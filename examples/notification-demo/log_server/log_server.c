@@ -71,6 +71,11 @@
 #include <wolfssl/ssl.h>
 #include <wolfssl/error-ssl.h>
 
+/* this is an internal routine with strange argument type that's immediately
+ * cast back to int in the implementation.
+ */
+#define wolfSSL_ERR_reason_error_string(x) wolfSSL_ERR_reason_error_string((unsigned long)(x))
+
 #ifndef OPENSSL_EXTRA
 #error log_server requires that wolfSSL be built with --enable-opensslextra
 #endif
@@ -81,7 +86,7 @@ static int log_server_data_index = -1;
 #ifdef SERVER_SECP384R1
 
 /* certs/server-ecc384-cert.pem */
-const char cert[] =
+static const char server_cert[] =
 "-----BEGIN CERTIFICATE-----\n\
 MIIDnzCCAyWgAwIBAgICEAEwCgYIKoZIzj0EAwMwgZcxCzAJBgNVBAYTAlVTMRMw\n\
 EQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxlMRAwDgYDVQQKDAd3\n\
@@ -107,7 +112,7 @@ F+yUIbg9aV7K5ISc2mF9G1G/0Q==\n\
 ";
 
 /* certs/server-ecc384-key.pem */
-const char key[] =
+static const char server_key[] =
 "-----BEGIN PRIVATE KEY-----\n\
 MIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDCk5QboBhY+q4n4YEPA\n\
 YCXbunv+GTUIVWV24tzgAYtraN/Pb4ASznk36yuce8RoHHShZANiAATqz5NPLAm7\n\
@@ -121,7 +126,7 @@ r22YSAqodMmpF6AMw/vTI2j+BDxjUIg7uU98ZzT3O6lz5xvDUV4iGOw=\n\
 #ifdef SERVER_PRIME256V1
 
 /* certs/server-ecc.pem */
-const char cert[] =
+static const char server_cert[] =
 "-----BEGIN CERTIFICATE-----\n\
 MIICoTCCAkegAwIBAgIBAzAKBggqhkjOPQQDAjCBlzELMAkGA1UEBhMCVVMxEzAR\n\
 BgNVBAgMCldhc2hpbmd0b24xEDAOBgNVBAcMB1NlYXR0bGUxEDAOBgNVBAoMB3dv\n\
@@ -143,7 +148,7 @@ tCc44rE=\n\
 
 /* certs/ecc-key.pem */
 
-const char key[] =
+static const char server_key[] =
 "ASN1 OID: prime256v1\n\
 -----BEGIN EC PARAMETERS-----\n\
 BggqhkjOPQMBBw==\n\
@@ -425,26 +430,26 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
 
     /* check incoming validation of cert 1=okay, 0=failed */
     if (preverify != 1) {
-        fprintf(stderr, "%s L%d pre-verify check failed! %d\n",
+        fprintf(stderr, "ERROR: %s L%d pre-verify check failed! %d\n",
             __FILE__,__LINE__, preverify);
         return preverify;
     }
 
     if (store == NULL) {
-        fprintf(stderr, "%s L%d null store!\n", __FILE__,__LINE__);
+        fprintf(stderr, "ERROR: %s L%d null store!\n", __FILE__,__LINE__);
         return WOLFSSL_FAILURE;
     }
 
     app_data = (struct log_server_data *)store->userCtx;
     if (app_data == NULL) {
-        fprintf(stderr, "%s L%d null store->userCtx!\n", __FILE__,__LINE__);
+        fprintf(stderr, "ERROR: %s L%d null store->userCtx!\n", __FILE__,__LINE__);
         return WOLFSSL_FAILURE;
     }
 
     app_data->error_code = NO_PEER_CERT; /* default error code */
 
     if (store->current_cert == NULL) {
-        fprintf(stderr, "%s L%d null store->current_cert\n", __FILE__,__LINE__);
+        fprintf(stderr, "ERROR: %s L%d null store->current_cert\n", __FILE__,__LINE__);
         return WOLFSSL_FAILURE;
     }
 
@@ -452,7 +457,7 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
 #ifdef DEBUG_TLS
         fprintf(stderr, "%s L%d depth=%d ->error=%d (%s)\n", __FILE__,__LINE__,
             store->error_depth,store->error,
-            wolfSSL_ERR_reason_error_string(store->error));
+                wolfSSL_ERR_reason_error_string(store->error));
 #endif
         app_data->error_code = store->error;
         return WOLFSSL_FAILURE;
@@ -473,9 +478,9 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     subjectHash = wolfSSL_X509_subject_name_hash(store->current_cert);
     subjectName = wolfSSL_X509_NAME_oneline(
             wolfSSL_X509_get_subject_name(store->current_cert), 0, 0);
-    printf("CN=%s subjectName->name=\"%s\" subject_hash=%lu\n",
+    fprintf(stderr, "CN=%s subjectName->name=\"%s\" subject_hash=%lu\n",
         subjectCN, subjectName, subjectHash);
-    printf("issuerName->name=\"%s\" issuer_hash=%lu\n", issuerName, issuerHash);
+    fprintf(stderr, "issuerName->name=\"%s\" issuer_hash=%lu\n", issuerName, issuerHash);
     #endif
 #endif
 
@@ -490,7 +495,7 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
         }
     }
     if (app_data->issuer_cert == NULL) {
-        fprintf(stderr, "%s L%d app_data->issuer_cert NULL.\n",__FILE__,__LINE__);
+        fprintf(stderr, "ERROR: %s L%d app_data->issuer_cert NULL.\n",__FILE__,__LINE__);
         return WOLFSSL_FAILURE;
     }
 
@@ -537,8 +542,8 @@ static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx)
         pollfd.fd = wolfSSL_get_fd(ssl);
         if (pollfd.fd < 0) {
 #if defined(DEBUG_HTTP_IO) || defined(DEBUG_TLS)
-            fprintf(stderr,"%s L%d wolfSSL_get_fd() error: %s\n",
-                __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(pollfd.fd));
+            fprintf(stderr,"ERROR: %s L%d wolfSSL_get_fd(): %s\n",
+                    __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(pollfd.fd));
 #endif
             return WOLFSSL_CBIO_ERR_GENERAL;
         }
@@ -547,21 +552,21 @@ static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx)
         ret = poll(&pollfd, 1, ctx->timeout);
         if (ret < 0) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d poll() error: %s\n",
+            fprintf(stderr,"ERROR: %s L%d poll(): %s\n",
                 __FILE__, __LINE__, strerror(errno));
 #endif
             return WOLFSSL_CBIO_ERR_CONN_CLOSE;
         }
         if (pollfd.revents & (POLLERR|POLLHUP|POLLNVAL)) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d pollfd.revents error bits: 0%o\n",
+            fprintf(stderr,"ERROR: %s L%d pollfd.revents error bits: 0%o\n",
                 __FILE__, __LINE__, pollfd.revents);
 #endif
             return WOLFSSL_CBIO_ERR_CONN_CLOSE;
         }
         if (! (pollfd.revents & POLLIN)) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d poll() returned without POLLIN set: 0%o\n",
+            fprintf(stderr,"ERROR: %s L%d poll() returned without POLLIN set: 0%o\n",
                 __FILE__, __LINE__, pollfd.revents);
 #endif
             return WOLFSSL_CBIO_ERR_TIMEOUT /* WOLFSSL_CBIO_ERR_WANT_READ */;
@@ -575,7 +580,7 @@ static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx)
         }
 #endif
 
-        ret = (int)read(pollfd.fd, buf, sz);
+        ret = (int)read(pollfd.fd, buf, (size_t)sz);
         if (ret <= 0)
             return WOLFSSL_CBIO_ERR_GENERAL;
         else
@@ -592,8 +597,8 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
     pollfd.fd = wolfSSL_get_fd(ssl);
     if (pollfd.fd < 0) {
 #if defined(DEBUG_HTTP_IO) || defined(DEBUG_TLS)
-        fprintf(stderr,"%s L%d wolfSSL_get_fd() error: %s\n",
-            __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(pollfd.fd));
+        fprintf(stderr,"ERROR: %s L%d wolfSSL_get_fd() error: %s\n",
+                __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(pollfd.fd));
 #endif
         return WOLFSSL_CBIO_ERR_GENERAL;
     }
@@ -606,21 +611,21 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
         ret = poll(&pollfd, 1, ctx->timeout);
         if (ret < 0) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d poll() error: %s\n",
+            fprintf(stderr,"ERROR: %s L%d poll(): %s\n",
                 __FILE__, __LINE__, strerror(errno));
 #endif
             return WOLFSSL_CBIO_ERR_CONN_CLOSE;
         }
         if (pollfd.revents & (POLLERR|POLLHUP|POLLNVAL)) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d pollfd.revents error bits: 0%o\n",
+            fprintf(stderr,"ERROR: %s L%d pollfd.revents error bits: 0%o\n",
                 __FILE__, __LINE__, pollfd.revents);
 #endif
             return WOLFSSL_CBIO_ERR_CONN_CLOSE;
         }
         if (! (pollfd.revents & POLLOUT)) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d poll() returned without POLLOUT set: 0%o\n",
+            fprintf(stderr,"ERROR: %s L%d poll() returned without POLLOUT set: 0%o\n",
                 __FILE__, __LINE__, pollfd.revents);
 #endif
             return WOLFSSL_CBIO_ERR_TIMEOUT;
@@ -630,7 +635,7 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
 #endif
 
         this_written = send(pollfd.fd, buf + total_written,
-            sz - total_written, MSG_DONTWAIT);
+                            (size_t)(sz - total_written), MSG_DONTWAIT);
         if (this_written <= 0)
             return WOLFSSL_CBIO_ERR_GENERAL;
         total_written += this_written;
@@ -655,8 +660,8 @@ static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx)
     fd = wolfSSL_get_fd(ssl);
     if (fd < 0) {
 #if defined(DEBUG_HTTP_IO) || defined(DEBUG_TLS)
-        fprintf(stderr,"%s L%d wolfSSL_get_fd() error: %s\n",
-            __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(fd));
+        fprintf(stderr,"ERROR: %s L%d wolfSSL_get_fd(): %s\n",
+                __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(fd));
 #endif
         return WOLFSSL_CBIO_ERR_GENERAL;
     }
@@ -674,20 +679,20 @@ static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx)
     ret = select(fd+1, &readfds, &writefds, &exceptfds, &timeout);
     if (ret < 0) {
 #ifdef DEBUG_HTTP_IO
-        fprintf(stderr,"%s L%d select() error: %s\n",
+        fprintf(stderr,"ERROR: %s L%d select(): %s\n",
             __FILE__, __LINE__, strerror(errno));
 #endif
         return WOLFSSL_CBIO_ERR_CONN_CLOSE;
     }
     if (FD_ISSET(fd, &exceptfds)) {
 #ifdef DEBUG_HTTP_IO
-        fprintf(stderr,"%s L%d fd exception\n", __FILE__, __LINE__);
+        fprintf(stderr,"ERROR: %s L%d fd exception\n", __FILE__, __LINE__);
 #endif
         return WOLFSSL_CBIO_ERR_CONN_CLOSE;
     }
     if (! FD_ISSET(fd, &readfds)) {
 #ifdef DEBUG_HTTP_IO
-        fprintf(stderr,"%s L%d poll() returned with fd not readable\n",
+        fprintf(stderr,"ERROR: %s L%d poll() returned with fd not readable\n",
             __FILE__, __LINE__);
 #endif
         return WOLFSSL_CBIO_ERR_TIMEOUT /* WOLFSSL_CBIO_ERR_WANT_READ */;
@@ -711,8 +716,8 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
     fd = wolfSSL_get_fd(ssl);
     if (fd < 0) {
 #if defined(DEBUG_HTTP_IO) || defined(DEBUG_TLS)
-        fprintf(stderr,"%s L%d wolfSSL_get_fd() error: %s\n",
-             __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(fd));
+        fprintf(stderr,"ERROR: %s L%d wolfSSL_get_fd(): %s\n",
+                __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(fd));
 #endif
         return WOLFSSL_CBIO_ERR_GENERAL;
     }
@@ -734,7 +739,7 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
         ret = select(fd+1, &readfds, &writefds, &exceptfds, &timeout);
         if (ret < 0) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d select() error: %s\n",
+            fprintf(stderr,"ERROR: %s L%d select(): %s\n",
                 __FILE__, __LINE__, strerror(errno));
 #endif
             return WOLFSSL_CBIO_ERR_CONN_CLOSE;
@@ -742,13 +747,13 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
 
         if (FD_ISSET(fd, &exceptfds)) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d fd exception\n", __FILE__, __LINE__);
+            fprintf(stderr,"ERROR: %s L%d fd exception\n", __FILE__, __LINE__);
 #endif
             return WOLFSSL_CBIO_ERR_CONN_CLOSE;
         }
         if (! FD_ISSET(fd, &writefds)) {
 #ifdef DEBUG_HTTP_IO
-            fprintf(stderr,"%s L%d poll() returned with fd not writable\n",
+            fprintf(stderr,"ERROR: %s L%d poll() returned with fd not writable\n",
                 __FILE__, __LINE__);
 #endif
             return WOLFSSL_CBIO_ERR_TIMEOUT /* WOLFSSL_CBIO_ERR_WANT_READ */;
@@ -780,7 +785,7 @@ static int read_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx)
 
     if (fd < 0) {
 #if defined(DEBUG_HTTP_IO) || defined(DEBUG_TLS)
-        fprintf(stderr,"%s L%d wolfSSL_get_fd() error: %s\n",
+        fprintf(stderr,"ERROR: %s L%d wolfSSL_get_fd(): %s\n",
             __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(fd));
 #endif
         return WOLFSSL_CBIO_ERR_GENERAL;
@@ -803,7 +808,7 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
     fd = wolfSSL_get_fd(ssl);
     if (fd < 0) {
 #if defined(DEBUG_HTTP_IO) || defined(DEBUG_TLS)
-        fprintf(stderr,"%s L%d wolfSSL_get_fd() error: %s\n",
+        fprintf(stderr,"ERROR: %s L%d wolfSSL_get_fd(): %s\n",
             __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(fd));
 #endif
         return WOLFSSL_CBIO_ERR_GENERAL;
@@ -829,7 +834,7 @@ static int write_timed(WOLFSSL* ssl, char *buf, int sz, const struct io_ctx *ctx
 #endif /* NO_IO_TIMEOUTS */
 
 /* Init the TCP listener */
-static int ssl_init()
+static int ssl_init(void)
 {
     int ret;
     struct ca_cert *ca_certs_i;
@@ -842,7 +847,7 @@ static int ssl_init()
             NULL, NULL, NULL, NULL);
         if (log_server_data_index < 0) {
             fprintf(stderr,
-                "wolfSSL_get_ex_new_index(WOLF_CRYPTO_EX_INDEX_X509, ...) returned %d\n",
+                "ERROR: wolfSSL_get_ex_new_index(WOLF_CRYPTO_EX_INDEX_X509, ...) returned %d\n",
                 log_server_data_index);
             return -1;
         }
@@ -858,18 +863,18 @@ static int ssl_init()
     wolfSSL_CTX_SetIOSend(wolf_ctx, (CallbackIOSend)write_timed);
 
     /* Load server certificates into WOLFSSL_CTX */
-    if ((ret = wolfSSL_CTX_use_certificate_buffer(wolf_ctx, (const unsigned char *)cert,
-                strlen(cert), WOLFSSL_FILETYPE_PEM))
+    if ((ret = wolfSSL_CTX_use_certificate_buffer(wolf_ctx, (const unsigned char *)server_cert,
+                strlen(server_cert), WOLFSSL_FILETYPE_PEM))
         != WOLFSSL_SUCCESS) {
         fprintf(stderr, "ERROR: failed to load certificate buffer.\n");
         return -1;
     }
 
     /* Load server key into WOLFSSL_CTX */
-    if ((ret = wolfSSL_CTX_use_PrivateKey_buffer(wolf_ctx, (const unsigned char *)key,
-                strlen(key), WOLFSSL_FILETYPE_PEM))
+    if ((ret = wolfSSL_CTX_use_PrivateKey_buffer(wolf_ctx, (const unsigned char *)server_key,
+                strlen(server_key), WOLFSSL_FILETYPE_PEM))
         != WOLFSSL_SUCCESS) {
-        fprintf(stderr, "%s L%d: failed to load key buffer: %s\n",
+        fprintf(stderr, "ERROR: %s L%d: failed to load key buffer: %s\n",
             __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(ret));
         return -1;
     }
@@ -879,10 +884,10 @@ static int ssl_init()
         ++ca_certs_i)
     {
         if ((ret = wolfSSL_CTX_load_verify_buffer(wolf_ctx,
-            (const unsigned char *)ca_certs_i->pem, strlen(ca_certs_i->pem),
+            (const unsigned char *)ca_certs_i->pem, (long)strlen(ca_certs_i->pem),
                 WOLFSSL_FILETYPE_PEM)) != WOLFSSL_SUCCESS)
         {
-            fprintf(stderr, "%s L%d: failed to load verify buffer: %s\n",
+            fprintf(stderr, "ERROR: %s L%d: failed to load verify buffer: %s\n",
                 __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(ret));
             return -1;
         }
@@ -893,11 +898,11 @@ static int ssl_init()
             int keyFormat = 0;
 
             if ((ret = wc_PemToDer((const unsigned char *)ca_certs_i->pem,
-                strlen(ca_certs_i->pem), CA_TYPE, &der,
+                (long)strlen(ca_certs_i->pem), CA_TYPE, &der,
                 NULL /* heap */, NULL /* EncryptedInfo */, &keyFormat))
                 != 0)
             {
-                fprintf(stderr, "%s L%d: wc_PemToDer() failed: %s\n",
+                fprintf(stderr, "ERROR: %s L%d: wc_PemToDer() failed: %s\n",
                     __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(ret));
                 return -1;
             }
@@ -906,7 +911,7 @@ static int ssl_init()
             if ((ret = wc_ParseCert(&cert, CA_TYPE, NO_VERIFY, NULL /* cm */))
                 != 0)
             {
-                fprintf(stderr, "%s L%d: wc_ParseCert() failed: %s\n",
+                fprintf(stderr, "ERROR: %s L%d: wc_ParseCert() failed: %s\n",
                     __FILE__, __LINE__, wolfSSL_ERR_reason_error_string(ret));
                 free(der);
                 return -1;
@@ -915,7 +920,7 @@ static int ssl_init()
             /* make sure the subject is unique */
             for (struct ca_cert *ca_certs_j = ca_certs; ca_certs_j < ca_certs_i; ++ca_certs_j) {
                 if (strncmp(ca_certs_j->subject, cert.subject, WC_ASN_NAME_MAX) == 0) {
-                    fprintf(stderr, "%s L%d CA subject \"%s\" repeats at array offset %zu.\n",
+                    fprintf(stderr, "ERROR: %s L%d CA subject \"%s\" repeats at array offset %zu.\n",
                         __FILE__,__LINE__,ca_certs_j->subject,
                         ((ptrdiff_t)ca_certs_i - (ptrdiff_t)ca_certs) /
                             (ptrdiff_t)sizeof ca_certs[0]);
@@ -945,7 +950,7 @@ static int ssl_init()
 
 static int inbound_fd = -1;
 
-int log_server_init() {
+static int log_server_init(void) {
     int ret;
 
     const char *admin_listen_addr;
@@ -963,9 +968,14 @@ int log_server_init() {
         &admin_listen_port);
 
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_user_value_get_string(\"admin-listen-port\") returned "
+        fprintf(stderr, "ERROR: wolfsentry_user_value_get_uint(\"admin-listen-port\") returned "
                 WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        exit(1);
+    }
+
+    if (admin_listen_port > MAX_UINT_OF(inbound_sa.sin_port)) {
+        fprintf(stderr, "ERROR: \"admin-listen-port\" value %lu is too big.\n", admin_listen_port);
         exit(1);
     }
 
@@ -978,7 +988,7 @@ int log_server_init() {
         &admin_listen_addr_record);
 
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_user_value_get_string(\"admin-listen-addr\") returned "
+        fprintf(stderr, "ERROR: wolfsentry_user_value_get_string(\"admin-listen-addr\") returned "
                 WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
@@ -1007,7 +1017,7 @@ int log_server_init() {
     }
 
     inbound_sa.sin_family = AF_INET;
-    inbound_sa.sin_port = htons(admin_listen_port);
+    inbound_sa.sin_port = htons((wolfsentry_port_t)admin_listen_port);
 
     inbound_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (inbound_fd < 0) {
@@ -1045,7 +1055,7 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
     const char *http_code_description = NULL, *http_code_explanation = NULL;
     int resp_len, ret;
 
-    static const struct { int code; char *description; char *explanation; } http_codes[] = {
+    static const struct { int code; const char *description; const char *explanation; } http_codes[] = {
         { 200, "OK", "Operation succeeded\n" },
         { 403, "Forbidden", "Authorization denied.\n" },
         { 404, "Not Found", "Requested path not recognized.\n" },
@@ -1063,22 +1073,22 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
         http_code_description = "Unknown code";
 
     if (gmtime_r(&now, &now_tm) == NULL) {
-        fprintf(stderr, "gmtime_r failed\n");
+        fprintf(stderr, "ERROR: gmtime_r failed\n");
         return -1;
     }
 
     now_formatted_len = strftime(now_formatted, sizeof now_formatted, "%a, %d %h %Y %H:%M:%S %Z", &now_tm);
     if (now_formatted_len == 0) {
-        fprintf(stderr, "strftime failed\n");
+        fprintf(stderr, "ERROR: strftime failed\n");
         return -1;
     }
 
     if ((content_length < 0) && body)
-        content_length = strlen(body);
+        content_length = (ssize_t)strlen(body);
 
     if ((content_length == 0) && http_code_explanation) {
         content_type = "text/plain";
-        content_length = strlen(http_code_explanation);
+        content_length = (ssize_t)strlen(http_code_explanation);
         body = http_code_explanation;
     } else if (! body)
         body = "";
@@ -1094,7 +1104,7 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
                         content_type ? content_type : "",
                         body);
     if (resp_len > (int)http_buf_size) {
-        fprintf(stderr, "overrun averted while formatting header, " \
+        fprintf(stderr, "ERROR: overrun averted while formatting header, " \
             "http_buf_size = %zu, needed = %d\n", http_buf_size, resp_len);
         return -1;
     }
@@ -1126,7 +1136,7 @@ static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
     /* open file (read-only binary) */
     lFile = fopen(fname, "rb");
     if (!lFile) {
-        fprintf(stderr, "Error loading %s\n", fname);
+        fprintf(stderr, "ERROR: while loading %s: %s\n", fname, strerror(errno));
         return -1;
     }
 
@@ -1139,7 +1149,7 @@ static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
         if (*buf == NULL) {
             ret = MEMORY_E;
             fprintf(stderr,
-                    "Error allocating %lu bytes\n", (unsigned long)*bufLen);
+                    "ERROR: while allocating %lu bytes: %s\n", (unsigned long)*bufLen, strerror(errno));
         }
         else {
             size_t readLen = fread(*buf, *bufLen, 1, lFile);
@@ -1178,7 +1188,6 @@ static void handle_interrupt(int sig) {
 
 int main(int argc, char **argv) {
     wolfsentry_errcode_t ret;
-    size_t circlog_size;
     char *http_buf = NULL;
     size_t http_buf_size = 0, http_buf_len;
     static const struct io_ctx io_ctx = { 1000 }; /* timeout = 1 second */
@@ -1202,25 +1211,25 @@ int main(int argc, char **argv) {
     }
 
 #ifdef DEBUG_TLS
-    printf("log_server SSL init\n");
+    fprintf(stderr, "log_server SSL init\n");
 #endif
     if (ssl_init() < 0)
         exit(1);
 
 #ifdef DEBUG_HTTP
-    printf("Sentry init\n");
+    fprintf(stderr, "Sentry init\n");
 #endif
 
     ret = wolfsentry_user_source_string_set(WOLFSENTRY_SOURCE_ID, __FILE__);
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_user_source_string_set() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "ERROR: wolfsentry_user_source_string_set() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
     }
 
     /* load configuration */
     for (i=1; i<argc; i+=2) {
         if (argc < i+2) {
-            fprintf(stderr,"%s: missing argument to \"%s\"\n", argv[0], argv[i]);
+            fprintf(stderr,"ERROR: %s: missing argument to \"%s\"\n", argv[0], argv[i]);
             exit(1);
         }
         if (! strcmp(argv[i],"--config")) {
@@ -1235,7 +1244,7 @@ int main(int argc, char **argv) {
         else if (! strcmp(argv[i],"--redlist")) {
         }
         else {
-            fprintf(stderr,"%s: unrecognized argument \"%s\"\n",argv[0],argv[i]);
+            fprintf(stderr,"ERROR: %s: unrecognized argument \"%s\"\n",argv[0],argv[i]);
             exit(1);
         }
     }
@@ -1243,7 +1252,7 @@ int main(int argc, char **argv) {
 #ifndef NO_FILESYSTEM
     printf("Loading configuration file %s\n", wolfsentry_configfile);
     if (load_file(wolfsentry_configfile, &wolfsentry_config_data, &wolfsentry_config_data_sz) != 0) {
-        fprintf(stderr, "Error loading configuration file %s\n", wolfsentry_configfile);
+        fprintf(stderr, "ERROR: while loading configuration file %s\n", wolfsentry_configfile);
         exit(1);
     }
     (void)wolfsentry_config_data_sz;
@@ -1265,21 +1274,21 @@ int main(int argc, char **argv) {
     /* parse other arguments */
     for (i=1; i<argc; i+=2) {
         if (argc < i+2) {
-            fprintf(stderr,"%s: missing argument to \"%s\"\n",argv[0],argv[i]);
+            fprintf(stderr,"ERROR: %s: missing argument to \"%s\"\n",argv[0],argv[i]);
             exit(1);
         }
 
         if (! strcmp(argv[i],"--kv-string")) {
             char *cp = strchr(argv[i+1], '=');
             if (cp == NULL) {
-                fprintf(stderr,"%s: missing '=' in argument to %s\n",argv[0],argv[i]);
+                fprintf(stderr,"ERROR: %s: missing '=' in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
             fprintf(stderr, "\tOverride string assignment loaded: %s\n", argv[i+1]);
             ret = wolfsentry_user_value_store_string(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread), argv[i+1],
                 (int)(cp - argv[i+1]), cp + 1, WOLFSENTRY_LENGTH_NULL_TERMINATED, 1 /* overwrite_p */);
             if (ret < 0) {
-                fprintf(stderr, "wolfsentry_user_value_store_string(): " \
+                fprintf(stderr, "ERROR: wolfsentry_user_value_store_string(): " \
                     WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
                 exit(1);
             }
@@ -1289,18 +1298,18 @@ int main(int argc, char **argv) {
             uint64_t the_int;
             char *end_of_the_int;
             if (cp == NULL) {
-                fprintf(stderr,"%s: missing '=' in argument to %s\n",argv[0],argv[i]);
+                fprintf(stderr,"ERROR: %s: missing '=' in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
             the_int = strtoul(cp+1, &end_of_the_int, 0);
             if ((*end_of_the_int != 0) || (end_of_the_int == cp+1)) {
-                fprintf(stderr,"%s: bad numeric argument to %s: \"%s\"\n",argv[0],cp+1,argv[i]);
+                fprintf(stderr,"ERROR: %s: bad numeric argument to %s: \"%s\"\n",argv[0],cp+1,argv[i]);
                 exit(1);
             }
             fprintf(stderr, "\tOverride int assignment loaded: %s (%llu)\n", argv[i+1], (unsigned long long int)the_int);
             ret = wolfsentry_user_value_store_uint(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread), argv[i+1], (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {
-                fprintf(stderr, "wolfsentry_user_value_store_string(): " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                fprintf(stderr, "ERROR: wolfsentry_user_value_store_string(): " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
                 exit(1);
             }
         }
@@ -1310,7 +1319,7 @@ int main(int argc, char **argv) {
             int json_len;
             char err_buf[1024];
             if (cp == NULL) {
-                fprintf(stderr,"%s: missing '/' (prefix length introducer) in argument to %s\n",argv[0],argv[i]);
+                fprintf(stderr,"ERROR: %s: missing '/' (prefix length introducer) in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
             json_len = snprintf((char *)json_buf, sizeof(json_buf),
@@ -1338,13 +1347,13 @@ int main(int argc, char **argv) {
 
             ret = wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
                                                 json_buf,
-                                                json_len,
+                                                 (size_t)json_len,
                                                 WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH,
                                                 err_buf,
                                                 sizeof err_buf);
 
             if (ret < 0) {
-                fprintf(stderr, "wolfsentry_config_json_oneshot(): %s\n",err_buf);
+                fprintf(stderr, "ERROR: wolfsentry_config_json_oneshot(): %s\n",err_buf);
                 return ret;
             }
         }
@@ -1354,7 +1363,7 @@ int main(int argc, char **argv) {
             int json_len;
             char err_buf[1024];
             if (cp == NULL) {
-                fprintf(stderr,"%s: missing '/' (prefix length introducer) in argument to %s\n",argv[0],argv[i]);
+                fprintf(stderr,"ERROR: %s: missing '/' (prefix length introducer) in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
             json_len = snprintf((char *)json_buf, sizeof json_buf,
@@ -1381,14 +1390,14 @@ int main(int argc, char **argv) {
                 (int)(cp - argv[i+1]), argv[i+1], cp+1);
 
             ret = wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
-                                                json_buf,
-                                                json_len,
-                                                WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH,
-                                                err_buf,
-                                                sizeof err_buf);
+                                                 json_buf,
+                                                 (size_t)json_len,
+                                                 WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH,
+                                                 err_buf,
+                                                 sizeof err_buf);
 
             if (ret < 0) {
-                fprintf(stderr, "wolfsentry_config_json_oneshot(): %s\n",err_buf);
+                fprintf(stderr, "ERROR: wolfsentry_config_json_oneshot(): %s\n",err_buf);
                 return ret;
             }
         }
@@ -1399,18 +1408,17 @@ int main(int argc, char **argv) {
         "circlog-size",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &circlog_size_uint64);
-    circlog_size = (size_t)circlog_size_uint64;
     if (ret < 0) {
-        fprintf(stderr, "%s L%d: wolfsentry_user_value_get_string(\"circlog-size\") returned "
+        fprintf(stderr, "ERROR: %s L%d: wolfsentry_user_value_get_string(\"circlog-size\") returned "
                 WOLFSENTRY_ERROR_FMT "\n",
                 __FILE__, __LINE__,
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
     }
 
-    ret = circlog_init(circlog_size);
+    ret = circlog_init((size_t)circlog_size_uint64);
     if (ret < 0) {
-        fprintf(stderr, "circlog_init() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "ERROR: circlog_init() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
     }
 
@@ -1424,7 +1432,7 @@ int main(int argc, char **argv) {
 
     ret = circlog_enqueue_one(strlen(text_s), &msg_buf);
     if (ret < 0) {
-        fprintf(stderr, " %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
     }
 
@@ -1432,11 +1440,11 @@ int main(int argc, char **argv) {
 
     ret = circlog_dequeue_one(&msg);
     if (ret < 0) {
-        fprintf(stderr, " %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
     }
 
-    printf("%.*s\n",(int)msg->len,msg->msg_buf);
+    fprintf(stderr, "%.*s\n",(int)msg->len,msg->msg_buf);
 
     fprintf(stderr,"circlog_head=%zu circlog_tail=%zu\n",circlog_head,circlog_tail);
 
@@ -1445,7 +1453,7 @@ int main(int argc, char **argv) {
 
         ret = circlog_enqueue_one(strlen(text_s), &msg_buf);
         if (ret < 0) {
-            fprintf(stderr, " %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
             exit(1);
         }
 
@@ -1456,12 +1464,12 @@ int main(int argc, char **argv) {
 
         ret = circlog_dequeue_one(&msg);
         if (ret < 0) {
-            fprintf(stderr, " %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
             exit(1);
         }
 
         if (((size_t)msg->len != strlen(text_s)) || (memcmp(msg->msg_buf, text_s, msg->len) != 0)) {
-            fprintf(stderr, "circlog msg doesn't match what went in, i=%d msg->len=%u circlog_head_after_enqueue=%zu circlog_tail_after_enqueue=%zu circlog_head=%zu circlog_tail=%zu.\n",i,msg->len,circlog_head_after_enqueue,circlog_tail_after_enqueue,circlog_head,circlog_tail);
+            fprintf(stderr, "ERROR: circlog msg doesn't match what went in, i=%d msg->len=%u circlog_head_after_enqueue=%zu circlog_tail_after_enqueue=%zu circlog_head=%zu circlog_tail=%zu.\n",i,msg->len,circlog_head_after_enqueue,circlog_tail_after_enqueue,circlog_head,circlog_tail);
             exit(1);
         }
     }
@@ -1493,7 +1501,6 @@ int main(int argc, char **argv) {
         struct sockaddr_in client_addr;
         socklen_t client_len;
         struct wolfsentry_data *wolfsentry_data = NULL;
-        int ret;
 #ifdef HTTP_NONBLOCKING
         int retry;
 #endif
@@ -1521,7 +1528,7 @@ int main(int argc, char **argv) {
 
         app_data = (struct log_server_data *)XMALLOC(sizeof *app_data, NULL /* heap */, DYNAMIC_TYPE_TMP_BUFFER);
         if (app_data == NULL) {
-            fprintf(stderr,"%s L%d: XMALLOC(%zu) failed: %s\n", __FILE__, __LINE__, sizeof *app_data, strerror(errno));
+            fprintf(stderr,"ERROR: %s L%d: XMALLOC(%zu) failed: %s\n", __FILE__, __LINE__, sizeof *app_data, strerror(errno));
             notnormal = 1;
             running = 0;
             goto ssl_shutdown;
@@ -1532,7 +1539,7 @@ int main(int argc, char **argv) {
 
         ret = wolfSSL_set_fd(ssl, peer_fd);
         if (ret != WOLFSSL_SUCCESS) {
-            fprintf(stderr,"SSL_set_fd() failed: %s\n", wolfSSL_ERR_reason_error_string(ret));
+            fprintf(stderr,"ERROR: SSL_set_fd() failed: %s\n", wolfSSL_ERR_reason_error_string(ret));
             notnormal = 1;
             running = 0;
             goto ssl_shutdown;
@@ -1555,7 +1562,7 @@ int main(int argc, char **argv) {
         ret = wolfsentry_store_endpoints(ssl, &client_addr, &server_addr, IPPROTO_TCP,
                                          WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN, &wolfsentry_data);
         if (ret < 0) {
-            fprintf(stderr, "wolfsentry_store_endpoints() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            fprintf(stderr, "ERROR: wolfsentry_store_endpoints() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
             notnormal = 1;
             running = 0;
             goto ssl_shutdown;
@@ -1580,7 +1587,7 @@ int main(int argc, char **argv) {
 
         if (ret != WOLFSSL_SUCCESS) {
             wolfsentry_data->ssl_error = wolfSSL_get_error(ssl, ret);
-            fprintf(stderr, "wolfSSL_accept ret = %d, error = %d (%s), sub-error = %d (%s)\n",
+            fprintf(stderr, "ERROR: wolfSSL_accept ret = %d, error = %d (%s), sub-error = %d (%s)\n",
                     ret, wolfSSL_get_error(ssl, ret), wolfSSL_ERR_reason_error_string(wolfSSL_get_error(ssl, ret)),
                     app_data->error_code, wolfSSL_ERR_reason_error_string(app_data->error_code));
             goto ssl_shutdown;
@@ -1588,7 +1595,7 @@ int main(int argc, char **argv) {
 
         /* sanity check */
         if (app_data->issuer_cert == NULL) {
-            fprintf(stderr, "%s L%d app_data->issuer_cert is null!\n",__FILE__,__LINE__);
+            fprintf(stderr, "ERROR: %s L%d app_data->issuer_cert is null!\n",__FILE__,__LINE__);
             goto ssl_shutdown;
         }
 
@@ -1603,10 +1610,10 @@ int main(int argc, char **argv) {
 #endif
         for (;;) {
             if (http_buf_len >= http_buf_size - 1) {
-                fprintf(stderr, "overlong client payload\n");
+                fprintf(stderr, "ERROR: overlong client payload\n");
                 goto ssl_shutdown;
             }
-            ret = wolfSSL_read(ssl, http_buf + http_buf_len, http_buf_size - http_buf_len - 1);
+            ret = wolfSSL_read(ssl, http_buf + http_buf_len, (int)(http_buf_size - http_buf_len - 1));
             if (! running)
                 goto ssl_shutdown;
             if (ret < 0) {
@@ -1652,7 +1659,7 @@ int main(int argc, char **argv) {
 
         if (strncmp(http_buf, "GET ", 4) != 0) {
 #ifdef DEBUG_HTTP
-            fprintf(stderr, "%s L%d non-GET request\n", __FILE__, __LINE__);
+            fprintf(stderr, "ERROR: %s L%d non-GET request\n", __FILE__, __LINE__);
 #endif
             goto ssl_shutdown;
         }
@@ -1660,7 +1667,7 @@ int main(int argc, char **argv) {
         url_end = memchr(http_buf + 4, ' ', http_buf_len - 4);
         if ((url_end == NULL) || (url_end == http_buf + 4)) {
 #ifdef DEBUG_HTTP
-            fprintf(stderr, "%s L%d malformed request\n", __FILE__, __LINE__);
+            fprintf(stderr, "ERROR: %s L%d malformed request\n", __FILE__, __LINE__);
 #endif
             goto ssl_shutdown;
         }
@@ -1669,7 +1676,7 @@ int main(int argc, char **argv) {
 
         if (strncmp(url_end+1, "HTTP/", 5) != 0) {
 #ifdef DEBUG_HTTP
-            fprintf(stderr, "%s L%d unexpected protocol\n", __FILE__, __LINE__);
+            fprintf(stderr, "ERROR: %s L%d unexpected protocol\n", __FILE__, __LINE__);
 #endif
             goto ssl_shutdown;
         }
@@ -1745,7 +1752,7 @@ int main(int argc, char **argv) {
                 size_t this_out_len;
                 ret = circlog_format_one(msg_i, NULL /* char **out */, &this_out_len);
                 if (ret < 0) {
-                    fprintf(stderr, " %s L%d circlog_format_one() for size failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                    fprintf(stderr, "ERROR: %s L%d circlog_format_one() for size failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
                     goto ssl_shutdown;
                 }
                 total_msg_len += this_out_len + 2; /* +2 for the ",\n" or "\n]" */
@@ -1758,7 +1765,7 @@ int main(int argc, char **argv) {
 
             transaction_successful = 1;
 
-            if (http_write_header(ssl, http_buf, http_buf_size, 200, total_msg_len, "application/json", NULL) < 0)
+            if (http_write_header(ssl, http_buf, http_buf_size, 200, (ssize_t)total_msg_len, "application/json", NULL) < 0)
                 goto ssl_shutdown;
 
             /* option to dump rule counts? */
@@ -1789,7 +1796,7 @@ int main(int argc, char **argv) {
                         if (ret < 0) {
                             if (WOLFSENTRY_ERROR_CODE_IS(ret, BUFFER_TOO_SMALL)) {
                                 if (http_buf_size - out_space <= strlen(",\n")) {
-                                    fprintf(stderr,"%s L%d msg won't fit in http_buf!\n",__FILE__,__LINE__);
+                                    fprintf(stderr,"ERROR: %s L%d msg won't fit in http_buf!\n",__FILE__,__LINE__);
                                     goto ssl_shutdown;
                                 }
                             flush_now:
@@ -1802,7 +1809,7 @@ int main(int argc, char **argv) {
                                 out_space = http_buf_size;
                                 continue;
                             } else {
-                                fprintf(stderr, " %s L%d circlog_format_one() failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                                fprintf(stderr, "ERROR: %s L%d circlog_format_one() failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
                                 goto ssl_shutdown;
                             }
                         }
@@ -1849,7 +1856,7 @@ int main(int argc, char **argv) {
                 WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_time_now_plus_delta(global_wolfsentry, 0 /* td */, &now));
                 WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_time_to_timespec(global_wolfsentry, now - m.insert_time, &age));
                 if (m.purge_after)
-                    (void)wolfsentry_time_to_timespec(global_wolfsentry, m.purge_after - now, &purge_after);
+                    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_time_to_timespec(global_wolfsentry, m.purge_after - now, &purge_after));
                 else
                     purge_after.tv_sec = 0;
                 fprintf(stderr,"%s L%d wolfsentry_data->rule_route_id = %u, derog = %u, commend = %u, hits = %u, age = %lds, purge_after=+%lds\n", __FILE__, __LINE__,
@@ -1870,7 +1877,7 @@ int main(int argc, char **argv) {
                                                                    wolfsentry_data->rule_route, "transaction-successful",
                                                                    WOLFSENTRY_LENGTH_NULL_TERMINATED, wolfsentry_data, &action_results);
                     if (ret < 0) {
-                        fprintf(stderr, "wolfsentry_route_event_dispatch_by_id() returned "
+                        fprintf(stderr, "ERROR: wolfsentry_route_event_dispatch_by_id() returned "
                                 WOLFSENTRY_ERROR_FMT "\n",
                                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
                     }
@@ -1892,11 +1899,11 @@ int main(int argc, char **argv) {
                     ret = wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),
                                                           wolfsentry_data->rule_route, &action_results);
 #ifdef DEBUG_WOLFSENTRY
-                    fprintf(stderr,"%s L%d rule_route=%p action_results=0%o\n",
-                            __FILE__, __LINE__, wolfsentry_data->rule_route, action_results);
+                    fprintf(stderr,"%s L%d drop_reference rule_route=%p rule_route_id=%u action_results=0%o\n",
+                            __FILE__, __LINE__, wolfsentry_data->rule_route, wolfsentry_data->rule_route_id, action_results);
 #endif
                     if (ret < 0) {
-                        fprintf(stderr, "wolfsentry_route_drop_reference() returned "
+                        fprintf(stderr, "ERROR: wolfsentry_route_drop_reference() returned "
                                 WOLFSENTRY_ERROR_FMT "\n",
                                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
                         exit(1);
@@ -1927,7 +1934,7 @@ int main(int argc, char **argv) {
 #endif /* HTTP_NONBLOCKING */
 
             if (ret < 0) {
-                fprintf(stderr, "wolfSSL_shutdown() returned code %d %s\n",
+                fprintf(stderr, "ERROR: wolfSSL_shutdown() returned code %d %s\n",
                         ret, wolfSSL_ERR_reason_error_string(ret));
             }
         }
@@ -1948,7 +1955,7 @@ int main(int argc, char **argv) {
 
     ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&global_wolfsentry, global_thread));
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT,
+        fprintf(stderr, "ERROR: wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT,
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         notnormal = 1;
     }
@@ -1956,7 +1963,7 @@ int main(int argc, char **argv) {
 #ifdef WOLFSENTRY_THREADSAFE
     ret = wolfsentry_destroy_thread_context(global_thread, WOLFSENTRY_THREAD_FLAG_NONE);
     if (ret < 0) {
-        fprintf(stderr, "%s: thread shutdown failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "ERROR: %s: thread shutdown failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(ret));
         notnormal = 1;
     }
 #endif

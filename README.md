@@ -13,6 +13,13 @@ The wolfSentry engine is dynamically configurable programmatically through an AP
 Notably, wolfSentry is designed from the ground up to function well in resource-constrained, bare-metal, and realtime environments, with algorithms to stay within designated maximum memory footprints and maintain deterministic throughput. Opportunities include embedded IDPS on such common embedded targets as FreeRTOS, Nucleus, NUTTX, Zephyr, VxWorks, and Green Hills Integrity, and IDPS for ARM silicon and other common deeply embedded CPUs and MCUs.  wolfSentry with dynamic firewalling can add as little as 64k to the code footprint, and 32k to the volatile state footprint, and can fully leverage the existing logic and state of applications and sibling libraries.
 
 
+## Documentation
+
+Basic application integration on FreeRTOS-lwIP is documented, with usable code fragments, by [doc/freertos-lwip-app.md](doc/freertos-lwip-app.md).
+
+The JSON configuration blob is documented in detail by [doc/json_configuration.md](doc/json_configuration.md).
+
+
 ## Dependencies
 
 In its default build, wolfSentry depends on a POSIX runtime, specifically the
@@ -80,13 +87,6 @@ Build for FreeRTOS on ARM32, assuming FreeRTOS and lwIP source trees are located
 `make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00 LWIP_TOP=../third/lwip EXTRA_CFLAGS='-mcpu=cortex-m7'`
 
 
-## Documentation
-
-Basic application integration on FreeRTOS-lwIP is documented, with usable code fragments, by [doc/freertos-lwip-app.md](doc/freertos-lwip-app.md).
-
-The JSON configuration blob is documented in detail by [doc/json_configuration.md](doc/json_configuration.md).
-
-
 ## Examples
 
 In [the wolfSSL repository](https://github.com/wolfSSL/wolfssl), see code in
@@ -115,4 +115,5 @@ Linux D-Bus facility.
 
 ## Change Log
 
-The latest changes and additions are noted in ChangeLog.md at the top of the repository.
+The latest changes and additions are noted in the [ChangeLog.md](ChangeLog.md)
+at the top of the repository.

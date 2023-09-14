@@ -49,28 +49,32 @@ enum wolfsentry_rwlock_state {
 struct wolfsentry_rwlock {
     const struct wolfsentry_host_platform_interface *hpi;
     sem_t sem;
-    sem_t sem_read_waiters;
-    sem_t sem_write_waiters;
-    sem_t sem_read2write_waiters;
     volatile wolfsentry_thread_id_t write_lock_holder;
-    volatile wolfsentry_thread_id_t read2write_reservation_holder;
     union {
         volatile int read;
         volatile int write;
     } holder_count;
+    volatile enum wolfsentry_rwlock_state state;
+    wolfsentry_lock_flags_t flags;
+    volatile wolfsentry_thread_id_t read2write_reservation_holder;
     volatile int read_waiter_count;
     volatile int write_waiter_count;
     volatile int read2write_waiter_read_count; /* the recursion depth of the shared lock held by read2write_reservation_holder */
-    volatile enum wolfsentry_rwlock_state state;
     volatile int promoted_at_count;
-    wolfsentry_lock_flags_t flags;
+    /* each sem_t is 32 bytes -- move these to the end (out of the first cache line) since they won't be accessed in uncontended scenarios. */
+    sem_t sem_read_waiters;
+    sem_t sem_write_waiters;
+    sem_t sem_read2write_waiters;
 };
+
+struct wolfsentry_thread_cache;
 
 struct wolfsentry_thread_context {
     wolfsentry_thread_id_t id;
     void *user_context;
     struct timespec deadline;
     wolfsentry_thread_flags_t current_thread_flags;
+    int recursion_of_tracked_lock; /* recursion count for outermost_shared_lock/current_shared_lock -- 1 if locked only once. */
     struct wolfsentry_rwlock *tracked_shared_lock; /* if !_THREAD_FLAG_READONLY,
                                             * locker can have shared lock(s) only
                                             * for this lock.  if another shared lock is
@@ -79,9 +83,9 @@ struct wolfsentry_thread_context {
                                             * be demoted only if it matches
                                             * current_shared_lock, or current_shared_lock is null.
                                             */
-    int recursion_of_tracked_lock; /* recursion count for outermost_shared_lock/current_shared_lock -- 1 if locked only once. */
     int shared_count; /* total count of shared locks held */
     int mutex_and_reservation_count;
+    struct wolfsentry_thread_cache *cache; /* future expansion, to be dynamically allocated */
 };
 
 #define WOLFSENTRY_THREAD_GET_ID (thread ? thread->id : WOLFSENTRY_THREAD_GET_ID_HANDLER())
@@ -106,34 +110,48 @@ static_assert(sizeof(struct wolfsentry_thread_context_public) >= sizeof(struct w
 static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof__(struct wolfsentry_thread_context), "alignment of wolfsentry_thread_context_public is too small for wolfsentry_thread_context");
 #endif
 
+#define WOLFSENTRY_HAVE_MUTEX_EX(ctx)                           \
+    wolfsentry_lock_have_mutex(                                 \
+        &(ctx)->lock,                                           \
+        thread,                                                 \
+        WOLFSENTRY_LOCK_FLAG_NONE)
+
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) do {            \
         wolfsentry_errcode_t _lock_ret =                        \
-          wolfsentry_lock_have_mutex(                           \
-            &(ctx)->lock,                                       \
-            thread,                                             \
-            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+            WOLFSENTRY_HAVE_MUTEX_EX(ctx);                      \
         WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
+
+#define WOLFSENTRY_HAVE_MUTEX() WOLFSENTRY_HAVE_MUTEX_EX(wolfsentry)
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(wolfsentry)
 
-#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(ctx) do {           \
-        wolfsentry_errcode_t _lock_ret =                        \
+#define WOLFSENTRY_HAVE_SHLOCK_EX(ctx)                          \
           wolfsentry_lock_have_shared(                          \
             &(ctx)->lock,                                       \
             thread,                                             \
-            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+            WOLFSENTRY_LOCK_FLAG_NONE)
+
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(ctx) do {           \
+        wolfsentry_errcode_t _lock_ret =                        \
+            WOLFSENTRY_HAVE_SHLOCK_EX(ctx);                     \
         WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
+
+#define WOLFSENTRY_HAVE_SHLOCK() WOLFSENTRY_HAVE_SHLOCK_EX(wolfsentry)
 #define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(wolfsentry)
+
+#define WOLFSENTRY_HAVE_A_LOCK_EX(ctx) wolfsentry_lock_have_either(\
+        &(ctx)->lock,                                           \
+        thread,                                                 \
+        WOLFSENTRY_LOCK_FLAG_NONE)
 
 #define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(ctx) do {           \
         wolfsentry_errcode_t _lock_ret =                        \
-          wolfsentry_lock_have_either(                          \
-            &(ctx)->lock,                                       \
-            thread,                                             \
-            WOLFSENTRY_LOCK_FLAG_NONE);                         \
+            WOLFSENTRY_HAVE_A_LOCK_EX(ctx);                     \
         WOLFSENTRY_RERETURN_IF_ERROR(_lock_ret);                \
     } while (0)
+
+#define WOLFSENTRY_HAVE_A_LOCK() WOLFSENTRY_HAVE_A_LOCK_EX(wolfsentry)
 #define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(wolfsentry)
 
 #else /* !WOLFSENTRY_THREADSAFE */
@@ -141,12 +159,18 @@ static_assert(__alignof__(struct wolfsentry_thread_context_public) >= __alignof_
 #define WOLFSENTRY_THREAD_ASSERT_INITED(thread) DO_NOTHING
 #define WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread) DO_NOTHING
 
+#define WOLFSENTRY_HAVE_MUTEX_EX(ctx) ((void)ctx, 0)
 #define WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(ctx) (void)(ctx)
-#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_MUTEX() WOLFSENTRY_HAVE_MUTEX_EX(wolfsentry)
+#define WOLFSENTRY_HAVE_MUTEX_OR_RETURN() WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(wolfsentry)
+#define WOLFSENTRY_HAVE_SHLOCK_ex(ctx) ((void)ctx, 0)
+#define WOLFSENTRY_HAVE_SHLOCK WOLFSENTRY_HAVE_SHLOCK_EX(wolfsentry)
 #define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(ctx) (void)(ctx)
-#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_SHLOCK_OR_RETURN() WOLFSENTRY_HAVE_SHLOCK_OR_RETURN_EX(wolfsentry)
+#define WOLFSENTRY_HAVE_A_LOCK_EX(ctx) ((void)ctx, 0)
 #define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(ctx) (void)(ctx)
-#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() (void)wolfsentry
+#define WOLFSENTRY_HAVE_A_LOCK() WOLFSENTRY_HAVE_A_LOCK_EX(wolfsentry)
+#define WOLFSENTRY_HAVE_A_LOCK_OR_RETURN() WOLFSENTRY_HAVE_A_LOCK_OR_RETURN_EX(wolfsentry)
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
@@ -183,14 +207,16 @@ struct wolfsentry_table_ent_header
     struct wolfsentry_table_ent_header *prev_by_id, *next_by_id; /* these will be replaced by red-black table elements later. */
     wolfsentry_hitcount_t hitcount;
     wolfsentry_ent_id_t id;
-    uint32_t padding1;
+    uint32_t _pad1;
     wolfsentry_refcount_t refcount;
 };
 
+/* note this does not reset the object ID. */
 #define WOLFSENTRY_TABLE_ENT_HEADER_RESET(ent) do {                           \
         (ent).parent_table = NULL;                                            \
         (ent).prev = (ent).next = (ent).prev_by_id = (ent).next_by_id = NULL; \
-        (ent).refcount = 1; }                                                 \
+        (ent).refcount = 1;                                                   \
+        (ent)._pad1 = 0; }                                                    \
     while (0)
 
 struct wolfsentry_context;
@@ -286,23 +312,24 @@ struct wolfsentry_eventconfig_internal {
 struct wolfsentry_event {
     struct wolfsentry_table_ent_header header;
 
+    wolfsentry_priority_t priority;
     wolfsentry_event_flags_t flags;
 
     struct wolfsentry_eventconfig_internal *config;
 
-    struct wolfsentry_action_list post_action_list; /* in parent/trigger events, this decides whether to insert the route, and/or updates route state.
-                                              * in child events, this does the work described immediately below.
-                                              */
-
+    struct wolfsentry_action_list post_action_list;
     struct wolfsentry_action_list insert_action_list;
     struct wolfsentry_action_list match_action_list;
     struct wolfsentry_action_list update_action_list;
     struct wolfsentry_action_list delete_action_list;
     struct wolfsentry_action_list decision_action_list;
 
-    struct wolfsentry_event *aux_event; /* plugins that insert new routes can use this as parent, and autoinserted routes via WOLFSENTRY_ACTION_RES_INSERT use this. */
+    struct wolfsentry_event *aux_event; /* plugins that insert new routes can
+                                         * use this as parent, to separate
+                                         * policy for the generator route from
+                                         * policy for the ephemeral route.
+                                         */
 
-    wolfsentry_priority_t priority;
 
     byte label_len;
     char label[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE];
@@ -314,9 +341,6 @@ struct wolfsentry_event_table {
 
 struct wolfsentry_route {
     struct wolfsentry_table_ent_header header;
-
-    struct wolfsentry_list_ent_header purge_links;
-#define WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(purge_link) container_of(purge_link, struct wolfsentry_route, purge_links)
 
     struct wolfsentry_event *parent_event; /* applicable config is parent_event->config or if null, wolfsentry->config */
 
@@ -339,7 +363,11 @@ struct wolfsentry_route {
         uint16_t connection_count;
         uint16_t derogatory_count;
         uint16_t commendable_count;
+        uint16_t _pad1;
     } meta;
+
+    struct wolfsentry_list_ent_header purge_links;
+#define WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(purge_link) container_of(purge_link, struct wolfsentry_route, purge_links)
 
     uint16_t data[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE]; /* first the caller's private data area (if any),
                    * then the remote addr in big endian padded up to
@@ -386,9 +414,9 @@ struct wolfsentry_kv_table {
 struct wolfsentry_addr_family_bynumber {
     struct wolfsentry_table_ent_header header;
     wolfsentry_addr_family_t number;
+    wolfsentry_addr_bits_t max_addr_bits;
     wolfsentry_addr_family_parser_t parser;
     wolfsentry_addr_family_formatter_t formatter;
-    wolfsentry_addr_bits_t max_addr_bits;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     struct wolfsentry_addr_family_byname *byname_ent; /* 1:1 mapping between _bynumber and _byname tables */
 #endif
@@ -560,7 +588,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_table_clone_headers
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_header *table, int unique_p);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table, struct wolfsentry_table_ent_header **ent);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header **ent);
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent);
@@ -743,10 +770,12 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_load(
     struct wolfsentry_eventconfig_internal *internal);
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_eventconfig_internal *internal,
     struct wolfsentry_eventconfig *exported);
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_update_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal);
 

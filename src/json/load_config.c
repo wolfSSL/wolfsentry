@@ -448,7 +448,7 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
         wolfsentry_errcode_t ret;
         if (jps->table_under_construction != T_U_C_TOPCONFIG)
             WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
-        ret = wolfsentry_defaultconfig_update(jps->wolfsentry, &jps->default_config);
+        ret = wolfsentry_defaultconfig_update(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, &jps->default_config);
         jps->table_under_construction = T_U_C_NONE;
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if (jps->default_policy) {
@@ -467,7 +467,7 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
     if (! strcmp(jps->cur_keyname, "route-idle-time-for-purge"))
         WOLFSENTRY_ERROR_RERETURN(convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->route_idle_time_for_purge));
     if (! strcmp(jps->cur_keyname, "derog-thresh-for-penalty-boxing"))
-        WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox));
+        WOLFSENTRY_ERROR_RERETURN(convert_uint32(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox));
     if (! strcmp(jps->cur_keyname, "derog-thresh-ignore-commendable"))
         WOLFSENTRY_ERROR_RERETURN(convert_eventconfig_flag(type, &eventconfig->flags, WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE));
     if (! strcmp(jps->cur_keyname, "commendable-clears-derogatory"))
@@ -1655,7 +1655,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     }
 
     /* initialize with defaults already set in context, particularly to pick up route_private_data* fields. */
-    ret = wolfsentry_defaultconfig_get((*jps)->wolfsentry, &(*jps)->default_config);
+    ret = wolfsentry_defaultconfig_get(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT, &(*jps)->default_config);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {

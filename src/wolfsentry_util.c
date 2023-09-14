@@ -20,7 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#define DEFINE_WOLFSENTRY_BUILD_SETTINGS
+#define WOLFSENTRY_DEFINE_BUILD_SETTINGS
 #include "wolfsentry_internal.h"
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_WOLFSENTRY_UTIL_C
@@ -77,7 +77,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t
         if (user_defined_sources[i - WOLFSENTRY_SOURCE_ID_USER_BASE])
             return user_defined_sources[i - WOLFSENTRY_SOURCE_ID_USER_BASE];
         else
-            return "user defined source";
+            return "unknown user defined source";
     } else
         return "unknown source";
 }
@@ -85,14 +85,14 @@ WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t
 static const char *user_defined_errors[WOLFSENTRY_ERROR_ID_MAX - WOLFSENTRY_ERROR_ID_USER_BASE + 1] = {0};
 static const char *user_defined_successes[WOLFSENTRY_ERROR_ID_MAX + WOLFSENTRY_SUCCESS_ID_USER_BASE + 1] = {0};
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *error_string) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *message_string) {
     if (wolfsentry_error_id < 0) {
         if ((wolfsentry_error_id > WOLFSENTRY_ERROR_ID_USER_BASE) || (wolfsentry_error_id < -WOLFSENTRY_ERROR_ID_MAX))
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         else if (user_defined_errors[-(wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE)] != NULL)
             WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
         else {
-            user_defined_errors[-(wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE)] = error_string;
+            user_defined_errors[-(wolfsentry_error_id - WOLFSENTRY_ERROR_ID_USER_BASE)] = message_string;
             WOLFSENTRY_RETURN_OK;
         }
     } else {
@@ -101,7 +101,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfse
         else if (user_defined_successes[wolfsentry_error_id - WOLFSENTRY_SUCCESS_ID_USER_BASE] != NULL)
             WOLFSENTRY_ERROR_RETURN(ITEM_ALREADY_PRESENT);
         else {
-            user_defined_successes[wolfsentry_error_id - WOLFSENTRY_SUCCESS_ID_USER_BASE] = error_string;
+            user_defined_successes[wolfsentry_error_id - WOLFSENTRY_SUCCESS_ID_USER_BASE] = message_string;
             WOLFSENTRY_RETURN_OK;
         }
     }
@@ -193,7 +193,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
     case WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH:
         return "Library built configuration is incompatible with caller";
     case WOLFSENTRY_ERROR_ID_IO_FAILED:
-        return "Input/ouput failure";
+        return "Input/output failure";
 
     case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
         return "Lock request succeeded and reserved promotion";
@@ -217,12 +217,12 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         if (user_defined_errors[-(i - WOLFSENTRY_ERROR_ID_USER_BASE)])
             return user_defined_errors[-(i - WOLFSENTRY_ERROR_ID_USER_BASE)];
         else
-            return "user defined error code";
+            return "unknown user defined error code";
     } else if (i >= WOLFSENTRY_SUCCESS_ID_USER_BASE) {
         if (user_defined_successes[i - WOLFSENTRY_SUCCESS_ID_USER_BASE])
             return user_defined_errors[i - WOLFSENTRY_SUCCESS_ID_USER_BASE];
         else
-            return "user defined success code";
+            return "unknown user defined success code";
     } else if (i >= 0)
         return "unknown success code";
     else
@@ -234,103 +234,60 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 {
     enum wolfsentry_error_id i = (enum wolfsentry_error_id)WOLFSENTRY_ERROR_DECODE_ERROR_CODE(e);
     switch(i) {
-    case WOLFSENTRY_ERROR_ID_OK:
-        return "OK";
-    case WOLFSENTRY_ERROR_ID_NOT_OK:
-        return "NOT_OK";
-    case WOLFSENTRY_ERROR_ID_INTERNAL_CHECK_FATAL:
-        return "INTERNAL_CHECK_FATAL";
-    case WOLFSENTRY_ERROR_ID_SYS_OP_FATAL:
-        return "SYS_OP_FATAL";
-    case WOLFSENTRY_ERROR_ID_SYS_OP_FAILED:
-        return "SYS_OP_FAILED";
-    case WOLFSENTRY_ERROR_ID_SYS_RESOURCE_FAILED:
-        return "SYS_RESOURCE_FAILED";
-    case WOLFSENTRY_ERROR_ID_INCOMPATIBLE_STATE:
-        return "INCOMPATIBLE_STATE";
-    case WOLFSENTRY_ERROR_ID_TIMED_OUT:
-        return "TIMED_OUT";
-    case WOLFSENTRY_ERROR_ID_INVALID_ARG:
-        return "INVALID_ARG";
-    case WOLFSENTRY_ERROR_ID_BUSY:
-        return "BUSY";
-    case WOLFSENTRY_ERROR_ID_INTERRUPTED:
-        return "INTERRUPTED";
-    case WOLFSENTRY_ERROR_ID_NUMERIC_ARG_TOO_BIG:
-        return "NUMERIC_ARG_TOO_BIG";
-    case WOLFSENTRY_ERROR_ID_NUMERIC_ARG_TOO_SMALL:
-        return "NUMERIC_ARG_TOO_SMALL";
-    case WOLFSENTRY_ERROR_ID_STRING_ARG_TOO_LONG:
-        return "STRING_ARG_TOO_LONG";
-    case WOLFSENTRY_ERROR_ID_BUFFER_TOO_SMALL:
-        return "BUFFER_TOO_SMALL";
-    case WOLFSENTRY_ERROR_ID_IMPLEMENTATION_MISSING:
-        return "IMPLEMENTATION_MISSING";
-    case WOLFSENTRY_ERROR_ID_ITEM_NOT_FOUND:
-        return "ITEM_NOT_FOUND";
-    case WOLFSENTRY_ERROR_ID_ITEM_ALREADY_PRESENT:
-        return "ITEM_ALREADY_PRESENT";
-    case WOLFSENTRY_ERROR_ID_ALREADY_STOPPED:
-        return "ALREADY_STOPPED";
-    case WOLFSENTRY_ERROR_ID_WRONG_OBJECT:
-        return "WRONG_OBJECT";
-    case WOLFSENTRY_ERROR_ID_DATA_MISSING:
-        return "DATA_MISSING";
-    case WOLFSENTRY_ERROR_ID_NOT_PERMITTED:
-        return "NOT_PERMITTED";
-    case WOLFSENTRY_ERROR_ID_ALREADY:
-        return "ALREADY";
-    case WOLFSENTRY_ERROR_ID_CONFIG_INVALID_KEY:
-        return "CONFIG_INVALID_KEY";
-    case WOLFSENTRY_ERROR_ID_CONFIG_INVALID_VALUE:
-        return "CONFIG_INVALID_VALUE";
-    case WOLFSENTRY_ERROR_ID_CONFIG_OUT_OF_SEQUENCE:
-        return "CONFIG_OUT_OF_SEQUENCE";
-    case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
-        return "CONFIG_UNEXPECTED";
-    case WOLFSENTRY_ERROR_ID_CONFIG_MISPLACED_KEY:
-        return "CONFIG_MISPLACED_KEY";
-    case WOLFSENTRY_ERROR_ID_CONFIG_PARSER:
-        return "CONFIG_PARSER";
-    case WOLFSENTRY_ERROR_ID_CONFIG_MISSING_HANDLER:
-        return "CONFIG_MISSING_HANDLER";
-    case WOLFSENTRY_ERROR_ID_CONFIG_JSON_VALUE_SIZE:
-        return "CONFIG_JSON_VALUE_SIZE";
-    case WOLFSENTRY_ERROR_ID_OP_NOT_SUPP_FOR_PROTO:
-        return "OP_NOT_SUPP_FOR_PROTO";
-    case WOLFSENTRY_ERROR_ID_WRONG_TYPE:
-        return "WRONG_TYPE";
-    case WOLFSENTRY_ERROR_ID_BAD_VALUE:
-        return "BAD_VALUE";
-    case WOLFSENTRY_ERROR_ID_DEADLOCK_AVERTED:
-        return "DEADLOCK_AVERTED";
-    case WOLFSENTRY_ERROR_ID_OVERFLOW_AVERTED:
-        return "OVERFLOW_AVERTED";
-    case WOLFSENTRY_ERROR_ID_LACKING_MUTEX:
-        return "LACKING_MUTEX";
-    case WOLFSENTRY_ERROR_ID_LACKING_READ_LOCK:
-        return "LACKING_READ_LOCK";
-    case WOLFSENTRY_ERROR_ID_LIB_MISMATCH:
-        return "LIB_MISMATCH";
-    case WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH:
-        return "LIBCONFIG_MISMATCH";
-    case WOLFSENTRY_ERROR_ID_IO_FAILED:
-        return "IO_FAILED";
+#define _ERRNAME_TO_STRING(x) case WOLFSENTRY_ERROR_ID_ ## x: return #x
+    _ERRNAME_TO_STRING(OK);
+    _ERRNAME_TO_STRING(NOT_OK);
+    _ERRNAME_TO_STRING(INTERNAL_CHECK_FATAL);
+    _ERRNAME_TO_STRING(SYS_OP_FATAL);
+    _ERRNAME_TO_STRING(SYS_OP_FAILED);
+    _ERRNAME_TO_STRING(SYS_RESOURCE_FAILED);
+    _ERRNAME_TO_STRING(INCOMPATIBLE_STATE);
+    _ERRNAME_TO_STRING(TIMED_OUT);
+    _ERRNAME_TO_STRING(INVALID_ARG);
+    _ERRNAME_TO_STRING(BUSY);
+    _ERRNAME_TO_STRING(INTERRUPTED);
+    _ERRNAME_TO_STRING(NUMERIC_ARG_TOO_BIG);
+    _ERRNAME_TO_STRING(NUMERIC_ARG_TOO_SMALL);
+    _ERRNAME_TO_STRING(STRING_ARG_TOO_LONG);
+    _ERRNAME_TO_STRING(BUFFER_TOO_SMALL);
+    _ERRNAME_TO_STRING(IMPLEMENTATION_MISSING);
+    _ERRNAME_TO_STRING(ITEM_NOT_FOUND);
+    _ERRNAME_TO_STRING(ITEM_ALREADY_PRESENT);
+    _ERRNAME_TO_STRING(ALREADY_STOPPED);
+    _ERRNAME_TO_STRING(WRONG_OBJECT);
+    _ERRNAME_TO_STRING(DATA_MISSING);
+    _ERRNAME_TO_STRING(NOT_PERMITTED);
+    _ERRNAME_TO_STRING(ALREADY);
+    _ERRNAME_TO_STRING(CONFIG_INVALID_KEY);
+    _ERRNAME_TO_STRING(CONFIG_INVALID_VALUE);
+    _ERRNAME_TO_STRING(CONFIG_OUT_OF_SEQUENCE);
+    _ERRNAME_TO_STRING(CONFIG_UNEXPECTED);
+    _ERRNAME_TO_STRING(CONFIG_MISPLACED_KEY);
+    _ERRNAME_TO_STRING(CONFIG_PARSER);
+    _ERRNAME_TO_STRING(CONFIG_MISSING_HANDLER);
+    _ERRNAME_TO_STRING(CONFIG_JSON_VALUE_SIZE);
+    _ERRNAME_TO_STRING(OP_NOT_SUPP_FOR_PROTO);
+    _ERRNAME_TO_STRING(WRONG_TYPE);
+    _ERRNAME_TO_STRING(BAD_VALUE);
+    _ERRNAME_TO_STRING(DEADLOCK_AVERTED);
+    _ERRNAME_TO_STRING(OVERFLOW_AVERTED);
+    _ERRNAME_TO_STRING(LACKING_MUTEX);
+    _ERRNAME_TO_STRING(LACKING_READ_LOCK);
+    _ERRNAME_TO_STRING(LIB_MISMATCH);
+    _ERRNAME_TO_STRING(LIBCONFIG_MISMATCH);
+    _ERRNAME_TO_STRING(IO_FAILED);
+#undef _ERRNAME_TO_STRING
 
-    case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
-        return "LOCK_OK_AND_GOT_RESV";
-    case WOLFSENTRY_SUCCESS_ID_HAVE_MUTEX:
-        return "HAVE_MUTEX";
-    case WOLFSENTRY_SUCCESS_ID_HAVE_READ_LOCK:
-        return "HAVE_READ_LOCK";
-    case WOLFSENTRY_SUCCESS_ID_USED_FALLBACK:
-        return "USED_FALLBACK";
-    case WOLFSENTRY_SUCCESS_ID_YES:
-        return "YES";
-    case WOLFSENTRY_SUCCESS_ID_NO:
-        return "NO";
-    case WOLFSENTRY_SUCCESS_ID_ALREADY_OK:
-        return "ALREADY_OK";
+#define _SUCNAME_TO_STRING(x) case WOLFSENTRY_SUCCESS_ID_ ## x: return #x
+    _SUCNAME_TO_STRING(LOCK_OK_AND_GOT_RESV);
+    _SUCNAME_TO_STRING(HAVE_MUTEX);
+    _SUCNAME_TO_STRING(HAVE_READ_LOCK);
+    _SUCNAME_TO_STRING(USED_FALLBACK);
+    _SUCNAME_TO_STRING(YES);
+    _SUCNAME_TO_STRING(NO);
+    _SUCNAME_TO_STRING(ALREADY_OK);
+#undef _SUCNAME_TO_STRING
+
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
     case WOLFSENTRY_ERROR_ID_USER_BASE:
         break;
@@ -476,11 +433,20 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_build_settings_compatible(struct 
         WOLFSENTRY_ERROR_RETURN(LIB_MISMATCH);
     if (~((WOLFSENTRY_CONFIG_FLAG_MAX << 1UL) - 1UL) & caller_build_settings.config)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+#ifdef WOLFSENTRY_SHORT_ENUMS
+    if ((sizeof(wolfsentry_init_flags_t) < sizeof(int)) ^ WOLFSENTRY_SHORT_ENUMS)
+        WOLFSENTRY_ERROR_RETURN(LIBCONFIG_MISMATCH);
+#endif
+
 #define CHECK_CONFIG_MATCHES(x) if (! ((caller_build_settings.config & WOLFSENTRY_CONFIG_FLAG_ ## x) == (wolfsentry_build_settings.config & WOLFSENTRY_CONFIG_FLAG_ ## x))) WOLFSENTRY_ERROR_RETURN(LIBCONFIG_MISMATCH)
+
+    /* flags that affect struct layout must match. */
+
     CHECK_CONFIG_MATCHES(USER_DEFINED_TYPES);
     CHECK_CONFIG_MATCHES(THREADSAFE);
+    CHECK_CONFIG_MATCHES(PROTOCOL_NAMES);
     CHECK_CONFIG_MATCHES(HAVE_JSON_DOM);
-    CHECK_CONFIG_MATCHES(LWIP);
+    CHECK_CONFIG_MATCHES(SHORT_ENUMS);
 #undef CHECK_CONFIG_MATCHES
     WOLFSENTRY_RETURN_OK;
 }
@@ -861,9 +827,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfse
     WOLFSENTRY_THREAD_ASSERT_INITED(thread);
     if (deadline == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
-        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
-    *deadline = thread->deadline;
+    if (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE)) {
+        deadline->tv_sec = WOLFSENTRY_DEADLINE_NEVER;
+        deadline->tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
+    } else
+        *deadline = thread->deadline;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -1100,8 +1068,7 @@ static int freertos_sem_init( sem_t * sem,
               int pshared,
               unsigned value )
 {
-    /* Silence warnings about unused parameters. */
-    ( void ) pshared;
+    (void)pshared;
 
     /* Check value parameter. */
     if( value > SEM_VALUE_MAX )
@@ -1471,12 +1438,12 @@ static const struct wolfsentry_semcbs builtin_sem_methods =
 
 #ifdef NO_BUILTIN_SEM_API
 
-#define sem_init (hpi->semcbs->sem_init)
-#define sem_post (hpi->semcbs->sem_post)
+#define sem_init (hpi->semcbs.sem_init)
+#define sem_post (hpi->semcbs.sem_post)
 #define sem_wait (hpi->emcbs->sem_wait)
-#define sem_timedwait (hpi->semcbs->sem_timedwait)
-#define sem_trywait (hpi->semcbs->sem_trywait)
-#define sem_destroy (hpi->semcbs->sem_destroy)
+#define sem_timedwait (hpi->semcbs.sem_timedwait)
+#define sem_trywait (hpi->semcbs.sem_trywait)
+#define sem_destroy (hpi->semcbs.sem_destroy)
 
 #else
 
@@ -1497,8 +1464,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
 
     WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
 
-    if (flags & WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE)
+    if (flags & (WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE |
+                 WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO |
+                 WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO |
+                 WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO))
+    {
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
 
     memset(lock,0,sizeof *lock);
 
@@ -1543,11 +1515,21 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
+WOLFSENTRY_API size_t wolfsentry_lock_size(void) {
+    return sizeof(struct wolfsentry_rwlock);
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context *thread, struct wolfsentry_rwlock **lock, wolfsentry_lock_flags_t flags) {
     wolfsentry_errcode_t ret;
 
     if (lock == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    /* for pshared, the caller will need to handle the shared memory allocation
+     * and call wolfsentry_lock_init() directly.
+     */
+    if (flags & WOLFSENTRY_LOCK_FLAG_PSHARED)
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
 
     WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
 
@@ -1570,12 +1552,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host
 
 #ifdef NO_BUILTIN_SEM_API
 
-#define sem_init (lock->hpi->semcbs->sem_init)
-#define sem_post (lock->hpi->semcbs->sem_post)
-#define sem_wait (lock->hpi->emcbs->sem_wait)
-#define sem_timedwait (lock->hpi->semcbs->sem_timedwait)
-#define sem_trywait (lock->hpi->semcbs->sem_trywait)
-#define sem_destroy (lock->hpi->semcbs->sem_destroy)
+#define sem_init (lock->hpi->semcbs.sem_init)
+#define sem_post (lock->hpi->semcbs.sem_post)
+#define sem_wait (lock->hpi->semcbs.sem_wait)
+#define sem_timedwait (lock->hpi->semcbs.sem_timedwait)
+#define sem_trywait (lock->hpi->semcbs.sem_trywait)
+#define sem_destroy (lock->hpi->semcbs.sem_destroy)
 
 #else
 
@@ -1701,14 +1683,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
         abs_timeout = &thread->deadline;
     }
 
-
     /* if shared lock recursion is enabled, and the caller already holds some
      * other lock in shared mode, it must first be promoted.
      */
-    if ((! (flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED))
-        && (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY))
-        && thread->tracked_shared_lock
-        && (thread->tracked_shared_lock != lock))
+    if (thread->tracked_shared_lock &&
+        (thread->tracked_shared_lock != lock) &&
+        (! (flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_SHARED)) &&
+        (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_READONLY)))
     {
         ret = wolfsentry_lock_shared2mutex_abstimed(thread->tracked_shared_lock, thread, abs_timeout, flags);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
@@ -1885,20 +1866,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
             ++thread->recursion_of_tracked_lock;
 
         if (store_reservation) {
-
             WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_GET_ID);
             lock->holder_count.read += 2; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
             lock->read2write_waiter_read_count = thread->recursion_of_tracked_lock;
             ++thread->mutex_and_reservation_count;
         } else {
-
             ++lock->holder_count.read;
             if (lock->read2write_reservation_holder == WOLFSENTRY_THREAD_GET_ID)
                 ++lock->read2write_waiter_read_count;
         }
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-
 
         if (store_reservation)
             WOLFSENTRY_SUCCESS_RETURN(LOCK_OK_AND_GOT_RESV);
@@ -3282,14 +3260,31 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_interval_from_seconds(struct wolf
     WOLFSENTRY_RETURN_VALUE(wolfsentry->hpi.timecbs.interval_from_seconds(howlong_secs, howlong_nsecs, howlong));
 }
 
+WOLFSENTRY_API wolfsentry_object_type_t wolfsentry_get_object_type(const void *object) {
+    if ((object == NULL) || (((const struct wolfsentry_table_ent_header *)object)->parent_table == NULL))
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_OBJECT_TYPE_UNINITED);
+    WOLFSENTRY_RETURN_VALUE(((const struct wolfsentry_table_ent_header *)object)->parent_table->ent_type);
+}
+
 WOLFSENTRY_API wolfsentry_ent_id_t wolfsentry_get_object_id(const void *object) {
+    if (object == NULL)
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_OBJECT_TYPE_UNINITED);
     WOLFSENTRY_RETURN_VALUE(((const struct wolfsentry_table_ent_header *)object)->id);
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_checkout(void *object) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_checkout(WOLFSENTRY_CONTEXT_ARGS_IN, void *object) {
     wolfsentry_errcode_t ret;
+    if (object == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     WOLFSENTRY_REFCOUNT_INCREMENT(((struct wolfsentry_table_ent_header *)object)->refcount, ret);
     WOLFSENTRY_ERROR_RERETURN(ret);
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_IN, void *object, wolfsentry_action_res_t *action_results) {
+    if (object == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_ERROR_RERETURN(((struct wolfsentry_table_ent_header *)object)->parent_table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_table_ent_header *)object, action_results));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_init(
@@ -3318,6 +3313,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
     if (config->action_res_filter_bits_set & config->action_res_filter_bits_unset)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (config->action_res_bits_to_add & config->action_res_bits_to_clear)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (config->derogatory_threshold_for_penaltybox > MAX_UINT_OF(instance_of_field(struct wolfsentry_route, meta.derogatory_count)))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     ret = wolfsentry_route_check_flags_sensical(config->route_flags_to_add_on_insert);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
@@ -3371,19 +3368,38 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_load(
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_update_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_eventconfig *supplied,
     struct wolfsentry_eventconfig_internal *internal)
 {
+    wolfsentry_errcode_t ret;
     if (supplied == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (internal == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
+
+    ret = wolfsentry_eventconfig_check(supplied);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
     internal->config.max_connection_count = supplied->max_connection_count;
+    internal->config.derogatory_threshold_for_penaltybox = supplied->derogatory_threshold_for_penaltybox;
     internal->config.penaltybox_duration = supplied->penaltybox_duration;
+    internal->config.route_idle_time_for_purge = supplied->route_idle_time_for_purge;
+    internal->config.flags = supplied->flags;
+    internal->config.route_flags_to_add_on_insert = supplied->route_flags_to_add_on_insert;
+    internal->config.route_flags_to_clear_on_insert = supplied->route_flags_to_clear_on_insert;
+    internal->config.action_res_filter_bits_set = supplied->action_res_filter_bits_set;
+    internal->config.action_res_filter_bits_unset = supplied->action_res_filter_bits_unset;
+    internal->config.action_res_bits_to_add = supplied->action_res_bits_to_add;
+    internal->config.action_res_bits_to_clear = supplied->action_res_bits_to_clear;
+
     WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_eventconfig_internal *internal,
     struct wolfsentry_eventconfig *exported)
 {
@@ -3391,23 +3407,32 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_eventconfig_get_1(
         WOLFSENTRY_ERROR_RETURN(DATA_MISSING);
     if (exported == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
+
     *exported = internal->config;
     exported->route_private_data_size -= internal->route_private_data_padding;
     WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_defaultconfig_get(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_eventconfig *config)
 {
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_eventconfig_get_1(&wolfsentry->config, config));
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_SHARED_OR_RETURN();
+    ret = wolfsentry_eventconfig_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->config, config);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_defaultconfig_update(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_eventconfig *config)
 {
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_eventconfig_update_1(config, &wolfsentry->config));
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_MUTEX_OR_RETURN();
+    ret = wolfsentry_eventconfig_update_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config, &wolfsentry->config);
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
 WOLFSENTRY_API struct wolfsentry_host_platform_interface *wolfsentry_get_hpi(struct wolfsentry_context *wolfsentry) {
@@ -3753,7 +3778,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_free(WOLFSENTRY_CONTEXT_A
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
 
+#ifdef WOLFSENTRY_THREADSAFE
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN_EX(*wolfsentry);
+    if ((*wolfsentry)->lock.holder_count.write != 1)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
+    if ((*wolfsentry)->lock.read_waiter_count != 0)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
+    if ((*wolfsentry)->lock.write_waiter_count != 0)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
+#endif
 
     ret = wolfsentry_cleanup_all(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry));
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
@@ -3776,17 +3809,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_free(WOLFSENTRY_CONTEXT_A
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_context **wolfsentry)) {
+    wolfsentry_errcode_t ret;
 #ifdef WOLFSENTRY_THREADSAFE
-    wolfsentry_errcode_t ret = WOLFSENTRY_MUTEX_EX(*wolfsentry);
+    ret = WOLFSENTRY_MUTEX_EX(*wolfsentry);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    if ((*wolfsentry)->lock.holder_count.write != 1)
-        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
-    if ((*wolfsentry)->lock.read_waiter_count != 0)
-        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
-    if ((*wolfsentry)->lock.write_waiter_count != 0)
-        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN_EX(*wolfsentry, BUSY);
 #endif
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    ret = wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT);
+#ifdef WOLFSENTRY_THREADSAFE
+    if (WOLFSENTRY_ERROR_CODE_IS(ret, BUSY))
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_unlock(*wolfsentry, thread));
+#endif
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_inhibit_actions(WOLFSENTRY_CONTEXT_ARGS_IN) {
@@ -3884,8 +3917,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
 
     if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->events->header, *clone, &(*clone)->events->header, flags)) < 0)
         goto out;
+
+    /* if WOLFSENTRY_CLONE_FLAG_NO_ROUTES, wolfsentry_table_clone() for the
+     * routes will return immediately after
+     * wolfsentry_route_table_clone_header(), without copying any routes.
+     */
     if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->routes->header, *clone, &(*clone)->routes->header, flags)) < 0)
         goto out;
+
     if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->user_values->header, *clone, &(*clone)->user_values->header, flags)) < 0)
         goto out;
 

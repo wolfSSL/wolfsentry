@@ -41,10 +41,9 @@ typedef wolfsentry_errcode_t (*circlog_format_fn_t)(struct circlog_message *msg,
 extern wolfsentry_errcode_t circlog_format_one(struct circlog_message *msg, char **out, size_t *out_space);
 extern wolfsentry_errcode_t circlog_reset(void);
 
-
-int echo_init();
+int echo_init(void);
 int sentry_tcp_inpkt(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint16_t optlen, uint16_t opt1len, uint8_t *opt2, struct pbuf *p);
-int echo_ssl();
+int echo_ssl(void);
 void echo_msgclose(struct tcp_pcb *pcb);
 
 #endif

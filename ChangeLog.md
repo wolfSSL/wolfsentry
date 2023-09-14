@@ -1,3 +1,132 @@
+# wolfSentry Release History and Change Log
+
+<br>
+
+# wolfSentry Release 1.5.0 (September 13, 2023)
+
+Release 1.5.0 of the wolfSentry embedded firewall/IDPS has enhancements,
+additions, and improvements including:
+
+## Noteworthy Changes and Additions
+
+In JSON configuration, recognize `"events"` as equivalent to legacy
+`"events-insert"`, and `"routes"` as equivalent to legacy
+`"static-routes-insert"`.  Legacy keys will continue to be recognized.
+
+In the `Makefile`, `FREERTOS_TOP` and `LWIP_TOP` now refer to actual
+distribution top -- previously, `FREERTOS_TOP` expected a path to the
+`FreeRTOS/Source` subdirectory, and `LWIP_TOP` expected a path to the `src`
+subdirectory.
+
+Added public functions `wolfsentry_route_default_policy_set()` and
+`wolfsentry_route_default_policy_get()`, implicitly accessing the main route
+table.
+
+Added public functions `wolfsentry_get_object_type()` and
+`wolfsentry_object_release()`, companions to existing
+`wolfsentry_object_checkout()` and `wolfsentry_get_object_id()`.
+
+Added `wolfsentry_lock_size()` to facilitate caller-allocated
+`wolfsentry_rwlock`s.
+
+`WOLFSENTRY_CONTEXT_ARGS_OUT` is now the first argument to utility routines
+`wolfsentry_object_checkout()`, `wolfsentry_defaultconfig_get()`, and
+`wolfsentry_defaultconfig_update()`, rather than a bare `wolfsentry`
+context pointer.
+
+`ports/Linux-lwIP/include/lwipopts.h`:  Add core locking code.
+
+Removed unneeded routine `wolfsentry_config_json_set_default_config()`.
+
+Improved `wolfsentry_kv_render_value()` to use `json_dump_string()` for
+`_KV_STRING` rendering, if available, to get JSON-style escapes in output.
+
+Implemented support for user-supplied semaphore callbacks.
+
+## Performance Improvements
+
+The critical paths for traffic evaluation have been streamlined by eliminating
+ephemeral heap allocations, eliminating redundant internal initializations,
+adding early shortcircuit paths to avoid frivolous processing, and eliminating
+redundant time lookups and context locking.  This results in a 33%-49% reduction
+in cycles per `wolfsentry_route_event_dispatch()` on `benchmark-test`, and a
+29%-61% reduction on `benchmark-singlethreaded-test`, at under 100 cycles for a
+simple default-policy scenario on a 64 bit target.
+
+## Documentation
+
+Added `doc/freertos-lwip-app.md`, "Building and Initializing wolfSentry for an
+application on FreeRTOS/lwIP".
+
+Added `doc/json_configuration.md`, "Configuring wolfSentry using a JSON
+document".
+
+Doxygen-based annotations are now included in all wolfSentry header files,
+covering all functions, macros, types, enums, and structures.
+
+The PDF version of the reference manual is now included in the repository and
+releases at `doc/wolfSentry_refman.pdf`.
+
+The `Makefile` now has targets `doc-html`, `doc-pdf`, and related targets for
+generating and cleaning the documentation artifacts.
+
+## Bug Fixes and Cleanups
+
+`lwip/LWIP_PACKET_FILTER_API.patch` has fixes for `-Wconversion` and `-Wshadow` warnings.
+
+`src/json/centijson_sax.c`: Fix bug in `json_dump_double()` such that floating point numbers were rendered with an extra decimal place.
+
+In `wolfsentry_config_json_init_ex()`, error if `json_config.max_key_len` is greater than `WOLFSENTRY_MAX_LABEL_BYTES` (required for memory safety).
+
+In `wolfsentry_config_json_init_ex()`, call `wolfsentry_defaultconfig_get()` to initialize `jps->default_config` with settings previously passed to `wolfsentry_init()`.
+
+`src/kv.c`: Fixed `_KV_STRING` and `_KV_BYTES` cases in
+`wolfsentry_kv_value_eq_1()` (inadvertently inverted `memcmp()`), and fixed
+`_KV_NONE` case to return true.
+
+Fixed `wolfsentry_kv_render_value()` for `_KV_JSON` case to pass `JSON_DOM_DUMP_PREFERDICTORDER` to `json_dom_dump()`.
+
+`src/lwip/packet_filter_glue.c`: In `wolfsentry_install_lwip_filter_callbacks()`, if error encountered, disable all callbacks to assure known state on return.
+
+In `wolfsentry_init_ex()`, correctly convert user-supplied `route_idle_time_for_purge` from seconds to `wolfsentry_time_t`.
+
+Pass `route_table->default_event` to `wolfsentry_route_event_dispatch_0()` if caller-supplied trigger event is null (changed in `wolfsentry_route_event_dispatch_1()`, `wolfsentry_route_event_dispatch_by_id_1()`, and `wolfsentry_route_event_dispatch_by_route_1()`).
+
+In `wolfsentry_route_lookup_0()`, fixed scoping of `WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES` to only check `WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED`, not `WOLFSENTRY_ROUTE_FLAG_PORT_RESET`.
+
+In `wolfsentry_route_delete_0()`, properly set `WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE`.
+
+In `wolfsentry_route_event_dispatch_0()` and `wolfsentry_route_event_dispatch_1()`, properly set `WOLFSENTRY_ACTION_RES_ERROR` at end if `ret < 0`.
+
+In `wolfsentry_route_event_dispatch_1()`, properly set `WOLFSENTRY_ACTION_RES_FALLTHROUGH` when `route_table->default_policy` is used.
+
+Added missing `action_results` reset to `wolfsentry_route_delete_for_filter()`.
+
+In `wolfsentry_lock_init()`, properly forbid all inapplicable flags.
+
+Fixed `wolfsentry_eventconfig_update_1()` to copy over all relevant elements.
+
+Fixed and updated expression for `WOLFSENTRY_USER_DEFINED_TYPES`.
+
+## Self-Test Enhancements
+
+`Makefile.analyzers`:  Added targets `test_lwip`, `minimal-threaded-build-test`, `pahole-test`, `route-holes-test`, `benchmark-test`, `benchmark-singlethreaded-test`, and `doc-check`.
+
+Implemented tripwires in `benchmark-test` and `benchmark-singlethreaded-test`
+for unexpectedly high cycles/call.
+
+Enlarged coverage of target `notification-demo-build-test` to run the applications
+and check for expected and unexpected output.
+
+`tests/unittests.c`:
+
+* Add `test_lwip()` with associated helper functions;
+* Add `WOLFSENTRY_UNITTEST_BENCHMARKS` sections in `test_static_routes()` and `test_json()`;
+* Add to `test_init()` tests of `wolfsentry_errcode_source_string()` and `wolfsentry_errcode_error_string()`;
+* Add to `test_static_routes()` tests of `wolfsentry_route_default_policy_set()` and `wolfsentry_get_object_type()`, `wolfsentry_object_checkout()`, and `wolfsentry_object_release()`.
+
+<br>
+
 # wolfSentry Release 1.4.1 (July 20, 2023)
 
 Release 1.4.1 of the wolfSentry embedded firewall/IDPS has bug fixes including:
@@ -22,6 +151,7 @@ Correct the release date of 1.4.0 in ChangeLog.
 Add `CALL_TRACE-test` to `Makefile.analyzers`, and include it in the
 `check-extra` dep list.
 
+<br>
 
 # wolfSentry Release 1.4.0 (July 19, 2023)
 
@@ -169,6 +299,7 @@ Add unit test coverage:
 * `wolfsentry_event_get_label()`
 * `wolfsentry_addr_family_max_addr_bits()`
 
+<br>
 
 # wolfSentry Release 1.3.1 (July 5, 2023)
 
@@ -192,6 +323,7 @@ Added `wolfsentry_route_event_dispatch()` cases to `test_json()`.
 
 Added unit test coverage to confirm correct copying of route table header fields when cloning.
 
+<br>
 
 # wolfSentry Release 1.3 (May 19, 2023)
 
@@ -225,6 +357,7 @@ The route (rule) table can now be dumped in conformant JSON format to a byte str
 
   * Added new target `notification-demo-build-test`.
 
+<br>
 
 # wolfSentry Release 1.2.2 (May 4, 2023)
 
@@ -284,6 +417,7 @@ Added more arg-not-null and thread-inited checks to thread/lock routines in `src
 
 Added assert in release recipe to assure that wolfsentry.h has a version that matches the tagged version.
 
+<br>
 
 # wolfSentry Release 1.2.1 (Apr 5, 2023)
 
@@ -309,6 +443,7 @@ Refactored wildcard handling in `wolfsentry_route_init()`, `wolfsentry_route_new
 
 Fixed `WOLFSENTRY_VERSION_*` values, which were inadvertently swapped in release 1.2.0.
 
+<br>
 
 # wolfSentry Release 1.2.0 (Mar 24, 2023)
 
@@ -374,6 +509,7 @@ When matching target routes (e.g. with `wolfsentry_route_event_dispatch()`),
 ignore failure in `wolfsentry_event_get_reference()` if
 `WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD` is set in the `flags`.
 
+<br>
 
 # wolfSentry Release 1.1.0 (Feb 23, 2023)
 
@@ -413,6 +549,7 @@ Fixed retval testing in `wolfsentry_action_list_{append,prepend,insert}_1()`, an
 
 Fixed potential use-after-free defect in `wolfsentry_event_delete()`.
 
+<br>
 
 # wolfSentry Release 1.0.0 (Jan 18, 2023)
 
@@ -428,6 +565,7 @@ Production Release 1.0.0 of the wolfSentry embedded firewall/IDPS has bug fixes 
 
 * In `examples/notification-demo/log_server/log_server.c`, in `main()`, properly reset `transaction_successful` at top of the accept loop.
 
+<br>
 
 # wolfSentry Release 0.8.0 (Jan 6, 2023)
 
@@ -496,6 +634,7 @@ Preview Release 0.8.0 of the wolfSentry embedded firewall/IDPS has bug fixes and
 
 * Various fixes in `Makefile`, for proper handling and installation of `wolfsentry_options.h`.
 
+<br>
 
 # wolfSentry Release 0.7.0 (Nov 7, 2022)
 
@@ -603,6 +742,7 @@ Preview Release 0.7.0 of the wolfSentry embedded firewall/IDPS has bug fixes and
 * Enlarged scope for build-time pedantic warnings -- now includes all of
   CentiJSON.
 
+<br>
 
 # wolfSentry Release 0.6.0 (Sep 30, 2022)
 
@@ -646,6 +786,7 @@ Preview Release 0.6.0 of the wolfSentry embedded firewall/IDPS has bug fixes and
 
 * src/internal.c: fix wrong constant of iteration in `wolfsentry_table_ent_get_by_id()`.
 
+<br>
 
 # wolfSentry Release 0.5.0 (Aug 1, 2022)
 
@@ -667,6 +808,7 @@ Added examples/notification-demo, demonstrating plugin actions, JSON event repre
 
 Fix missing assignment in `wolfsentry_list_ent_insert_after()`.
 
+<br>
 
 # wolfSentry Release 0.4.0 (May 27, 2022)
 
@@ -698,6 +840,7 @@ Preview Release 0.4.0 of the wolfSentry embedded firewall/IDPS has bug fixes and
 
 * The JSON SAX API routines (`wolfsentry/centijson_sax.h`) are now properly exported.
 
+<br>
 
 # wolfSentry Release 0.3.0 (Dec 30, 2021)
 

@@ -34,6 +34,7 @@ struct wolfsentry_list_header {
 };
 
 #define WOLFSENTRY_LIST_HEADER_RESET(list) do { (list).head = (list).tail = NULL; (list).len = 0; } while (0)
+#define WOLFSENTRY_LIST_ENT_HEADER_RESET(ent) do { (ent).prev = (ent).next = NULL; } while (0)
 
 static inline void wolfsentry_list_ent_prepend(struct wolfsentry_list_header *list, struct wolfsentry_list_ent_header *ent) {
     ent->prev = NULL;

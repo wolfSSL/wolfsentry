@@ -510,26 +510,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete(WOLFSENTRY_CON
     WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
 }
 
-WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results) {
-    wolfsentry_errcode_t ret;
-    wolfsentry_refcount_t refs_left;
-
-    /* note no lock needed -- refcount uses threadsafe atomic ops. */
-
-    if (ent->refcount <= 0)
-        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
-    if (action_results)
-        WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
-    WOLFSENTRY_REFCOUNT_DECREMENT(ent->refcount, refs_left, ret);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    if (refs_left > 0)
-        WOLFSENTRY_RETURN_OK;
-    WOLFSENTRY_FREE(ent);
-    if (action_results)
-        WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED);
-    WOLFSENTRY_RETURN_OK;
-}
-
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table) {
     struct wolfsentry_table_ent_header *i = table->head, *next;
     wolfsentry_errcode_t ret;

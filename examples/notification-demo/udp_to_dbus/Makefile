@@ -35,6 +35,8 @@ ifndef OPTFLAGS
     OPTFLAGS := -O3
 endif
 
+CFLAGS += $(EXTRA_CFLAGS)
+
 udp_to_dbus.o: udp_to_dbus.c
 	$(CC) $(CFLAGS) $(DIAGFLAGS) $(OPTFLAGS) -c $< $(shell pkg-config --cflags libnotify) -I$(WOLFSENTRY_INCLUDEDIR)
 

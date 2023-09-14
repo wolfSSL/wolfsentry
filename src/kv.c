@@ -604,7 +604,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_pair_export(
     struct wolfsentry_kv_pair_internal *kv,
     const struct wolfsentry_kv_pair **kv_exports)
 {
-    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
     *kv_exports = &kv->kv;
     WOLFSENTRY_RETURN_OK;
 }

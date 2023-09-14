@@ -350,9 +350,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_config(WOLFSENTRY_CONTE
     ret = wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, &event);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (event->config == NULL)
-        ret = wolfsentry_eventconfig_get_1(&wolfsentry->config, config);
+        ret = wolfsentry_eventconfig_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->config, config);
     else
-        ret = wolfsentry_eventconfig_get_1(event->config, config);
+        ret = wolfsentry_eventconfig_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, event->config, config);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
@@ -382,14 +382,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(WOLFSENTRY_CO
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, struct wolfsentry_event **event) {
     wolfsentry_errcode_t ret;
 
-    WOLFSENTRY_SHARED_OR_RETURN();
+    /* avoid lock recursion overhead -- this function is mainly called by
+     * wolfsentry_route_event_dispatch_1(), which gets a lock before calling.
+     */
+    if (WOLFSENTRY_HAVE_A_LOCK() < 0) {
+        WOLFSENTRY_SHARED_OR_RETURN();
 
-    ret = wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, event);
-    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_REFCOUNT_INCREMENT((*event)->header.refcount, ret);
-    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+        ret = wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, event);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_REFCOUNT_INCREMENT((*event)->header.refcount, ret);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
 
-    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+        WOLFSENTRY_UNLOCK_AND_RETURN_OK;
+    } else {
+        ret = wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, event);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_REFCOUNT_INCREMENT((*event)->header.refcount, ret);
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
 }
 
 /* NOLINTBEGIN(misc-no-recursion) */

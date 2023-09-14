@@ -355,12 +355,41 @@ minimal-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-builds" clean
 	@echo "passed: minimal build test."
 
+.PHONY: minimal-threaded-build-test
+minimal-threaded-build-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" NO_STDIO=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_PROTOCOL_NAMES -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_USE_NONPOSIX_SEMAPHORES -DWOLFSENTRY_SEMAPHORE_INCLUDE=\<semaphore.h\> -DWOLFSENTRY_USE_NONPOSIX_THREADS -DWOLFSENTRY_THREAD_INCLUDE=\<pthread.h\> -DWOLFSENTRY_THREAD_ID_T=pthread_t -DWOLFSENTRY_THREAD_GET_ID_HANDLER=pthread_self -Wno-error=inline -Wno-inline'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" clean
+	@echo "passed: minimal threaded build test."
+
 .PHONY: short-enums-test
 short-enums-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" EXTRA_CFLAGS='-fshort-enums' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" clean
 	@echo "passed: short enums test."
+
+# this test assures that there are no more holes in structs than necessary.
+# note that it isn't possible to minimize this simultaneously for both
+# -fshort-enums and not-fshort-enums, because -fshort-enums inverts the size
+# relationships between shorts and some enum members.
+# wolfsentry_eventconfig is excluded because it is a public struct with an incumbent layout.
+.PHONY: pahole-test
+pahole-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-pahole-test-build" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-pahole-test-build" EXTRA_CFLAGS='-fshort-enums'
+	@if pahole --prefix_filter wolfsentry_ "$(BUILD_PARENT)"/wolfsentry-pahole-test-build/src/*.o | grep -E ', holes: [2-9],'; then echo 'found gratuitous hole(s) in struct(s)' 1>&2; false; fi
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-pahole-test-build" clean
+	@echo "passed: pahole test."
+
+.PHONY: route-holes-test
+route-holes-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/route-holes-test" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/route-holes-test" EXTRA_CFLAGS='-DWOLFSENTRY_ROUTE_INIT_TEST_FOR_UNINITED_DATA' UNITTEST_LIST='test_static_routes test_json' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/route-holes-test" EXTRA_CFLAGS='-DWOLFSENTRY_ROUTE_INIT_TEST_FOR_UNINITED_DATA -m32' EXTRA_LDFLAGS='-m32' UNITTEST_LIST='test_static_routes test_json' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/route-holes-test" EXTRA_CFLAGS='-DWOLFSENTRY_ROUTE_INIT_TEST_FOR_UNINITED_DATA -m32 -fshort-enums' EXTRA_LDFLAGS='-m32' UNITTEST_LIST='test_static_routes test_json' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/route-holes-test" clean
+	@echo "passed: route holes test."
 
 .PHONY: small-PRIVATE_DATA_ALIGNMENT-test
 small-PRIVATE_DATA_ALIGNMENT-test:
@@ -397,6 +426,23 @@ static-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-static-build-test" EXTRA_CFLAGS+='-static -DWOLFSENTRY_NO_GETPROTOBY' EXTRA_LDFLAGS+='-static' test
 	@echo 'passed: $@.'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-static-build-test" clean
+
+.PHONY: benchmark-test
+benchmark-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-builds" EXTRA_CFLAGS+='-DWOLFSENTRY_UNITTEST_BENCHMARKS -DWOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE=300 -DWOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED=1150' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-builds" clean
+	@echo "passed: benchmark test."
+
+.PHONY: benchmark-singlethreaded-test
+benchmark-singlethreaded-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-singlethreaded-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-singlethreaded-builds" SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_UNITTEST_BENCHMARKS -DWOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE=120 -DWOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED=900' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-singlethreaded-builds" clean
+	@echo "passed: benchmark-singlethreaded test."
+
+# the performance tripwires on the benchmarks generate false positives when competing for CPU resources.
+.NOTPARALLEL: benchmark-test benchmark-singlethreaded-test
 
 ifdef FREERTOS_TOP
     FREERTOS_TOP_FOR_TEST := $(FREERTOS_TOP)
@@ -519,17 +565,49 @@ linux-lwip-sanitize-all-gcc:
 
 .PHONY: notification-demo-build-test
 notification-demo-build-test:
-	@rm -rf "$(BUILD_PARENT)/wolfssl-notification-demo-build"
+	@rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build" "$(BUILD_PARENT)/wolfssl-notification-demo-build"
 	@git clone -q --shared "$(REPO_ROOT)/../wolfssl" "$(BUILD_PARENT)/wolfssl-notification-demo-build"
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" install INSTALL_DIR="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"
-	@cd examples/notification-demo/udp_to_dbus && $(MAKE) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' >/dev/null
-	@cd "$(BUILD_PARENT)/wolfssl-notification-demo-build" && bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry CPPFLAGS="-pedantic -DNO_WOLFSSL_CIPHER_SUITE_TEST -DWOLFSSL_OLD_PRIME_CHECK" --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) V=1 check >/dev/null && $(MAKE) $(QUIET_FLAG) install >/dev/null'
-	@cp -rs '$(SRC_TOP)/examples/notification-demo' '$(BUILD_PARENT)/wolfssl-notification-demo-build'
-	@cd '$(BUILD_PARENT)/wolfssl-notification-demo-build/notification-demo/log_server' && $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' clean && $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed'
-	@rm -rf "$(BUILD_PARENT)/wolfssl-notification-demo-build"
-	@rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-notification-demo-build" clean
+	@cp -rs '$(SRC_TOP)/examples/notification-demo' '$(BUILD_PARENT)/wolfsentry-notification-demo-build'
+	@cd '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/udp_to_dbus' && $(MAKE) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' OPTFLAGS='$(OPTIM)' DIAGFLAGS='$(DEBUG) $(C_WARNFLAGS)' >/dev/null
+	@echo 'building libwolfssl with --enable-wolfsentry'
+	@cd "$(BUILD_PARENT)/wolfssl-notification-demo-build" && \
+	bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry CPPFLAGS="-pedantic -DNO_WOLFSSL_CIPHER_SUITE_TEST -DWOLFSSL_OLD_PRIME_CHECK -Wno-restrict" --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && echo "checking libwolfssl" && $(MAKE) V=1 check >/dev/null && echo "installing libwolfssl at $(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) $(QUIET_FLAG) install >/dev/null'
+	@cd '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/log_server' && \
+	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' clean && \
+	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' OPTFLAGS='$(OPTIM)' DIAGFLAGS='$(DEBUG) $(C_WARNFLAGS)' EXTRA_CFLAGS='-DDEBUG_WOLFSENTRY'
+	@if [[ -v DBUS_SESSION_BUS_ADDRESS ]]; then \
+	    cd '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/udp_to_dbus' && \
+	    { ./udp_to_dbus > '$(BUILD_PARENT)/wolfsentry-notification-demo-build/udp_to_dbus.out' 2>&1 & } && \
+	    UDP_TO_DBUS_PID=$$! && \
+	    sleep 1 && \
+	    kill -0 $$UDP_TO_DBUS_PID && \
+	    UDP_TO_DBUS_OK=1; \
+	else \
+	    UDP_TO_DBUS_PID=; \
+	    UDP_TO_DBUS_OK=1; \
+	fi; \
+	[[ "$${UDP_TO_DBUS_OK-}" = "1" ]] && \
+	cd '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/log_server' && \
+	{ ./log_server > '$(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out' 2>&1 & } && \
+	LOG_SERVER_PID=$$! && \
+	sleep 1 && \
+	kill -0 $$LOG_SERVER_PID && \
+	cd '$(BUILD_PARENT)/wolfssl-notification-demo-build' && \
+	curl --max-time 2 --no-progress-meter --cert ./certs/client-ecc384-cert.pem --key ./certs/client-ecc384-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve 'www.wolfssl.com:10443:127.0.0.1' 'https://www.wolfssl.com:10443/show-log' > '$(BUILD_PARENT)/wolfsentry-notification-demo-build/curl.out' && \
+	kill $$UDP_TO_DBUS_PID $$LOG_SERVER_PID && \
+	sleep 1 && \
+	{ grep -q -E '"action" : "notify-on-decision", "trigger" : "event-on-connect", "parent" : "event-on-connect", "rule-id" : [0-9]{2,}, "rule-hitcount" : [0-9]+, "af" : "INET", "proto" : 6, "remote" : { "address" : "127\.0\.0\.1", "port" : [0-9]+ }, "local" : { "address" : "127\.0\.0\.1", "port" : 10443 }, "decision" : \["accept"\]' '$(BUILD_PARENT)/wolfsentry-notification-demo-build/curl.out' || { echo 'unexpected contents in $(BUILD_PARENT)/wolfsentry-notification-demo-build/curl.out' 1>&2; exit 1; }; } && \
+	! grep -q -E 'ERROR:|WARNING:|exiting with warnings or errors' '$(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out' '$(BUILD_PARENT)/wolfsentry-notification-demo-build/udp_to_dbus.out' && \
+	{ [[ $$(grep -c -E '^action callback: a="(handle-connect|handle-connect2|handle-match|notify-on-match)" parent_event="static-route-parent" trigger="event-on-connect"' '$(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out') == 4 ]] || { echo 'unexpected connect/match callback trace count in $(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out' 1>&2; exit 1; }; } && \
+	{ [[ $$(grep -c -E '^action callback: a="(handle-connect|handle-connect2|handle-match|notify-on-match)" parent_event="static-route-parent" trigger="transaction-successful"' '$(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out') == 2 ]] || { echo 'unexpected success callback trace count in $(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out' 1>&2; exit 1; }; } && \
+	{ [[ $$(grep -c -E '^(Handshake done|normal exit\.)$$' '$(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out') == 2 ]] || { echo 'missing expected success messages in $(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out' 1>&2; exit 1; }; }; \
+	exit_status=$$?; \
+	if [[ $$exit_status != 0 ]]; then pkill --parent $$$$ 'log_server|udp_to_dbus'; fi; \
+	rm -rf "$(BUILD_PARENT)/wolfssl-notification-demo-build"; \
+	rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"; \
+	exit $$exit_status
 	@echo "passed: notification-demo-build test."
 
 .PHONY: dist-check
@@ -549,11 +627,18 @@ release-check:
 	 rmdir release-test-$$$$ && \
 	 echo 'passed: $@.'
 
+.PHONY: doc-check
+doc-check:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-doc-html-build" doc-html-clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-doc-html-build" doc-html
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-doc-html-build" doc-html-clean
+	@echo "passed: doc-check."
+
 .PHONY: check
-check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test short-enums-test
+check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test minimal-threaded-build-test short-enums-test
 
 .PHONY: check-extra
-check-extra: static-build-test c89-test no-inline-test m32-test m32-c89-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-c89-m32-test dist-check release-check notification-demo-build-test
+check-extra: pahole-test route-holes-test static-build-test c89-test no-inline-test m32-test m32-c89-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

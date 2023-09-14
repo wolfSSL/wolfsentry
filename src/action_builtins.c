@@ -88,6 +88,14 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     ret = wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, target_route, &target_exports);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
+    /* if the target route is already in the route table (as it always is with
+     * wolfsentry_route_event_dispatch_by_route() and
+     * wolfsentry_route_event_dispatch_by_id()), return early without doing
+     * anything.
+     */
+    if (target_exports.flags & (WOLFSENTRY_ROUTE_FLAG_IN_TABLE | WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE))
+        WOLFSENTRY_RETURN_OK;
+
     rule_parent_event = wolfsentry_route_parent_event(rule_route);
     if (rule_parent_event)
         rule_aux_event = wolfsentry_event_get_aux_event(rule_parent_event);
@@ -117,9 +125,8 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
             &target_exports,
             NULL /* id */,
             &insert_action_results));
-    *action_results |= insert_action_results; /* crucial to inhibit double-accounting for
-                                               * connection_count, derogatory_count, and
-                                               * commendable_count.
+    *action_results |= insert_action_results; /* copying over the bits is crucial to inhibit double-accounting for
+                                               * connection_count, derogatory_count, and commendable_count.
                                                */
 
     WOLFSENTRY_RETURN_OK;

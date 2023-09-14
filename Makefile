@@ -117,6 +117,8 @@ ifndef CLANG
     CLANG := clang
 endif
 
+AS_VERSION := $(shell $(AS) --version 2>&1 | sed "s/'/'\\\\''/g")
+LD_VERSION := $(shell $(LD) --version 2>&1 | sed "s/'/'\\\\''/g")
 AR_VERSION := $(shell $(AR) --version 2>&1 | sed "s/'/'\\\\''/g")
 
 AR_IS_GNU_AR := $(shell if [[ '$(AR_VERSION)' =~ 'GNU' ]]; then echo 1; else echo 0; fi)
@@ -202,7 +204,7 @@ all: $(BUILD_TOP)/$(DYNLIB_NAME)
 endif
 
 #https://stackoverflow.com/questions/3236145/force-gnu-make-to-rebuild-objects-affected-by-compiler-definition/3237349#3237349
-BUILD_PARAMS := (echo 'CC_V:'; echo '$(CC_V)'; echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS) $(VISIBILITY_CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AR_VERSION:'; echo '$(AR_VERSION)'; echo 'ARFLAGS: $(AR_FLAGS)')
+BUILD_PARAMS := (echo 'CC_V:'; echo '$(CC_V)'; echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS) $(VISIBILITY_CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AS_VERSION:'; echo '$(AS_VERSION)'; echo 'LD_VERSION:'; echo '$(LD_VERSION)'; echo 'AR_VERSION:'; echo '$(AR_VERSION)'; echo 'ARFLAGS: $(AR_FLAGS)')
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force
@@ -383,6 +385,8 @@ ifndef RELEASE
     RELEASE := $(shell cd "$(SRC_TOP)" && git describe --tags "$$(git rev-list --tags='v[0-9]*' --max-count=1 2>/dev/null)" 2>/dev/null)
 endif
 
+RELEASE_PER_HEADERS := $(shell cd "$(SRC_TOP)" && echo -e '#include <stdio.h>\n#include <stdlib.h>\n#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) $(LDFLAGS) -x c - -o "$(BUILD_TOP)/print_version" 1>/dev/null 2>&1 && "$(BUILD_TOP)/print_version"; rm -f "$(BUILD_TOP)/print_version")
+
 .PHONY: dist
 dist:
 	@if [[ ! -d "$(SRC_TOP)/.git" ]]; then echo 'dist target requires git artifacts.' 1>&2; exit 1; fi
@@ -392,7 +396,12 @@ endif
 	@DEST_DIR="$$PWD"; \
 	cd $(SRC_TOP); \
 	if [[ "$(VERSION)" =~ -dirty$$ ]]; then \
-		$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" $$(git ls-files); \
+		if [[ -n "$$(git ls-files -d)" ]]; then \
+			echo '$@: error: there are uncommitted deletions of tracked files.' 1>&2; \
+			false; \
+		else \
+			$(TAR) --transform 's~^~wolfsentry-$(VERSION)/~' --gzip -cf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" $$(git ls-files); \
+		fi; \
 	else \
 		git archive --format=tgz --prefix="wolfsentry-$(VERSION)/" --worktree-attributes --output="$${DEST_DIR}/wolfsentry-$(VERSION).tgz" "$(VERSION)"; \
 	fi
@@ -416,6 +425,7 @@ CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry
 release:
 	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make release -- version isn't known."; exit 1; fi
 	@cd "$(SRC_TOP)" && git show "$(RELEASE):wolfsentry/wolfsentry.h" | awk '/^#define WOLFSENTRY_VERSION_MAJOR /{major=$$3; next;}/^#define WOLFSENTRY_VERSION_MINOR /{minor=$$3; next;}/^#define WOLFSENTRY_VERSION_TINY /{tiny=$$3; next;} {if ((major != "") && (minor != "") && (tiny != "")) {exit(0);}} END { if ("v" major "." minor "." tiny == "$(RELEASE)") {exit(0);} else {printf("make release: tagged version \"%s\" doesn'\''t match version in header \"v%s.%s.%s\".\n", "$(RELEASE)", major, minor, tiny) > "/dev/stderr"; exit(1);}; }'
+	@REFMAN_UPDATED_AT=$$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' doc/wolfSentry_refman.pdf 2>/dev/null); if [[ -n "$$REFMAN_UPDATED_AT" && ($$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' wolfsentry/wolfsentry.h) -gt "$$REFMAN_UPDATED_AT") ]]; then echo -e 'error: tag "$(RELEASE)" has doc/wolfSentry_refman.pdf older than wolfsentry/wolfsentry.h.\nfix with: make doc-pdf && mv doc/pdf/refman.pdf doc/wolfSentry_refman.pdf && git commit -n doc/wolfSentry_refman.pdf && git tag -f "$(RELEASE)"' 1>&2; false; fi
 ifndef VERY_QUIET
 	@echo "generating release archive $${PWD}/wolfsentry-$(RELEASE).zip"
 endif
@@ -441,6 +451,61 @@ endif
 	if [[ -e "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" ]]; then rm "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" || exit $$?; fi; \
 	7za a -r -mmt -mhe=on -mx=9 -ms=on -p"$$the_password" "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" "wolfsentry-$(RELEASE)-commercial" 1>/dev/null || exit $$?; \
 	echo -n "com-bundle SHA256: " && sha256sum "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z"
+
+DOXYGEN_PREDEFINED := WOLFSENTRY_THREADSAFE WOLFSENTRY_PROTOCOL_NAMES WOLFSENTRY_HAVE_JSON_DOM WOLFSENTRY_ERROR_STRINGS LWIP_PACKET_FILTER_API __GNUC__=4 WOLFSENTRY_HAVE_GNU_ATOMICS WOLFSENTRY_NO_INLINE WOLFSENTRY_FOR_DOXYGEN attr_align_to(x)=
+DOXYGEN_EXPAND_AS_DEFINED := WOLFSENTRY_SOCKADDR_MEMBERS WOLFSENTRY_FLEXIBLE_ARRAY_SIZE attr_align_to
+DOXYGEN_EXCLUDE := wolfsentry/wolfsentry_options.h
+
+.PHONY: doc-html
+doc-html:
+	@command -v doxygen >/dev/null || doxygen
+	@mkdir -p '$(BUILD_TOP)/doc' && \
+	cd '$(BUILD_TOP)/doc' && \
+	rm -rf html && \
+	cp -rs $(SRC_TOP)/doc/doxy-formats/html . && \
+	cd html && \
+	cp -rs $(SRC_TOP)/wolfsentry . && \
+	cp -s $(SRC_TOP)/*.md $(SRC_TOP)/doc/*.md . && \
+	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'Running doxygen...'; } && \
+	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION='$(RELEASE_PER_HEADERS)' doxygen Doxyfile && \
+	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/html/doxygen_warnings not found.' 1>&2 && false; }; } && \
+	{ [[ ! -s doxygen_warnings ]] || { echo '$(BUILD_TOP)/doc/html/doxygen_warnings has nonzero length.' 1>&2 && false; }; } && \
+	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'HTML manual generated; top index is $(BUILD_TOP)/doc/html/html/index.html'; }
+
+.PHONY: doc-html-clean
+doc-html-clean:
+	@rm -rf '$(BUILD_TOP)/doc/html'
+
+.PHONY: doc-pdf
+doc-pdf:
+	@command -v doxygen >/dev/null || doxygen
+	@command -v pdflatex >/dev/null || pdflatex
+	@command -v makeindex >/dev/null || makeindex
+	@mkdir -p '$(BUILD_TOP)/doc' && \
+	cd '$(BUILD_TOP)/doc' && \
+	rm -rf pdf && \
+	cp -rs $(SRC_TOP)/doc/doxy-formats/pdf . && \
+	cd pdf && \
+	cp -rs $(SRC_TOP)/wolfsentry . && \
+	cp -s $(SRC_TOP)/*.md $(SRC_TOP)/doc/*.md . && \
+	echo 'Running doxygen...' && \
+	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION='$(RELEASE_PER_HEADERS)' doxygen Doxyfile && \
+	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings not found.' 1>&2 && false; }; } && \
+	{ [[ ! -s doxygen_warnings ]] || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings has nonzero length.' 1>&2 && false; }; } && \
+	cd latex && \
+	make --quiet && \
+	mv refman.pdf .. && \
+	cd .. && \
+	rm -rf latex && \
+	echo 'PDF manual generated; moved to $(BUILD_TOP)/doc/pdf/refman.pdf'
+
+.PHONY: doc-pdf-clean
+doc-pdf-clean:
+	@rm -rf '$(BUILD_TOP)/doc/pdf'
+
+doc: doc-html doc-pdf
+
+doc-clean: doc-html-clean doc-pdf-clean
 
 .PHONY: clean
 clean:

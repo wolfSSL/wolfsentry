@@ -166,7 +166,7 @@
         }
     ],
     "user-values" : {
-        "notification-listen-addr" : "0.0.0.0",
+        "notification-listen-addr" : "127.0.0.1",
         "notification-server-addr" : "127.0.0.1",
         "notification-dest-port" : 55555,
         "admin-listen-addr" : "0.0.0.0",

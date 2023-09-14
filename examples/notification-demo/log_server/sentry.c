@@ -28,6 +28,11 @@
 #include "sentry.h"
 #include "log_server.h"
 
+/* this is an internal routine with strange argument type that's immediately
+ * cast back to int in the implementation.
+ */
+#define wolfSSL_ERR_reason_error_string(x) wolfSSL_ERR_reason_error_string((unsigned long)(x))
+
 struct wolfsentry_context *global_wolfsentry = NULL;
 static int wolfsentry_data_index = -1;
 
@@ -58,7 +63,7 @@ static wolfsentry_errcode_t wolfsentry_test_action(
 
     if (rule_route == NULL) {
 #ifdef DEBUG_WOLFSENTRY
-        fprintf(stderr, "null rule_route, target_route=%p\n",target_route);
+        fprintf(stderr, "WARNING: null rule_route, target_route=%p\n",target_route);
 #else
         (void)target_route;
 #endif
@@ -68,7 +73,7 @@ static wolfsentry_errcode_t wolfsentry_test_action(
     parent_event = wolfsentry_route_parent_event(rule_route);
 
 #ifdef DEBUG_WOLFSENTRY
-    printf("action callback: a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
+    fprintf(stderr, "action callback: a=\"%s\" parent_event=\"%s\" trigger=\"%s\" t=%u r_id=%u caller_arg=%p\n",
            wolfsentry_action_get_label(action),
            wolfsentry_event_get_label(parent_event),
            wolfsentry_event_get_label(trigger_event),
@@ -152,7 +157,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
 
     if (ret < 0) {
 #ifdef DEBUG_WOLFSENTRY
-        fprintf(stderr, "TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
+        fprintf(stderr, "ERROR: TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
 #endif
     }
@@ -235,7 +240,7 @@ int wolfsentry_store_endpoints(
         XMEMCPY(wolfsentry_data->local.addr, &local->sin_addr, sizeof local->sin_addr);
     }
 #endif
-    wolfsentry_data->remote.sa_proto = wolfsentry_data->local.sa_proto = proto;
+    wolfsentry_data->remote.sa_proto = wolfsentry_data->local.sa_proto = (wolfsentry_proto_t)proto;
     wolfsentry_data->remote.interface = wolfsentry_data->local.interface = 0;
     wolfsentry_data->flags = flags;
 
@@ -253,7 +258,7 @@ int wolfsentry_store_endpoints(
     return WOLFSSL_SUCCESS;
 }
 
-int wolfSentry_NetworkFilterCallback(
+static int wolfSentry_NetworkFilterCallback(
     WOLFSSL *ssl,
     struct wolfsentry_context *_wolfsentry,
     wolfSSL_netfilter_decision_t *decision)
@@ -287,13 +292,13 @@ int wolfSentry_NetworkFilterCallback(
         else
             *decision = WOLFSSL_NETFILTER_PASS;
     } else {
-        fprintf(stderr, "wolfsentry_route_event_dispatch error "
+        fprintf(stderr, "ERROR: wolfsentry_route_event_dispatch error "
                WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         *decision = WOLFSSL_NETFILTER_PASS;
     }
 
 #ifdef DEBUG_WOLFSENTRY
-    printf("wolfSentry got network filter callback: family=%d proto=%d rport=%d"
+    fprintf(stderr, "wolfSentry got network filter callback: family=%d proto=%d rport=%d"
            " lport=%d raddr=%s laddr=%s interface=%d; decision=%d (%s)\n",
            data->remote.sa_family,
            data->remote.sa_proto,
@@ -357,7 +362,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         WOLFSENTRY_RETURN_OK;
 
     if (caller_arg != NULL) {
-        if (wolfsentry_object_checkout(rule_route) >= 0)
+        if (wolfsentry_object_checkout(WOLFSENTRY_CONTEXT_ARGS_OUT, rule_route) >= 0)
             ((struct wolfsentry_data *)caller_arg)->rule_route = rule_route;
     }
 
@@ -377,6 +382,11 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     if (ret < 0)
         return ret;
 
+    if (notification_dest_port > MAX_UINT_OF(sa.sin_port)) {
+        fprintf(stderr, "ERROR: \"notification-dest-port\" value %lu is too big.\n", notification_dest_port);
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    }
+
     ret = wolfsentry_user_value_get_string(
         WOLFSENTRY_CONTEXT_ARGS_OUT,
         "notification-server-addr",
@@ -395,7 +405,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     ret = wolfsentry_user_value_release_record(WOLFSENTRY_CONTEXT_ARGS_OUT, &notification_dest_addr_record);
     if (ret < 0) {
         fprintf(stderr,
-                "wolfsentry_user_value_release_record: " WOLFSENTRY_ERROR_FMT,
+                "ERROR: wolfsentry_user_value_release_record: " WOLFSENTRY_ERROR_FMT,
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         return ret;
     }
@@ -410,7 +420,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
     }
 
-    sa.sin_port = htons(notification_dest_port);
+    sa.sin_port = htons((wolfsentry_port_t)notification_dest_port);
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 17 /* UDP */)) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
@@ -428,7 +438,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         return ret;
     if (gmtime_r(&ts.tv_sec, &tm) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-    msgbuf_len = strftime(timebuf, sizeof timebuf, "%Y-%m-%dT%H:%M:%SZ", &tm);
+    msgbuf_len = (int)strftime(timebuf, sizeof timebuf, "%Y-%m-%dT%H:%M:%SZ", &tm);
     if (msgbuf_len == 0)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
@@ -451,7 +461,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     msgbuf_space_left -= msgbuf_len;
     if (msgbuf_space_left < 0) {
-        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
+        fprintf(stderr,"ERROR: out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
                 __LINE__, msgbuf_len, msgbuf_space_left);
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     }
@@ -459,7 +469,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     if (addr_family) {
         if ((ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ )) < 0) {
-            fprintf(stderr, "wolfsentry_addr_family_drop_reference: " WOLFSENTRY_ERROR_FMT,
+            fprintf(stderr, "ERROR: wolfsentry_addr_family_drop_reference: " WOLFSENTRY_ERROR_FMT,
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
             return ret;
         }
@@ -474,14 +484,14 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         msgbuf_ptr,
         &msgbuf_len);
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_route_format_address: " WOLFSENTRY_ERROR_FMT,
+        fprintf(stderr, "ERROR: wolfsentry_route_format_address: " WOLFSENTRY_ERROR_FMT,
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         return ret;
     }
 
     msgbuf_space_left -= msgbuf_len;
     if (msgbuf_space_left < 0) {
-        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
+        fprintf(stderr,"ERROR: out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
                 __LINE__, msgbuf_len, msgbuf_space_left);
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     }
@@ -495,7 +505,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     msgbuf_space_left -= msgbuf_len;
     if (msgbuf_space_left < 0) {
-        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
+        fprintf(stderr,"ERROR: out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
                 __LINE__, msgbuf_len, msgbuf_space_left);
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     }
@@ -510,14 +520,14 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         msgbuf_ptr,
         &msgbuf_len);
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_route_format_address: " WOLFSENTRY_ERROR_FMT,
+        fprintf(stderr, "ERROR: wolfsentry_route_format_address: " WOLFSENTRY_ERROR_FMT,
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         return ret;
     }
 
     msgbuf_space_left -= msgbuf_len;
     if (msgbuf_space_left < 0) {
-        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
+        fprintf(stderr,"ERROR: out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
                 __LINE__, msgbuf_len, msgbuf_space_left);
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     }
@@ -531,7 +541,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
 
     msgbuf_space_left -= msgbuf_len;
     if (msgbuf_space_left < 0) {
-        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
+        fprintf(stderr,"ERROR: out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
                 __LINE__, msgbuf_len, msgbuf_space_left);
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     }
@@ -554,10 +564,10 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         }
     }
 
-    msgbuf_len = snprintf(msgbuf_ptr, msgbuf_space_left, "]}");
+    msgbuf_len = snprintf(msgbuf_ptr, (size_t)msgbuf_space_left, "]}");
     msgbuf_space_left -= msgbuf_len;
     if (msgbuf_space_left < 0) {
-        fprintf(stderr,"out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
+        fprintf(stderr,"ERROR: out of space at L%d, msgbuf_len = %d, msgbuf_space_left = %d\n",
                 __LINE__, msgbuf_len, msgbuf_space_left);
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     }
@@ -578,7 +588,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         char *circlog_buf;
         ret = circlog_enqueue_one(sizeof msgbuf - (size_t)msgbuf_space_left, &circlog_buf);
         if (ret < 0) {
-            fprintf(stderr, " %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
         } else
             memcpy(circlog_buf, msgbuf, sizeof msgbuf - (size_t)msgbuf_space_left);
     }
@@ -723,14 +733,14 @@ static wolfsentry_errcode_t handle_derogatory(
             &action_results_2);
 
         if (ret < 0) {
-            fprintf(stderr, "wolfsentry_route_insert_and_check_out() returned " WOLFSENTRY_ERROR_FMT "\n",
+            fprintf(stderr, "ERROR: wolfsentry_route_insert_and_check_out() returned " WOLFSENTRY_ERROR_FMT "\n",
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
             return ret;
         }
 
         ret = wolfsentry_route_increment_derogatory_count(WOLFSENTRY_CONTEXT_ARGS_OUT, new_route, 1 /* count_to_add */, &new_derogatory_count);
         if (ret < 0) {
-            fprintf(stderr, "wolfsentry_route_increment_derogatory_count() returned " WOLFSENTRY_ERROR_FMT "\n",
+            fprintf(stderr, "ERROR: wolfsentry_route_increment_derogatory_count() returned " WOLFSENTRY_ERROR_FMT "\n",
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
         } else {
 #ifdef DEBUG_WOLFSENTRY
@@ -740,7 +750,7 @@ static wolfsentry_errcode_t handle_derogatory(
 
         ret = wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, new_route, NULL /* action_results */);
         if (ret < 0) {
-            fprintf(stderr, "wolfsentry_route_drop_reference() returned "
+            fprintf(stderr, "ERROR: wolfsentry_route_drop_reference() returned "
                     WOLFSENTRY_ERROR_FMT "\n",
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
         }
@@ -861,7 +871,7 @@ int sentry_init(
     global_thread = (struct wolfsentry_thread_context *)&thread_buffer;
     ret = wolfsentry_init_thread_context(global_thread, WOLFSENTRY_THREAD_FLAG_NONE, NULL /* user_context */);
     if (ret < 0) {
-        fprintf(stderr, "sentry_init(): thread bootstrap failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "ERROR: sentry_init(): thread bootstrap failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
 #endif
@@ -872,7 +882,7 @@ int sentry_init(
     ret =  wolfsentry_init(wolfsentry_build_settings, WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(hpi, global_thread), &ws_init_config,
                            &global_wolfsentry);
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
+        fprintf(stderr, "ERROR: wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         errline = __LINE__;
         goto out;
@@ -1043,7 +1053,7 @@ int sentry_init(
         sizeof err_buf);
 
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_config_json_init() failed: %s\n", err_buf);
+        fprintf(stderr, "ERROR: wolfsentry_config_json_init() failed: %s\n", err_buf);
         errline = __LINE__;
         goto out;
     }
@@ -1057,7 +1067,7 @@ int sentry_init(
             (NetworkFilterCallback_t)wolfSentry_NetworkFilterCallback,
             global_wolfsentry);
     if (ret < 0) {
-        fprintf(stderr, "wolfSSL_CTX_set_AcceptFilter() failed with code %d \"%s\".\n", ret, wolfSSL_ERR_reason_error_string(ret));
+        fprintf(stderr, "ERROR: wolfSSL_CTX_set_AcceptFilter() failed with code %d \"%s\".\n", ret, wolfSSL_ERR_reason_error_string(ret));
         errline = __LINE__;
         goto out;
     }
@@ -1065,17 +1075,17 @@ int sentry_init(
 out:
 
     if (ret < 0) {
-        fprintf(stderr, "fatal error at line %d.\n", errline);
+        fprintf(stderr, "ERROR: fatal error at line %d.\n", errline);
         if (global_wolfsentry != NULL) {
             int ws_ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&global_wolfsentry, global_thread));
             if (ws_ret < 0)
-                fprintf(stderr, "wolfsentry_shutdown() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ws_ret));
+                fprintf(stderr, "ERROR: wolfsentry_shutdown() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ws_ret));
         }
 #ifdef WOLFSENTRY_THREADSAFE
         if (global_thread != NULL) {
             int thr_ret = wolfsentry_destroy_thread_context(global_thread, WOLFSENTRY_THREAD_FLAG_NONE);
             if (thr_ret < 0)
-                fprintf(stderr, "wolfsentry_destroy_thread_context() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(thr_ret));
+                fprintf(stderr, "ERROR: wolfsentry_destroy_thread_context() returns " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(thr_ret));
         }
 #endif
     }

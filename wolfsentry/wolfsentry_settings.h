@@ -20,8 +20,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+/*! @file wolfsentry_settings.h
+    \brief Target- and config-specific settings and abstractions for wolfSentry.
+
+    This file is included by wolfsentry.h.
+ */
+
 #ifndef WOLFSENTRY_SETTINGS_H
 #define WOLFSENTRY_SETTINGS_H
+
+/*! \addtogroup wolfsentry_init
+ * @{
+ */
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+#define WOLFSENTRY_USER_SETTINGS_FILE "the_path"
+     /*!< \brief Define #WOLFSENTRY_USER_SETTINGS_FILE to the path of a user settings file to be included, containing extra and override definitions and directives.  Can be an absolute or a relative path, subject to a `-I` path supplied to `make` using `EXTRA_CFLAGS`. */
+#undef WOLFSENTRY_USER_SETTINGS_FILE
+#endif
 
 #ifdef WOLFSENTRY_USER_SETTINGS_FILE
 #include WOLFSENTRY_USER_SETTINGS_FILE
@@ -29,6 +44,19 @@
 
 #ifndef BUILDING_LIBWOLFSENTRY
 #include <wolfsentry/wolfsentry_options.h>
+#endif
+
+/*! @} */
+
+/*! \addtogroup core_types
+ *  @{
+ */
+
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+#define WOLFSENTRY_NO_ALLOCA /*!< \brief Build flag to use only implementations that avoid alloca(). */
+#undef WOLFSENTRY_NO_ALLOCA
+#define WOLFSENTRY_C89 /*!< \brief Build flag to use only constructs that are pedantically legal in C89. */
+#undef WOLFSENTRY_C89
 #endif
 
 #ifdef WOLFSENTRY_C89
@@ -47,18 +75,24 @@
 #ifndef __attribute_maybe_unused__
 #if defined(__GNUC__)
 #define __attribute_maybe_unused__ __attribute__((unused))
+    /*!< \brief Attribute abstraction to mark a function or variable (typically a `static`) as possibly unused. @hideinitializer */
 #else
 #define __attribute_maybe_unused__
 #endif
 #endif
 
 #ifdef WOLFSENTRY_NO_INLINE
+/*! @cond doxygen_all */
 #define inline __attribute_maybe_unused__
+/*! @endcond */
 #endif
 
 #ifndef DO_NOTHING
 #define DO_NOTHING do {} while (0)
+    /*!< \brief Statement-type abstracted construct that executes no code. @hideinitializer */
 #endif
+
+/*! @} */
 
 #ifdef FREERTOS
     #include <FreeRTOS.h>
@@ -76,12 +110,28 @@
     #endif
 #endif
 
+/*! \addtogroup wolfsentry_init
+ * @{
+ */
+
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+#define WOLFSENTRY_NO_INTTYPES_H
+    /*!< \brief Define to inhibit inclusion of `inttypes.h` (alternative `typedef`s or `include` must be supplied with #WOLFSENTRY_USER_SETTINGS_FILE). */
+#undef WOLFSENTRY_NO_INTTYPES_H
+#endif
 #ifndef WOLFSENTRY_NO_INTTYPES_H
 #include <inttypes.h>
+#endif
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+#define WOLFSENTRY_NO_STDINT_H
+    /*!< \brief Define to inhibit inclusion of `stding.h` (alternative `typedef`s or `include` must be supplied with #WOLFSENTRY_USER_SETTINGS_FILE). */
+#undef WOLFSENTRY_NO_STDINT_H
 #endif
 #ifndef WOLFSENTRY_NO_STDINT_H
 #include <stdint.h>
 #endif
+
+/*! @} */
 
 #if !defined(SIZE_T_32) && !defined(SIZE_T_64)
     #if defined(__WORDSIZE) && (__WORDSIZE == 64)
@@ -99,13 +149,48 @@
     #error "must define SIZE_T_32 xor SIZE_T_64."
 #endif
 
+/*! \addtogroup wolfsentry_errcode_t
+ *  @{
+ */
+
 #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
     #define WOLFSENTRY_PRINTF_ERR(...) fprintf(stderr, __VA_ARGS__)
+        /*!< \brief printf-like macro, expecting a format as first arg, used for rendering warning and error messages.  Can be overridden in #WOLFSENTRY_USER_SETTINGS_FILE. @hideinitializer */
+#endif
+
+/*! @} */
+
+/*! \addtogroup wolfsentry_init
+ * @{
+ */
+
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+#define WOLFSENTRY_SINGLETHREADED
+    /*!< \brief Define to disable all thread handling and safety in wolfSentry. */
+#undef WOLFSENTRY_SINGLETHREADED
 #endif
 
 #ifndef WOLFSENTRY_SINGLETHREADED
 
+/*! @cond doxygen_all */
 #define WOLFSENTRY_THREADSAFE
+/*! @endcond */
+
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+
+#define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+    /*!< \brief Define if POSIX semaphore API is not available.  If no non-POSIX builtin implementation is present in wolfsentry_util.c, then the ::wolfsentry_host_platform_interface supplied to wolfSentry APIs must include a full semaphore implementation (shim set) in its ::wolfsentry_semcbs slot. */
+#undef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
+
+#define WOLFSENTRY_USE_NONPOSIX_THREADS
+    /*!< \brief Define if POSIX thread API is not available.  `WOLFSENTRY_THREAD_INCLUDE`, `WOLFSENTRY_THREAD_ID_T`, and `WOLFSENTRY_THREAD_GET_ID_HANDLER` will need to be supplied in #WOLFSENTRY_USER_SETTINGS_FILE. */
+#undef WOLFSENTRY_USE_NONPOSIX_THREADS
+
+#define WOLFSENTRY_HAVE_NONGNU_ATOMICS
+    /*!< \brief Define if gnu-style atomic intrinsics are not available.  `WOLFSENTRY_ATOMIC_*()` macro definitions for intrinsics will need to be supplied in #WOLFSENTRY_USER_SETTINGS_FILE (see wolfsentry_util.h). */
+#undef WOLFSENTRY_HAVE_NONGNU_ATOMICS
+
+#endif
 
 #ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
     #if defined(__MACH__) || defined(FREERTOS) || defined(_WIN32)
@@ -119,6 +204,8 @@
     #endif
 #endif
 
+/*! @cond doxygen_all */
+
 #ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
     #define WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
 #endif
@@ -131,7 +218,31 @@
     #define WOLFSENTRY_HAVE_GNU_ATOMICS
 #endif
 
+/*! @endcond */
+
 #endif /* !WOLFSENTRY_SINGLETHREADED */
+
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+
+#define WOLFSENTRY_NO_CLOCK_BUILTIN
+    /*!< \brief If defined, omit built-in time primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_timecbs`. */
+#undef WOLFSENTRY_NO_CLOCK_BUILTIN
+
+#define WOLFSENTRY_NO_MALLOC_BUILTIN
+    /*!< \brief If defined, omit built-in heap allocator primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_allocator`. */
+#undef WOLFSENTRY_NO_MALLOC_BUILTIN
+
+#define WOLFSENTRY_NO_ERROR_STRINGS
+    /*!< \brief If defined, omit APIs for rendering error codes and source code files in human readable form.  They will be rendered numerically. */
+#undef WOLFSENTRY_NO_ERROR_STRINGS
+
+#define WOLFSENTRY_NO_PROTOCOL_NAMES
+#undef WOLFSENTRY_NO_PROTOCOL_NAMES
+    /*!< \brief If defined, omit APIs for rendering error codes and source code files in human readable form.  They will be rendered numerically. */
+
+#endif /* WOLFSENTRY_FOR_DOXYGEN */
+
+/*! @cond doxygen_all */
 
 #ifndef WOLFSENTRY_NO_CLOCK_BUILTIN
     #define WOLFSENTRY_CLOCK_BUILTINS
@@ -149,6 +260,14 @@
     #define WOLFSENTRY_PROTOCOL_NAMES
 #endif
 
+/*! @endcond */
+
+/*! @} */
+
+/*! \addtogroup core_types
+ *  @{
+ */
+
 #if defined(WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES) || defined(WOLFSENTRY_CLOCK_BUILTINS) || defined(WOLFSENTRY_MALLOC_BUILTINS)
 #ifndef _XOPEN_SOURCE
 #if __STDC_VERSION__ >= 201112L
@@ -163,15 +282,19 @@
 
 #if !defined(WOLFSENTRY_NO_POSIX_MEMALIGN) && (!defined(_POSIX_C_SOURCE) || (_POSIX_C_SOURCE < 200112L))
     #define WOLFSENTRY_NO_POSIX_MEMALIGN
+        /*!< \brief Define if `posix_memalign()` is not available. */
 #endif
 
 #if defined(__STRICT_ANSI__)
 #define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 1
 #elif defined(__GNUC__) && !defined(__clang__)
 #define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE
+    /*!< \brief Value appropriate as a size for an array that will be allocated to a variable size.  Built-in value usually works. */
 #else
 #define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 0
 #endif
+
+/*! @cond doxygen_all */
 
 #ifndef WOLFSENTRY_NO_TIME_H
 #ifndef __USE_POSIX199309
@@ -180,12 +303,15 @@
 #endif
 #endif
 
+/*! @endcond */
+
 #ifdef SIZE_T_32
     #define SIZET_FMT "%u"
 #elif __STDC_VERSION__ >= 199901L
     #define SIZET_FMT "%zu"
 #else
     #define SIZET_FMT "%lu"
+        /*!< \brief printf-style format string appropriate for pairing with `size_t` @hideinitializer */
 #endif
 
 #ifndef WOLFSENTRY_NO_STDDEF_H
@@ -197,7 +323,9 @@
 #ifndef WOLFSENTRY_NO_STDIO
 #ifndef __USE_ISOC99
 /* kludge to make glibc snprintf() prototype visible even when -std=c89 */
+/*! @cond doxygen_all */
 #define __USE_ISOC99
+/*! @endcond */
 #include <stdio.h>
 #undef __USE_ISOC99
 #else
@@ -217,39 +345,51 @@
 #if !defined(WOLFSENTRY_NO_GETPROTOBY) && (!defined(__GLIBC__) || !defined(__USE_MISC) || defined(WOLFSENTRY_C89))
     /* get*by*_r() is non-standard. */
     #define WOLFSENTRY_NO_GETPROTOBY
+        /*!< \brief Define this to gate out calls to getprotobyname_r() and getservbyname_r(), necessitating numeric identification of protocols (e.g. 6 for TCP) and services (e.g. 25 for SMTP) in configuration JSON documents. */
 #endif
 
 typedef unsigned char byte;
+    /*!< \brief 8 bits unsigned */
 
 typedef uint16_t wolfsentry_addr_family_t;
-#include <wolfsentry/wolfsentry_af.h>
+    /*!< \brief integer type for holding address family number */
 
 typedef uint16_t wolfsentry_proto_t;
+    /*!< \brief integer type for holding protocol number */
 typedef uint16_t wolfsentry_port_t;
+    /*!< \brief integer type for holding port number */
 #ifdef WOLFSENTRY_ENT_ID_TYPE
 typedef WOLFSENTRY_ENT_ID_TYPE wolfsentry_ent_id_t;
 #else
 typedef uint32_t wolfsentry_ent_id_t;
+    /*!< \brief integer type for holding table entry ID */
 #define WOLFSENTRY_ENT_ID_FMT "%u"
+    /*!< \brief printf-style format string appropriate for pairing with ::wolfsentry_ent_id_t @hideinitializer */
 #endif
 #define WOLFSENTRY_ENT_ID_NONE 0
+    /*!< \brief always-invalid object ID @hideinitializer */
 typedef uint16_t wolfsentry_addr_bits_t;
+    /*!< \brief integer type for address prefix lengths (in bits) */
 #ifdef WOLFSENTRY_HITCOUNT_TYPE
 typedef WOLFSENTRY_HITCOUNT_TYPE wolfsentry_hitcount_t;
 #else
 typedef uint32_t wolfsentry_hitcount_t;
+    /*!< \brief integer type for holding hit count statistics */
 #define WOLFSENTRY_HITCOUNT_FMT "%u"
+    /*!< \brief printf-style format string appropriate for pairing with ::wolfsentry_hitcount_t @hideinitializer */
 #endif
 #ifdef WOLFSENTRY_TIME_TYPE
 typedef WOLFSENTRY_TIME_TYPE wolfsentry_time_t;
 #else
 typedef int64_t wolfsentry_time_t;
+    /*!< \brief integer type for holding absolute and relative times, using microseconds in built-in implementations. */
 #endif
 
 #ifdef WOLFSENTRY_PRIORITY_TYPE
 typedef WOLFSENTRY_PRIORITY_TYPE wolfsentry_priority_t;
 #else
 typedef uint16_t wolfsentry_priority_t;
+    /*!< \brief integer type for holding event priority (smaller number is higher priority) */
 #endif
 
 #ifndef attr_align_to
@@ -271,6 +411,7 @@ typedef uint16_t wolfsentry_priority_t;
 #define __wolfsentry_wur __must_check
 #elif defined(__GNUC__) && (__GNUC__ >= 4)
 #define __wolfsentry_wur __attribute__((warn_unused_result))
+    /*!< \brief abstracted attribute designating that the return value must be checked to avoid a compiler warning @hideinitializer */
 #else
 #define __wolfsentry_wur
 #endif
@@ -283,11 +424,32 @@ typedef uint16_t wolfsentry_priority_t;
 #define wolfsentry_static_assert2(c, m) static_assert(c, m);
 #else
 #define wolfsentry_static_assert(c)
+/*!< \brief abstracted static assert -- `c` must be true, else `c` is printed @hideinitializer */
 #define wolfsentry_static_assert2(c, m)
+/*!< \brief abstracted static assert -- `c` must be true, else `m` is printed @hideinitializer */
 #endif
 #endif /* !wolfsentry_static_assert */
 
+/*! @} */
+
+/*! \addtogroup wolfsentry_thread_context
+ *  @{
+ */
+
 #if defined(WOLFSENTRY_THREADSAFE)
+
+#ifndef WOLFSENTRY_DEADLINE_NEVER
+    #define WOLFSENTRY_DEADLINE_NEVER (-1)
+    /*!< \brief Value returned in `deadline->tv_sec` and `deadline->tv_nsec` by wolfsentry_get_thread_deadline() when `thread` has no deadline set.  Not allowed as explicit values passed to wolfsentry_set_deadline_abs() -- use wolfsentry_clear_deadline() to clear any deadline.  Can be overridden with user settings. */
+#endif
+#ifndef WOLFSENTRY_DEADLINE_NOW
+    #define WOLFSENTRY_DEADLINE_NOW (-2)
+    /*!< \brief Value returned in `deadline->tv_sec` and `deadline->tv_nsec` by wolfsentry_get_thread_deadline() when `thread` is in non-blocking mode.  Not allowed as explicit values passed to wolfsentry_set_deadline_abs() -- use wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_OUT, 0) to put thread in non-blocking mode.  Can be overridden with user settings. */
+#endif
+
+#ifndef WOLFSENTRY_NO_ERRNO_H
+    #include <errno.h>
+#endif
 
 #ifdef WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
 
@@ -317,7 +479,9 @@ typedef uint16_t wolfsentry_priority_t;
 
 #else
 
-#error semaphore shim set missing for target
+#ifdef WOLFSENTRY_SEMAPHORE_INCLUDE
+#include WOLFSENTRY_SEMAPHORE_INCLUDE
+#endif
 
 #endif
 
@@ -350,12 +514,21 @@ typedef uint16_t wolfsentry_priority_t;
     /* WOLFSENTRY_THREAD_NO_ID must be zero. */
     #define WOLFSENTRY_THREAD_NO_ID 0
 
+    /*! \brief Right-sized, right-aligned opaque container for thread state */
     struct wolfsentry_thread_context_public {
-        uint64_t opaque[9];
+        uint64_t opaque[8];
     };
 
     #define WOLFSENTRY_THREAD_CONTEXT_PUBLIC_INITIALIZER {0}
 #endif
+
+/*! @} */
+
+/*! \addtogroup core_types
+ *  @{
+ */
+
+/*! @cond doxygen_all */
 
 #ifdef BUILDING_LIBWOLFSENTRY
     #if defined(_MSC_VER) || defined(__MINGW32__) || defined(__CYGWIN__) || \
@@ -391,11 +564,19 @@ typedef uint16_t wolfsentry_priority_t;
     #endif
 #endif /* !BUILDING_LIBWOLFSENTRY */
 
+/*! @endcond */
+
 #define WOLFSENTRY_API_VOID WOLFSENTRY_API_BASE void
+    /*!< \brief Function attribute for declaring/defining public void API functions @hideinitializer */
 #define WOLFSENTRY_API WOLFSENTRY_API_BASE __wolfsentry_wur
+    /*!< \brief Function attribute for declaring/defining public API functions with return values @hideinitializer */
 
 #define WOLFSENTRY_LOCAL_VOID WOLFSENTRY_LOCAL_BASE void
+    /*!< \brief Function attribute for declaring/defining private void functions @hideinitializer */
 #define WOLFSENTRY_LOCAL WOLFSENTRY_LOCAL_BASE __wolfsentry_wur
+    /*!< \brief Function attribute for declaring/defining private functions with return values @hideinitializer */
+
+/*! @cond doxygen_all */
 
 #ifndef WOLFSENTRY_NO_DESIGNATED_INITIALIZERS
 #define WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
@@ -405,14 +586,18 @@ typedef uint16_t wolfsentry_priority_t;
 #define WOLFSENTRY_HAVE_LONG_LONG
 #endif
 
+/*! @endcond */
+
 #ifndef WOLFSENTRY_MAX_ADDR_BYTES
 #define WOLFSENTRY_MAX_ADDR_BYTES 16
+    /*!< \brief The maximum size allowed for an address, in bytes.  Can be overridden.  Incurs proportional overhead if wolfSentry is built #WOLFSENTRY_NO_ALLOCA or #WOLFSENTRY_C89. */
 #elif WOLFSENTRY_MAX_ADDR_BYTES * 8 > 0xffff
 #error WOLFSENTRY_MAX_ADDR_BYTES * 8 must fit in a uint16_t.
 #endif
 
 #ifndef WOLFSENTRY_MAX_ADDR_BITS
 #define WOLFSENTRY_MAX_ADDR_BITS (WOLFSENTRY_MAX_ADDR_BYTES*8)
+    /*!< \brief The maximum size allowed for an address, in bits.  Can be overridden. */
 #else
 #if WOLFSENTRY_MAX_ADDR_BITS > (WOLFSENTRY_MAX_ADDR_BYTES*8)
 #error WOLFSENTRY_MAX_ADDR_BITS is too large for given/default WOLFSENTRY_MAX_ADDR_BYTES
@@ -421,24 +606,38 @@ typedef uint16_t wolfsentry_priority_t;
 
 #ifndef WOLFSENTRY_MAX_LABEL_BYTES
 #define WOLFSENTRY_MAX_LABEL_BYTES 32
+    /*!< \brief The maximum size allowed for a label, in bytes.  Can be overridden. */
 #elif WOLFSENTRY_MAX_LABEL_BYTES > 0xff
 #error WOLFSENTRY_MAX_LABEL_BYTES must fit in a byte.
 #endif
 
 #ifndef WOLFSENTRY_BUILTIN_LABEL_PREFIX
 #define WOLFSENTRY_BUILTIN_LABEL_PREFIX "%"
+    /*!< \brief The prefix string reserved for use in names of built-in actions and events. */
 #endif
 
 #ifndef WOLFSENTRY_KV_MAX_VALUE_BYTES
 #define WOLFSENTRY_KV_MAX_VALUE_BYTES 16384
+    /*!< \brief The maximum size allowed for scalar user-defined values.  Can be overridden. */
 #endif
 
-#if defined(WOLFSENTRY_ENT_ID_TYPE) || \
-    defined(WOLFSENTRY_HITCOUNT_TYPE) || \
-    defined(WOLFSENTRY_TIME_TYPE) || \
-    defined(WOLFSENTRY_PRIORITY_TYPE)
+#if defined(WOLFSENTRY_ENT_ID_TYPE) ||          \
+    defined(WOLFSENTRY_HITCOUNT_TYPE) ||        \
+    defined(WOLFSENTRY_TIME_TYPE) ||            \
+    defined(WOLFSENTRY_PRIORITY_TYPE) ||        \
+    defined(WOLFSENTRY_THREAD_ID_T) ||          \
+    defined(SIZE_T_32) ||                       \
+    defined(SIZE_T_64)
 #define WOLFSENTRY_USER_DEFINED_TYPES
 #endif
+
+/*! @} */
+
+/*! \addtogroup wolfsentry_init
+ *  @{
+ */
+
+/*! @cond doxygen_all */
 
 enum wolfsentry_build_flags {
     WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE = (1U << 0U),
@@ -453,16 +652,22 @@ enum wolfsentry_build_flags {
     WOLFSENTRY_CONFIG_FLAG_HAVE_JSON_DOM = (1U << 9U),
     WOLFSENTRY_CONFIG_FLAG_DEBUG_CALL_TRACE = (1U << 10U),
     WOLFSENTRY_CONFIG_FLAG_LWIP = (1U << 11U),
-    WOLFSENTRY_CONFIG_FLAG_MAX = WOLFSENTRY_CONFIG_FLAG_LWIP,
+    WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS = (1U << 12U),
+    WOLFSENTRY_CONFIG_FLAG_MAX = WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS,
     WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ZERO = (0U << 31U)
 };
 
+/*! @endcond */
+
+/*! \brief struct for passing the build version and configuration */
 struct wolfsentry_build_settings {
     uint32_t version;
+        /*!< Must be initialized to `WOLFSENTRY_VERSION`. */
     uint32_t config;
+        /*!< Must be initialized to `__wolfsentry_config`. */
 };
 
-#if !defined(BUILDING_LIBWOLFSENTRY) || defined(DEFINE_WOLFSENTRY_BUILD_SETTINGS)
+#if !defined(BUILDING_LIBWOLFSENTRY) || defined(WOLFSENTRY_DEFINE_BUILD_SETTINGS)
 
 static const __attribute_maybe_unused__ uint32_t __wolfsentry_config = WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE
 #ifdef WOLFSENTRY_USER_DEFINED_TYPES
@@ -498,6 +703,17 @@ static const __attribute_maybe_unused__ uint32_t __wolfsentry_config = WOLFSENTR
 #ifdef WOLFSENTRY_LWIP
     | WOLFSENTRY_CONFIG_FLAG_LWIP
 #endif
+/* with compilers that can't evaluate the below expression as a compile-time
+ * constant, WOLFSENTRY_SHORT_ENUMS can be defined in user settings to 0 or
+ * 1 to avoid the dependency.
+ */
+#ifdef WOLFSENTRY_SHORT_ENUMS
+#if WOLFSENTRY_SHORT_ENUMS == 0
+    | WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS
+#endif
+#else
+    | ((sizeof(wolfsentry_init_flags_t) < sizeof(int)) ? WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS : 0)
+#endif
     ;
 
 static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_build_settings = {
@@ -510,7 +726,10 @@ static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_bu
 #endif
     __wolfsentry_config
 };
+/*!< \brief Convenience constant struct, with properly initialized `wolfsentry_build_settings` values, to be passed to `wolfsentry_init()` @hideinitializer */
 
-#endif /* !BUILDING_LIBWOLFSENTRY || DEFINE_WOLFSENTRY_BUILD_SETTINGS */
+#endif /* !BUILDING_LIBWOLFSENTRY || WOLFSENTRY_DEFINE_BUILD_SETTINGS */
+
+/*! @} */
 
 #endif /* WOLFSENTRY_SETTINGS_H */

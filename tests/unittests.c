@@ -83,6 +83,20 @@ int lwip_inet_pton(int af, const char *src, void *dst) {
 #define printf(...)
 #endif
 
+#ifdef WOLFSENTRY_UNITTEST_BENCHMARKS
+static inline uint64_t get_intel_cycles(void)
+{
+    unsigned int lo_c, hi_c;
+    __asm__ __volatile__ (
+        "cpuid\n\t"
+        "rdtsc"
+        : "=a"(lo_c), "=d"(hi_c)   /* out */
+        : "a"(0)                   /* in */
+        : "%ebx", "%ecx");         /* clobber */
+    return ((uint64_t)lo_c) | (((uint64_t)hi_c) << 32UL);
+}
+#endif
+
 #ifdef WOLFSENTRY_THREADSAFE
 
 #include <unistd.h>
@@ -320,6 +334,8 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_formatter(
 
 #include <wolfsentry/wolfsentry_json.h>
 
+static int test_action_enabled = 1;
+
 static __attribute_maybe_unused__ wolfsentry_errcode_t test_action(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
@@ -339,6 +355,9 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t test_action(
     (void)handler_arg;
     (void)route_table;
     (void)action_results;
+
+    if (! test_action_enabled)
+        WOLFSENTRY_RETURN_OK;
 
     if (rule_route == NULL) {
         printf("null rule_route, target_route=%p\n", (void *)target_route);
@@ -1391,6 +1410,58 @@ static int test_static_routes(void) {
 
     WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
 
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags, NULL /* event_label */, 0 /* event_label_len */, NULL /* caller_arg */,
+                                                           &route_id, &inexact_matches, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_FALLTHROUGH));
+
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags, NULL /* event_label */, 0 /* event_label_len */, NULL /* caller_arg */,
+                                                           &route_id, &inexact_matches, &action_results));
+
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_FALLTHROUGH));
+
+
+#ifdef WOLFSENTRY_UNITTEST_BENCHMARKS
+    {
+        struct timespec start_at, end_at;
+	uint64_t start_at_cycles, end_at_cycles;
+        int i;
+	double ns_per_call, cycles_per_call;
+
+        WOLFSENTRY_EXIT_ON_SYSFAILURE(clock_gettime(CLOCK_MONOTONIC, &start_at));
+	start_at_cycles = get_intel_cycles();
+        for (i=0; i<1000000; ++i) {
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags, NULL /* event_label */, 0 /* event_label_len */, NULL /* caller_arg */,
+                                                                       &route_id, &inexact_matches, &action_results));
+        }
+	end_at_cycles = get_intel_cycles();
+        WOLFSENTRY_EXIT_ON_SYSFAILURE(clock_gettime(CLOCK_MONOTONIC, &end_at));
+	ns_per_call = ((double)(end_at.tv_sec - start_at.tv_sec) * 1000000000.0 + (double)(end_at.tv_nsec - start_at.tv_nsec)) / (double)i;
+	cycles_per_call = (double)(end_at_cycles - start_at_cycles) / (double)i;
+        printf("benchmark wolfsentry_route_event_dispatch() with empty route table: %.2f ns/call %.2f cycles/call\n", ns_per_call, cycles_per_call);
+#ifdef WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE
+	if (cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE) {
+            fprintf(stderr, "benchmark wolfsentry_route_event_dispatch() with empty route table: measured %.2f cycles/call exceeds max %.2f\n", cycles_per_call, (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE);
+            WOLFSENTRY_EXIT_ON_TRUE(cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE);
+        }
+#endif
+    }
+#endif /* WOLFSENTRY_UNITTEST_BENCHMARKS */
+
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_NONE));
+
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &id, &action_results));
 
     memcpy(remote.sa.addr,"\4\5\6\7",sizeof remote.addr_buf);
@@ -1462,6 +1533,8 @@ static int test_static_routes(void) {
                                  &route_ref));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry_get_object_type(route_ref) == WOLFSENTRY_OBJECT_TYPE_ROUTE);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_private_data(
                                  WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -2030,10 +2103,21 @@ static int test_static_routes(void) {
         WOLFSENTRY_EXIT_ON_FALSE(new_commendable_count == 124);
     }
 
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(
-                                   WOLFSENTRY_CONTEXT_ARGS_OUT,
-                                   route_ref,
-                                   NULL /* action_results */));
+    /* test the generic object checkout/drop interface. */
+#ifdef WOLFSENTRY_THREADSAFE
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        LACKING_READ_LOCK,
+        wolfsentry_object_checkout(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref));
+#endif
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_object_checkout(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref, NULL /* action_results */));
 
     /* leave the route in the table, to be cleaned up by wolfsentry_shutdown(). */
 
@@ -4237,6 +4321,52 @@ static int test_json(const char *fname, const char *extra_fname) {
                 &action_results));
 
         WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+
+
+#ifdef WOLFSENTRY_UNITTEST_BENCHMARKS
+        {
+            struct timespec start_at, end_at;
+            uint64_t start_at_cycles, end_at_cycles;
+            double ns_per_call, cycles_per_call;
+
+            test_action_enabled = 0;
+
+            WOLFSENTRY_EXIT_ON_SYSFAILURE(clock_gettime(CLOCK_MONOTONIC, &start_at));
+            start_at_cycles = get_intel_cycles();
+            for (i=0; i<1000000; ++i) {
+                action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_DEROGATORY;
+                WOLFSENTRY_EXIT_ON_FAILURE(
+                    wolfsentry_route_event_dispatch_with_inited_result(
+                        WOLFSENTRY_CONTEXT_ARGS_OUT,
+                        &remote.sa,
+                        &local.sa,
+                        WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                        "call-in-from-unit-test",
+                        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                        (void *)0x12345678 /* caller_arg */,
+                        &id,
+                        &inexact_matches,
+                        &action_results));
+            }
+            end_at_cycles = get_intel_cycles();
+            WOLFSENTRY_EXIT_ON_SYSFAILURE(clock_gettime(CLOCK_MONOTONIC, &end_at));
+            ns_per_call = ((double)(end_at.tv_sec - start_at.tv_sec) * 1000000000.0 + (double)(end_at.tv_nsec - start_at.tv_nsec)) / (double)i;
+            cycles_per_call = (double)(end_at_cycles - start_at_cycles) / (double)i;
+            printf("benchmark wolfsentry_route_event_dispatch_with_inited_result() with JSON-loaded route table, matching penalty-boxed route: %.2f ns/call %.2f cycles/call\n", ns_per_call, cycles_per_call);
+
+#ifdef WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED
+	if (cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED) {
+            fprintf(stderr, "benchmark wolfsentry_route_event_dispatch_with_inited_result() with JSON-loaded route table, matching penalty-boxed route: measured %.2f cycles/call exceeds max %.2f\n", cycles_per_call, (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED);
+            WOLFSENTRY_EXIT_ON_TRUE(cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED);
+        }
+#endif
+
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+
+            test_action_enabled = 1;
+        }
+#endif /* WOLFSENTRY_UNITTEST_BENCHMARKS */
+
 
         /* force release from penalty box with explicit _RES_COMMENDABLE.
          * note that the result will still be _REJECT because of the fallthrough policy in test-config.json.

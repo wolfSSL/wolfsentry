@@ -4,7 +4,7 @@
 Most of the capabilities of wolfSentry can be configured, and dynamically
 reconfigured, by supplying JSON documents to the library.  To use this
 capability, add the following to wolfSentry initialization in the application:
-
+<br>
 ```
 #include <wolfsentry/wolfsentry_json.h>
 ```
@@ -29,11 +29,11 @@ restricted by RFC 7493, with certain additional requirements.  In particular,
 certain sections in the JSON document are restricted in their sequence of
 appearance.
 
-* "wolfsentry-config-version" shall appear first, and each event definition shall
+* `"wolfsentry-config-version"` shall appear first, and each event definition shall
 appear before any definitions for events, routes, or default policies that refer
-to it through "aux-parent-event", "parent-event", or "default-event" clauses.
+to it through `"aux-parent-event"`, `"parent-event"`, or `"default-event"` clauses.
 
-* Within event definitions, the "label", "priority", and "config"
+* Within event definitions, the `"label"`, `"priority"`, and `"config"`
 elements shall appear before any other elements.
 
 These sequence constraints are necessary to allow for high efficiency SAX-style
@@ -53,11 +53,11 @@ Note that certain element variants may be unavailable due to build settings:
 * `json_value_clause`: available if `defined(WOLFSENTRY_HAVE_JSON_DOM)`
 
 Caller-supplied event and action labels shall not begin with
-`WOLFSENTRY_BUILTIN_LABEL_PREFIX` (by default "%"), as these are reserved for
+`WOLFSENTRY_BUILTIN_LABEL_PREFIX` (by default `"%"`), as these are reserved for
 built-ins.
 
-"config-update" allows the default configuration to be updated.  It is termed an
-"update" because wolfSentry is initially configured by the `config` argument to
+`"config-update"` allows the default configuration to be updated.  It is termed an
+“update” because wolfSentry is initially configured by the `config` argument to
 `wolfsentry_init()` (which can be passed in `NULL`, signifying built-in
 defaults).  Note that times (`config.penaltybox_duration` and
 `config.route_idle_time_for_purge`) shall be passed to `wolfsentry_init()`
@@ -91,10 +91,10 @@ Note that `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_*` flags are allowed only if `WO
 
 ## Overview of JSON syntax
 
-Below is a JSON "lint" pseudodocument demonstrating all available configuration
+Below is a JSON “lint” pseudodocument demonstrating all available configuration
 nodes, with value specifiers that refer to the ABNF definitions below.  The
 allowed values are as in the ABNF formal syntax later in this document.
-
+<br>
 ```
 {
     "wolfsentry-config-version" : 1,
@@ -197,97 +197,97 @@ allowed values are as in the ABNF formal syntax later in this document.
 
 ## Descriptions of elements
 
-**`wolfsentry-config-version`** -- Shall appear first, with the value `1`.
+<b>`wolfsentry-config-version`</b> -- Shall appear first, with the value `1`.
 
-**`config-update`** -- Sets default and global parameters.  The default parameters apply to routes that have no parent event, or a parent event with no config of its own.
+<b>`config-update`</b> -- Sets default and global parameters.  The default parameters apply to routes that have no parent event, or a parent event with no config of its own.
 
-* **`max-connection-count`** -- If nonzero, the concurrent connection limit, beyond which additional connection requests are rejected.
+* <b>`max-connection-count`</b> -- If nonzero, the concurrent connection limit, beyond which additional connection requests are rejected.
 
-* **`penalty-box-duration`** -- If nonzero, the duration that a route stays in penalty box status before automatic release.
+* <b>`penalty-box-duration`</b> -- If nonzero, the duration that a route stays in penalty box status before automatic release.
 
-* **`derog-thresh-for-penalty-boxing`** -- If nonzero, the threshold at which accumulated derogatory counts (from `WOLFSENTRY_ACTION_RES_DEROGATORY` incidents) automatically penalty boxes a route.
+* <b>`derog-thresh-for-penalty-boxing`</b> -- If nonzero, the threshold at which accumulated derogatory counts (from `WOLFSENTRY_ACTION_RES_DEROGATORY` incidents) automatically penalty boxes a route.
 
-* **`derog-thresh-ignore-commendable`** -- If true, then counts from `WOLFSENTRY_ACTION_RES_COMMENDABLE` are not subtracted from the derogatory count when checking for automatic penalty boxing.
+* <b>`derog-thresh-ignore-commendable`</b> -- If true, then counts from `WOLFSENTRY_ACTION_RES_COMMENDABLE` are not subtracted from the derogatory count when checking for automatic penalty boxing.
 
-* **`commendable-clears-derogatory`** -- If true, then each count from `WOLFSENTRY_ACTION_RES_COMMENDABLE` zeroes the derogatory count.
+* <b>`commendable-clears-derogatory`</b> -- If true, then each count from `WOLFSENTRY_ACTION_RES_COMMENDABLE` zeroes the derogatory count.
 
-* **`max-purgeable-routes`** -- Global limit on the number of ephemeral routes to allow in the route table, beyond which the least recently matched ephemeral route is forced out early.  Not allowed in **`config`** clauses of events.
+* <b>`max-purgeable-routes`</b> -- Global limit on the number of ephemeral routes to allow in the route table, beyond which the least recently matched ephemeral route is forced out early.  Not allowed in <b>`config`</b> clauses of events.
 
-* **`route-idle-time-for-purge`** -- If nonzero, the time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in **`config`** clauses of events (see **`events`** below).
+* <b>`route-idle-time-for-purge`</b> -- If nonzero, the time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
-* **`route-flags-to-add-on-insert`** -- List of route flags to set on new routes upon insertion.  Useful primarily in **`config`** clauses of events (see **`events`** below).
+* <b>`route-flags-to-add-on-insert`</b> -- List of route flags to set on new routes upon insertion.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
-* **`route-flags-to-clear-on-insert`** -- List of route flags to clear on new routes upon insertion.  Useful primarily in **`config`** clauses of events (see **`events`** below).
+* <b>`route-flags-to-clear-on-insert`</b> -- List of route flags to clear on new routes upon insertion.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
-* **`action-res-filter-bits-set`** -- List of `action_res` flags that must be set at lookup time (dispatch) for referring routes to match.  Useful primarily in **`config`** clauses of events (see **`events`** below).
+* <b>`action-res-filter-bits-set`</b> -- List of `action_res` flags that must be set at lookup time (dispatch) for referring routes to match.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
-* **`action-res-filter-bits-unset`** -- List of `action_res` flags that must be clear at lookup time (dispatch) for referring routes to match.  Useful primarily in **`config`** clauses of events (see **`events`** below).
+* <b>`action-res-filter-bits-unset`</b> -- List of `action_res` flags that must be clear at lookup time (dispatch) for referring routes to match.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
-* **`action-res-bits-to-add`** -- List of `action_res` flags to be set upon match.
+* <b>`action-res-bits-to-add`</b> -- List of `action_res` flags to be set upon match.
 
-* **`action-res-bits-to-clear`** -- List of `action_res` flags to be cleared upon match.
+* <b>`action-res-bits-to-clear`</b> -- List of `action_res` flags to be cleared upon match.
 
 
-**`events`** -- The list of events with their respective definitions.  This section can appear more than once, but any given event definition shall precede any definitions that refer to it.
+<b>`events`</b> -- The list of events with their respective definitions.  This section can appear more than once, but any given event definition shall precede any definitions that refer to it.
 
-Each event is composed of the following elements, all of which are optional except for **`label`**.  **`label`**, **`priority`**, and **`config`** shall appear before the other elements.
+Each event is composed of the following elements, all of which are optional except for <b>`label`</b>.  <b>`label`</b>, <b>`priority`</b>, and <b>`config`</b> shall appear before the other elements.
 
-* **`label`** -- The name by which the event is identified.  See the definition of `label` in the ABNF grammar below for permissible values.
+* <b>`label`</b> -- The name by which the event is identified.  See the definition of `label` in the ABNF grammar below for permissible values.
 
-* **`priority`** -- The priority of routes that have this event as their **`parent-event`** (see **`routes`** below).  Lower number means higher priority.
+* <b>`priority`</b> -- The priority of routes that have this event as their <b>`parent-event`</b> (see <b>`routes`</b> below).  Lower number means higher priority.
 
-* **`config`** -- The configuration to associate with routes with this **`parent-event`**, as above for **`config-update`**.
+* <b>`config`</b> -- The configuration to associate with routes with this <b>`parent-event`</b>, as above for <b>`config-update`</b>.
 
-* **`aux-parent-event`** -- An event reference for use by action handlers, e.g. built-in `"%track-peer-v1"` creates routes with **`aux-parent-event`** as the new route's **`parent-event`**.
+* <b>`aux-parent-event`</b> -- An event reference for use by action handlers, e.g. built-in `"%track-peer-v1"` creates routes with <b>`aux-parent-event`</b> as the new route's <b>`parent-event`</b>.
 
-* **`post-actions`** -- List of actions to take when this event is passed via **`event_label`** to a dispatch routine such as `wolfsentry_route_event_dispatch()`.
+* <b>`post-actions`</b> -- List of actions to take when this event is passed via <b>`event_label`</b> to a dispatch routine such as `wolfsentry_route_event_dispatch()`.
 
-* **`insert-actions`** -- List of actions to take when a route is inserted with this event as **`parent-event`**.
+* <b>`insert-actions`</b> -- List of actions to take when a route is inserted with this event as <b>`parent-event`</b>.
 
-* **`match-actions`** -- List of actions to take when a route is matched by a dispatch routine, and the route has this event as its **`parent-event`**.
+* <b>`match-actions`</b> -- List of actions to take when a route is matched by a dispatch routine, and the route has this event as its <b>`parent-event`</b>.
 
-* **`update-actions`** -- List of actions to take when a route has a status update, such as a change of penalty box status, and has this event as its **`parent-event`**.
+* <b>`update-actions`</b> -- List of actions to take when a route has a status update, such as a change of penalty box status, and has this event as its <b>`parent-event`</b>.
 
-* **`delete-actions`** -- List of actions to take when a route is deleted, and has this event as its **`parent-event`**.
+* <b>`delete-actions`</b> -- List of actions to take when a route is deleted, and has this event as its <b>`parent-event`</b>.
 
-* **`decision-actions`** -- List of actions to take when dispatch final decision (final value of **`action_results`**) is determined, and the matched route has this event as its **`parent-event`**.
+* <b>`decision-actions`</b> -- List of actions to take when dispatch final decision (final value of <b>`action_results`</b>) is determined, and the matched route has this event as its <b>`parent-event`</b>.
 
-**`default-policies`** -- The global fallthrough default policies for dispatch routines such as `wolfsentry_route_event_dispatch()`.
+<b>`default-policies`</b> -- The global fallthrough default policies for dispatch routines such as `wolfsentry_route_event_dispatch()`.
 
-* **`default-policy`** -- A simple **`action_result`** flag to set by default, either **accept**, **reject**, or **reset**, the latter of which causes generation of TCP reset and ICMP unreachable reply packets where relevant.
+* <b>`default-policy`</b> -- A simple <b>`action_result`</b> flag to set by default, either **accept**, **reject**, or **reset**, the latter of which causes generation of TCP reset and ICMP unreachable reply packets where relevant.
 
-* **`default-event`** -- An event to use when a dispatch routine is called with a null **`event_label`**.
+* <b>`default-event`</b> -- An event to use when a dispatch routine is called with a null <b>`event_label`</b>.
 
-**`routes`** -- The list of routes with their respective definitions.  This section can appear more than once.
+<b>`routes`</b> -- The list of routes with their respective definitions.  This section can appear more than once.
 
 Each route is composed of the following elements, all of which are optional.
 
-* **`parent-event`** -- The event whose attributes determine the dynamics of the route.
+* <b>`parent-event`</b> -- The event whose attributes determine the dynamics of the route.
 
-* **`family`** -- The address family to match.  See `address_family` definition in the ABNF grammar below for permissible values.
+* <b>`family`</b> -- The address family to match.  See `address_family` definition in the ABNF grammar below for permissible values.
 
-* **`protocol`** -- The protocol to match.  See `route_protocol` definition in the ABNF grammar below for permissible values.
+* <b>`protocol`</b> -- The protocol to match.  See `route_protocol` definition in the ABNF grammar below for permissible values.
 
-* **`remote`** -- The attributes to match for the remote endpoint of the traffic.
-    * **`interface`** -- Network interface ID, as an arbitrary integer chosen and used consistently by the caller or IP stack integration.
-    * **`address`** -- The network address, in idiomatic form.  IPv4, IPv6, and MAC addresses shall enumerate all octets.  See `route_address` definition in the ABNF grammar below for permissible values.
-    * **`prefix-bits`** -- The number of bits in the **`address`** that traffic must match.
-    * **`port`** -- The port number that traffic must match.
+* <b>`remote`</b> -- The attributes to match for the remote endpoint of the traffic.
+    * <b>`interface`</b> -- Network interface ID, as an arbitrary integer chosen and used consistently by the caller or IP stack integration.
+    * <b>`address`</b> -- The network address, in idiomatic form.  IPv4, IPv6, and MAC addresses shall enumerate all octets.  See `route_address` definition in the ABNF grammar below for permissible values.
+    * <b>`prefix-bits`</b> -- The number of bits in the <b>`address`</b> that traffic must match.
+    * <b>`port`</b> -- The port number that traffic must match.
 
-* **`local`** -- The attributes to match for the local endpoint of the traffic.  The same nodes are available as for **`remote`**.
-* **`direction-in`** -- If true, match inbound traffic.
-* **`direction-out`** -- If true, match outbound traffic.
-* **`penalty-boxed`** -- If true, traffic matching the route is penalty boxed (rejected or reset).
-* **`green-listed`** -- If true, traffic matching the route is accepted.
-* **`dont-count-hits`** -- If true, inhibit statistical bookkeeping (no effect on dynamics).
-* **`dont-count-current-connections`** -- If true, inhibit tracking of concurrent connections, so that **`max-connection-count`** has no effect on traffic matching this route.
-* **`port-reset`** -- If true, set the `WOLFSENTRY_ACTION_RES_PORT_RESET` flag in the **`action_results`** when this route is matched, causing TCP reset or ICMP unreachable reply packet to be generated if IP stack integration is activated (e.g. `wolfsentry_install_lwip_filter_callbacks()`).
+* <b>`local`</b> -- The attributes to match for the local endpoint of the traffic.  The same nodes are available as for <b>`remote`</b>.
+* <b>`direction-in`</b> -- If true, match inbound traffic.
+* <b>`direction-out`</b> -- If true, match outbound traffic.
+* <b>`penalty-boxed`</b> -- If true, traffic matching the route is penalty boxed (rejected or reset).
+* <b>`green-listed`</b> -- If true, traffic matching the route is accepted.
+* <b>`dont-count-hits`</b> -- If true, inhibit statistical bookkeeping (no effect on dynamics).
+* <b>`dont-count-current-connections`</b> -- If true, inhibit tracking of concurrent connections, so that <b>`max-connection-count`</b> has no effect on traffic matching this route.
+* <b>`port-reset`</b> -- If true, set the `WOLFSENTRY_ACTION_RES_PORT_RESET` flag in the <b>`action_results`</b> when this route is matched, causing TCP reset or ICMP unreachable reply packet to be generated if IP stack integration is activated (e.g. `wolfsentry_install_lwip_filter_callbacks()`).
 
-**`user-values`** -- One or more sections of fully user-defined data available to application code for any use.  Each key is a label as defined in the ABNF grammar below.  The value can be any of:
+<b>`user-values`</b> -- One or more sections of fully user-defined data available to application code for any use.  Each key is a label as defined in the ABNF grammar below.  The value can be any of:
 
-* **`null`**
-* **`true`**
-* **`false`**
+* <b>`null`</b>
+* <b>`true`</b>
+* <b>`false`</b>
 * an integral number, implicitly a signed 64 bit integer
 * a floating point number, as defined in the ABNF grammar below for `number_float`
 * a quoted string allowing standard JSON escapes
@@ -314,9 +314,7 @@ The length limits used in the definition assume the default values in
 wolfsentry_settings.h, 32 octets for labels (`WOLFSENTRY_MAX_LABEL_BYTES`), and
 16384 octets for user-defined values (`WOLFSENTRY_KV_MAX_VALUE_BYTES`).  These
 values can be overridden at build time with user-supplied values.
-
-
-
+<br>
 ```
 "{"
     DQUOTE %s"wolfsentry-config-version" DQUOTE ":" uint32

@@ -12,12 +12,14 @@ make HOST=arm-none-eabi EXTRA_CFLAGS='-mcpu=cortex-m7' RUNTIME=FreeRTOS-lwIP FRE
 `FreeRTOS/Source` directly under it, and `LWIP_TOP` is the path to the top of
 the lwIP distribution, with `src` directly under it.
 
-The below code fragments can be added to a FreeRTOS application to enable
-    wolfSentry with dynamically loaded policies (JSON).  Many of the demonstrated code patterns are optional.  The only calls that are indispensable are `wolfsentry_init()`, `wolfsentry_config_json_oneshot()`, and `wolfsentry_install_lwip_filter_callbacks()`.  Each of these also has API variants that give the user more control.
+The below code fragments can be added to a FreeRTOS application to enable wolfSentry with dynamically loaded policies (JSON).  Many of the demonstrated code patterns are optional.  The only calls that are indispensable are `wolfsentry_init()`, `wolfsentry_config_json_oneshot()`, and `wolfsentry_install_lwip_filter_callbacks()`.  Each of these also has API variants that give the user more control.
+
+<br>
 
 ```
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_USER_BASE
-#define WOLFSENTRY_ERROR_ID_USER_APP_ERR0 (WOLFSENTRY_ERROR_ID_USER_BASE-1) /* user-defined error IDs count down starting at WOLFSENTRY_ERROR_ID_USER_BASE (which is negative). */
+#define WOLFSENTRY_ERROR_ID_USER_APP_ERR0 (WOLFSENTRY_ERROR_ID_USER_BASE-1)
+ /* user-defined error IDs count down starting at WOLFSENTRY_ERROR_ID_USER_BASE (which is negative). */
 
 #include <wolfsentry/wolfsentry_json.h>
 #include <wolfsentry/wolfsentry_lwip.h>
@@ -28,11 +30,23 @@ static const struct wolfsentry_eventconfig demo_config = {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
         .route_private_data_size = 64,
         .route_private_data_alignment = 0,         /* default alignment -- same as sizeof(void *). */
-        .max_connection_count = 10,                /* by default, don't allow more than 10 simultaneous connections that match the same route. */
-        .derogatory_threshold_for_penaltybox = 4,  /* after 4 derogatory events matching the same route, put the route in penalty box status. */
-        .penaltybox_duration = 300,                /* keep routes in penalty box status for 5 minutes.  denominated in seconds when passing to wolfsentry_init(). */
-        .route_idle_time_for_purge = 0,            /* 0 to disable -- autopurge doesn't usually make much sense as a default config. */
-        .flags = WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY, /* automatically clear derogatory count for a route when a commendable event matches the route. */
+        .max_connection_count = 10,                /* by default, don't allow more than 10 simultaneous
+                                                    * connections that match the same route.
+                                                    */
+        .derogatory_threshold_for_penaltybox = 4,  /* after 4 derogatory events matching the same route,
+                                                    * put the route in penalty box status.
+                                                    */
+        .penaltybox_duration = 300,                /* keep routes in penalty box status for 5 minutes.
+                                                    * denominated in seconds when passing to
+                                                    * wolfsentry_init().
+                                                    */
+        .route_idle_time_for_purge = 0,            /* 0 to disable -- autopurge doesn't usually make
+                                                    * much sense as a default config.
+                                                    */
+        .flags = WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY, /* automatically clear
+                                                    * derogatory count for a route when a commendable
+                                                    * event matches the route.
+                                                    */
         .route_flags_to_add_on_insert = 0,
         .route_flags_to_clear_on_insert = 0,
         .action_res_filter_bits_set = 0,
@@ -209,15 +223,18 @@ wolfsentry_errcode_t activate_wolfsentry_lwip(const char *json_config, int json_
 #endif
         );
     if (ret < 0) {
-        printf("wolfsentry_install_lwip_filter_callbacks: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        printf("wolfsentry_install_lwip_filter_callbacks: "
+               WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
 out:
     if (ret < 0) {
         /* Clean up if initialization failed. */
-        wolfsentry_errcode_t shutdown_ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry_lwip_ctx));
+        wolfsentry_errcode_t shutdown_ret =
+            wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry_lwip_ctx));
         if (shutdown_ret < 0)
-            printf("wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(shutdown_ret));
+            printf("wolfsentry_shutdown: "
+                   WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(shutdown_ret));
     }
 
     WOLFSENTRY_THREAD_TAILER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -239,7 +256,8 @@ wolfsentry_errcode_t shutdown_wolfsentry_lwip(void)
      */
     ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&wolfsentry_lwip_ctx, NULL));
     if (ret < 0) {
-        printf("wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        printf("wolfsentry_shutdown: "
+               WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
     return ret;

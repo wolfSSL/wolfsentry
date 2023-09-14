@@ -56,7 +56,7 @@ static int notnormal = 0;
     (ptr) += _len;                                                      \
 }
 
-#define WARN_ON_JSON_FAILURE(x) do { int _x = (x); if (_x < 0) { fprintf(stderr, "%s L %d: JSON call (%s) failed with code %d (%s)\n", __FILE__, __LINE__, #x, _x, json_error_str(_x)); } } while (0)
+#define WARN_ON_JSON_FAILURE(x) do { int _x = (x); if (_x < 0) { fprintf(stderr, "ERROR: %s L %d: JSON call (%s) failed with code %d (%s)\n", __FILE__, __LINE__, #x, _x, json_error_str(_x)); } } while (0)
 
 static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, const unsigned char *json_message,
     size_t json_message_len)
@@ -94,7 +94,7 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
                               0 /* dom_flags */, &p_root, &json_pos) < 0)) {
         if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
             fprintf(stderr,
-                    "json_dom_parse failed at offset " SIZET_FMT ", L%u, " \
+                    "ERROR: json_dom_parse failed at offset " SIZET_FMT ", L%u, " \
                     "col %u, with centijson code %d: %s\n",
                     json_pos.offset,
                     json_pos.line_number,
@@ -103,7 +103,7 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
                     json_error_str(ret));
         else
             fprintf(stderr,
-                    "json_dom_parse failed at offset " SIZET_FMT ", L%u, " \
+                    "ERROR: json_dom_parse failed at offset " SIZET_FMT ", L%u, " \
                     "col %u, with " WOLFSENTRY_ERROR_FMT "\n",
                     json_pos.offset,
                     json_pos.line_number,
@@ -210,14 +210,14 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
 
     notify_notification_set_category(notify, type);
     notify_notification_set_urgency(notify, urgency);
-    notify_notification_set_timeout(notify, expire_timeout);
+    notify_notification_set_timeout(notify, (int)expire_timeout);
     notify_notification_set_app_name(notify, app_name);
 
     notify_notification_set_hint(notify, "transient", g_variant_new_boolean(TRUE));
 
     retval = notify_notification_show(notify, &error);
     if (! retval) {
-        fprintf (stderr, "%s\n", error->message);
+        fprintf (stderr, "ERROR: %s\n", error->message);
         g_clear_error(&error);
     }
 
@@ -329,13 +329,13 @@ int main(int argc, char **argv) {
 
     WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
     if (WOLFSENTRY_THREAD_GET_ERROR < 0) {
-        fprintf(stderr, "%s: thread bootstrap failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(WOLFSENTRY_THREAD_GET_ERROR));
+        fprintf(stderr, "ERROR: %s: thread bootstrap failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(WOLFSENTRY_THREAD_GET_ERROR));
         exit(1);
     }
 
     for (i=1; i<argc; i+=2) {
         if (argc < i+2) {
-            fprintf(stderr,"%s: missing argument to \"%s\"\n", argv[0], argv[i]);
+            fprintf(stderr,"ERROR: %s: missing argument to \"%s\"\n", argv[0], argv[i]);
             exit(1);
         }
         if (! strcmp(argv[i],"--config")) {
@@ -346,7 +346,7 @@ int main(int argc, char **argv) {
         else if (! strcmp(argv[i],"--kv-int")) {
         }
         else {
-            fprintf(stderr,"%s: unrecognized argument \"%s\"\n", argv[0], argv[i]);
+            fprintf(stderr,"ERROR: %s: unrecognized argument \"%s\"\n", argv[0], argv[i]);
             exit(1);
         }
     }
@@ -372,7 +372,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    fprintf(stderr, "Loading configuration file %s\n", wolfsentry_configfile);
+    printf("Loading configuration file %s\n", wolfsentry_configfile);
     if ((wolfsentry_config_fd = open(wolfsentry_configfile, O_RDONLY)) < 0) {
         perror(wolfsentry_configfile);
         exit(1);
@@ -384,7 +384,7 @@ int main(int argc, char **argv) {
     }
 
     if ((wolfsentry_config_map = mmap(NULL,
-                                      wolfsentry_config_st.st_size,
+                                      (size_t)wolfsentry_config_st.st_size,
                                       PROT_READ,
                                       MAP_SHARED,
                                       wolfsentry_config_fd,
@@ -398,11 +398,11 @@ int main(int argc, char **argv) {
     if (wolfsentry_config_json_oneshot(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             wolfsentry_config_map,
-            wolfsentry_config_st.st_size,
+            (size_t)wolfsentry_config_st.st_size,
             WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS,
             (char *)buf,
             sizeof buf) < 0) {
-        fprintf(stderr,"%s\n",buf);
+        fprintf(stderr,"ERROR: %s\n",buf);
         exit(1);
     }
 
@@ -410,7 +410,7 @@ int main(int argc, char **argv) {
         if (! strcmp(argv[i],"--kv-string")) {
             char *cp = strchr(argv[i+1], '=');
             if (cp == NULL) {
-                fprintf(stderr,"%s: missing '=' in argument to %s\n",
+                fprintf(stderr,"ERROR: %s: missing '=' in argument to %s\n",
                     argv[0], argv[i]);
                 exit(1);
             }
@@ -419,7 +419,7 @@ int main(int argc, char **argv) {
                 (int)(cp - argv[i+1]), cp + 1,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED, 1 /* overwrite_p */);
             if (ret < 0) {
-                fprintf(stderr, "wolfsentry_user_value_store_string(): " \
+                fprintf(stderr, "ERROR: wolfsentry_user_value_store_string(): " \
                     WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
                 exit(1);
             }
@@ -429,12 +429,12 @@ int main(int argc, char **argv) {
             uint64_t the_int;
             char *end_of_the_int;
             if (cp == NULL) {
-                fprintf(stderr,"%s: missing '=' in argument to %s\n",argv[0],argv[i]);
+                fprintf(stderr,"ERROR: %s: missing '=' in argument to %s\n",argv[0],argv[i]);
                 exit(1);
             }
             the_int = strtoul(cp+1, &end_of_the_int, 0);
             if ((*end_of_the_int != 0) || (end_of_the_int == cp+1)) {
-                fprintf(stderr,"%s: bad numeric argument to %s: \"%s\"\n",
+                fprintf(stderr,"ERROR: %s: bad numeric argument to %s: \"%s\"\n",
                     argv[0], cp+1, argv[i]);
                 exit(1);
             }
@@ -442,7 +442,7 @@ int main(int argc, char **argv) {
             ret = wolfsentry_user_value_store_uint(WOLFSENTRY_CONTEXT_ARGS_OUT, argv[i+1],
                 (int)(cp - argv[i+1]), the_int, 1 /* overwrite_p */);
             if (ret < 0) {
-                fprintf(stderr, "wolfsentry_user_value_store_string(): " \
+                fprintf(stderr, "ERROR: wolfsentry_user_value_store_string(): " \
                     WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
                 exit(1);
             }
@@ -455,8 +455,17 @@ int main(int argc, char **argv) {
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         &notification_dest_port);
 
-    if (ret < 0)
+    if (ret < 0) {
+        fprintf(stderr, "ERROR: wolfsentry_user_value_get_uint(\"notification-dest-port\") returned "
+                WOLFSENTRY_ERROR_FMT "\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
+    }
+
+    if (notification_dest_port > MAX_UINT_OF(inbound_sa.sin_port)) {
+        fprintf(stderr, "ERROR: \"notification-dest-port\" value %lu is too big.\n", notification_dest_port);
+        exit(1);
+    }
 
     ret = wolfsentry_user_value_get_string(
         WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -467,7 +476,7 @@ int main(int argc, char **argv) {
         &notification_dest_addr_record);
 
     if (ret < 0) {
-        fprintf(stderr, "wolfsentry_user_value_get_string(\"notification-listen-addr\") returned "
+        fprintf(stderr, "ERROR: wolfsentry_user_value_get_string(\"notification-listen-addr\") returned "
                 WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         exit(1);
@@ -491,7 +500,7 @@ int main(int argc, char **argv) {
     }
 
     inbound_sa.sin_family = AF_INET;
-    inbound_sa.sin_port = htons(notification_dest_port);
+    inbound_sa.sin_port = htons((wolfsentry_port_t)notification_dest_port);
 
     inbound_fd = socket(AF_INET, SOCK_DGRAM, 17 /* UDP */);
     if (inbound_fd < 0) {
@@ -524,7 +533,7 @@ int main(int argc, char **argv) {
         recv_ret = recv(inbound_fd, buf, sizeof buf, MSG_TRUNC);
         if (recv_ret > (ssize_t)sizeof buf) {
             notnormal = 1;
-            fprintf(stderr,"received overlong packet %zd (max %zu)\n", recv_ret, sizeof buf);
+            fprintf(stderr,"ERROR: received overlong packet %zd (max %zu)\n", recv_ret, sizeof buf);
             continue;
         }
         if (recv_ret < 0) {
@@ -532,7 +541,7 @@ int main(int argc, char **argv) {
             perror("recv");
             break;
         }
-        if (notify(WOLFSENTRY_CONTEXT_ARGS_OUT, &centijson_config, buf, recv_ret) < 0)
+        if (notify(WOLFSENTRY_CONTEXT_ARGS_OUT, &centijson_config, buf, (size_t)recv_ret) < 0)
             notnormal = 1;
     }
 
@@ -541,14 +550,14 @@ done:
     notify_uninit();
 
     if (wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)) < 0) {
-            fprintf(stderr, "wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT,
+            fprintf(stderr, "ERROR: wolfsentry_shutdown: " WOLFSENTRY_ERROR_FMT,
                     WOLFSENTRY_ERROR_FMT_ARGS(ret));
             notnormal = 1;
     }
 
     ret = WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE);
     if (ret < 0) {
-        fprintf(stderr, "%s: thread shutdown failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        fprintf(stderr, "ERROR: %s: thread shutdown failed: " WOLFSENTRY_ERROR_FMT "\n", argv[0], WOLFSENTRY_ERROR_FMT_ARGS(ret));
         notnormal = 1;
     }
 

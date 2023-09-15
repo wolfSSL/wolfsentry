@@ -454,10 +454,12 @@ DOXYGEN_PREDEFINED := WOLFSENTRY_THREADSAFE WOLFSENTRY_PROTOCOL_NAMES WOLFSENTRY
 DOXYGEN_EXPAND_AS_DEFINED := WOLFSENTRY_SOCKADDR_MEMBERS WOLFSENTRY_FLEXIBLE_ARRAY_SIZE attr_align_to
 DOXYGEN_EXCLUDE := wolfsentry/wolfsentry_options.h
 
+PRINT_VERSION_RECIPE = cd '$(SRC_TOP)' && echo -e '\#include <stdio.h>\n\#include <stdlib.h>\n\#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) -DBUILDING_LIBWOLFSENTRY $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version.$$$$' && '$(BUILD_TOP)/print_version.$$$$' && rm -f '$(BUILD_TOP)/print_version.$$$$'
+
 .PHONY: doc-html
 doc-html:
 	@command -v doxygen >/dev/null || doxygen
-	@RELEASE_PER_HEADERS=$$(cd '$(SRC_TOP)' && echo -e '#include <stdio.h>\n#include <stdlib.h>\n#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version.$$$$' 1>/dev/null 2>&1 && '$(BUILD_TOP)/print_version.$$$$' && rm -f '$(BUILD_TOP)/print_version.$$$$') && \
+	@RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	mkdir -p '$(BUILD_TOP)/doc' && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf html && \
@@ -480,7 +482,7 @@ doc-pdf:
 	@command -v doxygen >/dev/null || doxygen
 	@command -v pdflatex >/dev/null || pdflatex
 	@command -v makeindex >/dev/null || makeindex
-	@RELEASE_PER_HEADERS=$$(cd '$(SRC_TOP)' && echo -e '#include <stdio.h>\n#include <stdlib.h>\n#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version.$$$$' 1>/dev/null 2>&1 && '$(BUILD_TOP)/print_version.$$$$' && rm -f '$(BUILD_TOP)/print_version.$$$$') && \
+	@RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	mkdir -p '$(BUILD_TOP)/doc' && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf pdf && \

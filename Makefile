@@ -138,20 +138,32 @@ VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
 DYNAMIC_CFLAGS := -fpic
 DYNAMIC_LDFLAGS := -shared
 
-$(BUILD_TOP)/src/json/centijson_%.o: CFLAGS+=-DWOLFSENTRY
-$(BUILD_TOP)/src/json/centijson_%.So: CFLAGS+=-DWOLFSENTRY
-
-ifeq "$(NO_STDIO)" "1"
+ifdef NO_STDIO
     CFLAGS += -DWOLFSENTRY_NO_STDIO
     NO_JSON := 1
 endif
 
-ifeq "$(NO_JSON)" "1"
-    CFLAGS += -DWOLFSENTRY_NO_JSON
+# JSON settings need to be extracted from $(USER_SETTINGS_FILE) to determine if JSON sources should be built.
+ifdef USER_SETTINGS_FILE
+    ifeq ($(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON$$' "$(USER_SETTINGS_FILE)" && echo 1 || echo 0), 1)
+        USER_SETTINGS_NO_JSON := 1
+    endif
+    ifeq ($(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON_DOM$$' "$(USER_SETTINGS_FILE)" && echo 1 || echo 0), 1)
+        USER_SETTINGS_NO_JSON_DOM := 1
+    endif
+endif
+
+ifdef NO_JSON
+    CFLAGS += -DWOLFSENTRY_NO_JSON -DWOLFSENTRY_NO_JSON_DOM
+else ifdef USER_SETTINGS_NO_JSON
+    NO_JSON := 1
 else
     SRCS += json/centijson_sax.c json/json_util.c json/load_config.c
-    ifneq "$(NO_JSON_DOM)" "1"
-        CFLAGS += -DWOLFSENTRY_HAVE_JSON_DOM
+    ifdef NO_JSON_DOM
+        CFLAGS += -DWOLFSENTRY_NO_JSON_DOM
+    else ifdef USER_SETTINGS_NO_JSON_DOM
+	NO_JSON_DOM := 1
+    else
         SRCS += json/centijson_dom.c json/centijson_value.c
     endif
 endif
@@ -160,21 +172,26 @@ ifdef CALL_TRACE
     CFLAGS += -DWOLFSENTRY_DEBUG_CALL_TRACE -fno-omit-frame-pointer -Wno-inline
 endif
 
+ifdef SINGLETHREADED
+    CFLAGS += -DWOLFSENTRY_SINGLETHREADED
+else
+    ifneq "$(RUNTIME)" "FreeRTOS-lwIP"
+        LDFLAGS += -pthread
+    endif
+endif
+
 ifdef USER_SETTINGS_FILE
+    ifneq (,$(filter -D% -U%,$(CFLAGS)))
+        $(error $(filter -D% -U%,$(CFLAGS)) USER_SETTINGS_FILE can't be combined with make-based feature switches or EXTRA_CFLAGS with macro clauses)
+    endif
     CFLAGS += -DWOLFSENTRY_USER_SETTINGS_FILE=\"$(USER_SETTINGS_FILE)\"
 endif
 
-ifeq "$(SINGLETHREADED)" "1"
-    CFLAGS += -DWOLFSENTRY_SINGLETHREADED
-else
-    LDFLAGS += -pthread
-endif
-
-ifeq "$(STATIC)" "1"
+ifdef STATIC
     LDFLAGS += -static
 endif
 
-ifeq "$(STRIPPED)" "1"
+ifdef STRIPPED
     DEBUG :=
     CFLAGS += -ffunction-sections -fdata-sections
     LDFLAGS += -Wl,--gc-sections -Wl,--strip-all
@@ -186,7 +203,14 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h
+
+ifdef USER_SETTINGS_FILE
+    OPTIONS_FILE := $(USER_SETTINGS_FILE)
+else
+    OPTIONS_FILE := $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
+    INSTALL_HEADERS += $(OPTIONS_FILE)
+endif
 
 all: $(BUILD_TOP)/$(LIB_NAME)
 
@@ -216,11 +240,13 @@ else
 	@{ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
 endif
 
+ifndef USER_SETTINGS_FILE
 $(BUILD_TOP)/wolfsentry/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentry_options_h.awk $(BUILD_TOP)/.build_params
 	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
 	@echo '$(CFLAGS)' | $< > $@
+endif
 
-$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(SRC_TOP)/Makefile
+$(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(OPTIONS_FILE) $(SRC_TOP)/Makefile
 
 INTERNAL_CFLAGS := -DBUILDING_LIBWOLFSENTRY -MMD
 
@@ -272,7 +298,7 @@ UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules te
 
 ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json
-    ifneq "$(NO_JSON_DOM)" "1"
+    ifndef NO_JSON_DOM
         UNITTEST_LIST += $(UNITTEST_LIST_JSON_DOM_EXTRAS)
         TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
     else
@@ -282,7 +308,7 @@ ifneq "$(NO_JSON)" "1"
 endif
 
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(OPTIONS_FILE)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
 	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h,$^)
@@ -297,7 +323,7 @@ endif
 UNITTEST_LIST_SHARED=test_all_shared
 UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]')) $(TEST_JSON_CFLAGS)
 
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(BUILD_TOP)/wolfsentry/wolfsentry_options.h
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(OPTIONS_FILE)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
 	$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
@@ -423,7 +449,7 @@ CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry
 release:
 	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make release -- version isn't known."; exit 1; fi
 	@cd "$(SRC_TOP)" && git show "$(RELEASE):wolfsentry/wolfsentry.h" | awk '/^#define WOLFSENTRY_VERSION_MAJOR /{major=$$3; next;}/^#define WOLFSENTRY_VERSION_MINOR /{minor=$$3; next;}/^#define WOLFSENTRY_VERSION_TINY /{tiny=$$3; next;} {if ((major != "") && (minor != "") && (tiny != "")) {exit(0);}} END { if ("v" major "." minor "." tiny == "$(RELEASE)") {exit(0);} else {printf("make release: tagged version \"%s\" doesn'\''t match version in header \"v%s.%s.%s\".\n", "$(RELEASE)", major, minor, tiny) > "/dev/stderr"; exit(1);}; }'
-	@REFMAN_UPDATED_AT=$$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' doc/wolfSentry_refman.pdf 2>/dev/null); if [[ -n "$$REFMAN_UPDATED_AT" && ($$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' wolfsentry/) -gt "$$REFMAN_UPDATED_AT") ]]; then echo -e 'error: tag "$(RELEASE)" has doc/wolfSentry_refman.pdf older than header(s) in wolfsentry/.\nfix with: make doc-pdf && mv doc/pdf/refman.pdf doc/wolfSentry_refman.pdf && git commit -n doc/wolfSentry_refman.pdf && git tag -f "$(RELEASE)"' 1>&2; false; fi
+	@REFMAN_UPDATED_AT=$$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' doc/wolfSentry_refman.pdf 2>/dev/null); if [[ -n "$$REFMAN_UPDATED_AT" && ($$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' wolfsentry/ doc/ ChangeLog.md README.md) -gt "$$REFMAN_UPDATED_AT") ]]; then echo -e 'error: tag "$(RELEASE)" has doc/wolfSentry_refman.pdf older than header(s) and/or documentation.\nfix with: make doc/wolfSentry_refman.pdf && git commit -n doc/wolfSentry_refman.pdf && git tag -f "$(RELEASE)"' 1>&2; false; fi
 ifndef VERY_QUIET
 	@echo "generating release archive $${PWD}/wolfsentry-$(RELEASE).zip"
 endif
@@ -466,7 +492,8 @@ doc-html:
 	cp -rs $(SRC_TOP)/doc/doxy-formats/html . && \
 	cd html && \
 	cp -rs $(SRC_TOP)/wolfsentry . && \
-	cp -s $(SRC_TOP)/*.md $(SRC_TOP)/doc/*.md . && \
+	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
+	sed 's/(doc\/\([^)]*\.md\))/(\1)/;s/^.*doc\/wolfSentry_refman\.pdf.*$$//' '$(SRC_TOP)/README.md' > README.md && \
 	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'Running doxygen...'; } && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/html/doxygen_warnings not found.' 1>&2 && false; }; } && \
@@ -489,7 +516,8 @@ doc-pdf:
 	cp -rs $(SRC_TOP)/doc/doxy-formats/pdf . && \
 	cd pdf && \
 	cp -rs $(SRC_TOP)/wolfsentry . && \
-	cp -s $(SRC_TOP)/*.md $(SRC_TOP)/doc/*.md . && \
+	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
+	sed 's/(doc\/\([^)]*\.md\))/(\1)/;s/^.*doc\/wolfSentry_refman\.pdf.*$$//' '$(SRC_TOP)/README.md' > README.md && \
 	echo 'Running doxygen...' && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings not found.' 1>&2 && false; }; } && \
@@ -508,6 +536,12 @@ doc-pdf-clean:
 doc: doc-html doc-pdf
 
 doc-clean: doc-html-clean doc-pdf-clean
+
+doc/wolfSentry_refman.pdf: $(SRC_TOP)/doc/wolfSentry_refman.pdf
+$(SRC_TOP)/doc/wolfSentry_refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsentry_options.h,$(INSTALL_HEADERS)) ChangeLog.md README.md doc/freertos-lwip-app.md  doc/json_configuration.md)
+	@$(MAKE) -f $(THIS_MAKEFILE) doc-pdf
+	@cp -p "$(BUILD_TOP)/doc/pdf/refman.pdf" "$@"
+	@echo 'updated $@'
 
 .PHONY: clean
 clean:

@@ -1,9 +1,9 @@
 # Building and Initializing wolfSentry for an application on FreeRTOS/lwIP
 
-Building the wolfSentry library for FreeRTOS with lwIP is supported directly by
+Building the wolfSentry library for FreeRTOS with lwIP and newlib-nano is supported directly by
 the top level `Makefile`.  E.g., for an ARM Cortex M7, `libwolfsentry.a` can be
 built with
-
+<br>
 ```
 make HOST=arm-none-eabi EXTRA_CFLAGS='-mcpu=cortex-m7' RUNTIME=FreeRTOS-lwIP FREERTOS_TOP="$FREERTOS_TOP" LWIP_TOP="$LWIP_TOP"
 ```
@@ -13,9 +13,7 @@ make HOST=arm-none-eabi EXTRA_CFLAGS='-mcpu=cortex-m7' RUNTIME=FreeRTOS-lwIP FRE
 the lwIP distribution, with `src` directly under it.
 
 The below code fragments can be added to a FreeRTOS application to enable wolfSentry with dynamically loaded policies (JSON).  Many of the demonstrated code patterns are optional.  The only calls that are indispensable are `wolfsentry_init()`, `wolfsentry_config_json_oneshot()`, and `wolfsentry_install_lwip_filter_callbacks()`.  Each of these also has API variants that give the user more control.
-
 <br>
-
 ```
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_USER_BASE
 #define WOLFSENTRY_ERROR_ID_USER_APP_ERR0 (WOLFSENTRY_ERROR_ID_USER_BASE-1)

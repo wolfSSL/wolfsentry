@@ -362,6 +362,14 @@ minimal-threaded-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" clean
 	@echo "passed: minimal threaded build test."
 
+.PHONY: user-settings-build-test
+user-settings-build-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-user-settings-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-user-settings-builds" SINGLETHREADED=1 NO_JSON=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_PROTOCOL_NAMES -DWOLFSENTRY_NO_GETPROTOBY' "$(BUILD_PARENT)/wolfsentry-user-settings-builds/wolfsentry/wolfsentry_options.h"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-user-settings-builds" USER_SETTINGS_FILE=$(BUILD_PARENT)/wolfsentry-user-settings-builds/wolfsentry/wolfsentry_options.h test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-user-settings-builds" clean
+	@echo "passed: user settings build test."
+
 .PHONY: short-enums-test
 short-enums-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" clean
@@ -635,7 +643,7 @@ doc-check:
 	@echo "passed: doc-check."
 
 .PHONY: check
-check:  dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test minimal-threaded-build-test short-enums-test
+check: dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test minimal-threaded-build-test user-settings-build-test short-enums-test
 
 .PHONY: check-extra
 check-extra: pahole-test route-holes-test static-build-test c89-test no-inline-test m32-test m32-c89-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test

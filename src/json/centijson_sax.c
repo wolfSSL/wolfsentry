@@ -45,7 +45,7 @@
  * IN THE SOFTWARE.
  */
 
-#ifdef WOLFSENTRY
+#ifndef NO_WOLFSENTRY
 #include "wolfsentry/wolfsentry_json.h"
 #else
 #include "wolfsentry/centijson_sax.h"

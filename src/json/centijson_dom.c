@@ -45,11 +45,11 @@
  * IN THE SOFTWARE.
  */
 
-#ifdef WOLFSENTRY
+#ifndef NO_WOLFSENTRY
+    #include "wolfsentry/wolfsentry_json.h"
     #ifndef WOLFSENTRY_HAVE_JSON_DOM
         #error building centijson_dom.c with WOLFSENTRY_HAVE_JSON_DOM unset
     #endif
-    #include "wolfsentry/wolfsentry_json.h"
 #else
     #include <string.h>
     #include "wolfsentry/centijson_dom.h"

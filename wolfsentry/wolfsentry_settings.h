@@ -34,16 +34,16 @@
  */
 #ifdef WOLFSENTRY_FOR_DOXYGEN
 #define WOLFSENTRY_USER_SETTINGS_FILE "the_path"
-     /*!< \brief Define #WOLFSENTRY_USER_SETTINGS_FILE to the path of a user settings file to be included, containing extra and override definitions and directives.  Can be an absolute or a relative path, subject to a `-I` path supplied to `make` using `EXTRA_CFLAGS`. */
+     /*!< \brief Define to the path of a user settings file to be included, containing extra and override definitions and directives.  Can be an absolute or a relative path, subject to a `-I` path supplied to `make` using `EXTRA_CFLAGS`.  Include quotes or <> around the path. */
 #undef WOLFSENTRY_USER_SETTINGS_FILE
 #endif
 
 #ifdef WOLFSENTRY_USER_SETTINGS_FILE
-#include WOLFSENTRY_USER_SETTINGS_FILE
+    #include WOLFSENTRY_USER_SETTINGS_FILE
 #endif
 
-#ifndef BUILDING_LIBWOLFSENTRY
-#include <wolfsentry/wolfsentry_options.h>
+#if !defined(BUILDING_LIBWOLFSENTRY) && !defined(WOLFSENTRY_USER_SETTINGS_FILE)
+    #include <wolfsentry/wolfsentry_options.h>
 #endif
 
 /*! @} */
@@ -260,7 +260,17 @@
     #define WOLFSENTRY_PROTOCOL_NAMES
 #endif
 
+#ifndef WOLFSENTRY_NO_JSON_DOM
+    #define WOLFSENTRY_HAVE_JSON_DOM
+#endif
+
 /*! @endcond */
+
+#if !defined(WOLFSENTRY_NO_GETPROTOBY) && (!defined(__GLIBC__) || !defined(__USE_MISC) || defined(WOLFSENTRY_C89))
+    /* get*by*_r() is non-standard. */
+    #define WOLFSENTRY_NO_GETPROTOBY
+        /*!< \brief Define this to gate out calls to getprotobyname_r() and getservbyname_r(), necessitating numeric identification of protocols (e.g. 6 for TCP) and services (e.g. 25 for SMTP) in configuration JSON documents. */
+#endif
 
 /*! @} */
 
@@ -340,12 +350,6 @@
 #endif
 #ifndef WOLFSENTRY_NO_TIME_H
 #include <time.h>
-#endif
-
-#if !defined(WOLFSENTRY_NO_GETPROTOBY) && (!defined(__GLIBC__) || !defined(__USE_MISC) || defined(WOLFSENTRY_C89))
-    /* get*by*_r() is non-standard. */
-    #define WOLFSENTRY_NO_GETPROTOBY
-        /*!< \brief Define this to gate out calls to getprotobyname_r() and getservbyname_r(), necessitating numeric identification of protocols (e.g. 6 for TCP) and services (e.g. 25 for SMTP) in configuration JSON documents. */
 #endif
 
 typedef unsigned char byte;
@@ -478,6 +482,33 @@ typedef uint16_t wolfsentry_priority_t;
 #define sem_t StaticSemaphore_t
 
 #else
+
+/*! @} */
+
+/*! \addtogroup wolfsentry_init
+ *  @{
+ */
+
+#ifdef WOLFSENTRY_FOR_DOXYGEN
+#define WOLFSENTRY_SEMAPHORE_INCLUDE "the_path"
+    /*!< \brief Define to the path of a header file declaring a semaphore API.  Can be an absolute or a relative path, subject to a `-I` path supplied to `make` using `EXTRA_CFLAGS`.  Include quotes or <> around the path. */
+#undef WOLFSENTRY_SEMAPHORE_INCLUDE
+#define WOLFSENTRY_THREAD_INCLUDE "the_path"
+    /*!< \brief Define to the path of a header file declaring a threading API.  Can be an absolute or a relative path, subject to a `-I` path supplied to `make` using `EXTRA_CFLAGS`.  Include quotes or <> around the path. */
+#undef WOLFSENTRY_THREAD_INCLUDE
+#define WOLFSENTRY_THREAD_ID_T thread_id_type
+    /*!< \brief Define to the appropriate type analogous to POSIX `pthread_t`. */
+#undef WOLFSENTRY_THREAD_ID_T
+#define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self_ish_function
+    /*!< \brief Define to the name of a void function analogous to POSIX `pthread_self`, returning a value of type #WOLFSENTRY_THREAD_ID_T. */
+#undef WOLFSENTRY_THREAD_GET_ID_HANDLER
+#endif
+
+/*! @} */
+
+/*! \addtogroup wolfsentry_thread_context
+ *  @{
+ */
 
 #ifdef WOLFSENTRY_SEMAPHORE_INCLUDE
 #include WOLFSENTRY_SEMAPHORE_INCLUDE
@@ -753,6 +784,7 @@ struct wolfsentry_build_settings {
 
 /*! @endcond */
 
+/*! \brief Macro to use as the initializer for ::wolfsentry_build_settings.config and ::wolfsentry_host_platform_interface.caller_build_settings.  @hideinitializer */
 #define WOLFSENTRY_CONFIG_SIGNATURE ( \
     WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ONE | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_USER_DEFINED_TYPES | \
@@ -767,7 +799,6 @@ struct wolfsentry_build_settings {
     _WOLFSENTRY_CONFIG_FLAG_VALUE_DEBUG_CALL_TRACE | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_LWIP | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS)
-    /*!< \brief Macro to use as the initializer for ::wolfsentry_build_settings.config and ::wolfsentry_host_platform_interface.caller_build_settings.  @hideinitializer */
 
 static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_build_settings = {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS

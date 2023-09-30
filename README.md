@@ -1,4 +1,4 @@
-# wolfSentry -- the wolfSSL IDPS
+# wolfSentry -- The Wolfssl Embedded Firewall/IDPS
 
 ## Description
 
@@ -11,7 +11,7 @@ dynamically configurable logic hub, arbitrarily associating user-defined events
 with user-defined actions, contextualized by connection attributes.  The
 evolution of client-server relationships can thus be tracked in detail, freely
 passing traffic matching expected usage patterns, while efficiently rejecting
-abusive patterns.
+abusive traffic.
 
 wolfSentry is fully integrated with the lwIP stack, through a patchset in the
 `lwip/` subdirectory of the source tree, and has basic integration with the
@@ -39,14 +39,18 @@ state of applications and sibling libraries.
 
 ## Documentation
 
-Basic application integration on FreeRTOS-lwIP is documented, with usable code fragments, in [doc/freertos-lwip-app.md](doc/freertos-lwip-app.md).
+<!-- not-for-full-manuals --> Basic application integration on FreeRTOS-lwIP is documented, with usable code fragments, in [doc/freertos-lwip-app.md](doc/freertos-lwip-app.md).
 
-JSON configuration is documented in detail by [doc/json_configuration.md](doc/json_configuration.md).
+<!-- not-for-full-manuals --> JSON configuration is documented in detail by [doc/json_configuration.md](doc/json_configuration.md).
 
-The full programmer's manual in PDF form is available at [doc/wolfSentry_refman.pdf](doc/wolfSentry_refman.pdf).
+With `doxygen` installed, the HTML version of the full API reference manual can
+be generated from the top of the wolfSentry source tree with `make doc-html`.
+This, and the source code itself, are the recommended API references.
 
-With `doxygen` installed, the HTML version of the reference manual can be
-generated with `make doc-html`.
+The PDF version of the reference manual is pregenerated and included with source
+distributions in the `doc/` subdirectory.
+<!-- not-for-full-manuals --> See [doc/wolfSentry_refman.pdf](doc/wolfSentry_refman.pdf).
+
 
 ## Dependencies
 
@@ -211,7 +215,7 @@ client/server can be loaded with user-supplied wolfSentry JSON configurations
 from the command line, using `--wolfsentry-config <file>`.
 
 
-## Change Log
+<!-- not-for-full-manuals --> ## Change Log
 
-The latest changes and additions are noted in the [ChangeLog.md](ChangeLog.md)
-at the top of the repository.
+<!-- not-for-full-manuals --> The latest changes and additions are noted in the [ChangeLog.md](ChangeLog.md)
+<!-- not-for-full-manuals --> at the top of the repository.

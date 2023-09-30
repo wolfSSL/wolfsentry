@@ -485,15 +485,15 @@ PRINT_VERSION_RECIPE = cd '$(SRC_TOP)' && echo -e '\#include <stdio.h>\n\#includ
 .PHONY: doc-html
 doc-html:
 	@command -v doxygen >/dev/null || doxygen
-	@RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
-	mkdir -p '$(BUILD_TOP)/doc' && \
+	@mkdir -p '$(BUILD_TOP)/doc' && \
+	RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf html && \
 	cp -rs $(SRC_TOP)/doc/doxy-formats/html . && \
 	cd html && \
 	cp -rs $(SRC_TOP)/wolfsentry . && \
 	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
-	sed 's/(doc\/\([^)]*\.md\))/(\1)/;s/^.*doc\/wolfSentry_refman\.pdf.*$$//' '$(SRC_TOP)/README.md' > README.md && \
+	grep -v -F -e '<!-- not-for-full-manuals -->' '$(SRC_TOP)/README.md' > README.md && \
 	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'Running doxygen...'; } && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/html/doxygen_warnings not found.' 1>&2 && false; }; } && \
@@ -504,20 +504,19 @@ doc-html:
 doc-html-clean:
 	@rm -rf '$(BUILD_TOP)/doc/html'
 
-.PHONY: doc-pdf
-doc-pdf:
+$(BUILD_TOP)/doc/pdf/refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsentry_options.h,$(INSTALL_HEADERS)) ChangeLog.md README.md doc/freertos-lwip-app.md doc/json_configuration.md)
 	@command -v doxygen >/dev/null || doxygen
 	@command -v pdflatex >/dev/null || pdflatex
 	@command -v makeindex >/dev/null || makeindex
-	@RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
-	mkdir -p '$(BUILD_TOP)/doc' && \
+	@mkdir -p '$(BUILD_TOP)/doc' && \
+	RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf pdf && \
 	cp -rs $(SRC_TOP)/doc/doxy-formats/pdf . && \
 	cd pdf && \
 	cp -rs $(SRC_TOP)/wolfsentry . && \
 	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
-	sed 's/(doc\/\([^)]*\.md\))/(\1)/;s/^.*doc\/wolfSentry_refman\.pdf.*$$//' '$(SRC_TOP)/README.md' > README.md && \
+	grep -v -F -e '<!-- not-for-full-manuals -->' '$(SRC_TOP)/README.md' > README.md && \
 	echo 'Running doxygen...' && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings not found.' 1>&2 && false; }; } && \
@@ -529,19 +528,48 @@ doc-pdf:
 	rm -rf latex && \
 	echo 'PDF manual generated; moved to $(BUILD_TOP)/doc/pdf/refman.pdf'
 
+doc-pdf: $(BUILD_TOP)/doc/pdf/refman.pdf
+
 .PHONY: doc-pdf-clean
 doc-pdf-clean:
 	@rm -rf '$(BUILD_TOP)/doc/pdf'
 
-doc: doc-html doc-pdf
+doc: doc-html $(BUILD_TOP)/doc/pdf/refman.pdf
 
 doc-clean: doc-html-clean doc-pdf-clean
 
 doc/wolfSentry_refman.pdf: $(SRC_TOP)/doc/wolfSentry_refman.pdf
-$(SRC_TOP)/doc/wolfSentry_refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsentry_options.h,$(INSTALL_HEADERS)) ChangeLog.md README.md doc/freertos-lwip-app.md  doc/json_configuration.md)
-	@$(MAKE) -f $(THIS_MAKEFILE) doc-pdf
+$(SRC_TOP)/doc/wolfSentry_refman.pdf: $(BUILD_TOP)/doc/pdf/refman.pdf
 	@cp -p "$(BUILD_TOP)/doc/pdf/refman.pdf" "$@"
 	@echo 'updated $@'
+
+DOC_SYNC_BASE_BRANCH := master
+
+.PHONY: doc-sync
+doc-sync: $(SRC_TOP)/doc/wolfSentry_refman.pdf
+	@cd $(SRC_TOP)/../documentation || exit $$?; \
+	if [[ -n '$(DOC_SYNC_NEW_BRANCH)' ]]; then \
+	    NEW_BRANCH='$(DOC_SYNC_NEW_BRANCH)'; \
+	    git checkout "$${NEW_BRANCH}" || exit $$?; \
+	else \
+	    NEW_BRANCH=$$(date +%Y%m%d)-wolfsentry-doc-sync; \
+	    [[ "$$NEW_BRANCH" != '$(DOC_SYNC_BASE_BRANCH)' ]] || { echo 'supplied DOC_SYNC_BASE_BRANCH collides with constructed branch name.' 1>&2; exit 1; }; \
+	    git checkout -b "$${NEW_BRANCH}" '$(DOC_SYNC_BASE_BRANCH)' || exit $$?; \
+	fi; \
+	cd wolfSentry/src && \
+	git ls-files --error-unmatch README.md freertos-lwip-app.md json_configuration.md ChangeLog.md >/dev/null && \
+	grep -v -F -e '<!-- not-for-full-manuals -->' '$(SRC_TOP)/README.md' >| README.md && \
+	cp -p $(SRC_TOP)/doc/freertos-lwip-app.md $(SRC_TOP)/doc/json_configuration.md $(SRC_TOP)/ChangeLog.md . && \
+	git commit -n -a && \
+	git push --no-verify origin "$$NEW_BRANCH"; \
+	exitval=$$?; \
+	if [[ $$exitval != 0 ]]; then \
+	    git reset -q --hard; \
+	    if [[ -z '$(DOC_SYNC_NEW_BRANCH)' ]]; then \
+	        git checkout DOC_SYNC_BASE_BRANCH && git branch -D "$$NEW_BRANCH"; \
+	    fi; \
+	fi; \
+	exit $$exitval
 
 .PHONY: clean
 clean:

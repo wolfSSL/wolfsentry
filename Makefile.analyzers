@@ -614,7 +614,7 @@ notification-demo-build-test:
 	exit_status=$$?; \
 	if [[ $$exit_status != 0 ]]; then pkill --parent $$$$ 'log_server|udp_to_dbus'; fi; \
 	rm -rf "$(BUILD_PARENT)/wolfssl-notification-demo-build"; \
-	rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed"; \
+	rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build"; \
 	exit $$exit_status
 	@echo "passed: notification-demo-build test."
 
@@ -640,6 +640,7 @@ doc-check:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-doc-html-build" doc-html-clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-doc-html-build" doc-html
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-doc-html-build" doc-html-clean
+	@rm -rf "$(BUILD_PARENT)/wolfsentry-doc-html-build"
 	@echo "passed: doc-check."
 
 .PHONY: check

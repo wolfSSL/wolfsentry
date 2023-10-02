@@ -300,7 +300,7 @@ Each route is composed of the following elements, all of which are optional.
     * `{ "json" : json_value }`
 
 
-## Formal ABNF grammar 
+## Formal ABNF grammar
 
 Below is the formal ABNF definition of the configuration syntax and permitted values.
 

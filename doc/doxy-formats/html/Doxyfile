@@ -42,7 +42,7 @@ DOXYFILE_ENCODING      = UTF-8
 # title of most generated pages and in a few other places.
 # The default value is: My Project.
 
-PROJECT_NAME           = wolfSentry Embedded IDPS $(WOLFSENTRY_VERSION) API Reference
+PROJECT_NAME           = wolfSentry Embedded Firewall/IDPS $(WOLFSENTRY_VERSION) API Reference
 
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This
 # could be handy for archiving the generated documentation or if some version
@@ -943,7 +943,7 @@ WARN_LOGFILE           = doxygen_warnings
 # spaces. See also FILE_PATTERNS and EXTENSION_MAPPING
 # Note: If this tag is empty the current directory is searched.
 
-INPUT                  = README.md ChangeLog.md wolfsentry freertos-lwip-app.md json_configuration.md
+INPUT                  = README.md freertos-lwip-app.md json_configuration.md ChangeLog.md wolfsentry
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses

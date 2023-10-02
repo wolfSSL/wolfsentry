@@ -47,9 +47,9 @@ With `doxygen` installed, the HTML version of the full API reference manual can
 be generated from the top of the wolfSentry source tree with `make doc-html`.
 This, and the source code itself, are the recommended API references.
 
-The PDF version of the reference manual is pregenerated and included with source
-distributions in the `doc/` subdirectory.
-<!-- not-for-full-manuals --> See [doc/wolfSentry_refman.pdf](doc/wolfSentry_refman.pdf).
+The PDF version of the API reference manual is pregenerated and included with source
+distributions in the `doc/` subdirectory.  The latest version is always
+available [on GitHub](https://raw.githubusercontent.com/wolfSSL/wolfsentry/master/doc/wolfSentry_refman.pdf).
 
 
 ## Dependencies

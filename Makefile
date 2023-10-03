@@ -482,6 +482,8 @@ DOXYGEN_EXCLUDE := wolfsentry/wolfsentry_options.h
 
 PRINT_VERSION_RECIPE = cd '$(SRC_TOP)' && echo -e '\#include <stdio.h>\n\#include <stdlib.h>\n\#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) -DBUILDING_LIBWOLFSENTRY $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version.$$$$' && '$(BUILD_TOP)/print_version.$$$$' && rm -f '$(BUILD_TOP)/print_version.$$$$'
 
+README_FOR_FULL_MANUAL_RECIPE = grep -v -E -e 'doc/[-_[:alnum:]]+\.md|ChangeLog\.md' '$(SRC_TOP)/README.md'
+
 .PHONY: doc-html
 doc-html:
 	@command -v doxygen >/dev/null || doxygen
@@ -493,7 +495,7 @@ doc-html:
 	cd html && \
 	cp -rs $(SRC_TOP)/wolfsentry . && \
 	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
-	grep -v -F -e '<!-- not-for-full-manuals -->' '$(SRC_TOP)/README.md' > README.md && \
+	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
 	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'Running doxygen...'; } && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/html/doxygen_warnings not found.' 1>&2 && false; }; } && \
@@ -516,7 +518,7 @@ $(BUILD_TOP)/doc/pdf/refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsen
 	cd pdf && \
 	cp -rs $(SRC_TOP)/wolfsentry . && \
 	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
-	grep -v -F -e '<!-- not-for-full-manuals -->' '$(SRC_TOP)/README.md' > README.md && \
+	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
 	echo 'Running doxygen...' && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings not found.' 1>&2 && false; }; } && \
@@ -558,7 +560,7 @@ doc-sync: $(SRC_TOP)/doc/wolfSentry_refman.pdf
 	fi; \
 	cd wolfSentry/src && \
 	git ls-files --error-unmatch README.md freertos-lwip-app.md json_configuration.md ChangeLog.md >/dev/null && \
-	grep -v -F -e '<!-- not-for-full-manuals -->' '$(SRC_TOP)/README.md' >| README.md && \
+	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
 	cp -p $(SRC_TOP)/doc/freertos-lwip-app.md $(SRC_TOP)/doc/json_configuration.md $(SRC_TOP)/ChangeLog.md . && \
 	git commit -n -a && \
 	git push --no-verify origin "$$NEW_BRANCH"; \

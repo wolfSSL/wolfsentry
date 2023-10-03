@@ -39,9 +39,9 @@ state of applications and sibling libraries.
 
 ## Documentation
 
-<!-- not-for-full-manuals --> Basic application integration on FreeRTOS-lwIP is documented, with usable code fragments, in [doc/freertos-lwip-app.md](doc/freertos-lwip-app.md).
+Basic application integration on FreeRTOS-lwIP is documented, with usable code fragments, in [doc/freertos-lwip-app.md](doc/freertos-lwip-app.md).
 
-<!-- not-for-full-manuals --> JSON configuration is documented in detail by [doc/json_configuration.md](doc/json_configuration.md).
+JSON configuration is documented in detail by [doc/json_configuration.md](doc/json_configuration.md).
 
 With `doxygen` installed, the HTML version of the full API reference manual can
 be generated from the top of the wolfSentry source tree with `make doc-html`.
@@ -50,6 +50,8 @@ This, and the source code itself, are the recommended API references.
 The PDF version of the API reference manual is pregenerated and included with source
 distributions in the `doc/` subdirectory.  The latest version is always
 available [on GitHub](https://raw.githubusercontent.com/wolfSSL/wolfsentry/master/doc/wolfSentry_refman.pdf).
+
+The latest changes and additions are noted in the [ChangeLog.md](ChangeLog.md) at the top of the repository.
 
 
 ## Dependencies
@@ -213,9 +215,3 @@ build with wolfSentry integration, and use `--with-wolfsentry=/the/install/path`
 if wolfSentry is installed in a nonstandard location.  The wolfSSL test
 client/server can be loaded with user-supplied wolfSentry JSON configurations
 from the command line, using `--wolfsentry-config <file>`.
-
-
-<!-- not-for-full-manuals --> ## Change Log
-
-<!-- not-for-full-manuals --> The latest changes and additions are noted in the [ChangeLog.md](ChangeLog.md)
-<!-- not-for-full-manuals --> at the top of the repository.

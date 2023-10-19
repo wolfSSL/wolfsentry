@@ -203,7 +203,7 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h wolfsentry/wolfssl_test.h
 
 ifdef USER_SETTINGS_FILE
     OPTIONS_FILE := $(USER_SETTINGS_FILE)

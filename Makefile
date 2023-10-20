@@ -50,6 +50,10 @@ ifndef OPTIM
     OPTIM := -O3
 endif
 
+ifndef NM
+    NM := nm
+endif
+
 ifdef HOST
     ifeq "$(CC)" "cc"
         CC = $(HOST)-gcc
@@ -68,6 +72,9 @@ ifdef HOST
     endif
     ifeq "$(AS)" "as"
         AS = $(HOST)-as
+    endif
+    ifeq "$(NM)" "nm"
+        NM = $(HOST)-nm
     endif
 endif
 
@@ -138,9 +145,16 @@ VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
 DYNAMIC_CFLAGS := -fpic
 DYNAMIC_LDFLAGS := -shared
 
-ifdef NO_STDIO
-    CFLAGS += -DWOLFSENTRY_NO_STDIO
-    NO_JSON := 1
+ifdef NO_STDIO_STREAMS
+    CFLAGS += -DWOLFSENTRY_NO_STDIO_STREAMS
+endif
+
+ifdef NO_ADDR_BITMASK_MATCHING
+    CFLAGS += -DWOLFSENTRY_NO_ADDR_BITMASK_MATCHING
+endif
+
+ifdef NO_IPV6
+    CFLAGS += -DWOLFSENTRY_NO_IPV6
 endif
 
 # JSON settings need to be extracted from $(USER_SETTINGS_FILE) to determine if JSON sources should be built.
@@ -300,9 +314,9 @@ ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json
     ifndef NO_JSON_DOM
         UNITTEST_LIST += $(UNITTEST_LIST_JSON_DOM_EXTRAS)
-        TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
-    else
-        TEST_JSON_CFLAGS:=-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-dom.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric-no-dom.json\"
+        TEST_JSON_CFLAGS := -DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric.json\"
+    else ifndef TEST_JSON_CFLAGS
+        TEST_JSON_CFLAGS := -DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-dom.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric-no-dom.json\"
     endif
     $(BUILD_TOP)/tests/test_json: override CFLAGS+=$(TEST_JSON_CFLAGS)
 endif
@@ -491,10 +505,10 @@ doc-html:
 	RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf html && \
-	cp -rs $(SRC_TOP)/doc/doxy-formats/html . && \
+	cp -Lrs $(SRC_TOP)/doc/doxy-formats/html . && \
 	cd html && \
-	cp -rs $(SRC_TOP)/wolfsentry . && \
-	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
+	cp -Lrs $(SRC_TOP)/wolfsentry . && \
+	cp -Ls $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
 	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
 	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'Running doxygen...'; } && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
@@ -514,10 +528,10 @@ $(BUILD_TOP)/doc/pdf/refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsen
 	RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf pdf && \
-	cp -rs $(SRC_TOP)/doc/doxy-formats/pdf . && \
+	cp -Lrs $(SRC_TOP)/doc/doxy-formats/pdf . && \
 	cd pdf && \
-	cp -rs $(SRC_TOP)/wolfsentry . && \
-	cp -s $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
+	cp -Lrs $(SRC_TOP)/wolfsentry . && \
+	cp -Ls $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
 	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
 	echo 'Running doxygen...' && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \

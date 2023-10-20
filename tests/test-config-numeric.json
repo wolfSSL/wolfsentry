@@ -135,7 +135,36 @@
         },
         {
             "label" : "call-in-from-unit-test"
-        }
+        },
+
+	{
+	    "label" : "set-user-0",
+	    "priority" : 1,
+	    "config" : {
+		"action-res-bits-to-add" : [ "user+0" ]
+	    }
+	},
+	{
+	    "label" : "set-user-1",
+	    "priority" : 1,
+	    "config" : {
+		"action-res-bits-to-add" : [ "user+1" ]
+	    }
+	},
+	{
+	    "label" : "set-user-2",
+	    "priority" : 1,
+	    "config" : {
+		"action-res-bits-to-add" : [ "user+2" ]
+	    }
+	},
+	{
+	    "label" : "set-user-3",
+	    "priority" : 1,
+	    "config" : {
+		"action-res-bits-to-add" : [ "user+3" ]
+	    }
+	}
     ],
     "default-policies" : {
         "default-policy" : "reject",
@@ -283,6 +312,63 @@
             },
             "local" : {
                 "address" : "001/002/003"
+            }
+        },
+
+        {
+            "parent-event" : "set-user-0",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : 29,
+            "remote" : {
+                "address" : "0x1fffffed",
+		"bitmask" : "0x1fffffff"
+            }
+        },
+        {
+            "parent-event" : "set-user-1",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : 29,
+            "remote" : {
+                "address" : "0x000007cb",
+		"bitmask" : "0x1fffffff"
+            }
+        },
+        {
+            "parent-event" : "set-user-2",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : 29,
+            "remote" : {
+                "address" : "0x1fffffff",
+		"bitmask" : "0x13333333"
+            }
+        },
+        {
+            "parent-event" : "set-user-3",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : 29,
+            "remote" : {
+                "address" : "0x123",
+		"bitmask" : "0x1ff"
             }
         },
 

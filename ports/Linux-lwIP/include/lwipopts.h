@@ -37,12 +37,14 @@
 
 #define LWIP_ETHERNET                   1
 #define LWIP_IPV4                       1
+#ifndef LWIP_IPV6
 #define LWIP_IPV6                       1
+#endif
 #define LWIP_TCP                        1
 #define LWIP_UDP                        1
 #define LWIP_ARP                        1
 #define LWIP_ICMP                       1
-#define LWIP_ICMP6                      1
+#define LWIP_ICMP6                      LWIP_IPV6
 #define IP_FRAG                         1
 
 #define LWIP_DEBUG			0

@@ -97,7 +97,7 @@
 #ifdef FREERTOS
     #include <FreeRTOS.h>
     #define WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
-    #if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
+    #if !defined(WOLFSENTRY_NO_STDIO_STREAMS) && !defined(WOLFSENTRY_PRINTF_ERR)
         #define WOLFSENTRY_PRINTF_ERR(...) printf(__VA_ARGS__)
     #endif
 
@@ -153,7 +153,7 @@
  *  @{
  */
 
-#if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_PRINTF_ERR)
+#if !defined(WOLFSENTRY_NO_STDIO_STREAMS) && !defined(WOLFSENTRY_PRINTF_ERR)
     #define WOLFSENTRY_PRINTF_ERR(...) fprintf(stderr, __VA_ARGS__)
         /*!< \brief printf-like macro, expecting a format as first arg, used for rendering warning and error messages.  Can be overridden in #WOLFSENTRY_USER_SETTINGS_FILE. @hideinitializer */
 #endif
@@ -179,16 +179,16 @@
 #ifdef WOLFSENTRY_FOR_DOXYGEN
 
 #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-    /*!< \brief Define if POSIX semaphore API is not available.  If no non-POSIX builtin implementation is present in wolfsentry_util.c, then the ::wolfsentry_host_platform_interface supplied to wolfSentry APIs must include a full semaphore implementation (shim set) in its ::wolfsentry_semcbs slot. */
+    /*!< \brief Define if POSIX semaphore API is not available.  If no non-POSIX builtin implementation is present in wolfsentry_util.c, then #WOLFSENTRY_NO_SEM_BUILTIN must be set, and the ::wolfsentry_host_platform_interface supplied to wolfSentry APIs must include a full semaphore implementation (shim set) in its ::wolfsentry_semcbs slot. */
 #undef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
 
 #define WOLFSENTRY_USE_NONPOSIX_THREADS
     /*!< \brief Define if POSIX thread API is not available.  `WOLFSENTRY_THREAD_INCLUDE`, `WOLFSENTRY_THREAD_ID_T`, and `WOLFSENTRY_THREAD_GET_ID_HANDLER` will need to be supplied in #WOLFSENTRY_USER_SETTINGS_FILE. */
 #undef WOLFSENTRY_USE_NONPOSIX_THREADS
 
-#define WOLFSENTRY_HAVE_NONGNU_ATOMICS
+#define WOLFSENTRY_NO_GNU_ATOMICS
     /*!< \brief Define if gnu-style atomic intrinsics are not available.  `WOLFSENTRY_ATOMIC_*()` macro definitions for intrinsics will need to be supplied in #WOLFSENTRY_USER_SETTINGS_FILE (see wolfsentry_util.h). */
-#undef WOLFSENTRY_HAVE_NONGNU_ATOMICS
+#undef WOLFSENTRY_NO_GNU_ATOMICS
 
 #endif
 
@@ -214,7 +214,7 @@
     #define WOLFSENTRY_USE_NATIVE_POSIX_THREADS
 #endif
 
-#ifndef WOLFSENTRY_HAVE_NONGNU_ATOMICS
+#ifndef WOLFSENTRY_NO_GNU_ATOMICS
     #define WOLFSENTRY_HAVE_GNU_ATOMICS
 #endif
 
@@ -225,11 +225,15 @@
 #ifdef WOLFSENTRY_FOR_DOXYGEN
 
 #define WOLFSENTRY_NO_CLOCK_BUILTIN
-    /*!< \brief If defined, omit built-in time primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_timecbs`. */
+    /*!< \brief If defined, omit built-in time primitives; the ::wolfsentry_host_platform_interface supplied to wolfSentry APIs must include implementations of all functions in ::wolfsentry_timecbs. */
 #undef WOLFSENTRY_NO_CLOCK_BUILTIN
 
+#define WOLFSENTRY_NO_SEM_BUILTIN
+    /*!< \brief If defined, omit built-in semaphore primitives; the ::wolfsentry_host_platform_interface supplied to wolfSentry APIs must include implementations of all functions in ::wolfsentry_semcbs. */
+#undef WOLFSENTRY_NO_SEM_BUILTIN
+
 #define WOLFSENTRY_NO_MALLOC_BUILTIN
-    /*!< \brief If defined, omit built-in heap allocator primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_allocator`. */
+    /*!< \brief If defined, omit built-in heap allocator primitives; the ::wolfsentry_host_platform_interface supplied to wolfSentry APIs must include implementations of all functions in ::wolfsentry_allocator. */
 #undef WOLFSENTRY_NO_MALLOC_BUILTIN
 
 #define WOLFSENTRY_NO_ERROR_STRINGS
@@ -237,10 +241,23 @@
 #undef WOLFSENTRY_NO_ERROR_STRINGS
 
 #define WOLFSENTRY_NO_PROTOCOL_NAMES
-#undef WOLFSENTRY_NO_PROTOCOL_NAMES
     /*!< \brief If defined, omit APIs for rendering error codes and source code files in human readable form.  They will be rendered numerically. */
+#undef WOLFSENTRY_NO_PROTOCOL_NAMES
+
+#define WOLFSENTRY_NO_ADDR_BITMASK_MATCHING
+    /*!< \brief If defined, omit support for bitmask matching of addresses, and support only prefix matching. */
+#undef WOLFSENTRY_NO_ADDR_BITMASK_MATCHING
+
+#define WOLFSENTRY_NO_IPV6
+    /*!< \brief If defined, omit support for IPv6. */
+#undef WOLFSENTRY_NO_IPV6
 
 #endif /* WOLFSENTRY_FOR_DOXYGEN */
+
+#ifndef WOLFSENTRY_MAX_BITMASK_MATCHED_AFS
+    #define WOLFSENTRY_MAX_BITMASK_MATCHED_AFS 4
+        /*!< \brief The maximum number of distinct address families that can use bitmask matching in routes.  Default value is 4.  @hideinitializer */
+#endif
 
 /*! @cond doxygen_all */
 
@@ -250,6 +267,10 @@
 
 #ifndef WOLFSENTRY_NO_MALLOC_BUILTIN
     #define WOLFSENTRY_MALLOC_BUILTINS
+#endif
+
+#ifndef WOLFSENTRY_NO_SEM_BUILTIN
+    #define WOLFSENTRY_SEM_BUILTINS
 #endif
 
 #ifndef WOLFSENTRY_NO_ERROR_STRINGS
@@ -262,6 +283,14 @@
 
 #ifndef WOLFSENTRY_NO_JSON_DOM
     #define WOLFSENTRY_HAVE_JSON_DOM
+#endif
+
+#ifndef WOLFSENTRY_NO_ADDR_BITMASK_MATCHING
+    #define WOLFSENTRY_ADDR_BITMASK_MATCHING
+#endif
+
+#ifndef WOLFSENTRY_NO_IPV6
+    #define WOLFSENTRY_IPV6
 #endif
 
 /*! @endcond */
@@ -330,7 +359,7 @@
 #ifndef WOLFSENTRY_NO_ASSERT_H
 #include <assert.h>
 #endif
-#ifndef WOLFSENTRY_NO_STDIO
+#ifndef WOLFSENTRY_NO_STDIO_H
 #ifndef __USE_ISOC99
 /* kludge to make glibc snprintf() prototype visible even when -std=c89 */
 /*! @cond doxygen_all */
@@ -451,11 +480,13 @@ typedef uint16_t wolfsentry_priority_t;
     /*!< \brief Value returned in `deadline->tv_sec` and `deadline->tv_nsec` by wolfsentry_get_thread_deadline() when `thread` is in non-blocking mode.  Not allowed as explicit values passed to wolfsentry_set_deadline_abs() -- use wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_OUT, 0) to put thread in non-blocking mode.  Can be overridden with user settings. */
 #endif
 
-#ifndef WOLFSENTRY_NO_ERRNO_H
-    #include <errno.h>
-#endif
-
 #ifdef WOLFSENTRY_USE_NATIVE_POSIX_SEMAPHORES
+
+#ifdef WOLFSENTRY_SEMAPHORE_INCLUDE
+
+#include WOLFSENTRY_SEMAPHORE_INCLUDE
+
+#else /* !WOLFSENTRY_SEMAPHORE_INCLUDE */
 
 #ifndef __USE_XOPEN2K
 /* kludge to force glibc sem_timedwait() prototype visible with -std=c99 */
@@ -466,6 +497,8 @@ typedef uint16_t wolfsentry_priority_t;
 #include <semaphore.h>
 #endif
 
+#endif /* !WOLFSENTRY_SEMAPHORE_INCLUDE */
+
 #elif defined(__MACH__)
 
 #include <dispatch/dispatch.h>
@@ -474,8 +507,13 @@ typedef uint16_t wolfsentry_priority_t;
 
 #elif defined(FREERTOS)
 
-#include <semphr.h>
 #include <atomic.h>
+
+#ifdef WOLFSENTRY_SEMAPHORE_INCLUDE
+#include WOLFSENTRY_SEMAPHORE_INCLUDE
+#else
+#include <semphr.h>
+#endif
 
 #define SEM_VALUE_MAX        0x7FFFU
 
@@ -621,7 +659,7 @@ typedef uint16_t wolfsentry_priority_t;
 
 #ifndef WOLFSENTRY_MAX_ADDR_BYTES
 #define WOLFSENTRY_MAX_ADDR_BYTES 16
-    /*!< \brief The maximum size allowed for an address, in bytes.  Can be overridden.  Incurs proportional overhead if wolfSentry is built #WOLFSENTRY_NO_ALLOCA or #WOLFSENTRY_C89. */
+    /*!< \brief The maximum size allowed for an address, in bytes.  Can be overridden.  Note that support for bitmask matching for an address family depends on #WOLFSENTRY_MAX_ADDR_BYTES at least twice the max size of a bare address in that family, as the address and mask are internally stored as a single double-length byte vector.  Note also that #WOLFSENTRY_MAX_ADDR_BYTES entails proportional overhead if wolfSentry is built #WOLFSENTRY_NO_ALLOCA or #WOLFSENTRY_C89. */
 #elif WOLFSENTRY_MAX_ADDR_BYTES * 8 > 0xffff
 #error WOLFSENTRY_MAX_ADDR_BYTES * 8 must fit in a uint16_t.
 #endif
@@ -678,13 +716,14 @@ enum wolfsentry_build_flags {
     WOLFSENTRY_CONFIG_FLAG_MALLOC_BUILTINS = (1U << 4U),
     WOLFSENTRY_CONFIG_FLAG_ERROR_STRINGS = (1U << 5U),
     WOLFSENTRY_CONFIG_FLAG_PROTOCOL_NAMES = (1U << 6U),
-    WOLFSENTRY_CONFIG_FLAG_NO_STDIO = (1U << 7U),
+    WOLFSENTRY_CONFIG_FLAG_NO_STDIO_STREAMS = (1U << 7U),
     WOLFSENTRY_CONFIG_FLAG_NO_JSON = (1U << 8U),
     WOLFSENTRY_CONFIG_FLAG_HAVE_JSON_DOM = (1U << 9U),
     WOLFSENTRY_CONFIG_FLAG_DEBUG_CALL_TRACE = (1U << 10U),
     WOLFSENTRY_CONFIG_FLAG_LWIP = (1U << 11U),
     WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS = (1U << 12U),
-    WOLFSENTRY_CONFIG_FLAG_MAX = WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS,
+    WOLFSENTRY_CONFIG_FLAG_ADDR_BITMASKS = (1U << 13U),
+    WOLFSENTRY_CONFIG_FLAG_MAX = WOLFSENTRY_CONFIG_FLAG_ADDR_BITMASKS,
     WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ZERO = (0U << 31U)
 };
 
@@ -738,10 +777,10 @@ struct wolfsentry_build_settings {
     #define _WOLFSENTRY_CONFIG_FLAG_VALUE_PROTOCOL_NAMES 0
 #endif
 
-#ifdef WOLFSENTRY_NO_STDIO
-    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO WOLFSENTRY_CONFIG_FLAG_NO_STDIO
+#ifdef WOLFSENTRY_NO_STDIO_STREAMS
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO_STREAMS WOLFSENTRY_CONFIG_FLAG_NO_STDIO_STREAMS
 #else
-    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO 0
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO_STREAMS 0
 #endif
 
 #ifdef WOLFSENTRY_NO_JSON
@@ -782,6 +821,12 @@ struct wolfsentry_build_settings {
     #define _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS ((sizeof(wolfsentry_init_flags_t) < sizeof(int)) ? WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS : 0)
 #endif
 
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_ADDR_BITMASKS WOLFSENTRY_CONFIG_FLAG_ADDR_BITMASKS
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_ADDR_BITMASKS 0
+#endif
+
 /*! @endcond */
 
 /*! \brief Macro to use as the initializer for ::wolfsentry_build_settings.config and ::wolfsentry_host_platform_interface.caller_build_settings.  @hideinitializer */
@@ -793,12 +838,13 @@ struct wolfsentry_build_settings {
     _WOLFSENTRY_CONFIG_FLAG_VALUE_MALLOC_BUILTINS | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_ERROR_STRINGS | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_PROTOCOL_NAMES | \
-    _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_STDIO_STREAMS | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_NO_JSON | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_HAVE_JSON_DOM | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_DEBUG_CALL_TRACE | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_LWIP | \
-    _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS)
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_ADDR_BITMASKS)
 
 static __attribute_maybe_unused__ struct wolfsentry_build_settings wolfsentry_build_settings = {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS

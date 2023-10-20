@@ -124,7 +124,10 @@ topic.
 | `TAR` || Path to GNU tar binary for `make dist`, should be set to `gtar` for macOS |
 | `VERSION` || The version to package for `make dist` |
 | `LWIP` | `WOLFSENTRY_LWIP` | True/false -- Activates appropriate build settings for lwIP |
-| `NO_STDIO` | `WOLFSENTRY_NO_STDIO` | Define to omit functionality that depends on `stdio` |
+| `NO_STDIO_STREAMS` | `WOLFSENTRY_NO_STDIO_STREAMS` | Define to omit functionality that depends on `stdio` stream I/O |
+|| `WOLFSENTRY_NO_STDIO_H` | Define to inhibit inclusion of `stdio.h` |
+| `NO_ADDR_BITMASK_MATCHING` | `WOLFSENTRY_NO_ADDR_BITMASK_MATCHING` | Define to omit support for bitmask matching of addresses, i.e. support only prefix matching. |
+| `NO_IPV6` | `WOLFSENTRY_NO_IPV6` | Define to omit support for the IPv6 address family. |
 | `NO_JSON` | `WOLFSENTRY_NO_JSON` | Define to omit JSON configuration support |
 | `NO_JSON_DOM` | `WOLFSENTRY_NO_JSON_DOM` | Define to omit JSON DOM API |
 | `CALL_TRACE` | `WOLFSENTRY_DEBUG_CALL_TRACE` | Define to activate runtime call stack logging (profusely verbose) |
@@ -136,7 +139,8 @@ topic.
 || `WOLFSENTRY_NO_MALLOC_BUILTINS` | If defined, omit built-in heap allocator primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_allocator`. |
 || `WOLFSENTRY_HAVE_NONGNU_ATOMICS` | Define if gnu-style atomic intrinsics are not available. `WOLFSENTRY_ATOMIC_*()` macro definitions for intrinsics will need to be supplied in `WOLFSENTRY_USER_SETTINGS_FILE` (see `wolfsentry_util.h`). |
 || `WOLFSENTRY_NO_CLOCK_BUILTIN` | If defined, omit built-in time primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_timecbs`. |
-|| `WOLFSENTRY_USE_NONPOSIX_SEMAPHORES` | Define if POSIX semaphore API is not available. If no non-POSIX builtin implementation is present in `wolfsentry_util.c`, then the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include a full semaphore implementation (shim set) in its `wolfsentry_semcbs` slot. |
+|| `WOLFSENTRY_NO_SEM_BUILTIN` || If defined, omit built-in semaphore primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_semcbs`. |
+|| `WOLFSENTRY_USE_NONPOSIX_SEMAPHORES` | Define if POSIX semaphore API is not available. If no non-POSIX builtin implementation is present in `wolfsentry_util.c`, then #WOLFSENTRY_NO_SEM_BUILTIN must be set, and the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include a full semaphore implementation (shim set) in its `wolfsentry_semcbs` slot. |
 || `WOLFSENTRY_SEMAPHORE_INCLUDE` | Define to the path of a header file declaring a semaphore API. |
 || `WOLFSENTRY_USE_NONPOSIX_THREADS` | Define if POSIX thread API is not available. `WOLFSENTRY_THREAD_INCLUDE`, `WOLFSENTRY_THREAD_ID_T`, and `WOLFSENTRY_THREAD_GET_ID_HANDLER` will need to be defined. |
 || `WOLFSENTRY_THREAD_INCLUDE` | Define to the path of a header file declaring a threading API. |
@@ -162,8 +166,7 @@ Install from an alternate build location to a non-standard destination:
 
 `make BUILD_TOP=./build INSTALL_DIR=/usr INSTALL_LIBDIR=/usr/lib64 install`
 
-Build libwolfsentry.a and test it under various analyzers (memory and thread
-testing under full battery of valgrind and sanitizer tests):
+Build libwolfsentry.a and test it in various configurations:
 
 `make -j check`
 

@@ -182,10 +182,15 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_clone(
         if ((ret = wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(dest_context), new)) < 0)
             goto out;
 
-        if ((src_table->ent_type == WOLFSENTRY_OBJECT_TYPE_ROUTE) &&
-            ((struct wolfsentry_route *)new)->meta.purge_after)
-        {
-            wolfsentry_route_purge_list_insert((struct wolfsentry_route_table *)dest_table, (struct wolfsentry_route *)new);
+        if (src_table->ent_type == WOLFSENTRY_OBJECT_TYPE_ROUTE) {
+            if (((struct wolfsentry_route *)new)->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)
+                ((struct wolfsentry_route_table *)dest_table)->last_af_wildcard_route = (struct wolfsentry_route *)new;
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+            if (((struct wolfsentry_route *)new)->flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_bitmask_matching_upref(((struct wolfsentry_route *)new)->sa_family, (struct wolfsentry_route_table *)dest_table));
+#endif
+            if (((struct wolfsentry_route *)new)->meta.purge_after)
+                wolfsentry_route_purge_list_insert((struct wolfsentry_route_table *)dest_table, (struct wolfsentry_route *)new);
         }
     }
     dest_table->tail = new;
@@ -264,7 +269,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_coupled_table_clone(
 
     for (i = src_table1->head;
          i;
-         i = i->next) {
+         i = i->next)
+    {
         if ((ret = clone_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, dest_context, &new1, &new2, flags)) < 0)
             goto out;
         new1->parent_table = dest_table1;
@@ -516,17 +522,29 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONT
 
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
 
-    WOLFSENTRY_TABLE_HEADER_RESET(*table);
-    /* coupled objects are freed as a pair, e.g. ents in
-     * wolfsentry_addr_family_byname_table are freed when the corresponding
-     * wolfsentry_addr_family_bynumber_table ents are freed.
-     */
+    if (table->reset_fn != NULL) {
+        ret = table->reset_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, table);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    } else
+        WOLFSENTRY_TABLE_HEADER_RESET(*table);
+
     if (table->free_fn == NULL)
         WOLFSENTRY_RETURN_OK;
     while (i) {
         next = i->next;
         ret = wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, i);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (table->coupled_ent_fn) {
+            struct wolfsentry_table_ent_header *j;
+            ret = table->coupled_ent_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, &j);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+            ret = wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, j);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        }
+        /* if this is a coupled object, the free_fn will free both objects.
+         * e.g., a coupled wolfsentry_addr_family_byname is freed when the
+         * corresponding wolfsentry_addr_family_bynumber is freed.
+         */
         table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, NULL /* action_results */);
         i = next;
     }

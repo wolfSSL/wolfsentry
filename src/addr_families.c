@@ -627,6 +627,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
         { *family_number = WOLFSENTRY_AF_HYLINK; WOLFSENTRY_RETURN_OK; }
     if (strcaseeq(family_name, "LINK", (size_t)family_name_len))
         { *family_number = WOLFSENTRY_AF_LINK; WOLFSENTRY_RETURN_OK; }
+    if (strcaseeq(family_name, "LINK48", (size_t)family_name_len))
+        { *family_number = WOLFSENTRY_AF_LINK48; WOLFSENTRY_RETURN_OK; }
+    if (strcaseeq(family_name, "LINK64", (size_t)family_name_len))
+        { *family_number = WOLFSENTRY_AF_LINK64; WOLFSENTRY_RETURN_OK; }
     if (strcaseeq(family_name, "COIP", (size_t)family_name_len))
         { *family_number = WOLFSENTRY_AF_COIP; WOLFSENTRY_RETURN_OK; }
     if (strcaseeq(family_name, "CNT", (size_t)family_name_len))
@@ -848,11 +852,15 @@ static wolfsentry_errcode_t wolfsentry_addr_family_max_addr_bits_1(
         { *bits = 48; WOLFSENTRY_RETURN_OK; }
     case WOLFSENTRY_AF_IEEE80211:
         { *bits = 48; WOLFSENTRY_RETURN_OK; }
-    case WOLFSENTRY_AF_LINK:
-        /* assume EUI-48 as used in Ethernet, 802.11, and Bluetooth.  sometimes
-         * these are EUI-64, as with FireWire and Zigbee.
-         */
+    case WOLFSENTRY_AF_LINK48:
+        /* EUI-48 is used in Ethernet, 802.11, 802.5, Bluetooth, FDDI, ATM, Fibre Channel, SAS, ITU-T G.hn. */
         { *bits = 48; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_LINK64:
+        /* EUI-64 is used with FireWire, Zigbee, IPv6 (second half of IPv6 address for stateless autoconfiguration). */
+        { *bits = 64; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_CAN:
+        /* CAN addresses come in 2 flavors, 11 bit (v2.0A) and 29 bit (v2.0B).  fix size at 32 bits to allow bitmask matching (byte-aligned). */
+        { *bits = 32; WOLFSENTRY_RETURN_OK; }
     default:
         WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
     }
@@ -894,6 +902,21 @@ static wolfsentry_errcode_t wolfsentry_addr_family_drop_reference_generic(
         action_results);
 }
 
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+static wolfsentry_errcode_t wolfsentry_addr_family_get_coupled_ent(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_table_ent_header *family_bynumber,
+    struct wolfsentry_table_ent_header **family_byname)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    if (family_bynumber->parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER)
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
+    *family_byname = (struct wolfsentry_table_ent_header *)
+        ((struct wolfsentry_addr_family_bynumber *)family_bynumber)->byname_ent;
+    WOLFSENTRY_RETURN_OK;
+}
+#endif
+
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init(
     struct wolfsentry_addr_family_bynumber_table *addr_family_bynumber_table)
 {
@@ -901,6 +924,9 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_bynumber_table_init
     addr_family_bynumber_table->header.cmp_fn = wolfsentry_addr_family_bynumber_key_cmp;
     addr_family_bynumber_table->header.free_fn = wolfsentry_addr_family_drop_reference_generic;
     addr_family_bynumber_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER;
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    addr_family_bynumber_table->header.coupled_ent_fn = wolfsentry_addr_family_get_coupled_ent;
+#endif
     WOLFSENTRY_RETURN_OK;
 }
 

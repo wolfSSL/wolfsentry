@@ -168,12 +168,14 @@ allowed values are as in the ABNF formal syntax later in this document.
           "interface" : uint8,
           "address" : route_address,
           "prefix-bits" : uint16,
+          "bitmask" : route_address,
           "port" : endpoint_port
         },
         "local" : {
           "interface" : uint8,
           "address" : route_address,
           "prefix-bits" : uint16,
+          "bitmask" : route_address,
           "port" : endpoint_port
         }
       }
@@ -271,7 +273,8 @@ Each route is composed of the following elements, all of which are optional.
 * <b>`remote`</b> -- The attributes to match for the remote endpoint of the traffic.
     * <b>`interface`</b> -- Network interface ID, as an arbitrary integer chosen and used consistently by the caller or IP stack integration.
     * <b>`address`</b> -- The network address, in idiomatic form.  IPv4, IPv6, and MAC addresses shall enumerate all octets.  See `route_address` definition in the ABNF grammar below for permissible values.
-    * <b>`prefix-bits`</b> -- The number of bits in the <b>`address`</b> that traffic must match.
+    * <b>`prefix-bits`</b> -- The number of bits in the <b>`address`</b> that traffic must match (mutually exclusive with <b>`bitmask`</b>).
+    * <b>`bitmask`</b> -- A bitmask to be applied to the traffic address before matching with the route <b>`address`</b> (mutually exclusive with <b>`prefix-bits`</b>).
     * <b>`port`</b> -- The port number that traffic must match.
 
 * <b>`local`</b> -- The attributes to match for the local endpoint of the traffic.  The same nodes are available as for <b>`remote`</b>.
@@ -405,7 +408,7 @@ route_local_endpoint_clause = DQUOTE %s"local" DQUOTE ":" route_endpoint
 route_endpoint = "{"
     [ route_interface_clause "," ]
     [ route_address_clause ","
-      [ route_address_prefix_bits_clause "," ]
+      [ (route_address_prefix_bits_clause / route_address_bitmask_clause) "," ]
     ]
     [ route_port_clause "," ]
     -","
@@ -414,6 +417,8 @@ route_endpoint = "{"
 route_interface_clause = DQUOTE %s"interface" DQUOTE ":" uint8
 
 route_address_clause = DQUOTE %s"address" DQUOTE ":" route_address
+
+route_address_bitmask_clause = DQUOTE %s"bitmask" DQUOTE ":" route_address
 
 route_address = DQUOTE (route_address_ipv4 / route_address_ipv6 / route_address_mac / route_address_user) DQUOTE
 

@@ -222,7 +222,9 @@ struct wolfsentry_table_ent_header
 struct wolfsentry_context;
 
 typedef int (*wolfsentry_ent_cmp_fn_t)(const struct wolfsentry_table_ent_header *left, const struct wolfsentry_table_ent_header *right);
+typedef wolfsentry_errcode_t (*wolfsentry_table_reset_fn_t)(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_header *table);
 typedef wolfsentry_errcode_t (*wolfsentry_ent_free_fn_t)(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, wolfsentry_action_res_t *action_results);
+typedef wolfsentry_errcode_t (*wolfsentry_coupled_ent_fn_t)(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent, struct wolfsentry_table_ent_header **coupled_ent);
 
 typedef wolfsentry_errcode_t (*wolfsentry_filter_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
 typedef wolfsentry_errcode_t (*wolfsentry_dropper_function_t)(void *context, struct wolfsentry_table_ent_header *object, wolfsentry_action_res_t *action_results);
@@ -262,7 +264,9 @@ typedef wolfsentry_errcode_t (*wolfsentry_table_ent_clone_map_fn_t)(
 struct wolfsentry_table_header {
     struct wolfsentry_table_ent_header *head, *tail; /* these will be replaced by red-black table elements later. */
     wolfsentry_ent_cmp_fn_t cmp_fn;
+    wolfsentry_table_reset_fn_t reset_fn;
     wolfsentry_ent_free_fn_t free_fn;
+    wolfsentry_coupled_ent_fn_t coupled_ent_fn;
     wolfsentry_hitcount_t n_ents;
     wolfsentry_hitcount_t n_inserts;
     wolfsentry_hitcount_t n_deletes;
@@ -393,12 +397,24 @@ struct wolfsentry_route {
 
 struct wolfsentry_route_table {
     struct wolfsentry_table_header header;
-    struct wolfsentry_list_header purge_list;
+    struct wolfsentry_list_header purge_list; /* list of purgeable routes ordered from least stale at head, to most stale at tail. */
     wolfsentry_hitcount_t max_purgeable_routes;
     struct wolfsentry_event *default_event; /* used as the parent_event by wolfsentry_route_dispatch() for a static route match with a null parent_event. */
     struct wolfsentry_route *fallthrough_route; /* used as the rule_route when no rule_route is matched or inserted. */
+    struct wolfsentry_route *last_af_wildcard_route; /* last ent in the wildcard-AF span, if any. */
     wolfsentry_action_res_t default_policy;
     wolfsentry_priority_t highest_priority_route_in_table;
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    wolfsentry_addr_family_t n_bitmask_matching_afs;
+    struct {
+#ifdef WOLFSENTRY_ADDR_BITMASK_WIDE_REFCOUNT
+        uint32_t refcount;
+#else
+        uint16_t refcount;
+#endif
+        wolfsentry_addr_family_t af;
+    } bitmask_matching_afs[WOLFSENTRY_MAX_BITMASK_MATCHED_AFS];
+#endif
 };
 
 struct wolfsentry_kv_pair_internal {
@@ -537,6 +553,12 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_table_clone_header(
     wolfsentry_clone_flags_t flags);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_init(
     struct wolfsentry_route_table *route_table);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_bitmask_matching_upref(
+    wolfsentry_addr_family_t af,
+    struct wolfsentry_route_table *routes);
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_bitmask_matching_downref(
+    wolfsentry_addr_family_t af,
+    struct wolfsentry_route_table *routes);
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_fallthrough_route_alloc(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table *route_table);
@@ -682,6 +704,9 @@ static inline void wolfsentry_table_cursor_seek_to_head(const struct wolfsentry_
 }
 static inline void wolfsentry_table_cursor_seek_to_tail(const struct wolfsentry_table_header *table, struct wolfsentry_cursor *cursor) {
     cursor->point = table->tail;
+}
+static inline void wolfsentry_table_cursor_set(struct wolfsentry_cursor *cursor, struct wolfsentry_table_ent_header *ent) {
+    cursor->point = ent;
 }
 static inline struct wolfsentry_table_ent_header * wolfsentry_table_cursor_prev(struct wolfsentry_cursor *cursor) {
     if (cursor->point == NULL)

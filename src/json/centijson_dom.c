@@ -63,14 +63,12 @@ static void *json_malloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocat
     if (allocator)
         return allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), size);
     else
-        return malloc(size);
+        return NULL;
 }
 #define malloc(size) json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator), size)
 static void json_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), void *ptr) {
     if (allocator)
         allocator->free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr);
-    else
-        free(ptr);
     WOLFSENTRY_RETURN_VOID;
 }
 #define free(ptr) json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator), ptr)
@@ -80,7 +78,7 @@ static void *json_realloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_alloca
     if (allocator)
         return allocator->realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr, size);
     else
-        return realloc(ptr, size);
+        return NULL;
 }
 #define realloc(ptr, size) json_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(&dom_parser->parser, allocator), ptr, size)
 

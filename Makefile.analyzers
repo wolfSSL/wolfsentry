@@ -341,26 +341,44 @@ no-getprotoby-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-getprotoby-builds" clean
 	@echo "passed: no-getprotoby test."
 
-.PHONY: no-stdio-build-test
-no-stdio-build-test:
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no_stdio-builds" clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no_stdio-builds" NO_STDIO=1
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no_stdio-builds" clean
-	@echo "passed: NO_STDIO build test."
+.PHONY: no-stdio-streams-build-test
+no-stdio-streams-build-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-stdio-streams-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-stdio-streams-builds" NO_STDIO_STREAMS=1
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-stdio-streams-builds" clean
+	@echo "passed: NO_STDIO_STREAMS build test."
 
 .PHONY: minimal-build-test
 minimal-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-builds" clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-builds" SINGLETHREADED=1 NO_STDIO=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_PROTOCOL_NAMES -DWOLFSENTRY_NO_GETPROTOBY -Wno-error=inline -Wno-inline'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-builds" SINGLETHREADED=1 NO_STDIO_STREAMS=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_PROTOCOL_NAMES -DWOLFSENTRY_NO_GETPROTOBY -Wno-error=inline -Wno-inline'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-builds" clean
 	@echo "passed: minimal build test."
 
 .PHONY: minimal-threaded-build-test
 minimal-threaded-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" NO_STDIO=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_PROTOCOL_NAMES -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_USE_NONPOSIX_SEMAPHORES -DWOLFSENTRY_SEMAPHORE_INCLUDE=\<semaphore.h\> -DWOLFSENTRY_USE_NONPOSIX_THREADS -DWOLFSENTRY_THREAD_INCLUDE=\<pthread.h\> -DWOLFSENTRY_THREAD_ID_T=pthread_t -DWOLFSENTRY_THREAD_GET_ID_HANDLER=pthread_self -Wno-error=inline -Wno-inline'
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" NO_STDIO_STREAMS=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -DWOLFSENTRY_NO_PROTOCOL_NAMES -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_SEM_BUILTIN -DWOLFSENTRY_SEMAPHORE_INCLUDE=\<semaphore.h\> -DWOLFSENTRY_USE_NONPOSIX_THREADS -DWOLFSENTRY_THREAD_INCLUDE=\<pthread.h\> -DWOLFSENTRY_THREAD_ID_T=pthread_t -DWOLFSENTRY_THREAD_GET_ID_HANDLER=pthread_self -Wno-error=inline -Wno-inline'
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" clean
 	@echo "passed: minimal threaded build test."
+
+LIBRARY_DEPENDENCY_SUPPRESSIONS_BASE := U wolfsentry_|U json_|U (inet_ntop|inet_pton|memchr|memcmp|memcpy|__memcpy_chk|memmove|memset|__popcountdi2|snprintf|__snprintf_chk|strchr|strcmp|strlen|strncasecmp|strncmp|strtod|strtol|strtoll|strtoul|strtoull)$$
+
+.PHONY: library-dependency-singlethreaded-build-test
+library-dependency-singlethreaded-build-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP='$(BUILD_PARENT)/library-dependency-singlethreaded-builds' clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP='$(BUILD_PARENT)/library-dependency-singlethreaded-builds' NO_STDIO_STREAMS=1 SINGLETHREADED=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_SEM_BUILTIN -DWOLFSENTRY_NO_ERRNO_H -ffreestanding'
+	@if $(NM) -u '$(BUILD_PARENT)/library-dependency-singlethreaded-builds/libwolfsentry.a' | egrep -q -v '^$$|^[a-zA-Z].*:$$|$(LIBRARY_DEPENDENCY_SUPPRESSIONS_BASE)'; then $(NM) -u '$(BUILD_PARENT)/library-dependency-singlethreaded-builds/libwolfsentry.a' | egrep -v '$(LIBRARY_DEPENDENCY_SUPPRESSIONS_BASE)'; exit 1; fi
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP='$(BUILD_PARENT)/library-dependency-singlethreaded-builds' clean
+	@echo "passed: library-dependency-singlethreaded-build test."
+
+.PHONY: library-dependency-multithreaded-build-test
+library-dependency-multithreaded-build-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP='$(BUILD_PARENT)/library-dependency-multithreaded-builds' clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP='$(BUILD_PARENT)/library-dependency-multithreaded-builds' NO_STDIO_STREAMS=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_SEM_BUILTIN -ffreestanding'
+	@if $(NM) -u '$(BUILD_PARENT)/library-dependency-multithreaded-builds/libwolfsentry.a' | egrep -q -v '^$$|^[a-zA-Z].*:$$|$(LIBRARY_DEPENDENCY_SUPPRESSIONS_BASE)|U (__errno_location|pthread_self)$$'; then $(NM) -u '$(BUILD_PARENT)/library-dependency-multithreaded-builds/libwolfsentry.a' | egrep -v '$(LIBRARY_DEPENDENCY_SUPPRESSIONS_BASE)|U (__errno_location|pthread_self)$$'; exit 1; fi
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP='$(BUILD_PARENT)/library-dependency-multithreaded-builds' clean
+	@echo "passed: library-dependency-multithreaded-build test."
 
 .PHONY: user-settings-build-test
 user-settings-build-test:
@@ -376,6 +394,21 @@ short-enums-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" EXTRA_CFLAGS='-fshort-enums' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" clean
 	@echo "passed: short enums test."
+
+.PHONY: no-addr-bitmask-matching-test
+no-addr-bitmask-matching-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-addr-bitmask-matching-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-addr-bitmask-matching-builds" NO_ADDR_BITMASK_MATCHING=1 TEST_JSON_CFLAGS='-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-bitmasks.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric-no-bitmasks.json\"' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-addr-bitmask-matching-builds" clean
+	@echo "passed: NO_ADDR_BITMASK_MATCHING test."
+
+.PHONY: no-ipv6-test
+no-ipv6-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-ipv6-test-builds" NO_IPV6=1 clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-ipv6-test-builds" NO_IPV6=1 TEST_JSON_CFLAGS='-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-ipv6.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric-no-ipv6.json\"' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-ipv6-test-builds" NO_IPV6=1 clean
+	@echo "passed: no-ipv6 test."
+
 
 # this test assures that there are no more holes in structs than necessary.
 # note that it isn't possible to minimize this simultaneously for both
@@ -438,14 +471,14 @@ static-build-test:
 .PHONY: benchmark-test
 benchmark-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-builds" clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-builds" EXTRA_CFLAGS+='-DWOLFSENTRY_UNITTEST_BENCHMARKS -DWOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE=320 -DWOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED=1200' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-builds" EXTRA_CFLAGS+='-DWOLFSENTRY_UNITTEST_BENCHMARKS -DWOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE=320 -DWOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED=1400' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-builds" clean
 	@echo "passed: benchmark test."
 
 .PHONY: benchmark-singlethreaded-test
 benchmark-singlethreaded-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-singlethreaded-builds" clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-singlethreaded-builds" SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_UNITTEST_BENCHMARKS -DWOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE=120 -DWOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED=900' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-singlethreaded-builds" SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_UNITTEST_BENCHMARKS -DWOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE=120 -DWOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED=1000' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-benchmark-singlethreaded-builds" clean
 	@echo "passed: benchmark-singlethreaded test."
 
@@ -455,7 +488,7 @@ benchmark-singlethreaded-test:
 ifdef FREERTOS_TOP
     FREERTOS_TOP_FOR_TEST := $(FREERTOS_TOP)
 else
-    FREERTOS_TOP_FOR_TEST := ../third/FreeRTOS
+    FREERTOS_TOP_FOR_TEST := $(SRC_TOP)/../third/FreeRTOS
 endif
 ifdef LWIP_TOP
     LWIP_TOP_FOR_TEST := $(LWIP_TOP)
@@ -468,9 +501,11 @@ freertos-arm32-build-test:
 	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
 	@[ -d $(LWIP_TOP_FOR_TEST)/. ] || ( echo '$@: $(LWIP_TOP_FOR_TEST) not found.' >&2; exit 1)
 	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7'
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' clean
+	@rm -rf "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' DEBUG= STRIPPED=1
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 60000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-test-builds/tests/{freertos,lwip}
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-build test."
 
 .PHONY: freertos-arm32-singlethreaded-build-test
@@ -493,7 +528,7 @@ freertos-arm32-c89-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-c89-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -DWOLFSENTRY_DEBUG_LWIP' clean
 	@echo "passed: freertos-arm32-c89-build test."
 
-LWIP_SRC_LIST := \
+LWIP_SRC_LIST_BASE := \
   $(LWIP_TOP)/src/core/def.c \
   $(LWIP_TOP)/src/core/init.c \
   $(LWIP_TOP)/src/core/mem.c \
@@ -527,8 +562,34 @@ LWIP_SRC_LIST := \
   $(LWIP_TOP)/src/api/netbuf.c \
   $(LWIP_TOP)/src/netif/ethernet.c \
   $(LWIP_TOP)/src/core/udp.c \
-  $(LWIP_TOP)/src/core/ipv4/ip4_frag.c \
-  $(LWIP_TOP)/contrib/ports/unix/port/sys_arch.c
+  $(LWIP_TOP)/src/core/ipv4/ip4_frag.c
+
+LWIP_SRC_LIST_UNIX := $(LWIP_TOP)/contrib/ports/unix/port/sys_arch.c
+
+LWIP_SRC_LIST_FREERTOS := $(LWIP_TOP)/contrib/ports/freertos/sys_arch.c
+
+#  $(LWIP_TOP)/contrib/ports/unix/port/perf.c \
+#  $(LWIP_TOP)/contrib/ports/unix/port/netif/fifo.c \
+#  $(LWIP_TOP)/contrib/ports/unix/port/netif/list.c \
+#  $(LWIP_TOP)/contrib/ports/unix/port/netif/pcapif.c \
+#  $(LWIP_TOP)/contrib/ports/unix/port/netif/sio.c \
+#  $(LWIP_TOP)/contrib/ports/unix/port/netif/tapif.c
+
+FREERTOS_SRC_LIST := \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/tasks.c \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/list.c \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/queue.c \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/timers.c \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/event_groups.c \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/stream_buffer.c \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/portable/MemMang/heap_4.c \
+  $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/portable/GCC/ARM_CM3/port.c
+
+ifeq "$(RUNTIME)" "FreeRTOS-lwIP"
+    LWIP_SRC_LIST := $(LWIP_SRC_LIST_BASE) $(LWIP_SRC_LIST_FREERTOS)
+else ifeq "$(RUNTIME)" "Linux-lwIP"
+    LWIP_SRC_LIST := $(LWIP_SRC_LIST_BASE) $(LWIP_SRC_LIST_UNIX)
+endif
 
 $(BUILD_TOP)/tests/lwip/%.o: $(LWIP_TOP)/%.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
@@ -541,7 +602,22 @@ endif
 	@$(CC) $(CFLAGS) -Wno-conversion -c $< -o $@
 endif
 
+$(BUILD_TOP)/tests/freertos/%.o: $(FREERTOS_TOP)/%.c
+	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+ifeq "$(V)" "1"
+	$(CC) $(CFLAGS) -Wno-conversion -Wno-array-bounds -Wno-cast-align -c $< -o $@
+else
+ifndef VERY_QUIET
+	@echo "$(CC) ... -o $@"
+endif
+	@$(CC) $(CFLAGS) -Wno-conversion -Wno-array-bounds -Wno-cast-align -c $< -o $@
+endif
+
+ifeq "$(RUNTIME)" "FreeRTOS-lwIP"
+$(BUILD_TOP)/tests/test_lwip: $(patsubst $(LWIP_TOP)/%.c,$(BUILD_TOP)/tests/lwip/%.o,$(LWIP_SRC_LIST)) $(patsubst $(FREERTOS_TOP)/%.c,$(BUILD_TOP)/tests/freertos/%.o,$(FREERTOS_SRC_LIST))
+else
 $(BUILD_TOP)/tests/test_lwip: $(patsubst $(LWIP_TOP)/%.c,$(BUILD_TOP)/tests/lwip/%.o,$(LWIP_SRC_LIST))
+endif
 
 ANALYZER_BUILD_ARTIFACTS+=$(patsubst $(LWIP_TOP)/%.c,$(BUILD_TOP)/tests/lwip/%.o,$(LWIP_SRC_LIST))
 
@@ -551,6 +627,13 @@ linux-lwip-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip clean
 	@echo "passed: linux-lwip test."
+
+.PHONY: linux-lwip-test-no-ipv6
+linux-lwip-test-no-ipv6:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-no-ipv6-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip NO_IPV6=1 clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-no-ipv6-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip EXTRA_CFLAGS='-DLWIP_IPV6=0' NO_IPV6=1 TEST_JSON_CFLAGS='-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-ipv6.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric-no-ipv6.json\"' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-no-ipv6-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip NO_IPV6=1 clean
+	@echo "passed: linux-lwip-no-ipv6 test."
 
 .PHONY: linux-lwip-c89-m32-test
 linux-lwip-c89-m32-test:
@@ -581,7 +664,7 @@ notification-demo-build-test:
 	@cd '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/udp_to_dbus' && $(MAKE) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' OPTFLAGS='$(OPTIM)' DIAGFLAGS='$(DEBUG) $(C_WARNFLAGS)' >/dev/null
 	@echo 'building libwolfssl with --enable-wolfsentry'
 	@cd "$(BUILD_PARENT)/wolfssl-notification-demo-build" && \
-	bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry CPPFLAGS="-pedantic -DNO_WOLFSSL_CIPHER_SUITE_TEST -DWOLFSSL_OLD_PRIME_CHECK -Wno-restrict" --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && echo "checking libwolfssl" && $(MAKE) V=1 check >/dev/null && echo "installing libwolfssl at $(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) $(QUIET_FLAG) install >/dev/null'
+	bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry CPPFLAGS="-pedantic -DNO_WOLFSSL_CIPHER_SUITE_TEST -DWOLFSSL_OLD_PRIME_CHECK -Wno-restrict" --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) V=1 >/dev/null && echo "checking libwolfssl" && $(MAKE) V=1 check >/dev/null && echo "installing libwolfssl at $(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) $(QUIET_FLAG) install >/dev/null'
 	@cd '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/log_server' && \
 	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' clean && \
 	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' OPTFLAGS='$(OPTIM)' DIAGFLAGS='$(DEBUG) $(C_WARNFLAGS)' EXTRA_CFLAGS='-DDEBUG_WOLFSENTRY'
@@ -644,10 +727,10 @@ doc-check:
 	@echo "passed: doc-check."
 
 .PHONY: check
-check: dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-build-test minimal-build-test minimal-threaded-build-test user-settings-build-test short-enums-test
+check: dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-streams-build-test minimal-build-test minimal-threaded-build-test user-settings-build-test short-enums-test no-addr-bitmask-matching-test no-ipv6-test
 
 .PHONY: check-extra
-check-extra: pahole-test route-holes-test static-build-test c89-test no-inline-test m32-test m32-c89-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test
+check-extra: library-dependency-singlethreaded-build-test library-dependency-multithreaded-build-test pahole-test route-holes-test static-build-test c89-test no-inline-test m32-test m32-c89-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-test-no-ipv6 linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

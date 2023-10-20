@@ -31,10 +31,6 @@
 
 #include "wolfsentry.h"
 
-#ifdef WOLFSENTRY_NO_STDIO
-#error wolfsentry_json requires stdio
-#endif
-
 #ifndef WOLFSENTRY
 #define WOLFSENTRY
 #endif

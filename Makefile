@@ -494,7 +494,7 @@ DOXYGEN_PREDEFINED := WOLFSENTRY_THREADSAFE WOLFSENTRY_PROTOCOL_NAMES WOLFSENTRY
 DOXYGEN_EXPAND_AS_DEFINED := WOLFSENTRY_SOCKADDR_MEMBERS WOLFSENTRY_FLEXIBLE_ARRAY_SIZE attr_align_to
 DOXYGEN_EXCLUDE := wolfsentry/wolfsentry_options.h
 
-PRINT_VERSION_RECIPE = cd '$(SRC_TOP)' && echo -e '\#include <stdio.h>\n\#include <stdlib.h>\n\#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) -DBUILDING_LIBWOLFSENTRY $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version.$$$$' && '$(BUILD_TOP)/print_version.$$$$' && rm -f '$(BUILD_TOP)/print_version.$$$$'
+PRINT_VERSION_RECIPE = cd '$(SRC_TOP)' && echo -e '\#include <stdio.h>\n\#include <stdlib.h>\n\#include <wolfsentry/wolfsentry.h>\nint main(int argc, char **argv) {\n(void)argc; (void)argv; printf("v%d.%d.%d\\n",WOLFSENTRY_VERSION_MAJOR,WOLFSENTRY_VERSION_MINOR,WOLFSENTRY_VERSION_TINY); exit(0);\n}' | $(CC) $(CFLAGS) -DBUILDING_LIBWOLFSENTRY $(LDFLAGS) -x c - -o '$(BUILD_TOP)/print_version.'$$$$ && '$(BUILD_TOP)/print_version.'$$$$ && rm -f '$(BUILD_TOP)/print_version.'$$$$
 
 README_FOR_FULL_MANUAL_RECIPE = grep -v -E -e 'doc/[-_[:alnum:]]+\.md|ChangeLog\.md' '$(SRC_TOP)/README.md'
 
@@ -533,16 +533,16 @@ $(BUILD_TOP)/doc/pdf/refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsen
 	cp -Lrs $(SRC_TOP)/wolfsentry . && \
 	cp -Ls $(SRC_TOP)/ChangeLog.md $(SRC_TOP)/doc/*.md . && \
 	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
-	echo 'Running doxygen...' && \
+	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'Running doxygen...'; } && \
 	DOXYGEN_PREDEFINED='$(DOXYGEN_PREDEFINED)' DOXYGEN_EXPAND_AS_DEFINED='$(DOXYGEN_EXPAND_AS_DEFINED)' DOXYGEN_EXCLUDE='$(DOXYGEN_EXCLUDE)' WOLFSENTRY_VERSION="$$RELEASE_PER_HEADERS" doxygen Doxyfile && \
 	{ [[ -e doxygen_warnings ]]  || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings not found.' 1>&2 && false; }; } && \
 	{ [[ ! -s doxygen_warnings ]] || { echo '$(BUILD_TOP)/doc/pdf/doxygen_warnings has nonzero length.' 1>&2 && false; }; } && \
 	cd latex && \
-	make --quiet && \
+	if [[ "$(V)" == "1" ]]; then make; elif [[ "$(VERY_QUIET)" = "1" ]]; then make --quiet MKIDX_CMD='makeindex -q' >/dev/null; else make --quiet; fi && \
 	mv refman.pdf .. && \
 	cd .. && \
 	rm -rf latex && \
-	echo 'PDF manual generated; moved to $(BUILD_TOP)/doc/pdf/refman.pdf'
+	{ [[ "$(VERY_QUIET)" = "1" ]] || echo 'PDF manual generated; moved to $(BUILD_TOP)/doc/pdf/refman.pdf'; }
 
 doc-pdf: $(BUILD_TOP)/doc/pdf/refman.pdf
 

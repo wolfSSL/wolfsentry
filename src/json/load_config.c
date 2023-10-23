@@ -672,14 +672,26 @@ static wolfsentry_errcode_t convert_sockaddr_address(
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         if (data_size >= sizeof d_buf)
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-        if (sa->addr_len > 32)
-            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        if (sa->addr_len > 32) {
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+            if ((jps->section_under_construction == S_U_C_REMOTE_ENDPOINT) ?
+                (jps->o_u_c.route.flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) :
+                (jps->o_u_c.route.flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+            {
+                if (sa->addr_len > 64)
+                    WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+            } else
+#endif
+            {
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+            }
+        }
         memcpy(d_buf, data, data_size);
         d_buf[data_size] = 0;
         addr = strtoul(d_buf, &endptr, 0);
         if ((size_t)(endptr - d_buf) != data_size)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
-        if (addr >= (1U << 30U))
+        if (addr > MAX_UINT_OF(uint32_t))
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         sa_addr[0] = (byte)(addr >> 24U);
         sa_addr[1] = (byte)(addr >> 16U);

@@ -388,8 +388,8 @@
             "dont-count-current-connections" : false,
             "family" : "CAN",
             "remote" : {
-                "address" : "0x1fffffff",
-                "bitmask" : "0x13333333"
+                "bitmask" : "0x13333333",
+                "address" : "0x1fffffff"
             }
         },
         {
@@ -402,8 +402,8 @@
             "dont-count-current-connections" : false,
             "family" : "CAN",
             "remote" : {
-                "address" : "0x123",
-                "bitmask" : "0x1ff"
+                "bitmask" : "0x1ff",
+                "address" : "0x123"
             }
         },
 

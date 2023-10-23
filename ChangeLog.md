@@ -2,6 +2,112 @@
 
 <br>
 
+# wolfSentry Release 1.6.0 (October 23, 2023)
+
+Release 1.6.0 of the wolfSentry embedded firewall/IDPS has enhancements,
+additions, and improvements including:
+
+## New Features
+
+This release adds native support for the CAN bus address family, and for
+bitmask-based address matching.  CAN addresses and bitmasks are now handled in
+configuration JSON, as numbers in decimal, octal, or hexadecimal, supporting
+both 11 bit (part A) and 29 bit (part B) identifiers.
+
+
+## Noteworthy Changes and Additions
+
+`wolfsentry/wolfsentry.h`:
+
+* Add `WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK` and `WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK` to `wolfsentry_route_flags_t`.
+* Add `WOLFSENTRY_ACTION_RES_USER0`-`WOLFSENTRY_ACTION_RES_USER6` to `wolfsentry_action_res_t` `enum`, add `WOLFSENTRY_ACTION_RES_USER7` macro, and refactor `WOLFSENTRY_ACTION_RES_USER_BASE` as a macro aliased to `WOLFSENTRY_ACTION_RES_USER0`.
+* Remove !`WOLFSENTRY_NO_STDIO` gate around `wolfsentry_kv_render_value()`.
+
+`wolfsentry/wolfsentry_settings.h`:
+
+* Rename `WOLFSENTRY_NO_STDIO` to `WOLFSENTRY_NO_STDIO_STREAMS`.
+* Rename `WOLFSENTRY_HAVE_NONGNU_ATOMICS` to `WOLFSENTRY_NO_GNU_ATOMICS`.
+* Added handling for `WOLFSENTRY_NO_SEM_BUILTIN`, `WOLFSENTRY_NO_ADDR_BITMASK_MATCHING`, and `WOLFSENTRY_NO_IPV6`.
+* Gate inclusion of `stdio.h` on !`WOLFSENTRY_NO_STDIO_H`, formerly !`WOLFSENTRY_NO_STDIO`.
+* Added `WOLFSENTRY_CONFIG_FLAG_ADDR_BITMASKS`, and rename `WOLFSENTRY_CONFIG_FLAG_NO_STDIO` to `WOLFSENTRY_CONFIG_FLAG_NO_STDIO_STREAMS`.
+
+`src/addr_families.c` and `wolfsentry/wolfsentry_af.h`:  Split `WOLFSENTRY_AF_LINK` into `WOLFSENTRY_AF_LINK48` and `WOLFSENTRY_AF_LINK64`, with `WOLFSENTRY_AF_LINK` aliased to `WOLFSENTRY_AF_LINK48`.
+
+`src/kv.c`: remove !`WOLFSENTRY_NO_STDIO` gate around `wolfsentry_kv_render_value()`.
+
+`src/json/load_config.c`: In `convert_sockaddr_address()`, add separate handling for `WOLFSENTRY_AF_LINK48` and `WOLFSENTRY_AF_LINK64`.
+
+`Makefile`:
+
+* Refactor `NO_STDIO`, `NO_JSON`, `NO_JSON_DOM`, `SINGLETHREADED`, `STATIC`, and `STRIPPED` to pivot on definedness, not oneness.
+* Add feature flags `NO_ADDR_BITMASK_MATCHING` and `NO_IPV6`.
+* Rename feature flag `NO_STDIO` to `NO_STDIO_STREAMS`.
+
+
+## Performance Improvements
+
+`src/routes.c`: Added AF-mismatch optimization to `wolfsentry_route_lookup_0()`.
+
+
+## Documentation
+
+Add inline documentation for `WOLFSENTRY_NO_GETPROTOBY`, `WOLFSENTRY_SEMAPHORE_INCLUDE`, `WOLFSENTRY_THREAD_INCLUDE`, `WOLFSENTRY_THREAD_ID_T`, and `WOLFSENTRY_THREAD_GET_ID_HANDLER`.
+
+`doc/json_configuration.md`: add documentation and ABNF grammar for `"bitmask"` node in route endpoints.
+
+
+## Bug Fixes and Cleanups
+
+Fixes for user settings file handling:
+
+* Don't `#include <wolfsentry/wolfsentry_options.h>` if `defined(WOLFSENTRY_USER_SETTINGS_FILE)`.
+* Generate and install `wolfsentry/wolfsentry_options.h` only if `USER_SETTINGS_FILE` is undefined, and if `USER_SETTINGS_FILE` is defined, depend on it where previously the dependency was unconditionally on `wolfsentry/wolfsentry_options.h`.
+* If `USER_SETTINGS_FILE` is set search it to derive JSON build settings.
+
+`Makefile`: Don't add `-pthread` to `LDFLAGS` if `RUNTIME` is `FreeRTOS-lwIP`.
+
+`wolfsentry/wolfsentry_settings.h`:
+
+* Eliminate inclusion of `errno.h` -- now included only in source files that need it.
+* Fix handling for `WOLFSENTRY_SEMAPHORE_INCLUDE` to give it effect in all code paths (previously ignored in POSIX and FreeRTOS paths).
+
+`src/routes.c`:
+
+* in `wolfsentry_route_event_dispatch_0()`, move update of `meta.purge_after` inside the mutex.
+* in `wolfsentry_route_get_metadata()`, conditionalize use of 64 bit `WOLFSENTRY_ATOMIC_LOAD()` on pointer size, to avoid dependency on library implementation of `__atomic_load_8()`.
+
+`src/wolfsentry_internal.c`: fix use-after-free bug in `wolfsentry_table_free_ents()`, using new `table->coupled_ent_fn` mechanism.
+
+`src/json/load_config.c`: In `convert_sockaddr_address()`, handle `sa->addr_len` consistently -- don't overwrite nonzero values.
+
+`src/json/{centijson_dom.c,centijson_sax.c,centijson_value.c}`: eliminate direct calls to heap allocator functions in `WOLFSENTRY` code paths, i.e. use only `wolfsentry_allocator`.
+
+`src/json/centijson_value.c`: fix uninited-variable defect on `cmp` in `json_value_dict_get_or_add_()`.
+
+
+## Self-Test Enhancements
+
+Makefile.analyzers new and enhanced test targets:
+
+* `user-settings-build-test`: construct a user settings file, then build and self-test using it.
+* `library-dependency-singlethreaded-build-test` and `library-dependency-multithreaded-build-test`: comprehensive check for unexpected unresolved symbols in the library.
+* `no-addr-bitmask-matching-test`, `no-ipv6-test`, `linux-lwip-test-no-ipv6`: tests for new feature gates.
+* `freertos-arm32-build-test`: newly refactored to perform a final link of `test_lwip` kernel using lwIP and FreeRTOS kernel files and newlib-nano, followed by a check on the size of the kernel.
+
+Added `wolfsentry/wolfssl_test.h`, containing self-test and example logic relocated from `wolfssl/wolfssl/test.h` verbatim.
+
+`tests/test-config*.json`: added several bitmask-matched routes, added several diagnostic events (`"set-user-0"` through `"set-user-4"`), and added no-bitmasks and no-ipv6 variants.  Also removed AF-wildcard route from `tests/test-config-numeric.json` to increase test coverage.
+
+`tests/unittests.c`:
+
+* Additional tweaks for portability to 32 bit FreeRTOS
+* Add FreeRTOS-specific implementations of `test_lwip()` and `main()`.
+* In `test_json()`, add `wolfsentry_addr_family_handler_install(...,"my_AF2",...)`.
+* In `test_json()`, add bitmask tests.
+* Added stub implementations for various FreeRTOS/newlib dependencies to support final link in `freertos-arm32-build-test` target.
+
+<br>
+
 # wolfSentry Release 1.5.0 (September 13, 2023)
 
 Release 1.5.0 of the wolfSentry embedded firewall/IDPS has enhancements,

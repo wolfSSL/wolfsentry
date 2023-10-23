@@ -672,6 +672,8 @@ static wolfsentry_errcode_t convert_sockaddr_address(
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         if (data_size >= sizeof d_buf)
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        if (sa->addr_len > 32)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         memcpy(d_buf, data, data_size);
         d_buf[data_size] = 0;
         addr = strtoul(d_buf, &endptr, 0);
@@ -826,9 +828,11 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
         else
             WOLFSENTRY_SET_BITS(jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK);
 
-        sa->addr_len = (wolfsentry_addr_bits_t)(addr_size << 1);
+        ret = convert_sockaddr_address(jps, type, data, data_size, sa, sa->addr + WOLFSENTRY_BITS_TO_BYTES(addr_size));
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
-        WOLFSENTRY_ERROR_RERETURN(convert_sockaddr_address(jps, type, data, data_size, sa, sa->addr + WOLFSENTRY_BITS_TO_BYTES(addr_size)));
+        sa->addr_len = (wolfsentry_addr_bits_t)(addr_size << 1);
+        WOLFSENTRY_ERROR_RERETURN(ret);
     }
 #endif
     else if (! strcmp(jps->cur_keyname, "prefix-bits")) {

@@ -3767,8 +3767,8 @@ static int test_json(const char *fname, const char *extra_fname) {
     {
         struct wolfsentry_route_table *main_routes, main_routes_copy;
         struct wolfsentry_cursor *cursor;
-        WOLFSENTRY_BYTE_STREAM_DECLARE_STACK(json_out, 8192);
-        WOLFSENTRY_BYTE_STREAM_DECLARE_HEAP(json_out2, 8192);
+        WOLFSENTRY_BYTE_STREAM_DECLARE_STACK(json_out, 16384);
+        WOLFSENTRY_BYTE_STREAM_DECLARE_HEAP(json_out2, 16384);
         wolfsentry_hitcount_t n_seen = 0;
         char err_buf[512];
 
@@ -3798,7 +3798,8 @@ static int test_json(const char *fname, const char *extra_fname) {
                  WOLFSENTRY_BYTE_STREAM_SPC(json_out),
                  WOLFSENTRY_FORMAT_FLAG_NONE);
             if (ret < 0) {
-                WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND));
+                if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
+                    WOLFSENTRY_EXIT_ON_FAILURE(ret);
                 WOLFSENTRY_EXIT_ON_FAILURE(
                     wolfsentry_route_table_dump_json_end(
                         WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -4069,6 +4070,37 @@ static int test_json(const char *fname, const char *extra_fname) {
         wolfsentry_route_flags_t inexact_matches;
         wolfsentry_action_res_t action_results;
 
+        remote.sa.sa_family = local.sa.sa_family = WOLFSENTRY_AF_CHAOS;
+        remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+        remote.sa.sa_port = 12345;
+        local.sa.sa_port = 443;
+        remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+        remote.sa.interface = local.sa.interface = 1;
+        memcpy(remote.sa.addr,"\177\0\0\1",sizeof remote.addr_buf);
+        memcpy(local.sa.addr,"\177\0\0\1",sizeof local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_FALLTHROUGH));
+    }
+
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } remote, local;
+        wolfsentry_route_flags_t inexact_matches;
+        wolfsentry_action_res_t action_results;
+
         remote.sa.sa_family = local.sa.sa_family = AF_INET;
         remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
         remote.sa.sa_port = 0;
@@ -4211,6 +4243,28 @@ static int test_json(const char *fname, const char *extra_fname) {
                 &inexact_matches, &action_results));
 
         WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER3));
+
+        /* one prefix-matched CAN address to try */
+        memcpy(remote.sa.addr,"\x15\x67\x01\x22",sizeof remote.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER4));
     }
 #endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
 

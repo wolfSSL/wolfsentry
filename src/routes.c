@@ -3599,13 +3599,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
         WOLFSENTRY_RETURN_OK;
     } else if (sa_family == WOLFSENTRY_AF_CAN) {
         unsigned int i;
-        if (2 + ((addr_bits >> 3) * 2) + 1 > (size_t)*buflen)
+        if (2 + (4 * 2) + 1 > (size_t)*buflen)
             WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
         *buf++ = '0';
         *buf++ = 'x';
-        for (i=0; i < (addr_bits >> 3); ++i) {
-            *buf++ = hexdigit_ntoa(addr[i] >> 4);
-            *buf++ = hexdigit_ntoa(addr[i]);
+        for (i=0; i < 4; ++i) {
+            if (i < (addr_bits >> 3)) {
+                *buf++ = hexdigit_ntoa(addr[i] >> 4);
+                *buf++ = hexdigit_ntoa(addr[i]);
+            } else {
+                *buf++ = '0';
+                *buf++ = '0';
+            }
         }
         *buf = 0;
         *buflen = (int)(buf - buf_at_start);
@@ -4120,10 +4125,26 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
         if (fprintf(f, "\"%.*s\"", (int)addr_bytes, addr) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else if (sa_family == WOLFSENTRY_AF_CAN) {
-        if (addr_bits != 32)
+        switch(WOLFSENTRY_BITS_TO_BYTES(addr_bits)) {
+        case 4:
+            if (fprintf(f, "\"0x%02x%02x%02x%02x\"", addr[0], addr[1], addr[2], addr[3]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        case 3:
+            if (fprintf(f, "\"0x%02x%02x%02x00\"", addr[0], addr[1], addr[2]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        case 2:
+            if (fprintf(f, "\"0x%02x%02x0000\"", addr[0], addr[1]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        case 1:
+            if (fprintf(f, "\"0x%02x000000\"", addr[0]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        default:
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-        if (fprintf(f, "\"0x%02x%02x%02x%02x\"", addr[0], addr[1], addr[2], addr[3]) < 0)
-            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        }
     } else
         WOLFSENTRY_ERROR_RETURN(OP_NOT_SUPP_FOR_PROTO);
     WOLFSENTRY_RETURN_OK;

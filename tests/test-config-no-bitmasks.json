@@ -32,10 +32,10 @@
             "priority" : 1,
             "config" : {
                 "max-connection-count" : 10,
-		"route-flags-to-add-on-insert" : [ "direction-in", "direction-out", "green-listed" ],
-		"route-flags-to-clear-on-insert" : [ "dont-count-hits", "dont-count-current-connections" ],
+                "route-flags-to-add-on-insert" : [ "direction-in", "direction-out", "green-listed" ],
+                "route-flags-to-clear-on-insert" : [ "dont-count-hits", "dont-count-current-connections" ],
                 "route-idle-time-for-purge" : "10s",
-		"action-res-bits-to-add" : [ "user+5" ]
+                "action-res-bits-to-add" : [ "user+5" ]
             },
             "post-actions" : [ "handle-connect", "handle-connect2" ],
             "insert-actions" : [ "handle-insert" ],
@@ -48,14 +48,14 @@
         {
             "label" : "pinhole-generator-parent",
             "priority" : 10,
-	    "config" : {
-		"action-res-filter-bits-set" : [ "user+1" ],
+            "config" : {
+                "action-res-filter-bits-set" : [ "user+1" ],
                 "action-res-filter-bits-unset" : [ "user+2" ],
-		"action-res-bits-to-add" : [ "user+3" ],
-		"action-res-bits-to-clear" : [ "user+4" ]
-	    },
+                "action-res-bits-to-add" : [ "user+3" ],
+                "action-res-bits-to-clear" : [ "user+4" ]
+            },
             "match-actions" : [ "%track-peer-v1" ],
-	    "aux-parent-event" : "ephemeral-pinhole-parent",
+            "aux-parent-event" : "ephemeral-pinhole-parent",
             "decision-actions" : [ "notify-on-decision" ]
         },
 
@@ -68,9 +68,9 @@
                 "derog-thresh-for-penalty-boxing" : 4,
                 "derog-thresh-ignore-commendable" : false,
                 "commendable-clears-derogatory" : true,
-		"action-res-bits-to-add" : [ "user+5" ],
-		"route-flags-to-add-on-insert" : [ "direction-in", "laddr-wild", "rport-wild", "lport-wild" ],
-		"route-flags-to-clear-on-insert" : [ "direction-out", "dont-count-hits", "dont-count-current-connections", "green-listed" ],
+                "action-res-bits-to-add" : [ "user+5" ],
+                "route-flags-to-add-on-insert" : [ "direction-in", "laddr-wild", "rport-wild", "lport-wild" ],
+                "route-flags-to-clear-on-insert" : [ "direction-out", "dont-count-hits", "dont-count-current-connections", "green-listed" ],
                 "route-idle-time-for-purge" : "5m"
             },
             "post-actions" : [ "handle-connect", "handle-connect2" ],
@@ -85,13 +85,13 @@
             "label" : "port-scanner-generator-parent",
             "priority" : 10,
             "config" : {
-		"action-res-filter-bits-set" : [ "unreachable" ],
-		"action-res-filter-bits-unset" : [ "commendable" ],
-		"action-res-bits-to-add" : [ "user+4" ],
-		"action-res-bits-to-clear" : [ "none" ]
-	    },
+                "action-res-filter-bits-set" : [ "unreachable" ],
+                "action-res-filter-bits-unset" : [ "commendable" ],
+                "action-res-bits-to-add" : [ "user+4" ],
+                "action-res-bits-to-clear" : [ "none" ]
+            },
             "match-actions" : [ "%track-peer-v1" ],
-	    "aux-parent-event" : "ephemeral-port-scanner-parent",
+            "aux-parent-event" : "ephemeral-port-scanner-parent",
             "decision-actions" : [ "notify-on-decision" ]
         },
 
@@ -304,7 +304,7 @@
             "remote" : {
                 "interface" : 2
             }
-	},
+        },
 
         {
             "parent-event" : "pinhole-generator-parent",
@@ -316,19 +316,19 @@
             "remote" : {
                 "port" : 53
             }
-	},
+        },
         {
             "parent-event" : "port-scanner-generator-parent",
             "direction-in" : true,
             "direction-out" : false,
             "family" : "inet"
-	},
+        },
         {
             "parent-event" : "port-scanner-generator-parent",
             "direction-in" : true,
             "direction-out" : false,
             "family" : "inet6"
-	}
+        }
     ],
     "user-values" : {
         "user-null" : null,

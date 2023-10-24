@@ -35,7 +35,7 @@
 
 #include "src/wolfsentry_internal.h"
 
-#if defined(_POSIX_C_SOURCE) || defined(__MACH__)
+#if (defined(_POSIX_C_SOURCE) || defined(__MACH__)) && !defined(FREERTOS)
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -267,7 +267,6 @@ static wolfsentry_errcode_t test_init(void) {
 
 #endif /* TEST_INIT */
 
-
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *addr_text,
@@ -283,14 +282,14 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
 
     if (snprintf(abuf,sizeof abuf,"%.*s",addr_text_len,addr_text) >= (int)sizeof abuf)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
-    if ((n_octets = sscanf(abuf,"%o/%o/%o%n",&a[0],&a[1],&a[2],&parsed_len)) < 1)
+    if ((n_octets = sscanf(abuf,"%o/%o/%o%n",(unsigned int *)&a[0],(unsigned int *)&a[1],(unsigned int *)&a[2],&parsed_len)) < 1)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if (parsed_len != addr_text_len) {
-        if ((n_octets = sscanf(abuf,"%o/%o/%n",&a[0],&a[1],&parsed_len)) < 1)
+        if ((n_octets = sscanf(abuf,"%o/%o/%n",(unsigned int *)&a[0],(unsigned int *)&a[1],&parsed_len)) < 1)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     }
     if (parsed_len != addr_text_len) {
-        if ((n_octets = sscanf(abuf,"%o/%n",&a[0],&parsed_len)) < 1)
+        if ((n_octets = sscanf(abuf,"%o/%n",(unsigned int *)&a[0],&parsed_len)) < 1)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     }
     if (parsed_len != addr_text_len)
@@ -371,7 +370,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t test_action(
            wolfsentry_event_get_label(parent_event),
            wolfsentry_event_get_label(trigger_event),
            (unsigned)action_type,
-           wolfsentry_get_object_id(rule_route),
+           (unsigned int)wolfsentry_get_object_id(rule_route),
            caller_arg);
     WOLFSENTRY_RETURN_OK;
 }
@@ -756,7 +755,16 @@ static wolfsentry_errcode_t shutdown_wolfsentry_lwip(void)
     return ret;
 }
 
+#ifdef FREERTOS
 
+static int test_lwip(const char *json_path) {
+    (void)json_path;
+    WOLFSENTRY_EXIT_ON_FAILURE(activate_wolfsentry_lwip(NULL, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(shutdown_wolfsentry_lwip());
+    return 0;
+}
+
+#else /* !FREERTOS */
 
 static int test_lwip(const char *json_path) {
     if (json_path) {
@@ -784,6 +792,8 @@ static int test_lwip(const char *json_path) {
     WOLFSENTRY_EXIT_ON_FAILURE(shutdown_wolfsentry_lwip());
     return 0;
 }
+
+#endif /* !FREERTOS */
 
 #endif /* TEST_LWIP */
 
@@ -3510,6 +3520,16 @@ static int test_json(const char *fname, const char *extra_fname) {
             my_addr_family_formatter,
             24 /* max_addr_bits */));
 
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_install(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            WOLFSENTRY_AF_USER_OFFSET + 1,
+            "my_AF2",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            my_addr_family_parser,
+            my_addr_family_formatter,
+            24 /* max_addr_bits */));
+
     WOLFSENTRY_EXIT_ON_FAILURE(json_feed_file(WOLFSENTRY_CONTEXT_ARGS_OUT, fname, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS, 1));
 
     {
@@ -3747,8 +3767,8 @@ static int test_json(const char *fname, const char *extra_fname) {
     {
         struct wolfsentry_route_table *main_routes, main_routes_copy;
         struct wolfsentry_cursor *cursor;
-        WOLFSENTRY_BYTE_STREAM_DECLARE_STACK(json_out, 8192);
-        WOLFSENTRY_BYTE_STREAM_DECLARE_HEAP(json_out2, 8192);
+        WOLFSENTRY_BYTE_STREAM_DECLARE_STACK(json_out, 16384);
+        WOLFSENTRY_BYTE_STREAM_DECLARE_HEAP(json_out2, 16384);
         wolfsentry_hitcount_t n_seen = 0;
         char err_buf[512];
 
@@ -3778,7 +3798,8 @@ static int test_json(const char *fname, const char *extra_fname) {
                  WOLFSENTRY_BYTE_STREAM_SPC(json_out),
                  WOLFSENTRY_FORMAT_FLAG_NONE);
             if (ret < 0) {
-                WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND));
+                if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
+                    WOLFSENTRY_EXIT_ON_FAILURE(ret);
                 WOLFSENTRY_EXIT_ON_FAILURE(
                     wolfsentry_route_table_dump_json_end(
                         WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -4049,6 +4070,37 @@ static int test_json(const char *fname, const char *extra_fname) {
         wolfsentry_route_flags_t inexact_matches;
         wolfsentry_action_res_t action_results;
 
+        remote.sa.sa_family = local.sa.sa_family = WOLFSENTRY_AF_CHAOS;
+        remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+        remote.sa.sa_port = 12345;
+        local.sa.sa_port = 443;
+        remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+        remote.sa.interface = local.sa.interface = 1;
+        memcpy(remote.sa.addr,"\177\0\0\1",sizeof remote.addr_buf);
+        memcpy(local.sa.addr,"\177\0\0\1",sizeof local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_FALLTHROUGH));
+    }
+
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } remote, local;
+        wolfsentry_route_flags_t inexact_matches;
+        wolfsentry_action_res_t action_results;
+
         remote.sa.sa_family = local.sa.sa_family = AF_INET;
         remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
         remote.sa.sa_port = 0;
@@ -4073,6 +4125,148 @@ static int test_json(const char *fname, const char *extra_fname) {
         WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET));
     }
 
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+/* test bitmap-based matching of CAN addresses. */
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } remote, local;
+        wolfsentry_route_flags_t inexact_matches;
+        wolfsentry_action_res_t action_results;
+
+        remote.sa.sa_family = local.sa.sa_family = WOLFSENTRY_AF_CAN;
+        remote.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;;
+        local.sa.addr_len = 0;
+        remote.sa.interface = local.sa.interface = 0;
+        memcpy(remote.sa.addr,"\x1f\xff\xff\xed",sizeof remote.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER0));
+
+        memcpy(remote.sa.addr,"\x1f\xff\xff\xec",sizeof remote.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER0));
+
+        memcpy(remote.sa.addr,"\x00\x00\x07\xcb",sizeof remote.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER1));
+
+        memcpy(remote.sa.addr,"\x1f\xff\xff\xff",sizeof remote.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER2));
+
+        memcpy(remote.sa.addr,"\x1f\xff\x01\x23",sizeof remote.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER3));
+
+        /* one prefix-matched CAN address to try */
+        memcpy(remote.sa.addr,"\x15\x67\x01\x22",sizeof remote.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+                WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD |
+                WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD,
+                "call-in-from-unit-test",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                (void *)0x12345678 /* caller_arg */,
+                &id,
+                &inexact_matches, &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_USER4));
+    }
+#endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
 
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
     {
@@ -4616,7 +4810,29 @@ static int test_json_corpus(void) {
 
 #endif /* TEST_JSON_CORPUS */
 
-int main (int argc, char* argv[]) {
+#ifdef FREERTOS
+
+int main(int argc, char* argv[]) {
+    int ret = 0;
+    (void)argc;
+    (void)argv;
+
+#ifdef TEST_LWIP
+    #ifdef TEST_JSON_CONFIG_PATH
+    ret = test_lwip(TEST_JSON_CONFIG_PATH);
+    #else
+    ret = test_lwip(NULL);
+    #endif
+#endif
+    if (ret < 0)
+        return ret;
+    else
+        return 0;
+}
+
+#else /* !FREERTOS */
+
+int main(int argc, char* argv[]) {
     wolfsentry_errcode_t ret = 0;
     int err = 0;
     (void)argc;
@@ -4716,3 +4932,101 @@ int main (int argc, char* argv[]) {
 
     WOLFSENTRY_RETURN_VALUE(err);
 }
+
+#endif /* !FREERTOS */
+
+#ifdef FREERTOS
+
+/* provide warning-free dummy syscall and callback stubs for newlib-nano (same
+ * effect as -specs=nosys.specs, but no warnings) and FreeRTOS dependencies.
+ */
+void _exit(int status) {
+    (void)status;
+    for (;;);
+}
+int _close(int fd);
+int _close(int fd) {
+    (void)fd;
+    return -1;
+}
+int _lseek(int fd, off_t offset, int whence);
+int _lseek(int fd, off_t offset, int whence) {
+    (void)fd;
+    (void)offset;
+    (void)whence;
+    return -1;
+}
+ssize_t _read(int fildes, void *buf, size_t nbyte);
+ssize_t _read(int fildes, void *buf, size_t nbyte) {
+    (void)fildes;
+    (void)buf;
+    (void)nbyte;
+    return -1;
+}
+void *_sbrk(intptr_t increment);
+void *_sbrk(intptr_t increment) {
+    (void)increment;
+    return NULL;
+}
+ssize_t _write(int fd, const void *buf, size_t count);
+ssize_t _write(int fd, const void *buf, size_t count) {
+    (void)fd;
+    (void)buf;
+    (void)count;
+    return -1;
+}
+int _kill(pid_t pid, int sig);
+int _kill(pid_t pid, int sig) {
+    (void)pid;
+    (void)sig;
+    return -1;
+}
+int _getpid(void);
+int _getpid(void) {
+    return -1;
+}
+struct stat;
+int _fstat(int fd, struct stat *statbuf);
+int _fstat(int fd, struct stat *statbuf) {
+    (void)fd;
+    (void)statbuf;
+    return -1;
+}
+int _isatty(int fd);
+int _isatty(int fd) {
+    (void)fd;
+    return 0; /* note, return 0 for error, not -1. */
+}
+
+void vApplicationMallocFailedHook(void) {
+    for(;;);
+}
+
+void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName) {
+    (void)pcTaskName;
+    (void)pxTask;
+    for(;;);
+}
+
+void vApplicationTickHook(void) {
+}
+
+void vAssertCalled( const char *pcFileName, uint32_t ulLine ) {
+    (void)pcFileName;
+    (void)ulLine;
+}
+
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize) {
+    (void)ppxIdleTaskTCBBuffer;
+    (void)ppxIdleTaskStackBuffer;
+    (void)pulIdleTaskStackSize;
+}
+
+void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize);
+void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize) {
+    (void)ppxTimerTaskTCBBuffer;
+    (void)ppxTimerTaskStackBuffer;
+    (void)pulTimerTaskStackSize;
+}
+
+#endif

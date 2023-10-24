@@ -85,7 +85,7 @@
 
 #define WOLFSENTRY_AF_BSD_OFFSET 100
 
-/*!< \brief from FreeBSD at commit a56e5ad6 */
+/*!< \brief from FreeBSD at commit a56e5ad6, except WOLFSENTRY_AF_LINK64, added here. */
 #define WOLFSENTRY_AF_IMPLINK      (WOLFSENTRY_AF_BSD_OFFSET + 3)          /*!< \brief arpanet imp addresses */
 #define WOLFSENTRY_AF_PUP          (WOLFSENTRY_AF_BSD_OFFSET + 4)          /*!< \brief pup protocols: e.g. BSP */
 #define WOLFSENTRY_AF_CHAOS        (WOLFSENTRY_AF_BSD_OFFSET + 5)          /*!< \brief mit CHAOS protocols */
@@ -97,7 +97,9 @@
 #define WOLFSENTRY_AF_DLI          (WOLFSENTRY_AF_BSD_OFFSET + 13)         /*!< \brief DEC Direct data link interface */
 #define WOLFSENTRY_AF_LAT          (WOLFSENTRY_AF_BSD_OFFSET + 14)         /*!< \brief LAT */
 #define WOLFSENTRY_AF_HYLINK       (WOLFSENTRY_AF_BSD_OFFSET + 15)         /*!< \brief NSC Hyperchannel */
-#define WOLFSENTRY_AF_LINK         (WOLFSENTRY_AF_BSD_OFFSET + 18)         /*!< \brief Link layer interface */
+#define WOLFSENTRY_AF_LINK48       (WOLFSENTRY_AF_BSD_OFFSET + 18)         /*!< \brief Link layer interface, explicit EUI-48 */
+#define WOLFSENTRY_AF_LINK         WOLFSENTRY_AF_LINK48                    /*!< \brief Link layer interface, implicit EUI-48 */
+#define WOLFSENTRY_AF_LINK64       (WOLFSENTRY_AF_BSD_OFFSET + 19)         /*!< \brief Link layer interface, explicit EUI-64 */
 #define WOLFSENTRY_AF_COIP         (WOLFSENTRY_AF_BSD_OFFSET + 20)         /*!< \brief connection-oriented IP, aka ST II */
 #define WOLFSENTRY_AF_CNT          (WOLFSENTRY_AF_BSD_OFFSET + 21)         /*!< \brief Computer Network Technology */
 #define WOLFSENTRY_AF_SIP          (WOLFSENTRY_AF_BSD_OFFSET + 24)         /*!< \brief Simple Internet Protocol */

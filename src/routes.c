@@ -40,7 +40,7 @@
 #include <netdb.h>
 #endif
 
-static inline int cmp_addrs(
+static inline int cmp_addrs_prefixful(
     const byte *left_addr,
     int left_addr_len,
     const byte *right_addr,
@@ -139,6 +139,189 @@ static inline int addr_prefix_match_size(
     return ret;
 }
 
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+
+static inline int is_bitmask_matching(wolfsentry_addr_family_t af, const struct wolfsentry_route_table *routes) {
+    wolfsentry_addr_family_t i = 0;
+    for (; i<routes->n_bitmask_matching_afs; ++i) {
+        if (routes->bitmask_matching_afs[i].af == af)
+            return 1;
+    }
+    return 0;
+}
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_bitmask_matching_upref(wolfsentry_addr_family_t af, struct wolfsentry_route_table *routes) {
+    wolfsentry_addr_family_t i;
+    for (i=0; i<routes->n_bitmask_matching_afs; ++i) {
+        if (routes->bitmask_matching_afs[i].af == af) {
+            if (routes->bitmask_matching_afs[i].refcount == MAX_UINT_OF(routes->bitmask_matching_afs[i].refcount))
+                WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+            else
+                ++routes->bitmask_matching_afs[i].refcount;
+            WOLFSENTRY_RETURN_OK;
+        }
+    }
+    if (routes->n_bitmask_matching_afs >= length_of_array(routes->bitmask_matching_afs))
+        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+    routes->bitmask_matching_afs[routes->n_bitmask_matching_afs].af = af;
+    routes->bitmask_matching_afs[routes->n_bitmask_matching_afs].refcount = 1;
+    ++routes->n_bitmask_matching_afs;
+    WOLFSENTRY_RETURN_OK;
+}
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_bitmask_matching_downref(wolfsentry_addr_family_t af, struct wolfsentry_route_table *routes) {
+    wolfsentry_addr_family_t i = 0;
+    for (; i<routes->n_bitmask_matching_afs; ++i) {
+        if (routes->bitmask_matching_afs[i].af == af) {
+            if (--routes->bitmask_matching_afs[i].refcount == 0) {
+                --routes->n_bitmask_matching_afs;
+                if (i < routes->n_bitmask_matching_afs)
+                    routes->bitmask_matching_afs[i] = routes->bitmask_matching_afs[routes->n_bitmask_matching_afs];
+                WOLFSENTRY_RETURN_OK;
+            }
+            WOLFSENTRY_RETURN_OK;
+        }
+    }
+    WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+}
+
+static inline int cmp_addrs_bitmaskful(
+    const byte *left_addr,
+    unsigned int left_addr_len,
+    const byte *right_addr,
+    unsigned int right_addr_len,
+    int wildcard_p,
+    int match_masked_p,
+    int *inexact_p)
+{
+    int cmp;
+    unsigned int min_addr_len;
+
+    min_addr_len = (left_addr_len < right_addr_len) ? left_addr_len : right_addr_len;
+
+    *inexact_p = 0;
+
+    /* if match_masked_p, only one address can be bitmaskful, and it needs to be
+     * at least twice the size of the non-maskful address.
+     */
+    if (match_masked_p) {
+        if ((left_addr_len >> 1 < right_addr_len) &&
+            (right_addr_len >> 1 < left_addr_len))
+        {
+            if (wildcard_p) {
+                *inexact_p = 1;
+                return 0;
+            } else
+                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        }
+    }
+
+    /* zero-length (full wildcard) address always precedes nonzero-length address. */
+    if (min_addr_len == 0) {
+        if (left_addr_len == right_addr_len)
+            return 0;
+        else if (wildcard_p || match_masked_p) {
+            *inexact_p = 1;
+            return 0;
+        } else if (left_addr_len != 0)
+            return 1;
+        else /* right_addr_len != 0 */
+            return -1;
+    }
+
+    if (left_addr_len == right_addr_len) {
+        /* same logic as prefixful -- lexically ordered purely for internal bookkeeping purposes. */
+        if ((cmp = memcmp(left_addr, right_addr, WOLFSENTRY_BITS_TO_BYTES((size_t)left_addr_len)))) {
+            if (wildcard_p)
+                *inexact_p = 1;
+            else
+                return cmp;
+        }
+    } else {
+        if (wildcard_p) {
+            *inexact_p = 1;
+        } else if (match_masked_p) {
+            const byte *mask, *maskful_addr, *target_addr;
+            unsigned int mask_len, i, padding_offset;
+
+            if (left_addr_len < right_addr_len) {
+                maskful_addr = right_addr;
+                mask_len = right_addr_len >> 1;
+                target_addr = left_addr;
+                padding_offset = mask_len - left_addr_len;
+            } else {
+                maskful_addr = left_addr;
+                mask_len = left_addr_len >> 1;
+                target_addr = right_addr;
+                padding_offset = mask_len - right_addr_len;
+            }
+
+            mask_len = WOLFSENTRY_BITS_TO_BYTES(mask_len);
+            mask = maskful_addr + mask_len;
+
+            for (i = 0; i < mask_len; ++i) {
+                unsigned int x;
+                if (i < padding_offset) {
+                    if (maskful_addr[i] != 0)
+                        return maskful_addr[i];
+                    continue;
+                }
+                x = target_addr[i - padding_offset] & mask[i];
+                if (x == maskful_addr[i]) {
+                    if (target_addr[i - padding_offset] != maskful_addr[i])
+                        *inexact_p = 1;
+                    continue;
+                }
+                return (int)maskful_addr[i] - (int)x;
+            }
+        } else {
+            /* same logic as prefixful -- lexically ordered purely for internal bookkeeping purposes. */
+            if ((cmp = memcmp(left_addr, right_addr, WOLFSENTRY_BITS_TO_BYTES((size_t)min_addr_len))))
+                return cmp;
+            else if (left_addr_len < right_addr_len)
+                return -1;
+            else
+                return 1;
+        }
+    }
+
+    return 0;
+}
+
+static inline int addr_bitmask_match_size(
+    const byte *a,
+    unsigned int a_len,
+    const byte *b,
+    unsigned int b_len)
+{
+    const byte *longer_addr, *shorter_addr;
+    unsigned int mask_len, i, padding_offset;
+    int ret = 0;
+
+    if (a_len < b_len) {
+        longer_addr = b;
+        mask_len = WOLFSENTRY_BITS_TO_BYTES(b_len >> 1);
+        shorter_addr = a;
+        padding_offset = mask_len - a_len;
+    } else {
+        longer_addr = a;
+        mask_len = WOLFSENTRY_BITS_TO_BYTES(a_len >> 1);
+        shorter_addr = b;
+        padding_offset = mask_len - b_len;
+    }
+
+    for (ret = 0, i = 0; i < mask_len; ++i) {
+        if (i < padding_offset)
+            ret += popcount32(~(uint32_t)(longer_addr[i])) - 24;
+        else
+            ret += popcount32(~(uint32_t)(longer_addr[i] ^ shorter_addr[i - padding_offset])) - 24;
+    }
+
+    return ret;
+}
+
+#endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
+
 static int wolfsentry_route_key_cmp_1(
     const struct wolfsentry_route *left,
     const struct wolfsentry_route *right,
@@ -161,11 +344,25 @@ static int wolfsentry_route_key_cmp_1(
             WOLFSENTRY_RETURN_VALUE(1);
     }
 
-    cmp = cmp_addrs(WOLFSENTRY_ROUTE_REMOTE_ADDR(left), left->remote.addr_len,
-                    WOLFSENTRY_ROUTE_REMOTE_ADDR(right), right->remote.addr_len,
-                    match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD),
-                    match_wildcards_p,
-                    &inexact_p);
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+        cmp = cmp_addrs_bitmaskful(WOLFSENTRY_ROUTE_REMOTE_ADDR(left), left->remote.addr_len,
+                                   WOLFSENTRY_ROUTE_REMOTE_ADDR(right), right->remote.addr_len,
+                                   match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD),
+                                   match_wildcards_p,
+                                   &inexact_p);
+        if (cmp < -1)
+            return cmp;
+    } else
+#endif
+    {
+        cmp = cmp_addrs_prefixful(WOLFSENTRY_ROUTE_REMOTE_ADDR(left), left->remote.addr_len,
+                                  WOLFSENTRY_ROUTE_REMOTE_ADDR(right), right->remote.addr_len,
+                                  match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD),
+                                  match_wildcards_p,
+                                  &inexact_p);
+    }
+
     if (cmp)
         WOLFSENTRY_RETURN_VALUE(cmp);
     if (inexact_p && inexact_matches)
@@ -191,11 +388,25 @@ static int wolfsentry_route_key_cmp_1(
             WOLFSENTRY_RETURN_VALUE(1);
     }
 
-    cmp = cmp_addrs(WOLFSENTRY_ROUTE_LOCAL_ADDR(left), left->local.addr_len,
-                    WOLFSENTRY_ROUTE_LOCAL_ADDR(right), right->local.addr_len,
-                    match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD),
-                    match_wildcards_p,
-                    &inexact_p);
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+        cmp = cmp_addrs_bitmaskful(WOLFSENTRY_ROUTE_LOCAL_ADDR(left), left->local.addr_len,
+                                   WOLFSENTRY_ROUTE_LOCAL_ADDR(right), right->local.addr_len,
+                                   match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD),
+                                   match_wildcards_p,
+                                   &inexact_p);
+        if (cmp < -1)
+            return cmp;
+    } else
+#endif
+    {
+        cmp = cmp_addrs_prefixful(WOLFSENTRY_ROUTE_LOCAL_ADDR(left), left->local.addr_len,
+                                  WOLFSENTRY_ROUTE_LOCAL_ADDR(right), right->local.addr_len,
+                                  match_wildcards_p && (wildcard_flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD),
+                                  match_wildcards_p,
+                                  &inexact_p);
+    }
+
     if (cmp)
         WOLFSENTRY_RETURN_VALUE(cmp);
     if (inexact_p && inexact_matches)
@@ -293,13 +504,43 @@ static int compare_match_exactness(const struct wolfsentry_route *target, const 
     int left_match_score = popcount32(WOLFSENTRY_ROUTE_WILDCARD_FLAGS) - popcount32(left_inexact_matches & WOLFSENTRY_ROUTE_WILDCARD_FLAGS);
     int right_match_score = popcount32(WOLFSENTRY_ROUTE_WILDCARD_FLAGS) - popcount32(right_inexact_matches & WOLFSENTRY_ROUTE_WILDCARD_FLAGS);
     if (left_match_score == right_match_score) {
-        left_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_REMOTE_ADDR(target), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(target), WOLFSENTRY_ROUTE_REMOTE_ADDR(left), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(left));
-        right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_REMOTE_ADDR(target), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(target), WOLFSENTRY_ROUTE_REMOTE_ADDR(right), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(right));
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        if (left->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+            left_match_score = addr_bitmask_match_size(WOLFSENTRY_ROUTE_REMOTE_ADDR(target), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(target), WOLFSENTRY_ROUTE_REMOTE_ADDR(left), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(left));
+        } else
+#endif
+        {
+            left_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_REMOTE_ADDR(target), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(target), WOLFSENTRY_ROUTE_REMOTE_ADDR(left), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(left));
+        }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        if (right->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+            right_match_score = addr_bitmask_match_size(WOLFSENTRY_ROUTE_REMOTE_ADDR(target), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(target), WOLFSENTRY_ROUTE_REMOTE_ADDR(right), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(right));
+        } else
+#endif
+        {
+            right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(right), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(right));
+        }
     }
+
     if (left_match_score == right_match_score) {
-        left_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(left), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(left));
-        right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(right), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(right));
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        if (left->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+            left_match_score = addr_bitmask_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(left), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(left));
+        } else
+#endif
+        {
+            left_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(left), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(left));
+        }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        if (right->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+            right_match_score = addr_bitmask_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(right), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(right));
+        } else
+#endif
+        {
+            right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(right), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(right));
+        }
     }
+
     if (left_match_score > right_match_score)
         return -1;
     else if (left_match_score < right_match_score)
@@ -413,6 +654,23 @@ static wolfsentry_errcode_t wolfsentry_route_init(
     if (! (flags & (WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN | WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT)))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    /* bitmask-matched addresses must be byte-aligned, and since there is
+     * both an address and a mask, that means the bottom 4 bits of each
+     * address package must be zero.
+     */
+    if ((flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) &&
+        (remote->addr_len & 0xf))
+    {
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+    if ((flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) &&
+        (local->addr_len & 0xf))
+    {
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+#endif
+
     /* make sure wildcards are sensical. */
     if (((flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD) &&
          ((! (flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) ||
@@ -465,7 +723,15 @@ static wolfsentry_errcode_t wolfsentry_route_init(
     if (local->addr_len > 0)
         memcpy(WOLFSENTRY_ROUTE_LOCAL_ADDR(new), local->addr, WOLFSENTRY_BITS_TO_BYTES(local->addr_len));
 
-    /* make sure the pad bits in the addresses are zero. */
+    /* make sure the pad/ignored bits in the addresses are zero. */
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+        size_t i, addr_size = WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) >> 1;
+        for (i=0; i < addr_size; ++i)
+            WOLFSENTRY_ROUTE_REMOTE_ADDR(new)[i] &= WOLFSENTRY_ROUTE_REMOTE_ADDR(new)[i + addr_size];
+    }
+    else
+#endif
     {
         int left_over_bits = remote->addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
@@ -474,6 +740,14 @@ static wolfsentry_errcode_t wolfsentry_route_init(
                 *remote_lsb = (byte)(*remote_lsb & (0xffU << left_over_bits));
         }
     }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+        size_t i, addr_size = WOLFSENTRY_BITS_TO_BYTES(local->addr_len) >> 1;
+        for (i=0; i < addr_size; ++i)
+            WOLFSENTRY_ROUTE_LOCAL_ADDR(new)[i] &= WOLFSENTRY_ROUTE_LOCAL_ADDR(new)[i + addr_size];
+    }
+    else
+#endif
     {
         int left_over_bits = local->addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
@@ -525,6 +799,23 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     if (! (route_exports->flags & (WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN | WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT)))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    /* bitmask-matched addresses must be byte-aligned, and since there is
+     * both an address and a mask, that means the bottom 4 bits of each
+     * address package must be zero.
+     */
+    if ((route_exports->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) &&
+        (route_exports->remote.addr_len & 0xf))
+    {
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+    if ((route_exports->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) &&
+        (route_exports->local.addr_len & 0xf))
+    {
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+#endif
 
     /* make sure wildcards are sensical. */
     if (((route_exports->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD) &&
@@ -594,7 +885,15 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
                WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len));
     }
 
-    /* make sure the pad bits in the addresses are zero. */
+    /* make sure the pad/ignored bits in the addresses are zero. */
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (route_exports->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+        size_t i, addr_size = WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len) >> 1;
+        for (i=0; i < addr_size; ++i)
+            WOLFSENTRY_ROUTE_REMOTE_ADDR(new)[i] &= WOLFSENTRY_ROUTE_REMOTE_ADDR(new)[i + addr_size];
+    }
+    else
+#endif
     {
         int left_over_bits = route_exports->remote.addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
@@ -603,6 +902,15 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
                 *remote_lsb = (byte)(*remote_lsb & (0xffU << left_over_bits));
         }
     }
+
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (route_exports->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+        size_t i, addr_size = WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len) >> 1;
+        for (i=0; i < addr_size; ++i)
+            WOLFSENTRY_ROUTE_LOCAL_ADDR(new)[i] &= WOLFSENTRY_ROUTE_LOCAL_ADDR(new)[i + addr_size];
+    }
+    else
+#endif
     {
         int left_over_bits = route_exports->local.addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
@@ -649,6 +957,25 @@ static wolfsentry_errcode_t wolfsentry_route_new(
     wolfsentry_errcode_t ret;
     struct wolfsentry_eventconfig_internal *config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
 
+    if (flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK)) {
+#ifndef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+#else
+        /* bitmask-matched addresses must be byte-aligned, and since there is
+         * both an address and a mask of equal length, that means the bottom 4
+         * bits of each address package must be zero.
+         */
+        if (flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+            if (remote->addr_len & 0xf)
+                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        }
+        if (flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+            if (local->addr_len & 0xf)
+                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        }
+#endif
+    }
+
     new_size = WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len);
     if (new_size > (size_t)(uint16_t)~0UL)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
@@ -690,6 +1017,24 @@ static wolfsentry_errcode_t wolfsentry_route_new_by_exports(
     if ((route_exports->private_data_size != 0) && (route_exports->private_data_size != config->config.route_private_data_size))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    if (route_exports->flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK)) {
+#ifndef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+#else
+        /* bitmask-matched addresses must be byte-aligned, and since there is
+         * both an address and a mask of equal length, that means the bottom 4
+         * bits of each address package must be zero.
+         */
+        if (route_exports->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+            if (route_exports->remote.addr_len & 0xf)
+                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        }
+        if (route_exports->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+            if (route_exports->local.addr_len & 0xf)
+                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        }
+#endif
+    }
     new_size = WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len) + WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len);
     if (new_size > (size_t)(uint16_t)~0UL)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
@@ -919,10 +1264,16 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
 
-    WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED); /* signals to _dispatch_0() that counts were assigned to the newly inserted route. */
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (route_to_insert->flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK)) {
+        if ((ret = wolfsentry_bitmask_matching_upref(route_to_insert->sa_family, route_table)) < 0) {
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_to_insert->header));
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        }
+    }
+#endif
 
-    if (route_to_insert->meta.purge_after)
-        wolfsentry_route_purge_list_insert(route_table, route_to_insert);
+    WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED); /* signals to _dispatch_0() that counts were assigned to the newly inserted route. */
 
     if (route_to_insert->parent_event && (wolfsentry_list_ent_get_len(&route_to_insert->parent_event->insert_action_list.header) > 0)) {
         ret = wolfsentry_action_list_dispatch(
@@ -946,6 +1297,17 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
                 WOLFSENTRY_SET_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);
         }
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
+    }
+
+    if (route_to_insert->meta.purge_after)
+        wolfsentry_route_purge_list_insert(route_table, route_to_insert);
+
+    if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD) {
+        if ((route_table->last_af_wildcard_route == NULL) ||
+            (wolfsentry_route_key_cmp_1(route_to_insert, route_table->last_af_wildcard_route, 0 /* match_wildcards_p */, NULL /* inexact_matches */) < 0))
+        {
+            route_table->last_af_wildcard_route = route_to_insert;
+        }
     }
 
     {
@@ -1210,6 +1572,10 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     wolfsentry_errcode_t ret;
     int contiguous_search;
     wolfsentry_route_flags_t inexact_matches_buf;
+    int seen_target_af;
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    int af_is_bitmask_matched;
+#endif
 #ifdef DEBUG_ROUTE_LOOKUP
     struct wolfsentry_route *i_prev = NULL;
 #endif
@@ -1319,10 +1685,69 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
         wolfsentry_table_cursor_seek_to_tail(&table->header, &cursor);
     }
 
+    /* if the current and preceding cursor positions don't have a matching AF,
+     * and the caller didn't request wildcard AF, then we can either skip to
+     * table->last_af_wildcard_route, or end early if it's null.
+     */
+    if (! (target_route->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)) {
+        struct wolfsentry_route *point = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
+        if ((point == NULL) ||
+            ((point->sa_family != target_route->sa_family) &&
+             ((point->header.prev == NULL) ||
+              (((struct wolfsentry_route *)point->header.prev)->sa_family != target_route->sa_family))))
+        {
+            if (table->last_af_wildcard_route)
+                wolfsentry_table_cursor_set(&cursor, &table->last_af_wildcard_route->header);
+            else {
+                ret = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
+                goto out;
+            }
+        }
+    }
+
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    /* even if contiguous_search, bitmask matching is noncontiguous for the
+     * addresses themselves, but is still grouped together by address family, so
+     * we can assure best match is found by seeking to the end of the address
+     * family span.
+     */
+
+    af_is_bitmask_matched = is_bitmask_matching(target_route->sa_family, table);
+
+    if (af_is_bitmask_matched) {
+        struct wolfsentry_route *j;
+
+        for (i = j = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
+             i && (i->sa_family == target_route->sa_family);
+             j = i, i = (struct wolfsentry_route *)wolfsentry_table_cursor_next(&cursor));
+        if (j)
+            wolfsentry_table_cursor_set(&cursor, &j->header);
+        else
+            wolfsentry_table_cursor_seek_to_tail(&table->header, &cursor);
+    }
+#endif
+
+    seen_target_af = 0;
+
     for (i = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
          i;
          i = (struct wolfsentry_route *)wolfsentry_table_cursor_prev(&cursor))
     {
+        if (i->sa_family == target_route->sa_family) {
+            if (! seen_target_af)
+                seen_target_af = 1;
+        } else {
+            if (seen_target_af &&
+                (! (target_route->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)))
+            {
+                if (table->last_af_wildcard_route) {
+                    i = table->last_af_wildcard_route;
+                    wolfsentry_table_cursor_set(&cursor, &i->header);
+                } else
+                    break;
+            }
+        }
+
         if (WOLFSENTRY_CHECK_BITS(i->flags, WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE))
             continue;
         /* ignore routes that don't cover the direction of the target. */
@@ -1384,7 +1809,21 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
             ((highest_priority_inexact_matches & WOLFSENTRY_ROUTE_WILDCARD_FLAGS) == 0) &&
             (highest_priority_seen <= table->highest_priority_route_in_table))
         {
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+            /* with bitmask af's, iteration must continue until the end of the
+             * span for the AF, because bitmask matching isn't contiguous,
+             * notwithstanding contiguous_search (reflecting only wildcard
+             * contiguity).
+             */
+            if (af_is_bitmask_matched) {
+                if (seen_target_af && (i->sa_family != target_route->sa_family))
+                    break;
+            } else {
+                break;
+            }
+#else
             break;
+#endif
         }
     }
 
@@ -1590,7 +2029,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_reference(
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
-static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
+static wolfsentry_errcode_t wolfsentry_route_delete_0(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     struct wolfsentry_route_table *route_table,
@@ -1602,6 +2041,11 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
 
     if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route->header)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
+
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    if (route->flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_bitmask_matching_downref(route->sa_family, route_table));
+#endif
 
     if (route->meta.purge_after)
         wolfsentry_list_ent_delete(&route_table->purge_list, &route->purge_links);
@@ -1625,6 +2069,9 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_0(
         if (ret < 0)
             WOLFSENTRY_WARN("wolfsentry_action_list_dispatch for wolfsentry_route_delete_0 returned " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
+
+    if (route_table->last_af_wildcard_route == route)
+        route_table->last_af_wildcard_route = (struct wolfsentry_route *)route->header.prev;
 
     {
         wolfsentry_priority_t effective_priority = route->parent_event ? route->parent_event->priority : 0;
@@ -1811,6 +2258,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     if (action_results == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    /* doesn't make any sense to supply a bitmask with a target address. */
+    if (target_route->flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     parent_event = rule_route->parent_event ? rule_route->parent_event : route_table->default_event;
     config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
 
@@ -1832,14 +2283,19 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         /* use the purge_margin to reduce mutex burden. */
         WOLFSENTRY_FROM_EPOCH_TIME(WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS, 0 /* epoch_nsecs */, &purge_margin);
         new_purge_after = rule_route->meta.last_hit_time + config->config.route_idle_time_for_purge + purge_margin;
+        /* note that the below read access to rule_route->meta.purge_after is
+         * race-prone on 32 bit targets -- this is benign, because the code path
+         * on a false positive is to obtain a mutex, whereafter all access is
+         * coherent.
+         */
         if (new_purge_after - rule_route->meta.purge_after >= purge_margin) {
-            rule_route->meta.purge_after = new_purge_after;
-            if (route_table->purge_list.tail != &rule_route->purge_links) {
 #ifdef WOLFSENTRY_THREADSAFE
-                if ((wolfsentry_lock_have_mutex(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE) >= 0) ||
-                    (wolfsentry_lock_shared2mutex(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE) >= 0))
+            if ((wolfsentry_lock_have_mutex(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE) >= 0) ||
+                (wolfsentry_lock_shared2mutex(&wolfsentry->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE) >= 0))
 #endif
-                {
+            {
+                rule_route->meta.purge_after = new_purge_after; /* coherent assignment */
+                if (route_table->purge_list.tail != &rule_route->purge_links) {
                     wolfsentry_list_ent_delete(&route_table->purge_list, &rule_route->purge_links);
                     wolfsentry_route_purge_list_insert(route_table, rule_route);
                 }
@@ -2079,8 +2535,13 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     struct wolfsentry_event *trigger_event = NULL;
     wolfsentry_errcode_t ret;
 
-    if (action_results == NULL)
+    if ((route_table == NULL) ||
+        (remote == NULL) ||
+        (local == NULL) ||
+        (action_results == NULL))
+    {
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
 
     WOLFSENTRY_SHARED_OR_RETURN();
 
@@ -2835,16 +3296,25 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_set_wildcard(
 }
 
 /* note copying .meta with a shared lock is racey.  if coherent results are
- * needed, a mutex is needed.
+ * needed, a mutex is needed.  this caveat is particularly germane on 32 bit
+ * targets, where the top and bottom halves of the wolfsentry_time_t's will (on
+ * rare occasions) be mutually incoherent.
  */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_metadata(
     const struct wolfsentry_route *route,
     struct wolfsentry_route_metadata_exports *metadata)
 {
     metadata->insert_time = route->meta.insert_time;
-    metadata->last_hit_time = WOLFSENTRY_ATOMIC_LOAD(route->meta.last_hit_time);
-    metadata->last_penaltybox_time = WOLFSENTRY_ATOMIC_LOAD(route->meta.last_penaltybox_time);
-    metadata->purge_after = WOLFSENTRY_ATOMIC_LOAD(route->meta.purge_after);
+    if (sizeof(void *) == sizeof route->meta.last_hit_time) {
+        metadata->last_hit_time = WOLFSENTRY_ATOMIC_LOAD(route->meta.last_hit_time);
+        metadata->last_penaltybox_time = WOLFSENTRY_ATOMIC_LOAD(route->meta.last_penaltybox_time);
+        metadata->purge_after = WOLFSENTRY_ATOMIC_LOAD(route->meta.purge_after);
+    } else {
+        /* avoid 64 bit atomic operations on 32 bit targets. */
+        metadata->last_hit_time = route->meta.last_hit_time;
+        metadata->last_penaltybox_time = route->meta.last_penaltybox_time;
+        metadata->purge_after = route->meta.purge_after;
+    }
     metadata->connection_count = WOLFSENTRY_ATOMIC_LOAD(route->meta.connection_count);
     metadata->derogatory_count = WOLFSENTRY_ATOMIC_LOAD(route->meta.derogatory_count);
     metadata->commendable_count = WOLFSENTRY_ATOMIC_LOAD(route->meta.commendable_count);
@@ -3127,6 +3597,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
         buf[WOLFSENTRY_BITS_TO_BYTES(addr_bits)] = 0;
         *buflen = (int)WOLFSENTRY_BITS_TO_BYTES(addr_bits);
         WOLFSENTRY_RETURN_OK;
+    } else if (sa_family == WOLFSENTRY_AF_CAN) {
+        unsigned int i;
+        if (2 + (4 * 2) + 1 > (size_t)*buflen)
+            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+        *buf++ = '0';
+        *buf++ = 'x';
+        for (i=0; i < 4; ++i) {
+            if (i < (addr_bits >> 3)) {
+                *buf++ = hexdigit_ntoa(addr[i] >> 4);
+                *buf++ = hexdigit_ntoa(addr[i]);
+            } else {
+                *buf++ = '0';
+                *buf++ = '0';
+            }
+        }
+        *buf = 0;
+        *buflen = (int)(buf - buf_at_start);
+        WOLFSENTRY_RETURN_OK;
     } else
         WOLFSENTRY_ERROR_RETURN(OP_NOT_SUPP_FOR_PROTO);
 }
@@ -3340,21 +3828,52 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
         write_string("\"remote\":{");
 
         if (have_r_attr(SA_REMOTE_ADDR)) {
-            int len_in_out = (int)*json_out_len;
-            write_string("\"address\":\"");
-            ret = wolfsentry_route_format_address(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                r->sa_family,
-                WOLFSENTRY_ROUTE_REMOTE_ADDR(r),
-                WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r),
-                (char *)*json_out,
-                &len_in_out);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
-            (*json_out) += len_in_out;
-            *json_out_len -= (size_t)len_in_out;
-            write_string("\",\"prefix-bits\":");
-            WOLFSENTRY_RERETURN_IF_ERROR(ws_itoa(WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r), json_out, json_out_len));
-            write_byte(',');
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+            if (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
+                int len_in_out = (int)*json_out_len;
+                write_string("\"address\":\"");
+                ret = wolfsentry_route_format_address(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    r->sa_family,
+                    WOLFSENTRY_ROUTE_REMOTE_ADDR(r),
+                    WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r) >> 1,
+                    (char *)*json_out,
+                    &len_in_out);
+                WOLFSENTRY_RERETURN_IF_ERROR(ret);
+                (*json_out) += len_in_out;
+                *json_out_len -= (size_t)len_in_out;
+                write_string("\",\"bitmask\":\"");
+                len_in_out = (int)*json_out_len;
+                ret = wolfsentry_route_format_address(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    r->sa_family,
+                    WOLFSENTRY_ROUTE_REMOTE_ADDR(r) + WOLFSENTRY_BITS_TO_BYTES(WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r) >> 1),
+                    WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r) >> 1,
+                    (char *)*json_out,
+                    &len_in_out);
+                WOLFSENTRY_RERETURN_IF_ERROR(ret);
+                (*json_out) += len_in_out;
+                *json_out_len -= (size_t)len_in_out;
+                write_string("\",");
+            } else
+#endif
+            {
+                int len_in_out = (int)*json_out_len;
+                write_string("\"address\":\"");
+                ret = wolfsentry_route_format_address(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    r->sa_family,
+                    WOLFSENTRY_ROUTE_REMOTE_ADDR(r),
+                    WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r),
+                    (char *)*json_out,
+                    &len_in_out);
+                WOLFSENTRY_RERETURN_IF_ERROR(ret);
+                (*json_out) += len_in_out;
+                *json_out_len -= (size_t)len_in_out;
+                write_string("\",\"prefix-bits\":");
+                WOLFSENTRY_RERETURN_IF_ERROR(ws_itoa(WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(r), json_out, json_out_len));
+                write_byte(',');
+            }
         }
         if (have_r_attr(SA_REMOTE_PORT)) {
             write_string("\"port\":");
@@ -3377,21 +3896,52 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
         write_string("\"local\":{");
 
         if (have_r_attr(SA_LOCAL_ADDR)) {
-            int len_in_out = (int)*json_out_len;
-            write_string("\"address\":\"");
-            ret = wolfsentry_route_format_address(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                r->sa_family,
-                WOLFSENTRY_ROUTE_LOCAL_ADDR(r),
-                WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r),
-                (char *)*json_out,
-                &len_in_out);
-            WOLFSENTRY_RERETURN_IF_ERROR(ret);
-            (*json_out) += len_in_out;
-            *json_out_len -= (size_t)len_in_out;
-            write_string("\",\"prefix-bits\":");
-            WOLFSENTRY_RERETURN_IF_ERROR(ws_itoa(WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r), json_out, json_out_len));
-            write_byte(',');
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+            if (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
+                int len_in_out = (int)*json_out_len;
+                write_string("\"address\":\"");
+                ret = wolfsentry_route_format_address(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    r->sa_family,
+                    WOLFSENTRY_ROUTE_LOCAL_ADDR(r),
+                    WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r) >> 1,
+                    (char *)*json_out,
+                    &len_in_out);
+                WOLFSENTRY_RERETURN_IF_ERROR(ret);
+                (*json_out) += len_in_out;
+                *json_out_len -= (size_t)len_in_out;
+                write_string("\",\"bitmask\":\"");
+                len_in_out = (int)*json_out_len;
+                ret = wolfsentry_route_format_address(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    r->sa_family,
+                    WOLFSENTRY_ROUTE_LOCAL_ADDR(r) + WOLFSENTRY_BITS_TO_BYTES(WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r) >> 1),
+                    WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r) >> 1,
+                    (char *)*json_out,
+                    &len_in_out);
+                WOLFSENTRY_RERETURN_IF_ERROR(ret);
+                (*json_out) += len_in_out;
+                *json_out_len -= (size_t)len_in_out;
+                write_string("\",");
+            } else
+#endif
+            {
+                int len_in_out = (int)*json_out_len;
+                write_string("\"address\":\"");
+                ret = wolfsentry_route_format_address(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    r->sa_family,
+                    WOLFSENTRY_ROUTE_LOCAL_ADDR(r),
+                    WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r),
+                    (char *)*json_out,
+                    &len_in_out);
+                WOLFSENTRY_RERETURN_IF_ERROR(ret);
+                (*json_out) += len_in_out;
+                *json_out_len -= (size_t)len_in_out;
+                write_string("\",\"prefix-bits\":");
+                WOLFSENTRY_RERETURN_IF_ERROR(ws_itoa(WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(r), json_out, json_out_len));
+                write_byte(',');
+            }
         }
 
         if (have_r_attr(SA_LOCAL_PORT)) {
@@ -3492,7 +4042,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_dump_json_end(
 
 #endif /* !WOLFSENTRY_NO_JSON || WOLFSENTRY_JSON_DUMP_UTILS */
 
-#ifndef WOLFSENTRY_NO_STDIO
+#ifndef WOLFSENTRY_NO_STDIO_STREAMS
 
 static wolfsentry_errcode_t wolfsentry_route_render_proto(int proto, wolfsentry_route_flags_t flags, FILE *f) {
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD)) {
@@ -3574,6 +4124,27 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
     } else if (sa_family == WOLFSENTRY_AF_LOCAL) {
         if (fprintf(f, "\"%.*s\"", (int)addr_bytes, addr) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+    } else if (sa_family == WOLFSENTRY_AF_CAN) {
+        switch(WOLFSENTRY_BITS_TO_BYTES(addr_bits)) {
+        case 4:
+            if (fprintf(f, "\"0x%02x%02x%02x%02x\"", addr[0], addr[1], addr[2], addr[3]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        case 3:
+            if (fprintf(f, "\"0x%02x%02x%02x00\"", addr[0], addr[1], addr[2]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        case 2:
+            if (fprintf(f, "\"0x%02x%02x0000\"", addr[0], addr[1]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        case 1:
+            if (fprintf(f, "\"0x%02x000000\"", addr[0]) < 0)
+                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+            break;
+        default:
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        }
     } else
         WOLFSENTRY_ERROR_RETURN(OP_NOT_SUPP_FOR_PROTO);
     WOLFSENTRY_RETURN_OK;
@@ -3609,6 +4180,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_rou
             ROUTE_FLAG_CASE(TCPLIKE_PORT_NUMBERS, "Tcplike");
             ROUTE_FLAG_CASE(DIRECTION_IN, "In");
             ROUTE_FLAG_CASE(DIRECTION_OUT, "Out");
+            ROUTE_FLAG_CASE(REMOTE_ADDR_BITMASK, "BMR");
+            ROUTE_FLAG_CASE(LOCAL_ADDR_BITMASK, "BML");
             ROUTE_FLAG_CASE(IN_TABLE, "Res");
             ROUTE_FLAG_CASE(PENDING_DELETE, "D");
             ROUTE_FLAG_CASE(INSERT_ACTIONS_CALLED, "Ins");
@@ -3644,12 +4217,23 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_rou
 static wolfsentry_errcode_t wolfsentry_route_render_endpoint(WOLFSENTRY_CONTEXT_ARGS_IN, const struct wolfsentry_route *r, int sa_local_p, FILE *f) {
     const struct wolfsentry_route_endpoint *e = (sa_local_p ? &r->local : &r->remote);
     size_t addr_bytes = (size_t)(sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(r));
-    const void *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
+    const byte *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
 
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
         if (fputs("*", stdout) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
-    } else {
+    }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    else if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK)) {
+        wolfsentry_errcode_t ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len >> 1, addr, addr_bytes, f);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (fprintf(f, "&") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len >> 1, addr + WOLFSENTRY_BITS_TO_BYTES(e->addr_len >> 1), addr_bytes, f);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    }
+#endif
+    else {
         wolfsentry_errcode_t ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len, addr, addr_bytes, f);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
@@ -3744,7 +4328,18 @@ static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(WOLFSENTRY_
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
         if (fputs("*", stdout) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
-    } else {
+    }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    else if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) : (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK)) {
+        wolfsentry_errcode_t ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len >> 1, addr, addr_bytes, f);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (fprintf(f, "&") < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len >> 1, addr + WOLFSENTRY_BITS_TO_BYTES(e->addr_len >> 1), addr_bytes, f);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    }
+#endif
+    else {
         wolfsentry_errcode_t ret = wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, e->addr_len, addr, addr_bytes, f);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
@@ -3825,13 +4420,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_C
     WOLFSENTRY_RETURN_OK;
 }
 
-#endif /* !WOLFSENTRY_NO_STDIO */
+#endif /* !WOLFSENTRY_NO_STDIO_STREAMS */
+
+static wolfsentry_errcode_t wolfsentry_route_table_reset(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_table_header *table)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    WOLFSENTRY_TABLE_HEADER_RESET(*table);
+    ((struct wolfsentry_route_table *)table)->last_af_wildcard_route = NULL;
+    WOLFSENTRY_RETURN_OK;
+}
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_init(
     struct wolfsentry_route_table *route_table)
 {
     WOLFSENTRY_TABLE_HEADER_RESET(route_table->header);
     route_table->header.cmp_fn = wolfsentry_route_key_cmp;
+    route_table->header.reset_fn = wolfsentry_route_table_reset;
     route_table->header.free_fn = wolfsentry_route_drop_reference_generic;
     route_table->header.ent_type = WOLFSENTRY_OBJECT_TYPE_ROUTE;
     route_table->highest_priority_route_in_table = MAX_UINT_OF(wolfsentry_priority_t);

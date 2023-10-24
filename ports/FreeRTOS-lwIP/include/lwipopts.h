@@ -29,22 +29,24 @@
 /* #define LWIP_NOASSERT                   1 */
 #define SYS_LIGHTWEIGHT_PROT            1
 
-#define MEM_LIBC_MALLOC                 0
+#define MEM_LIBC_MALLOC                 1
 #define MEMP_MEM_MALLOC                 1
 #define MEM_USE_POOLS                   0
 #define LWIP_ALLOW_MEM_FREE_FROM_OTHER_CONTEXT 1
 
 #define LWIP_ETHERNET                   1
 #define LWIP_IPV4                       1
+#ifndef LWIP_IPV6
 #define LWIP_IPV6                       1
+#endif
 #define LWIP_TCP                        1
 #define LWIP_UDP                        1
 #define LWIP_ARP                        1
 #define LWIP_ICMP                       1
-#define LWIP_ICMP6                      1
+#define LWIP_ICMP6                      LWIP_IPV6
 #define IP_FRAG                         1
 
-#define LWIP_DEBUG
+#define LWIP_DEBUG                      0
 #define ECHO_DEBUG                      LWIP_DBG_ON
 /* #define IP4_DEBUG                       LWIP_DBG_ON */
 /* #define NETIF_DEBUG                     LWIP_DBG_ON */
@@ -55,7 +57,7 @@
 #define LWIP_SOCKET                     1
 #define LWIP_NETCONN                    1
 #define LWIP_RAW                        1
-#define LWIP_COMPAT_SOCKETS             1
+#define LWIP_COMPAT_SOCKETS             0
 #define LWIP_TIMEVAL_PRIVATE            0
 #include <sys/time.h>
 #define LWIP_STATS                      0
@@ -80,7 +82,7 @@
 #define MEMP_NUM_NETBUF                 4
 #define MEMP_NUM_NETCONN                4
 #define MEMP_NUM_API_MSG                8
-#define MEMP_NUM_TCPIP_MSG              8
+/* #define MEMP_NUM_TCPIP_MSG              8 */
 
 #define MEM_RECLAIM                     1
 #define MEMP_RECLAIM                    1
@@ -89,7 +91,7 @@
 #define PBUF_LINK_HLEN                 16
 #define TCP_TTL                       255
 #define TCP_QUEUE_OOSEQ                 1
-#define TCP_SND_BUF                  1500
+#define TCP_SND_BUF                 16384 /* "For maximum throughput, set this to the same value as TCP_WND" */
 #define TCP_SND_QUEUELEN                (6 * TCP_SND_BUF/TCP_MSS)
 #define TCP_MAXRTX                     12
 #define TCP_SYNMAXRTX                   4
@@ -119,5 +121,9 @@
 #endif /* STATS */
 
 #define LWIP_PACKET_FILTER_API 1
+
+#undef LWIP_PLATFORM_ASSERT
+#define LWIP_PLATFORM_ASSERT(x) do {printf("Assertion \"%s\" failed at line %d in %s\n", \
+                                           x, __LINE__, __FILE__); for (;;);} while(0)
 
 #endif /* __LWIPOPTS_H__ */

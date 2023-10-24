@@ -390,8 +390,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_type_to_string(
     WOLFSENTRY_RETURN_OK;
 }
 
-#ifndef WOLFSENTRY_NO_STDIO
-
 struct dump_buf_state {
     char *out;
     int out_space;
@@ -492,8 +490,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     else
         WOLFSENTRY_RETURN_OK;
 }
-
-#endif /* !WOLFSENTRY_NO_STDIO */
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_clone(
     struct wolfsentry_context *src_context,

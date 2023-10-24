@@ -23,6 +23,11 @@
 #ifndef __CC_H__
 #define __CC_H__
 
-/* don't need anything special here. */
+#ifndef inet_ntop
+#define inet_ntop lwip_inet_ntop
+#endif
+#ifndef inet_pton
+#define inet_pton lwip_inet_pton
+#endif
 
 #endif /* __CC_H__ */

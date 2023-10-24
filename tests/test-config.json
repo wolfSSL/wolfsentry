@@ -32,10 +32,10 @@
             "priority" : 1,
             "config" : {
                 "max-connection-count" : 10,
-		"route-flags-to-add-on-insert" : [ "direction-in", "direction-out", "green-listed" ],
-		"route-flags-to-clear-on-insert" : [ "dont-count-hits", "dont-count-current-connections" ],
+                "route-flags-to-add-on-insert" : [ "direction-in", "direction-out", "green-listed" ],
+                "route-flags-to-clear-on-insert" : [ "dont-count-hits", "dont-count-current-connections" ],
                 "route-idle-time-for-purge" : "10s",
-		"action-res-bits-to-add" : [ "user+5" ]
+                "action-res-bits-to-add" : [ "user+5" ]
             },
             "post-actions" : [ "handle-connect", "handle-connect2" ],
             "insert-actions" : [ "handle-insert" ],
@@ -48,14 +48,14 @@
         {
             "label" : "pinhole-generator-parent",
             "priority" : 10,
-	    "config" : {
-		"action-res-filter-bits-set" : [ "user+1" ],
+            "config" : {
+                "action-res-filter-bits-set" : [ "user+1" ],
                 "action-res-filter-bits-unset" : [ "user+2" ],
-		"action-res-bits-to-add" : [ "user+3" ],
-		"action-res-bits-to-clear" : [ "user+4" ]
-	    },
+                "action-res-bits-to-add" : [ "user+3" ],
+                "action-res-bits-to-clear" : [ "user+4" ]
+            },
             "match-actions" : [ "%track-peer-v1" ],
-	    "aux-parent-event" : "ephemeral-pinhole-parent",
+            "aux-parent-event" : "ephemeral-pinhole-parent",
             "decision-actions" : [ "notify-on-decision" ]
         },
 
@@ -68,9 +68,9 @@
                 "derog-thresh-for-penalty-boxing" : 4,
                 "derog-thresh-ignore-commendable" : false,
                 "commendable-clears-derogatory" : true,
-		"action-res-bits-to-add" : [ "user+5" ],
-		"route-flags-to-add-on-insert" : [ "direction-in", "laddr-wild", "rport-wild", "lport-wild" ],
-		"route-flags-to-clear-on-insert" : [ "direction-out", "dont-count-hits", "dont-count-current-connections", "green-listed" ],
+                "action-res-bits-to-add" : [ "user+5" ],
+                "route-flags-to-add-on-insert" : [ "direction-in", "laddr-wild", "rport-wild", "lport-wild" ],
+                "route-flags-to-clear-on-insert" : [ "direction-out", "dont-count-hits", "dont-count-current-connections", "green-listed" ],
                 "route-idle-time-for-purge" : "5m"
             },
             "post-actions" : [ "handle-connect", "handle-connect2" ],
@@ -85,13 +85,13 @@
             "label" : "port-scanner-generator-parent",
             "priority" : 10,
             "config" : {
-		"action-res-filter-bits-set" : [ "unreachable" ],
-		"action-res-filter-bits-unset" : [ "commendable" ],
-		"action-res-bits-to-add" : [ "user+4" ],
-		"action-res-bits-to-clear" : [ "none" ]
-	    },
+                "action-res-filter-bits-set" : [ "unreachable" ],
+                "action-res-filter-bits-unset" : [ "commendable" ],
+                "action-res-bits-to-add" : [ "user+4" ],
+                "action-res-bits-to-clear" : [ "none" ]
+            },
             "match-actions" : [ "%track-peer-v1" ],
-	    "aux-parent-event" : "ephemeral-port-scanner-parent",
+            "aux-parent-event" : "ephemeral-port-scanner-parent",
             "decision-actions" : [ "notify-on-decision" ]
         },
 
@@ -135,6 +135,42 @@
         },
         {
             "label" : "call-in-from-unit-test"
+        },
+
+        {
+            "label" : "set-user-0",
+            "priority" : 1,
+            "config" : {
+                "action-res-bits-to-add" : [ "user+0" ]
+            }
+        },
+        {
+            "label" : "set-user-1",
+            "priority" : 1,
+            "config" : {
+                "action-res-bits-to-add" : [ "user+1" ]
+            }
+        },
+        {
+            "label" : "set-user-2",
+            "priority" : 1,
+            "config" : {
+                "action-res-bits-to-add" : [ "user+2" ]
+            }
+        },
+        {
+            "label" : "set-user-3",
+            "priority" : 1,
+            "config" : {
+                "action-res-bits-to-add" : [ "user+3" ]
+            }
+        },
+        {
+            "label" : "set-user-4",
+            "priority" : 1,
+            "config" : {
+                "action-res-bits-to-add" : [ "user+4" ]
+            }
         }
     ],
     "default-policies" : {
@@ -300,11 +336,101 @@
             "parent-event" : "static-route-parent",
             "direction-in" : true,
             "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "my_AF2",
+            "remote" : {
+                "address" : "077/0/001",
+                "bitmask" : "377/0/377"
+            },
+            "local" : {
+                "address" : "001/002/003"
+            }
+        },
+
+        {
+            "parent-event" : "set-user-0",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "CAN",
+            "remote" : {
+                "address" : "0x1fffffed",
+                "bitmask" : "0x1fffffff"
+            }
+        },
+        {
+            "parent-event" : "set-user-1",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "CAN",
+            "remote" : {
+                "address" : "0x000007cb",
+                "bitmask" : "0x1fffffff"
+            }
+        },
+        {
+            "parent-event" : "set-user-2",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "CAN",
+            "remote" : {
+                "bitmask" : "0x13333333",
+                "address" : "0x1fffffff"
+            }
+        },
+        {
+            "parent-event" : "set-user-3",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "CAN",
+            "remote" : {
+                "bitmask" : "0x1ff",
+                "address" : "0x123"
+            }
+        },
+
+        {
+            "parent-event" : "set-user-4",
+            "direction-in" : true,
+            "direction-out" : true,
+            "penalty-boxed" : false,
+            "green-listed" : true,
+            "dont-count-hits" : false,
+            "dont-count-current-connections" : false,
+            "family" : "CAN",
+            "remote" : {
+                "address" : "0x156789ab",
+                "prefix-bits" : 16
+            }
+        },
+
+        {
+            "parent-event" : "static-route-parent",
+            "direction-in" : true,
+            "direction-out" : true,
             "green-listed" : true,
             "remote" : {
                 "interface" : 2
             }
-	},
+        },
 
         {
             "parent-event" : "pinhole-generator-parent",
@@ -316,19 +442,19 @@
             "remote" : {
                 "port" : 53
             }
-	},
+        },
         {
             "parent-event" : "port-scanner-generator-parent",
             "direction-in" : true,
             "direction-out" : false,
             "family" : "inet"
-	},
+        },
         {
             "parent-event" : "port-scanner-generator-parent",
             "direction-in" : true,
             "direction-out" : false,
             "family" : "inet6"
-	}
+        }
     ],
     "user-values" : {
         "user-null" : null,

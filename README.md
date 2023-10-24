@@ -48,7 +48,7 @@ be generated from the top of the wolfSentry source tree with `make doc-html`.
 This, and the source code itself, are the recommended API references.
 
 The PDF version of the API reference manual is pregenerated and included with source
-distributions in the `doc/` subdirectory.  The latest version is always
+distributions in the `doc/` subdirectory at `doc/wolfSentry_refman.pdf`.  The latest version is always
 available [on GitHub](https://raw.githubusercontent.com/wolfSSL/wolfsentry/master/doc/wolfSentry_refman.pdf).
 
 The latest changes and additions are noted in the [ChangeLog.md](ChangeLog.md) at the top of the repository.
@@ -59,10 +59,8 @@ The latest changes and additions are noted in the [ChangeLog.md](ChangeLog.md) a
 In its default build, wolfSentry depends on a POSIX runtime, specifically the
 heap allocator, clock_gettime, stdio, semaphore, pthreads, and string APIs.
 However, these dependencies can be avoided with various build-time options.  The recipe
-<br>
-```
-make STATIC=1 SINGLETHREADED=1 NO_STDIO=1 EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN'
-```
+
+`make STATIC=1 SINGLETHREADED=1 NO_STDIO=1 EXTRA_CFLAGS="-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN"`
 
 builds a libwolfsentry.a that depends on only a handful of basic string
 functions and the `inet_ntop()` library function (from POSIX.1-2001, and also
@@ -106,43 +104,47 @@ topic.
 
 | `make` Option | Macro Option | Description |
 | -------------- | ------------ | ----------- |
-| `V` ||  Verbose `make` output <br> e.g. `make V=1 -j test` |
-| `USER_MAKE_CONF` || User-defined make clauses to include at the top of the main Makefile <br> e.g. `make -j USER_MAKE_CONF=Makefile.settings` |
-| `EXTRA_CFLAGS` || Additional arguments to be passed verbatim to the compiler |
-| `EXTRA_LDFLAGS` || Additional arguments to be passed verbatim to the linker |
-| `SRC_TOP` || The source code top level directory (default `pwd -P`) |
-| `BUILD_TOP` || Build with artifacts in an alternate location (outside or in a subdirectory of the source tree) <br> e.g. `make BUILD_TOP=./build -j test`|
-| `DEBUG` || Compiler debugging flag to use (default `-ggdb`) |
-| `OPTIM` || The optimizer flag to use (default `-O3`) |
-| `HOST` || The target host tuple, for cross-compilation (default unset, i.e. native targeting) |
-| `RUNTIME` || The target runtime ecosystem -- default unset, `FreeRTOS-lwIP` and `Linux-lwIP` are recognized |
-| `C_WARNFLAGS` || The warning flags to use (overriding the generally applicable defaults) |
-| `STATIC` || Build statically linked unit tests |
-| `STRIPPED` || Strip binaries of debugging symbols |
-| `BUILD_DYNAMIC` || Build dynamically linked library |
-| `VERY_QUIET` || Inhibit all non-error output during build |
-| `TAR` || Path to GNU tar binary for `make dist`, should be set to `gtar` for macOS |
-| `VERSION` || The version to package for `make dist` |
+| `V` | |  Verbose `make` output <br> e.g. `make V=1 -j test` |
+| `USER_MAKE_CONF` | | User-defined make clauses to include at the top of the main Makefile <br> e.g. `make -j USER_MAKE_CONF=Makefile.settings` |
+| `EXTRA_CFLAGS` | | Additional arguments to be passed verbatim to the compiler |
+| `EXTRA_LDFLAGS` | | Additional arguments to be passed verbatim to the linker |
+| `SRC_TOP` | | The source code top level directory (default `pwd -P`) |
+| `BUILD_TOP` | | Build with artifacts in an alternate location (outside or in a subdirectory of the source tree) <br> e.g. `make BUILD_TOP=./build -j test`|
+| `DEBUG` | | Compiler debugging flag to use (default `-ggdb`) |
+| `OPTIM` | | The optimizer flag to use (default `-O3`) |
+| `HOST` | | The target host tuple, for cross-compilation (default unset, i.e. native targeting) |
+| `RUNTIME` | | The target runtime ecosystem -- default unset, `FreeRTOS-lwIP` and `Linux-lwIP` are recognized |
+| `C_WARNFLAGS` | | The warning flags to use (overriding the generally applicable defaults) |
+| `STATIC` | | Build statically linked unit tests |
+| `STRIPPED` | | Strip binaries of debugging symbols |
+| `BUILD_DYNAMIC` | | Build dynamically linked library |
+| `VERY_QUIET` | | Inhibit all non-error output during build |
+| `TAR` | | Path to GNU tar binary for `make dist`, should be set to `gtar` for macOS |
+| `VERSION` | | The version to package for `make dist` |
 | `LWIP` | `WOLFSENTRY_LWIP` | True/false -- Activates appropriate build settings for lwIP |
-| `NO_STDIO` | `WOLFSENTRY_NO_STDIO` | Define to omit functionality that depends on `stdio` |
+| `NO_STDIO_STREAMS` | `WOLFSENTRY_NO_STDIO_STREAMS` | Define to omit functionality that depends on `stdio` stream I/O |
+| | `WOLFSENTRY_NO_STDIO_H` | Define to inhibit inclusion of `stdio.h` |
+| `NO_ADDR_BITMASK_MATCHING` | `WOLFSENTRY_NO_ADDR_BITMASK_MATCHING` | Define to omit support for bitmask matching of addresses, i.e. support only prefix matching. |
+| `NO_IPV6` | `WOLFSENTRY_NO_IPV6` | Define to omit support for the IPv6 address family. |
 | `NO_JSON` | `WOLFSENTRY_NO_JSON` | Define to omit JSON configuration support |
 | `NO_JSON_DOM` | `WOLFSENTRY_NO_JSON_DOM` | Define to omit JSON DOM API |
 | `CALL_TRACE` | `WOLFSENTRY_DEBUG_CALL_TRACE` | Define to activate runtime call stack logging (profusely verbose) |
 | `USER_SETTINGS_FILE` | `WOLFSENTRY_USER_SETTINGS_FILE` | A substitute settings file, replacing autogenerated `wolfsentry_settings.h` |
 | `SINGLETHREADED` | `WOLFSENTRY_SINGLETHREADED` | Define to omit thread safety logic, and replace thread safety functions and macros with no-op macros. |
-|| `WOLFSENTRY_NO_PROTOCOL_NAMES` | If defined, omit APIs for rendering error codes and source code files in human readable form. They will be rendered numerically. |
-|| `WOLFSENTRY_NO_GETPROTOBY` | Define to disable lookup and rendering of protocols and services by name. |
-|| `WOLFSENTRY_NO_ERROR_STRINGS` | If defined, omit APIs for rendering error codes and source code files in human readable form. They will be rendered numerically. |
-|| `WOLFSENTRY_NO_MALLOC_BUILTINS` | If defined, omit built-in heap allocator primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_allocator`. |
-|| `WOLFSENTRY_HAVE_NONGNU_ATOMICS` | Define if gnu-style atomic intrinsics are not available. `WOLFSENTRY_ATOMIC_*()` macro definitions for intrinsics will need to be supplied in `WOLFSENTRY_USER_SETTINGS_FILE` (see `wolfsentry_util.h`). |
-|| `WOLFSENTRY_NO_CLOCK_BUILTIN` | If defined, omit built-in time primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_timecbs`. |
-|| `WOLFSENTRY_USE_NONPOSIX_SEMAPHORES` | Define if POSIX semaphore API is not available. If no non-POSIX builtin implementation is present in `wolfsentry_util.c`, then the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include a full semaphore implementation (shim set) in its `wolfsentry_semcbs` slot. |
-|| `WOLFSENTRY_SEMAPHORE_INCLUDE` | Define to the path of a header file declaring a semaphore API. |
-|| `WOLFSENTRY_USE_NONPOSIX_THREADS` | Define if POSIX thread API is not available. `WOLFSENTRY_THREAD_INCLUDE`, `WOLFSENTRY_THREAD_ID_T`, and `WOLFSENTRY_THREAD_GET_ID_HANDLER` will need to be defined. |
-|| `WOLFSENTRY_THREAD_INCLUDE` | Define to the path of a header file declaring a threading API. |
-|| `WOLFSENTRY_THREAD_ID_T` | Define to the appropriate type analogous to POSIX `pthread_t`. |
-|| `WOLFSENTRY_THREAD_GET_ID_HANDLER` | Define to the name of a void function analogous to POSIX `pthread_self`, returning a value of type `WOLFSENTRY_THREAD_ID_T`. |
-|| `FREERTOS` | Build for FreeRTOS |
+| | `WOLFSENTRY_NO_PROTOCOL_NAMES` | If defined, omit APIs for rendering error codes and source code files in human readable form. They will be rendered numerically. |
+| | `WOLFSENTRY_NO_GETPROTOBY` | Define to disable lookup and rendering of protocols and services by name. |
+| | `WOLFSENTRY_NO_ERROR_STRINGS` | If defined, omit APIs for rendering error codes and source code files in human readable form. They will be rendered numerically. |
+| | `WOLFSENTRY_NO_MALLOC_BUILTINS` | If defined, omit built-in heap allocator primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_allocator`. |
+| | `WOLFSENTRY_HAVE_NONGNU_ATOMICS` | Define if gnu-style atomic intrinsics are not available. `WOLFSENTRY_ATOMIC_*()` macro definitions for intrinsics will need to be supplied in `WOLFSENTRY_USER_SETTINGS_FILE` (see `wolfsentry_util.h`). |
+| | `WOLFSENTRY_NO_CLOCK_BUILTIN` | If defined, omit built-in time primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_timecbs`. |
+| | `WOLFSENTRY_NO_SEM_BUILTIN` | If defined, omit built-in semaphore primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_semcbs`. |
+| | `WOLFSENTRY_USE_NONPOSIX_SEMAPHORES` | Define if POSIX semaphore API is not available. If no non-POSIX builtin implementation is present in `wolfsentry_util.c`, then #WOLFSENTRY_NO_SEM_BUILTIN must be set, and the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include a full semaphore implementation (shim set) in its `wolfsentry_semcbs` slot. |
+| | `WOLFSENTRY_SEMAPHORE_INCLUDE` | Define to the path of a header file declaring a semaphore API. |
+| | `WOLFSENTRY_USE_NONPOSIX_THREADS` | Define if POSIX thread API is not available. `WOLFSENTRY_THREAD_INCLUDE`, `WOLFSENTRY_THREAD_ID_T`, and `WOLFSENTRY_THREAD_GET_ID_HANDLER` will need to be defined. |
+| | `WOLFSENTRY_THREAD_INCLUDE` | Define to the path of a header file declaring a threading API. |
+| | `WOLFSENTRY_THREAD_ID_T` | Define to the appropriate type analogous to POSIX `pthread_t`. |
+| | `WOLFSENTRY_THREAD_GET_ID_HANDLER` | Define to the name of a void function analogous to POSIX `pthread_self`, returning a value of type `WOLFSENTRY_THREAD_ID_T`. |
+| | `FREERTOS` | Build for FreeRTOS |
 
 ### Build and Self-Test Examples
 
@@ -162,8 +164,7 @@ Install from an alternate build location to a non-standard destination:
 
 `make BUILD_TOP=./build INSTALL_DIR=/usr INSTALL_LIBDIR=/usr/lib64 install`
 
-Build libwolfsentry.a and test it under various analyzers (memory and thread
-testing under full battery of valgrind and sanitizer tests):
+Build libwolfsentry.a and test it in various configurations:
 
 `make -j check`
 
@@ -184,7 +185,7 @@ elaborate makefile code including additional rules and dependency mechanisms.)
 
 Build the smallest simplest possible library:
 
-`make -j SINGLETHREADED=1 NO_STDIO=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS='-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -Wno-error=inline -Wno-inline'`
+`make -j SINGLETHREADED=1 NO_STDIO=1 DEBUG= OPTIM=-Os EXTRA_CFLAGS="-DWOLFSENTRY_NO_CLOCK_BUILTIN -DWOLFSENTRY_NO_MALLOC_BUILTIN -DWOLFSENTRY_NO_ERROR_STRINGS -Wno-error=inline -Wno-inline"`
 
 Build and test with user settings:
 
@@ -192,7 +193,7 @@ Build and test with user settings:
 
 Build for FreeRTOS on ARM32, assuming FreeRTOS and lwIP source trees are located as shown:
 
-`make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00 LWIP_TOP=../third/lwip EXTRA_CFLAGS='-mcpu=cortex-m7'`
+`make -j HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=../third/FreeRTOSv202212.00 LWIP_TOP=../third/lwip EXTRA_CFLAGS=-mcpu=cortex-m7`
 
 
 ## Project Examples

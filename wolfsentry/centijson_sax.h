@@ -203,7 +203,7 @@ typedef struct JSON_PARSER {
     size_t nesting_level;
     size_t nesting_stack_size;
 
-    enum {
+    enum centijson_automaton {
         AUTOMATON_MAIN = 0,
         AUTOMATON_NULL = 1,
         AUTOMATON_FALSE = 2,

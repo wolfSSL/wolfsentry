@@ -161,7 +161,7 @@ static inline int WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(wolfsentry_errcode_t x) {
 #undef WOLFSENTRY_DEBUG_CALL_TRACE
 #endif
 
-#if defined(WOLFSENTRY_DEBUG_CALL_TRACE) && !defined(WOLFSENTRY_NO_STDIO)
+#if defined(WOLFSENTRY_DEBUG_CALL_TRACE) && !defined(WOLFSENTRY_NO_STDIO_STREAMS)
     #define WOLFSENTRY_ERROR_RETURN(x) WOLFSENTRY_ERROR_RETURN_1(WOLFSENTRY_ERROR_ID_ ## x)
     #define WOLFSENTRY_SUCCESS_RETURN(x) WOLFSENTRY_ERROR_RETURN_1(WOLFSENTRY_SUCCESS_ID_ ## x)
     #if defined(WOLFSENTRY_ERROR_STRINGS) && defined(__GNUC__) && !defined(__STRICT_ANSI__)
@@ -335,7 +335,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
     /*!< \brief Return the short name of the failure or success code associated with `wolfsentry_errcode_t` `e`, or `wolfsentry_errcode_error_string(e)` if not known. @hideinitializer */
 #endif
 
-#if !defined(WOLFSENTRY_NO_STDIO) && !defined(WOLFSENTRY_NO_DIAG_MSGS)
+#if !defined(WOLFSENTRY_NO_STDIO_STREAMS) && !defined(WOLFSENTRY_NO_DIAG_MSGS)
 
 #include <errno.h>
 
@@ -343,13 +343,13 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 #define WOLFSENTRY_WARN(fmt,...) WOLFSENTRY_PRINTF_ERR("%s@L%d " fmt, __FILE__, __LINE__, __VA_ARGS__)
 #else
 #define WOLFSENTRY_WARN(fmt,...) WOLFSENTRY_PRINTF_ERR("%s@L%d " fmt, __FILE__, __LINE__, ## __VA_ARGS__)
-    /*!< \brief Render a warning message using `WOLFSENTRY_PRINTF_ERR()`, or if `WOLFSENTRY_NO_STDIO` or `WOLFSENTRY_NO_DIAG_MSGS` is set, `DO_NOTHING`. @hideinitializer */
+    /*!< \brief Render a warning message using `WOLFSENTRY_PRINTF_ERR()`, or if `WOLFSENTRY_NO_STDIO_STREAMS` or `WOLFSENTRY_NO_DIAG_MSGS` is set, `DO_NOTHING`. @hideinitializer */
 #endif
 
 #define WOLFSENTRY_WARN_ON_FAILURE(...) do { wolfsentry_errcode_t _ret = (__VA_ARGS__); if (_ret < 0) { WOLFSENTRY_WARN(#__VA_ARGS__ ": " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(_ret)); }} while(0)
-    /*!< \brief Evaluate the supplied expression, and if the resulting `wolfsentry_errcode_t` encodes an error, render the expression and the decoded error using `WOLFSENTRY_PRINTF_ERR()`, but if `WOLFSENTRY_NO_STDIO` or `WOLFSENTRY_NO_DIAG_MSGS` is set, don't render a warning. @hideinitializer */
+    /*!< \brief Evaluate the supplied expression, and if the resulting `wolfsentry_errcode_t` encodes an error, render the expression and the decoded error using `WOLFSENTRY_PRINTF_ERR()`, but if `WOLFSENTRY_NO_STDIO_STREAMS` or `WOLFSENTRY_NO_DIAG_MSGS` is set, don't render a warning. @hideinitializer */
 #define WOLFSENTRY_WARN_ON_FAILURE_LIBC(...) do { if ((__VA_ARGS__) < 0) { WOLFSENTRY_WARN(#__VA_ARGS__ ": %s\n", strerror(errno)); }} while(0)
-    /*!< \brief Evaluate the supplied expression, and if it evaluates to a negative value, render the expression and the decoded `errno` using `WOLFSENTRY_PRINTF_ERR()`, but if `WOLFSENTRY_NO_STDIO` or `WOLFSENTRY_NO_DIAG_MSGS` is set, don't render a warning. @hideinitializer */
+    /*!< \brief Evaluate the supplied expression, and if it evaluates to a negative value, render the expression and the decoded `errno` using `WOLFSENTRY_PRINTF_ERR()`, but if `WOLFSENTRY_NO_STDIO_STREAMS` or `WOLFSENTRY_NO_DIAG_MSGS` is set, don't render a warning. @hideinitializer */
 
 #else
 
@@ -357,7 +357,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 #define WOLFSENTRY_WARN_ON_FAILURE(...) do { if ((__VA_ARGS__) < 0) {} } while (0)
 #define WOLFSENTRY_WARN_ON_FAILURE_LIBC(...) do { if ((__VA_ARGS__) < 0) {}} while (0)
 
-#endif /* !WOLFSENTRY_NO_STDIO && !WOLFSENTRY_NO_DIAG_MSGS */
+#endif /* !WOLFSENTRY_NO_STDIO_STREAMS && !WOLFSENTRY_NO_DIAG_MSGS */
 
 #ifdef WOLFSENTRY_CPPCHECK
     #undef WOLFSENTRY_ERROR_ENCODE
@@ -432,6 +432,7 @@ enum wolfsentry_error_id {
     WOLFSENTRY_ERROR_ID_LIB_MISMATCH           =  -38,
     WOLFSENTRY_ERROR_ID_LIBCONFIG_MISMATCH     =  -39,
     WOLFSENTRY_ERROR_ID_IO_FAILED              =  -40,
+    WOLFSENTRY_ERROR_ID_WRONG_ATTRIBUTES       =  -41,
 
     WOLFSENTRY_ERROR_ID_USER_BASE              = -128,
 

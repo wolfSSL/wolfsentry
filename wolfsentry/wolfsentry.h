@@ -52,7 +52,7 @@
 
 #define WOLFSENTRY_VERSION_MAJOR 1
     /*!< \brief Macro for major version number of installed headers.  @hideinitializer */
-#define WOLFSENTRY_VERSION_MINOR 5
+#define WOLFSENTRY_VERSION_MINOR 6
     /*!< \brief Macro for minor version number of installed headers.  @hideinitializer */
 #define WOLFSENTRY_VERSION_TINY 0
     /*!< \brief Macro for tiny version number of installed headers.  @hideinitializer */
@@ -846,9 +846,6 @@ typedef enum {
         /*!< \brief called after final decision has been made by wolfsentry_route_event_dispatch*(). @hideinitializer */
 } wolfsentry_action_type_t;
 
-#define WOLFSENTRY_ACTION_RES_USER_SHIFT 24U
-    /*!< \brief Bit shift for user-defined bits in ::wolfsentry_action_res_t */
-
 /*! \brief bit field used to communicate states and attributes through the evaluation pipeline. */
 typedef enum {
     WOLFSENTRY_ACTION_RES_NONE        = 0U,
@@ -904,9 +901,33 @@ typedef enum {
     WOLFSENTRY_ACTION_RES_RESERVED22  = 1U << 22U,
     WOLFSENTRY_ACTION_RES_RESERVED23  = 1U << 23U,
 /*! @endcond */
-    WOLFSENTRY_ACTION_RES_USER_BASE   = 1U << WOLFSENTRY_ACTION_RES_USER_SHIFT
+    WOLFSENTRY_ACTION_RES_USER0       = 1U << 24U,
+        /*!< \brief user-defined result bit #1 of 8. @hideinitializer */
+    WOLFSENTRY_ACTION_RES_USER1       = 1U << 25U,
+        /*!< \brief user-defined result bit #2 of 8. @hideinitializer */
+    WOLFSENTRY_ACTION_RES_USER2       = 1U << 26U,
+        /*!< \brief user-defined result bit #3 of 8. @hideinitializer */
+    WOLFSENTRY_ACTION_RES_USER3       = 1U << 27U,
+        /*!< \brief user-defined result bit #4 of 8. @hideinitializer */
+    WOLFSENTRY_ACTION_RES_USER4       = 1U << 28U,
+        /*!< \brief user-defined result bit #5 of 8. @hideinitializer */
+    WOLFSENTRY_ACTION_RES_USER5       = 1U << 29U,
+        /*!< \brief user-defined result bit #6 of 8. @hideinitializer */
+    WOLFSENTRY_ACTION_RES_USER6       = 1U << 30U
+        /*!< \brief user-defined result bit #7 of 8. @hideinitializer */
+    /* see macro definition of WOLFSENTRY_ACTION_RES_USER7 below. */
+
         /*!< \brief start of user-defined results, with user-defined scheme (bit field, sequential, or other).  8 bits are available. @hideinitializer */
 } wolfsentry_action_res_t;
+
+/*! @cond doxygen_all */
+#define WOLFSENTRY_ACTION_RES_USER_BASE WOLFSENTRY_ACTION_RES_USER0
+/*! @endcond */
+
+#define WOLFSENTRY_ACTION_RES_USER_SHIFT 24U
+    /*!< \brief Bit shift for user-defined bit span in ::wolfsentry_action_res_t */
+#define WOLFSENTRY_ACTION_RES_USER7 (1U << 31U)
+    /*!< \brief user-defined result bit #8 of 8.  Defined with a macro to retain ISO C compliance on enum range. */
 
 /*! @} (end wolfsentry_action) */
 
@@ -996,32 +1017,36 @@ typedef enum {
         /*!< \brief Match inbound traffic @hideinitializer */
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT                  = 1U<<11U,
         /*!< \brief Match outbound traffic (if #WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN and #WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT are both set, traffic in both directions is matched) @hideinitializer */
+    WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK            = 1U<<12U,
+        /*!< \brief Supplied remote address consists of an address followed by a bitmask, and its addr_len is the total bit count for the address and mask.  The bit count for the address and bitmask must be equal, and each must be a multiple of 8, i.e. aligned to a byte boundary.  Matching will be performed by checking that masked addresses are equal. @hideinitializer */
+    WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK             = 1U<<13U,
+        /*!< \brief Supplied local address consists of an address followed by a bitmask, and its addr_len is the total bit count for the address and mask.  The bit count for the address and bitmask must be equal, and each must be a multiple of 8, i.e. aligned to a byte boundary.  Matching will be performed by checking that masked addresses are equal. @hideinitializer */
 
     /* immutable above here. */
 
     /* internal use from here... */
-    WOLFSENTRY_ROUTE_FLAG_IN_TABLE                       = 1U<<12U,
+    WOLFSENTRY_ROUTE_FLAG_IN_TABLE                       = 1U<<14U,
         /*!< \brief Internal use -- marks route as resident in table @hideinitializer */
-    WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE                 = 1U<<13U,
+    WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE                 = 1U<<15U,
         /*!< \brief Internal use -- marks route as deleted @hideinitializer */
-    WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED          = 1U<<14U,
+    WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED          = 1U<<16U,
         /*!< \brief Internal use -- records that route insertion actions have been completed @hideinitializer */
-    WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED          = 1U<<15U,
+    WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED          = 1U<<17U,
         /*!< \brief Internal use -- records that route deletion actions have been completed @hideinitializer */
 
     /* ...to here. */
 
     /* mutable below here. */
 
-    WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED                   = 1U<<16U,
+    WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED                   = 1U<<20U,
         /*!< \brief Traffic that matches a route with this flag set will be rejected. @hideinitializer */
-    WOLFSENTRY_ROUTE_FLAG_GREENLISTED                    = 1U<<17U,
+    WOLFSENTRY_ROUTE_FLAG_GREENLISTED                    = 1U<<21U,
         /*!< \brief Traffic that matches a route with this flag set will be accepted. @hideinitializer */
-    WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS                = 1U<<18U,
+    WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS                = 1U<<22U,
         /*!< \brief Don't keep traffic statistics for this rule (avoid counting overhead) @hideinitializer */
-    WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS = 1U<<19U,
+    WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS = 1U<<23U,
         /*!< \brief Don't keep concurrent connection count for this rule (don't impose connection limit, even if set in the applicable `wolfsentry_eventconfig`) @hideinitializer */
-    WOLFSENTRY_ROUTE_FLAG_PORT_RESET                     = 1U<<20U
+    WOLFSENTRY_ROUTE_FLAG_PORT_RESET                     = 1U<<24U
         /*!< \brief If traffic is rejected by this rule, set #WOLFSENTRY_ACTION_RES_PORT_RESET in the returned ::wolfsentry_action_res_t, prompting generation by the network stack of a TCP reset, ICMP unreachable, or other applicable reply packet. @hideinitializer */
 } wolfsentry_route_flags_t;
 
@@ -2482,7 +2507,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_dump_json_end(
 
 #endif /* !WOLFSENTRY_NO_JSON || WOLFSENTRY_JSON_DUMP_UTILS */
 
-#ifndef WOLFSENTRY_NO_STDIO
+#ifndef WOLFSENTRY_NO_STDIO_STREAMS
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_route_flags_t flags, FILE *f);
     /*!< \brief Render route flags in human-readable form to a stream. */
 
@@ -3222,14 +3247,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_type_to_string(
     const char **out);
     /*!< \brief Return a human-readable rendering of a `wolfsentry_kv_type_t`. */
 
-#ifndef WOLFSENTRY_NO_STDIO
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_pair *kv,
     char *out,
     int *out_len);
     /*!< \brief Render `kv` in human-readable form to caller-preallocated buffer `out`. */
-#endif
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_start(
     WOLFSENTRY_CONTEXT_ARGS_IN,

@@ -167,7 +167,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
     case WOLFSENTRY_ERROR_ID_CONFIG_UNEXPECTED:
         return "Configuration has unexpected or invalid structure";
     case WOLFSENTRY_ERROR_ID_CONFIG_MISPLACED_KEY:
-        return "Configuration uses a key in the wrong context";
+        return "Configuration uses a key in the wrong context or combination";
     case WOLFSENTRY_ERROR_ID_CONFIG_PARSER:
         return "Configuration parsing failed";
     case WOLFSENTRY_ERROR_ID_CONFIG_MISSING_HANDLER:
@@ -194,6 +194,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Library built configuration is incompatible with caller";
     case WOLFSENTRY_ERROR_ID_IO_FAILED:
         return "Input/output failure";
+    case WOLFSENTRY_ERROR_ID_WRONG_ATTRIBUTES:
+        return "Attributes of item preclude the requested operation";
 
     case WOLFSENTRY_SUCCESS_ID_LOCK_OK_AND_GOT_RESV:
         return "Lock request succeeded and reserved promotion";
@@ -275,6 +277,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
     _ERRNAME_TO_STRING(LACKING_READ_LOCK);
     _ERRNAME_TO_STRING(LIB_MISMATCH);
     _ERRNAME_TO_STRING(LIBCONFIG_MISMATCH);
+    _ERRNAME_TO_STRING(WRONG_ATTRIBUTES);
     _ERRNAME_TO_STRING(IO_FAILED);
 #undef _ERRNAME_TO_STRING
 
@@ -379,14 +382,14 @@ static const struct {
     { WOLFSENTRY_ACTION_RES_SOCK_ERROR, "sock-error" },
     { WOLFSENTRY_ACTION_RES_RESERVED22, "reserved-22" },
     { WOLFSENTRY_ACTION_RES_RESERVED23, "reserved-23" },
-    { WOLFSENTRY_ACTION_RES_USER_BASE, "user+0" },
-    { WOLFSENTRY_ACTION_RES_USER_BASE << 1U, "user+1" },
-    { WOLFSENTRY_ACTION_RES_USER_BASE << 2U, "user+2" },
-    { WOLFSENTRY_ACTION_RES_USER_BASE << 3U, "user+3" },
-    { WOLFSENTRY_ACTION_RES_USER_BASE << 4U, "user+4" },
-    { WOLFSENTRY_ACTION_RES_USER_BASE << 5U, "user+5" },
-    { WOLFSENTRY_ACTION_RES_USER_BASE << 6U, "user+6" },
-    { ((unsigned)WOLFSENTRY_ACTION_RES_USER_BASE) << 7U, "user+7" }
+    { WOLFSENTRY_ACTION_RES_USER0, "user+0" },
+    { WOLFSENTRY_ACTION_RES_USER1, "user+1" },
+    { WOLFSENTRY_ACTION_RES_USER2, "user+2" },
+    { WOLFSENTRY_ACTION_RES_USER3, "user+3" },
+    { WOLFSENTRY_ACTION_RES_USER4, "user+4" },
+    { WOLFSENTRY_ACTION_RES_USER5, "user+5" },
+    { WOLFSENTRY_ACTION_RES_USER6, "user+6" },
+    { WOLFSENTRY_ACTION_RES_USER7, "user+7" }
 };
 
 wolfsentry_static_assert(length_of_array(action_res_bit_map) == 1U + sizeof(wolfsentry_action_res_t) * BITS_PER_BYTE)
@@ -603,7 +606,11 @@ static void wolfsentry_builtin_free_aligned(
 
 #include <stdlib.h>
 #ifndef WOLFSENTRY_NO_POSIX_MEMALIGN
+#ifdef WOLFSENTRY_NO_ERRNO_H
+#error POSIX memalign requires errno.h
+#else
 #include <errno.h>
+#endif
 #endif
 
 static void *wolfsentry_builtin_malloc(
@@ -764,6 +771,12 @@ static void freertos_now(struct timespec *now) {
 #endif /* FREERTOS && (WOLFSENTRY_THREADSAFE || WOLFSENTRY_CLOCK_BUILTINS) */
 
 #ifdef WOLFSENTRY_THREADSAFE
+
+#ifdef WOLFSENTRY_NO_ERRNO_H
+#error WOLFSENTRY_THREADSAFE requires errno.h
+#else
+#include <errno.h>
+#endif
 
 static wolfsentry_thread_id_t fallback_thread_id_counter = WOLFSENTRY_THREAD_NO_ID;
 
@@ -962,9 +975,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_thread_readwrite(struct wolfs
  * FreeRTOS).
  */
 
-#ifdef WOLFSENTRY_USE_NATIVE_POSIX_THREADS
-    #include <errno.h>
-#endif
+#ifdef WOLFSENTRY_SEM_BUILTINS
 
 #ifdef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
 
@@ -1409,15 +1420,17 @@ static int freertos_sem_destroy( sem_t * sem )
 
 #else
 
-#define NO_BUILTIN_SEM_API
+#error Semaphore builtins not implemented for target -- build wolfSentry with -DWOLFSENTRY_NO_SEM_BUILTIN, and supply semaphore implementation with struct wolfsentry_host_platform_interface argument to wolfsentry_init().
 
 #endif
 
 #endif /* WOLFSENTRY_USE_NONPOSIX_SEMAPHORES */
 
+#endif /* WOLFSENTRY_SEM_BUILTINS */
+
 static const struct timespec timespec_deadline_now = {WOLFSENTRY_DEADLINE_NOW, WOLFSENTRY_DEADLINE_NOW};
 
-#ifndef NO_BUILTIN_SEM_API
+#ifdef WOLFSENTRY_SEM_BUILTINS
 static const struct wolfsentry_semcbs builtin_sem_methods =
 {
     sem_init,
@@ -1427,7 +1440,7 @@ static const struct wolfsentry_semcbs builtin_sem_methods =
     sem_trywait,
     sem_destroy
 };
-#endif /* !NO_BUILTIN_SEM_API */
+#endif /* WOLFSENTRY_SEM_BUILTINS */
 
 #undef sem_init
 #undef sem_post
@@ -1436,16 +1449,7 @@ static const struct wolfsentry_semcbs builtin_sem_methods =
 #undef sem_trywait
 #undef sem_destroy
 
-#ifdef NO_BUILTIN_SEM_API
-
-#define sem_init (hpi->semcbs.sem_init)
-#define sem_post (hpi->semcbs.sem_post)
-#define sem_wait (hpi->emcbs->sem_wait)
-#define sem_timedwait (hpi->semcbs.sem_timedwait)
-#define sem_trywait (hpi->semcbs.sem_trywait)
-#define sem_destroy (hpi->semcbs.sem_destroy)
-
-#else
+#ifdef WOLFSENTRY_SEM_BUILTINS
 
 #define sem_init (hpi->semcbs.sem_init ? hpi->semcbs.sem_init : builtin_sem_methods.sem_init)
 #define sem_post (hpi->semcbs.sem_post ? hpi->semcbs.sem_post : builtin_sem_methods.sem_post)
@@ -1453,6 +1457,15 @@ static const struct wolfsentry_semcbs builtin_sem_methods =
 #define sem_timedwait (hpi->semcbs.sem_timedwait ? hpi->semcbs.sem_timedwait : builtin_sem_methods.sem_timedwait)
 #define sem_trywait (hpi->semcbs.sem_trywait ? hpi->semcbs.sem_trywait : builtin_sem_methods.sem_trywait)
 #define sem_destroy (hpi->semcbs.sem_destroy ? hpi->semcbs.sem_destroy : builtin_sem_methods.sem_destroy)
+
+#else
+
+#define sem_init (hpi->semcbs.sem_init)
+#define sem_post (hpi->semcbs.sem_post)
+#define sem_wait (hpi->emcbs->sem_wait)
+#define sem_timedwait (hpi->semcbs.sem_timedwait)
+#define sem_trywait (hpi->semcbs.sem_trywait)
+#define sem_destroy (hpi->semcbs.sem_destroy)
 
 #endif
 
@@ -1550,16 +1563,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host
 #undef sem_trywait
 #undef sem_destroy
 
-#ifdef NO_BUILTIN_SEM_API
-
-#define sem_init (lock->hpi->semcbs.sem_init)
-#define sem_post (lock->hpi->semcbs.sem_post)
-#define sem_wait (lock->hpi->semcbs.sem_wait)
-#define sem_timedwait (lock->hpi->semcbs.sem_timedwait)
-#define sem_trywait (lock->hpi->semcbs.sem_trywait)
-#define sem_destroy (lock->hpi->semcbs.sem_destroy)
-
-#else
+#ifdef WOLFSENTRY_SEM_BUILTINS
 
 #define sem_init (lock->hpi->semcbs.sem_init ? lock->hpi->semcbs.sem_init : builtin_sem_methods.sem_init)
 #define sem_post (lock->hpi->semcbs.sem_post ? lock->hpi->semcbs.sem_post : builtin_sem_methods.sem_post)
@@ -1567,6 +1571,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_alloc(struct wolfsentry_host
 #define sem_timedwait (lock->hpi->semcbs.sem_timedwait ? lock->hpi->semcbs.sem_timedwait : builtin_sem_methods.sem_timedwait)
 #define sem_trywait (lock->hpi->semcbs.sem_trywait ? lock->hpi->semcbs.sem_trywait : builtin_sem_methods.sem_trywait)
 #define sem_destroy (lock->hpi->semcbs.sem_destroy ? lock->hpi->semcbs.sem_destroy : builtin_sem_methods.sem_destroy)
+
+#else
+
+#define sem_init (lock->hpi->semcbs.sem_init)
+#define sem_post (lock->hpi->semcbs.sem_post)
+#define sem_wait (lock->hpi->semcbs.sem_wait)
+#define sem_timedwait (lock->hpi->semcbs.sem_timedwait)
+#define sem_trywait (lock->hpi->semcbs.sem_trywait)
+#define sem_destroy (lock->hpi->semcbs.sem_destroy)
 
 #endif
 

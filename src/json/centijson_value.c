@@ -66,14 +66,12 @@ static void *json_malloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocat
     if (allocator)
         return allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), size);
     else
-        return malloc(size);
+        return NULL;
 }
 #define malloc(size) json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), size)
 static void json_free(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), void *ptr) {
     if (allocator)
         allocator->free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr);
-    else
-        free(ptr);
     WOLFSENTRY_RETURN_VOID;
 }
 #define free(ptr) json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), ptr)
@@ -83,7 +81,7 @@ static void *json_realloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_alloca
     if (allocator)
         return allocator->realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), ptr, size);
     else
-        return realloc(ptr, size);
+        return NULL;
 }
 #define realloc(ptr, size) json_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), ptr, size)
 
@@ -1377,7 +1375,7 @@ json_value_dict_get_or_add_(
     RBTREE **path;
 #endif
     int path_len = 0;
-    int cmp;
+    int cmp = 0;
 
     if(d == NULL)
         return NULL;

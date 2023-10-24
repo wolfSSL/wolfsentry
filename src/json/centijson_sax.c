@@ -90,14 +90,12 @@ static void *json_malloc(JSON_PARSER *parser, size_t size) {
     if (parser->allocator)
         return parser->allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(parser, allocator->context), size);
     else
-        return malloc(size);
+        return NULL;
 }
 #define malloc(size) json_malloc(parser, size)
 static void json_free(JSON_PARSER *parser, void *ptr) {
     if (parser->allocator)
         parser->allocator->free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(parser, allocator->context), ptr);
-    else
-        free(ptr);
     WOLFSENTRY_RETURN_VOID;
 }
 #define free(ptr) json_free(parser, ptr)
@@ -107,7 +105,7 @@ static void *json_realloc(JSON_PARSER *parser, void *ptr, size_t size) {
     if (parser->allocator)
         return parser->allocator->realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX3(parser, allocator->context), ptr, size);
     else
-        return realloc(ptr, size);
+        return NULL;
 }
 #define realloc(ptr, size) json_realloc(parser, ptr, size)
 
@@ -219,7 +217,7 @@ json_raise_unexpected(JSON_PARSER* parser)
 }
 
 static inline void
-json_switch_automaton(JSON_PARSER* parser, unsigned automaton)
+json_switch_automaton(JSON_PARSER* parser, enum centijson_automaton automaton)
 {
     memcpy(&parser->value_pos, &parser->pos, sizeof(JSON_INPUT_POS));
 

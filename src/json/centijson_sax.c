@@ -217,7 +217,7 @@ json_raise_unexpected(JSON_PARSER* parser)
 }
 
 static inline void
-json_switch_automaton(JSON_PARSER* parser, unsigned automaton)
+json_switch_automaton(JSON_PARSER* parser, enum centijson_automaton automaton)
 {
     memcpy(&parser->value_pos, &parser->pos, sizeof(JSON_INPUT_POS));
 

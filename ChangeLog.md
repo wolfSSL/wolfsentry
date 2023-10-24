@@ -2,7 +2,7 @@
 
 <br>
 
-# wolfSentry Release 1.6.0 (October 23, 2023)
+# wolfSentry Release 1.6.0 (October 24, 2023)
 
 Release 1.6.0 of the wolfSentry embedded firewall/IDPS has enhancements,
 additions, and improvements including:

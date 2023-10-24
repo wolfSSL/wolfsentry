@@ -1018,9 +1018,9 @@ typedef enum {
     WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT                  = 1U<<11U,
         /*!< \brief Match outbound traffic (if #WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN and #WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT are both set, traffic in both directions is matched) @hideinitializer */
     WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK            = 1U<<12U,
-        /*!< \brief Supplied remote address consists of an address followed by a bitmask, and its addr_len is the total bit count for the address and mask.  Matching will be performed by checking that masked addresses are equal. @hideinitializer */
+        /*!< \brief Supplied remote address consists of an address followed by a bitmask, and its addr_len is the total bit count for the address and mask.  The bit count for the address and bitmask must be equal, and each must be a multiple of 8, i.e. aligned to a byte boundary.  Matching will be performed by checking that masked addresses are equal. @hideinitializer */
     WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK             = 1U<<13U,
-        /*!< \brief Supplied local address consists of an address followed by a bitmask, and its addr_len is the total bit count for the address and mask.  Matching will be performed by checking that masked addresses are equal. @hideinitializer */
+        /*!< \brief Supplied local address consists of an address followed by a bitmask, and its addr_len is the total bit count for the address and mask.  The bit count for the address and bitmask must be equal, and each must be a multiple of 8, i.e. aligned to a byte boundary.  Matching will be performed by checking that masked addresses are equal. @hideinitializer */
 
     /* immutable above here. */
 

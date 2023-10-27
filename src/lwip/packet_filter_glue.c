@@ -185,7 +185,7 @@ static err_t ethernet_filter_with_wolfsentry(
 
 #ifdef WOLFSENTRY_DEBUG_LWIP
 #define macargs(x) (unsigned)(x)->addr[0], (unsigned)(x)->addr[1], (unsigned)(x)->addr[2], (unsigned)(x)->addr[3], (unsigned)(x)->addr[4], (unsigned)(x)->addr[5]
-    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%02x:%02x:%02x:%02x:%02x:%02x %s-%s raddr=%02x:%02x:%02x:%02x:%02x:%02x, type=0x%X, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), macargs(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", macargs(raddr), (int)type, (unsigned int)match_id, (unsigned int)inexact_matches);
+    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, action_results=0x%x, route_flags=0x%x, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", iface=%u, laddr=%02x:%02x:%02x:%02x:%02x:%02x %s-%s raddr=%02x:%02x:%02x:%02x:%02x:%02x, type=0x%X, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), action_results, route_flags, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), local.sa.interface, macargs(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", macargs(raddr), (int)type, (unsigned int)match_id, (unsigned int)inexact_matches);
 #endif
 
     WOLFSENTRY_RETURN_VALUE(ret);
@@ -318,7 +318,7 @@ static err_t ip4_filter_with_wolfsentry(
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef WOLFSENTRY_DEBUG_LWIP
-    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=" V4_FMT " %s-%s raddr=" V4_FMT " proto=%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)proto, (unsigned int)match_id, (unsigned int)inexact_matches);
+    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, action_results=0x%x, route_flags=0x%x, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", iface=%u, laddr=" V4_FMT " %s-%s raddr=" V4_FMT " proto=%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), action_results, route_flags, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), local.sa.interface, V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)proto, (unsigned int)match_id, (unsigned int)inexact_matches);
 #endif
 
     WOLFSENTRY_RETURN_VALUE(ret);
@@ -647,9 +647,13 @@ static err_t tcp_filter_with_wolfsentry(
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef WOLFSENTRY_DEBUG_LWIP
+#if LWIP_IPV6
     if (laddr->type == IPADDR_TYPE_V4) {
-        WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport, (unsigned int)match_id, (unsigned int)inexact_matches);
+#endif
+        WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, action_results=0x%x, route_flags=0x%x, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", iface=%u, lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), action_results, route_flags, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), local.sa.interface, V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport, (unsigned int)match_id, (unsigned int)inexact_matches);
+#if LWIP_IPV6
     }
+#endif
 #endif
 
     WOLFSENTRY_RETURN_VALUE(ret);
@@ -831,9 +835,13 @@ static err_t udp_filter_with_wolfsentry(
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef WOLFSENTRY_DEBUG_LWIP
+#if LWIP_IPV6
     if (laddr->type == IPADDR_TYPE_V4) {
-        WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport, (unsigned int)match_id, (unsigned int)inexact_matches);
+#endif
+        WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, action_results=0x%x, route_flags=0x%x, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", iface=%u, lsock=" V4_FMT ":%d %s-%s rsock=" V4_FMT ":%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), action_results, route_flags, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), local.sa.interface, V4V6_2_V4ARGS(laddr), lport, route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4V6_2_V4ARGS(raddr), rport, (unsigned int)match_id, (unsigned int)inexact_matches);
+#if LWIP_IPV6
     }
+#endif
 #endif
 
   WOLFSENTRY_RETURN_VALUE(ret);
@@ -967,7 +975,7 @@ static err_t icmp4_filter_with_wolfsentry(
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
 
 #ifdef WOLFSENTRY_DEBUG_LWIP
-    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", laddr=%d.%d.%d.%d %s-%s raddr=%d.%d.%d.%d type=%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)icmp4_type, (unsigned int)match_id, (unsigned int)inexact_matches);
+    WOLFSENTRY_PRINTF_ERR("%s L %d %s, reason=%s, action_results=0x%x, route_flags=0x%x, ret=%d, ws_ret=" WOLFSENTRY_ERROR_FMT ", iface=%u, laddr=%d.%d.%d.%d %s-%s raddr=%d.%d.%d.%d type=%d, match_id=%u, inexact_matches=0%o\n",__FILE__,__LINE__, __F__, lwip_event_reason(event->reason), action_results, route_flags, ret, WOLFSENTRY_ERROR_FMT_ARGS(ws_ret), local.sa.interface, V4_2_V4ARGS(laddr), route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN ? "<" : "", route_flags & WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT ? ">" : "", V4_2_V4ARGS(raddr), (int)icmp4_type, (unsigned int)match_id, (unsigned int)inexact_matches);
 #endif
 
     WOLFSENTRY_RETURN_VALUE(ret);

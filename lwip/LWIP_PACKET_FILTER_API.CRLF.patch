@@ -1,8 +1,8 @@
 diff --git a/src/core/ipv4/icmp.c b/src/core/ipv4/icmp.c
-index 9810b9bb..5f06c0ca 100644
+index f35ff4b5..13e2cdef 100644
 --- a/src/core/ipv4/icmp.c
 +++ b/src/core/ipv4/icmp.c
-@@ -102,7 +102,16 @@ icmp_input(struct pbuf *p, struct netif *inp)
+@@ -102,6 +102,14 @@ icmp_input(struct pbuf *p, struct netif *inp)
      goto lenerr;
    }
  
@@ -15,15 +15,12 @@ index 9810b9bb..5f06c0ca 100644
 +#endif
 +
    type = *((u8_t *)p->payload);
-+
  #ifdef LWIP_DEBUG
    code = *(((u8_t *)p->payload) + 1);
-   /* if debug is enabled but debug statement below is somehow disabled: */
-@@ -213,6 +222,14 @@ icmp_input(struct pbuf *p, struct netif *inp)
-         ip4_addr_copy(iphdr->src, *src);
-         ip4_addr_copy(iphdr->dest, *ip4_current_src_addr());
-         ICMPH_TYPE_SET(iecho, ICMP_ER);
-+
+@@ -232,6 +240,13 @@ icmp_input(struct pbuf *p, struct netif *inp)
+         iecho->chksum = 0;
+ #endif /* CHECKSUM_GEN_ICMP */
+ 
 +#if LWIP_PACKET_FILTER_API
 +        if (icmp_filter_dispatch_outgoing(FILT_SENDING, inp, &iphdr->src, &iphdr->dest, iecho->type, (const struct icmp_hdr *)iecho) != ERR_OK) {
 +          LWIP_DEBUGF(IP_DEBUG, ("icmp_input: icmp_filter_dispatch_outgoing rejected reply packet.\n"));
@@ -31,10 +28,10 @@ index 9810b9bb..5f06c0ca 100644
 +        }
 +#endif
 +
- #if CHECKSUM_GEN_ICMP
-         IF__NETIF_CHECKSUM_ENABLED(inp, NETIF_CHECKSUM_GEN_ICMP) {
-           /* adjust the checksum */
-@@ -388,6 +405,22 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
+         /* Set the correct TTL and recalculate the header checksum. */
+         IPH_TTL_SET(iphdr, ICMP_TTL);
+         IPH_CHKSUM_SET(iphdr, 0);
+@@ -391,6 +406,22 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
  #else
    netif = ip4_route(&iphdr_src);
  #endif
@@ -57,7 +54,7 @@ index 9810b9bb..5f06c0ca 100644
    if (netif != NULL) {
      /* calculate checksum */
      icmphdr->chksum = 0;
-@@ -402,4 +435,84 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
+@@ -405,4 +436,84 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
    pbuf_free(q);
  }
  
@@ -143,7 +140,7 @@ index 9810b9bb..5f06c0ca 100644
 +
  #endif /* LWIP_IPV4 && LWIP_ICMP */
 diff --git a/src/core/ipv4/ip4.c b/src/core/ipv4/ip4.c
-index 36f32358..d14a4762 100644
+index e044bff2..c99ae8d8 100644
 --- a/src/core/ipv4/ip4.c
 +++ b/src/core/ipv4/ip4.c
 @@ -648,6 +648,17 @@ ip4_input(struct pbuf *p, struct netif *inp)
@@ -397,7 +394,7 @@ index ed0bd7b7..f63da6f5 100644
 +
  #endif /* LWIP_ICMP6 && LWIP_IPV6 */
 diff --git a/src/core/ipv6/ip6.c b/src/core/ipv6/ip6.c
-index 90e90dda..7ccaf84b 100644
+index 2c25f8ad..e888fabc 100644
 --- a/src/core/ipv6/ip6.c
 +++ b/src/core/ipv6/ip6.c
 @@ -679,6 +679,16 @@ netif_found:
@@ -417,7 +414,7 @@ index 90e90dda..7ccaf84b 100644
    /* packet not for us? */
    if (netif == NULL) {
      /* packet not for us, route or discard */
-@@ -1230,6 +1240,17 @@ ip6_output_if_src(struct pbuf *p, const ip6_addr_t *src, const ip6_addr_t *dest,
+@@ -1231,6 +1241,17 @@ ip6_output_if_src(struct pbuf *p, const ip6_addr_t *src, const ip6_addr_t *dest,
      dest = &dest_addr;
    }
  
@@ -435,7 +432,7 @@ index 90e90dda..7ccaf84b 100644
    IP6_STATS_INC(ip6.xmit);
  
    LWIP_DEBUGF(IP6_DEBUG, ("ip6_output_if: %c%c%"U16_F"\n", netif->name[0], netif->name[1], (u16_t)netif->num));
-@@ -1491,4 +1512,81 @@ ip6_debug_print(struct pbuf *p)
+@@ -1492,4 +1513,81 @@ ip6_debug_print(struct pbuf *p)
  }
  #endif /* IP6_DEBUG */
  
@@ -518,7 +515,7 @@ index 90e90dda..7ccaf84b 100644
 +
  #endif /* LWIP_IPV6 */
 diff --git a/src/core/pbuf.c b/src/core/pbuf.c
-index ea5e026c..baa0b234 100644
+index 54a6e0e4..f234aa2f 100644
 --- a/src/core/pbuf.c
 +++ b/src/core/pbuf.c
 @@ -84,6 +84,10 @@
@@ -533,7 +530,7 @@ index ea5e026c..baa0b234 100644
  
  #define SIZEOF_STRUCT_PBUF        LWIP_MEM_ALIGN_SIZE(sizeof(struct pbuf))
 diff --git a/src/core/tcp.c b/src/core/tcp.c
-index 1abea8e0..ba1d83fb 100644
+index ea95ffee..1050c5bc 100644
 --- a/src/core/tcp.c
 +++ b/src/core/tcp.c
 @@ -367,6 +367,9 @@ tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
@@ -638,7 +635,7 @@ index 1abea8e0..ba1d83fb 100644
        tcp_free(pcb2);
      } else {
        prev = pcb;
-@@ -2692,4 +2727,99 @@ tcp_ext_arg_invoke_callbacks_passive_open(struct tcp_pcb_listen *lpcb, struct tc
+@@ -2693,4 +2728,99 @@ tcp_ext_arg_invoke_callbacks_passive_open(struct tcp_pcb_listen *lpcb, struct tc
  }
  #endif /* LWIP_TCP_PCB_NUM_EXT_ARGS */
  
@@ -739,7 +736,7 @@ index 1abea8e0..ba1d83fb 100644
 +
  #endif /* LWIP_TCP */
 diff --git a/src/core/tcp_in.c b/src/core/tcp_in.c
-index c7a1f7b7..58145507 100644
+index 1b17e40f..7c9c4397 100644
 --- a/src/core/tcp_in.c
 +++ b/src/core/tcp_in.c
 @@ -280,6 +280,16 @@ tcp_input(struct pbuf *p, struct netif *inp)
@@ -759,15 +756,7 @@ index c7a1f7b7..58145507 100644
    if (pcb == NULL) {
      /* If it did not go to an active connection, we check the connections
         in the TIME-WAIT state. */
-@@ -435,6 +445,7 @@ tcp_input(struct pbuf *p, struct netif *inp)
-       }
-     }
-     tcp_input_pcb = pcb;
-+
-     err = tcp_process(pcb);
-     /* A return value of ERR_ABRT means that tcp_abort() was called
-        and that the pcb has been freed. If so, we don't do anything. */
-@@ -446,6 +457,9 @@ tcp_input(struct pbuf *p, struct netif *inp)
+@@ -446,6 +456,9 @@ tcp_input(struct pbuf *p, struct netif *inp)
             deallocate the PCB. */
          TCP_EVENT_ERR(pcb->state, pcb->errf, pcb->callback_arg, ERR_RST);
          tcp_pcb_remove(&tcp_active_pcbs, pcb);
@@ -777,7 +766,7 @@ index c7a1f7b7..58145507 100644
          tcp_free(pcb);
        } else {
          err = ERR_OK;
-@@ -569,6 +583,15 @@ aborted:
+@@ -569,6 +582,15 @@ aborted:
        pbuf_free(inseg.p);
        inseg.p = NULL;
      }
@@ -793,7 +782,7 @@ index c7a1f7b7..58145507 100644
    } else {
      /* If no matching PCB was found, send a TCP RST (reset) to the
         sender. */
-@@ -611,6 +634,9 @@ tcp_input_delayed_close(struct tcp_pcb *pcb)
+@@ -611,6 +633,9 @@ tcp_input_delayed_close(struct tcp_pcb *pcb)
        TCP_EVENT_ERR(pcb->state, pcb->errf, pcb->callback_arg, ERR_CLSD);
      }
      tcp_pcb_remove(&tcp_active_pcbs, pcb);
@@ -803,7 +792,7 @@ index c7a1f7b7..58145507 100644
      tcp_free(pcb);
      return 1;
    }
-@@ -640,6 +666,21 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
+@@ -640,6 +665,21 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
  
    LWIP_ASSERT("tcp_listen_input: invalid pcb", pcb != NULL);
  
@@ -825,7 +814,7 @@ index c7a1f7b7..58145507 100644
    /* In the LISTEN state, we check for incoming SYN segments,
       creates a new PCB, and responds with a SYN|ACK. */
    if (flags & TCP_ACK) {
-@@ -668,6 +709,9 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
+@@ -668,6 +708,9 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
        LWIP_UNUSED_ARG(err); /* err not useful here */
        return;
      }
@@ -835,18 +824,8 @@ index c7a1f7b7..58145507 100644
  #if TCP_LISTEN_BACKLOG
      pcb->accepts_pending++;
      tcp_set_flags(npcb, TF_BACKLOGPEND);
-@@ -995,6 +1039,9 @@ tcp_process(struct tcp_pcb *pcb)
-       tcp_receive(pcb);
-       if (recv_flags & TF_GOT_FIN) { /* passive close */
-         tcp_ack_now(pcb);
-+#if LWIP_PACKET_FILTER_API
-+        (void)tcp_filter_dispatch_incoming(FILT_CLOSED, pcb, ip_data.current_input_netif, tcphdr);
-+#endif
-         pcb->state = CLOSE_WAIT;
-       }
-       break;
 diff --git a/src/core/tcp_out.c b/src/core/tcp_out.c
-index 64579ee5..b71f8956 100644
+index cfcc55dd..73dfdd1a 100644
 --- a/src/core/tcp_out.c
 +++ b/src/core/tcp_out.c
 @@ -1305,6 +1305,8 @@ tcp_output(struct tcp_pcb *pcb)
@@ -859,7 +838,7 @@ index 64579ee5..b71f8956 100644
    if (lwip_ntohl(seg->tcphdr->seqno) - pcb->lastack + seg->len > wnd) {
      /* We need to start the persistent timer when the next unsent segment does not fit
 diff --git a/src/core/udp.c b/src/core/udp.c
-index db833d00..9162d8ee 100644
+index c787ae0a..730dcbc6 100644
 --- a/src/core/udp.c
 +++ b/src/core/udp.c
 @@ -363,6 +363,33 @@ udp_input(struct pbuf *p, struct netif *inp)
@@ -904,7 +883,7 @@ index db833d00..9162d8ee 100644
  #if LWIP_ICMP || LWIP_ICMP6
        /* No match was found, send ICMP destination port unreachable unless
           destination address was broadcast/multicast. */
-@@ -751,11 +777,17 @@ udp_sendto_if_src_chksum(struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *d
+@@ -751,6 +777,11 @@ udp_sendto_if_src_chksum(struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *d
        return err;
      }
    }
@@ -916,13 +895,7 @@ index db833d00..9162d8ee 100644
  
    /* packet too large to add a UDP header without causing an overflow? */
    if ((u16_t)(p->tot_len + UDP_HLEN) < p->tot_len) {
-     return ERR_MEM;
-   }
-+
-   /* not enough space to add an UDP header to first pbuf in given p chain? */
-   if (pbuf_add_header(p, UDP_HLEN)) {
-     /* allocate header in a separate new pbuf */
-@@ -1017,6 +1049,9 @@ udp_bind(struct udp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port)
+@@ -1017,6 +1048,9 @@ udp_bind(struct udp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port)
    ip_addr_set_ipaddr(&pcb->local_ip, ipaddr);
  
    pcb->local_port = port;
@@ -932,7 +905,7 @@ index db833d00..9162d8ee 100644
    mib2_udp_bind(pcb);
    /* pcb not active yet? */
    if (rebind == 0) {
-@@ -1101,6 +1136,8 @@ udp_connect(struct udp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port)
+@@ -1101,6 +1135,8 @@ udp_connect(struct udp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port)
    pcb->remote_port = port;
    pcb->flags |= UDP_FLAGS_CONNECTED;
  
@@ -941,7 +914,7 @@ index db833d00..9162d8ee 100644
    LWIP_DEBUGF(UDP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_STATE, ("udp_connect: connected to "));
    ip_addr_debug_print_val(UDP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_STATE,
                            pcb->remote_ip);
-@@ -1133,6 +1170,13 @@ udp_disconnect(struct udp_pcb *pcb)
+@@ -1133,6 +1169,13 @@ udp_disconnect(struct udp_pcb *pcb)
  
    LWIP_ERROR("udp_disconnect: invalid pcb", pcb != NULL, return);
  
@@ -955,7 +928,7 @@ index db833d00..9162d8ee 100644
    /* reset remote address association */
  #if LWIP_IPV4 && LWIP_IPV6
    if (IP_IS_ANY_TYPE_VAL(pcb->local_ip)) {
-@@ -1143,10 +1187,10 @@ udp_disconnect(struct udp_pcb *pcb)
+@@ -1143,10 +1186,9 @@ udp_disconnect(struct udp_pcb *pcb)
  #if LWIP_IPV4 && LWIP_IPV6
    }
  #endif
@@ -964,11 +937,10 @@ index db833d00..9162d8ee 100644
    pcb->netif_idx = NETIF_NO_INDEX;
 -  /* mark PCB as unconnected */
 -  udp_clear_flags(pcb, UDP_FLAGS_CONNECTED);
-+
  }
  
  /**
-@@ -1188,6 +1232,10 @@ udp_remove(struct udp_pcb *pcb)
+@@ -1188,6 +1230,10 @@ udp_remove(struct udp_pcb *pcb)
  
    LWIP_ERROR("udp_remove: invalid pcb", pcb != NULL, return);
  
@@ -979,7 +951,7 @@ index db833d00..9162d8ee 100644
    mib2_udp_unbind(pcb);
    /* pcb to be removed is first in list? */
    if (udp_pcbs == pcb) {
-@@ -1317,4 +1365,91 @@ udp_debug_print(struct udp_hdr *udphdr)
+@@ -1318,4 +1364,91 @@ udp_debug_print(struct udp_hdr *udphdr)
  }
  #endif /* UDP_DEBUG */
  
@@ -1317,10 +1289,10 @@ index f894e063..b857029d 100644
  #ifdef __cplusplus
  }
 diff --git a/src/include/lwip/opt.h b/src/include/lwip/opt.h
-index 08c2628a..6f455e30 100644
+index 2573285f..347d1764 100644
 --- a/src/include/lwip/opt.h
 +++ b/src/include/lwip/opt.h
-@@ -3582,4 +3582,14 @@
+@@ -3622,4 +3622,14 @@
   * @}
   */
  
@@ -1487,7 +1459,7 @@ index 49649cbf..9e7999a9 100644
  
  #ifdef __cplusplus
 diff --git a/src/netif/ethernet.c b/src/netif/ethernet.c
-index b33566bd..2ce89592 100644
+index db5c514b..721dd6d0 100644
 --- a/src/netif/ethernet.c
 +++ b/src/netif/ethernet.c
 @@ -167,6 +167,11 @@ ethernet_input(struct pbuf *p, struct netif *netif)

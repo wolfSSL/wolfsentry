@@ -391,14 +391,26 @@ typedef uint16_t wolfsentry_proto_t;
     /*!< \brief integer type for holding protocol number */
 typedef uint16_t wolfsentry_port_t;
     /*!< \brief integer type for holding port number */
+
 #ifdef WOLFSENTRY_ENT_ID_TYPE
 typedef WOLFSENTRY_ENT_ID_TYPE wolfsentry_ent_id_t;
 #else
 typedef uint32_t wolfsentry_ent_id_t;
     /*!< \brief integer type for holding table entry ID */
-#define WOLFSENTRY_ENT_ID_FMT "%u"
-    /*!< \brief printf-style format string appropriate for pairing with ::wolfsentry_ent_id_t @hideinitializer */
 #endif
+
+#ifndef WOLFSENTRY_ENT_ID_FMT
+    #ifdef PRIu32
+        #define WOLFSENTRY_ENT_ID_FMT "%" PRIu32
+    #elif (defined(__WORDSIZE) && (__WORDSIZE == 32)) || \
+        (defined(INTPTR_MAX) && defined(INT32_MAX) && (INTPTR_MAX == INT32_MAX))
+        #define WOLFSENTRY_ENT_ID_FMT "%lu"
+    #else
+        #define WOLFSENTRY_ENT_ID_FMT "%u"
+            /*!< \brief printf-style format string appropriate for pairing with ::wolfsentry_ent_id_t @hideinitializer */
+    #endif
+#endif
+
 #define WOLFSENTRY_ENT_ID_NONE 0
     /*!< \brief always-invalid object ID @hideinitializer */
 typedef uint16_t wolfsentry_addr_bits_t;

@@ -2373,8 +2373,12 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                     ret = WOLFSENTRY_ERROR_ENCODE(OK);
                     goto done;
                 }
-            } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT)
-                WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(rule_route->meta.connection_count);
+            } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT) {
+                uint16_t new_connection_count;
+                WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(rule_route->meta.connection_count, 1, new_connection_count);
+                if (new_connection_count == MAX_UINT_OF(rule_route->meta.connection_count))
+                    WOLFSENTRY_WARN("_RES_DISCONNECT for route #" WOLFSENTRY_ENT_ID_FMT ", whose connection_count is already zero.", rule_route->header.id);
+            }
         }
 
         if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY) {

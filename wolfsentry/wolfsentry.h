@@ -897,8 +897,9 @@ typedef enum {
         /*!< \brief caller-preinited bit signaling that traffic destination was unreachable (unbound/unlistened). @hideinitializer */
     WOLFSENTRY_ACTION_RES_SOCK_ERROR  = 1U << 21U,
         /*!< \brief caller-preinited bit signaling that a transport error occurred. @hideinitializer */
+    WOLFSENTRY_ACTION_RES_CLOSE_WAIT  = 1U << 22U,
+        /*!< \brief caller-preinited bit signaling that an association has entered CLOSE_WAIT and will be closed. @hideinitializer */
 /*! @cond doxygen_all */
-    WOLFSENTRY_ACTION_RES_RESERVED22  = 1U << 22U,
     WOLFSENTRY_ACTION_RES_RESERVED23  = 1U << 23U,
 /*! @endcond */
     WOLFSENTRY_ACTION_RES_USER0       = 1U << 24U,

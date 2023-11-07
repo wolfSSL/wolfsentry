@@ -736,7 +736,7 @@ index ea95ffee..1050c5bc 100644
 +
  #endif /* LWIP_TCP */
 diff --git a/src/core/tcp_in.c b/src/core/tcp_in.c
-index 1b17e40f..7c9c4397 100644
+index 1b17e40f..7cbe082b 100644
 --- a/src/core/tcp_in.c
 +++ b/src/core/tcp_in.c
 @@ -280,6 +280,16 @@ tcp_input(struct pbuf *p, struct netif *inp)
@@ -824,6 +824,36 @@ index 1b17e40f..7c9c4397 100644
  #if TCP_LISTEN_BACKLOG
      pcb->accepts_pending++;
      tcp_set_flags(npcb, TF_BACKLOGPEND);
+@@ -981,6 +1024,9 @@ tcp_process(struct tcp_pcb *pcb)
+           if (recv_flags & TF_GOT_FIN) {
+             tcp_ack_now(pcb);
+             pcb->state = CLOSE_WAIT;
++#if LWIP_PACKET_FILTER_API
++            (void)tcp_filter_dispatch_incoming(FILT_CLOSE_WAIT, pcb, ip_data.current_input_netif, tcphdr);
++#endif
+           }
+         } else {
+           /* incorrect ACK number, send RST */
+@@ -996,6 +1042,9 @@ tcp_process(struct tcp_pcb *pcb)
+       if (recv_flags & TF_GOT_FIN) { /* passive close */
+         tcp_ack_now(pcb);
+         pcb->state = CLOSE_WAIT;
++#if LWIP_PACKET_FILTER_API
++        (void)tcp_filter_dispatch_incoming(FILT_CLOSE_WAIT, pcb, ip_data.current_input_netif, tcphdr);
++#endif
+       }
+       break;
+     case FIN_WAIT_1:
+@@ -1606,6 +1655,9 @@ tcp_receive(struct tcp_pcb *pcb)
+             recv_flags |= TF_GOT_FIN;
+             if (pcb->state == ESTABLISHED) { /* force passive close or we can move to active close */
+               pcb->state = CLOSE_WAIT;
++#if LWIP_PACKET_FILTER_API
++              (void)tcp_filter_dispatch_incoming(FILT_CLOSE_WAIT, pcb, ip_data.current_input_netif, tcphdr);
++#endif
+             }
+           }
+ 
 diff --git a/src/core/tcp_out.c b/src/core/tcp_out.c
 index cfcc55dd..73dfdd1a 100644
 --- a/src/core/tcp_out.c
@@ -1045,10 +1075,10 @@ index c787ae0a..730dcbc6 100644
  #endif /* LWIP_UDP */
 diff --git a/src/include/lwip/filter.h b/src/include/lwip/filter.h
 new file mode 100644
-index 00000000..03bacb9d
+index 00000000..c0757496
 --- /dev/null
 +++ b/src/include/lwip/filter.h
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,99 @@
 +/*
 + * lwip/src/include/lwip/filter.h
 + *
@@ -1100,7 +1130,8 @@ index 00000000..03bacb9d
 +    FILT_ADDR_UNREACHABLE = 10,
 +    FILT_PORT_UNREACHABLE = 11,
 +    FILT_INBOUND_ERR = 12,
-+    FILT_OUTBOUND_ERR = 13
++    FILT_OUTBOUND_ERR = 13,
++    FILT_CLOSE_WAIT = 14
 +} packet_filter_event_t;
 +
 +typedef u16_t packet_filter_event_mask_t;

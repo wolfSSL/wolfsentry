@@ -2050,6 +2050,9 @@ static wolfsentry_errcode_t wolfsentry_route_delete_0(
     if (route->meta.purge_after)
         wolfsentry_list_ent_delete(&route_table->purge_list, &route->purge_links);
 
+    if (route->meta.connection_count > 0)
+        WOLFSENTRY_WARN("wolfsentry_route_delete_0 for route #" WOLFSENTRY_ENT_ID_FMT " with connection_count %u.", route->header.id, route->meta.connection_count);
+
     {
         wolfsentry_route_flags_t flags_before, flags_after;
         wolfsentry_route_update_flags_1(route, WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, &flags_before, &flags_after);
@@ -2117,18 +2120,35 @@ static inline wolfsentry_errcode_t wolfsentry_route_delete_1(
     wolfsentry_errcode_t ret = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
     struct wolfsentry_route *route = NULL;
 
-    for (;;) {
-        wolfsentry_errcode_t lookup_ret = wolfsentry_route_lookup_1(WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, remote, local, flags, event, 1 /* exact_p */, NULL /* inexact_matches */, &route, NULL /* action_results */);
-        if (lookup_ret < 0)
-            break;
-        WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
-        ret = wolfsentry_route_delete_0(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, route_table, NULL /* trigger_event */, route, action_results);
-        if (ret < 0)
-            break;
-        else
-            ++(*n_deleted);
+    WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
+
+    ret = wolfsentry_route_lookup_1(WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, remote, local, flags, event, 1 /* exact_p */, NULL /* inexact_matches */, &route, NULL /* action_results */);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+    /* if the route has a nonzero connection count, assume all connections are
+     * in TIME_WAIT, set a GC timeout on the route, and defer actual deletion.
+     * note that wolfsentry_route_stale_purge_1() calls
+     * wolfsentry_route_delete_0() directly, intentionally bypassing this logic.
+     */
+    if (route->meta.connection_count > 0) {
+        wolfsentry_time_t tcp_fin_timeout, new_purge_after;
+        /* lwIP default TCP_FIN_WAIT_TIMEOUT is 20s, and Linux
+         * net.ipv4.tcp_fin_timeout is 60s.
+         */
+        WOLFSENTRY_FROM_EPOCH_TIME(60 /* epoch_secs */, 0 /* epoch_nsecs */, &tcp_fin_timeout);
+        new_purge_after = route->meta.last_hit_time + tcp_fin_timeout;
+        if (route->meta.purge_after < new_purge_after) {
+            if (route->meta.purge_after)
+                wolfsentry_list_ent_delete(&route_table->purge_list, &route->purge_links);
+            route->meta.purge_after = new_purge_after;
+            wolfsentry_route_purge_list_insert(route_table, route);
+        }
+        WOLFSENTRY_SUCCESS_RETURN(DEFERRED);
     }
 
+    ret = wolfsentry_route_delete_0(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, route_table, NULL /* trigger_event */, route, action_results);
+    if (WOLFSENTRY_IS_SUCCESS(ret))
+        ++(*n_deleted);
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
@@ -2358,8 +2378,17 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     /* if _RES_INSERTED signals that a side-effect route was created within this
      * dispatch, assume any counts were assigned to the new route, and ignore
      * them here.
+     *
+     * also inhibit counts if returning a fallthrough result.
      */
-    if (! WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED)) {
+    if ((! WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED)) &&
+        (! WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_FALLTHROUGH)))
+    {
+        if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY) {
+            WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.derogatory_count, ret);
+            (void)ret;
+        }
+
         if (! (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)) {
             if (*action_results & WOLFSENTRY_ACTION_RES_CONNECT) {
                 if (rule_route->meta.connection_count >= config->config.max_connection_count) {
@@ -2375,16 +2404,16 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                 }
             } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT) {
                 uint16_t new_connection_count;
+                /* important to decrement safely, because untimely route
+                 * deletions can lead to a decrement being assigned to a
+                 * different route than the one originally incremented.
+                 */
                 WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(rule_route->meta.connection_count, 1, new_connection_count);
                 if (new_connection_count == MAX_UINT_OF(rule_route->meta.connection_count))
                     WOLFSENTRY_WARN("_RES_DISCONNECT for route #" WOLFSENTRY_ENT_ID_FMT ", whose connection_count is already zero.", rule_route->header.id);
             }
         }
 
-        if (*action_results & WOLFSENTRY_ACTION_RES_DEROGATORY) {
-            WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.derogatory_count, ret);
-            (void)ret;
-        }
         if (*action_results & WOLFSENTRY_ACTION_RES_COMMENDABLE) {
             WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.commendable_count, ret);
             (void)ret;

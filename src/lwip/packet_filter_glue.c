@@ -52,7 +52,8 @@
         "ADDR_UNREACHABLE",
         "PORT_UNREACHABLE",
         "INBOUND_ERR",
-        "OUTBOUND_ERR"
+        "OUTBOUND_ERR",
+        "CLOSE_WAIT"
     };
     static const char *lwip_event_reason(packet_filter_event_t reason) {
         if ((unsigned)reason < length_of_array(lwip_event_reasons))
@@ -119,6 +120,7 @@ static err_t ethernet_filter_with_wolfsentry(
     case FILT_CONNECTING:
     case FILT_DISSOCIATE:
     case FILT_CLOSED:
+    case FILT_CLOSE_WAIT:
     case FILT_ACCEPTING:
     case FILT_REMOTE_RESET:
     case FILT_LISTENING:
@@ -253,6 +255,7 @@ static err_t ip4_filter_with_wolfsentry(
     case FILT_CONNECTING:
     case FILT_DISSOCIATE:
     case FILT_CLOSED:
+    case FILT_CLOSE_WAIT:
     case FILT_ACCEPTING:
     case FILT_REMOTE_RESET:
     case FILT_LISTENING:
@@ -382,6 +385,7 @@ static err_t ip6_filter_with_wolfsentry(
     case FILT_CONNECTING:
     case FILT_DISSOCIATE:
     case FILT_CLOSED:
+    case FILT_CLOSE_WAIT:
     case FILT_ACCEPTING:
     case FILT_REMOTE_RESET:
     case FILT_LISTENING:
@@ -500,7 +504,6 @@ static err_t tcp_filter_with_wolfsentry(
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
         break;
     case FILT_REMOTE_RESET:
-        route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
         /* fall through */
     case FILT_CLOSED:
         if (event->pcb.tcp_pcb->flags & TF_ACCEPTED) {
@@ -511,6 +514,12 @@ static err_t tcp_filter_with_wolfsentry(
             route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
             action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         }
+        break;
+    case FILT_CLOSE_WAIT:
+        if (event->pcb.tcp_pcb->flags & TF_ACCEPTED)
+            route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+        else
+            route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
         break;
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
@@ -622,7 +631,7 @@ static err_t tcp_filter_with_wolfsentry(
             route_flags,
             NULL /* event_label */,
             0,
-            (void *)&event,
+            (void *)event,
 #ifdef WOLFSENTRY_DEBUG_LWIP
             &match_id,
             &inexact_matches,
@@ -752,6 +761,7 @@ static err_t udp_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
     case FILT_ADDR_UNREACHABLE:
+    case FILT_CLOSE_WAIT:
         /* can't happen. */
         WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
@@ -914,6 +924,7 @@ static err_t icmp4_filter_with_wolfsentry(
     case FILT_REMOTE_RESET:
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
+    case FILT_CLOSE_WAIT:
         /* can't happen. */
         WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }
@@ -1044,6 +1055,7 @@ static err_t icmp6_filter_with_wolfsentry(
     case FILT_REMOTE_RESET:
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
+    case FILT_CLOSE_WAIT:
         /* can't happen. */
         WOLFSENTRY_RETURN_VALUE(ERR_OK);
     }

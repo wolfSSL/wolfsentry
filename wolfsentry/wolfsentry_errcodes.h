@@ -444,6 +444,7 @@ enum wolfsentry_error_id {
     WOLFSENTRY_SUCCESS_ID_YES                  =    5,
     WOLFSENTRY_SUCCESS_ID_NO                   =    6,
     WOLFSENTRY_SUCCESS_ID_ALREADY_OK           =    7,
+    WOLFSENTRY_SUCCESS_ID_DEFERRED             =    8,
     WOLFSENTRY_SUCCESS_ID_USER_BASE            =  128
 };
 

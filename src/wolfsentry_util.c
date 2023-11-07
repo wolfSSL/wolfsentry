@@ -211,6 +211,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Result was No";
     case WOLFSENTRY_SUCCESS_ID_ALREADY_OK:
         return "Operation skipped due to idempotency";
+    case WOLFSENTRY_SUCCESS_ID_DEFERRED:
+        return "Operation deferred awaiting state change";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
         break;
@@ -289,6 +291,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
     _SUCNAME_TO_STRING(YES);
     _SUCNAME_TO_STRING(NO);
     _SUCNAME_TO_STRING(ALREADY_OK);
+    _SUCNAME_TO_STRING(DEFERRED);
 #undef _SUCNAME_TO_STRING
 
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
@@ -380,7 +383,7 @@ static const struct {
     { WOLFSENTRY_ACTION_RES_CLOSED, "closed" },
     { WOLFSENTRY_ACTION_RES_UNREACHABLE, "unreachable" },
     { WOLFSENTRY_ACTION_RES_SOCK_ERROR, "sock-error" },
-    { WOLFSENTRY_ACTION_RES_RESERVED22, "reserved-22" },
+    { WOLFSENTRY_ACTION_RES_CLOSE_WAIT, "close-wait" },
     { WOLFSENTRY_ACTION_RES_RESERVED23, "reserved-23" },
     { WOLFSENTRY_ACTION_RES_USER0, "user+0" },
     { WOLFSENTRY_ACTION_RES_USER1, "user+1" },

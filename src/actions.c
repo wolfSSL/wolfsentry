@@ -146,7 +146,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_insert_1(
     if (id)
         *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header, &wolfsentry->actions->header, 1 /* unique_p */)) < 0) {
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header));
         ret = WOLFSENTRY_ERROR_RECODE(ret);
         goto out;
     }

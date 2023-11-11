@@ -54,7 +54,7 @@
     /*!< \brief Macro for major version number of installed headers.  @hideinitializer */
 #define WOLFSENTRY_VERSION_MINOR 6
     /*!< \brief Macro for minor version number of installed headers.  @hideinitializer */
-#define WOLFSENTRY_VERSION_TINY 0
+#define WOLFSENTRY_VERSION_TINY 1
     /*!< \brief Macro for tiny version number of installed headers.  @hideinitializer */
 #define WOLFSENTRY_VERSION_ENCODE(major, minor, tiny) (((major) << 16U) | ((minor) << 8U) | (tiny))
     /*!< \brief Macro to convert a wolfSentry version to a single integer, for comparison to other similarly converted versions.  @hideinitializer */
@@ -1058,6 +1058,12 @@ typedef enum {
 #define WOLFSENTRY_ROUTE_IMMUTABLE_FLAGS ((wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_IN_TABLE - 1U)
     /*!< \brief Bit mask for the bits in a ::wolfsentry_route_flags_t that can't change after the implicated route has been inserted in the route table.  @hideinitializer */
 
+#define WOLFSENTRY_ROUTE_INTERNAL_FLAGS ((wolfsentry_route_flags_t) \
+                                         (WOLFSENTRY_ROUTE_FLAG_IN_TABLE | \
+                                          WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE | \
+                                          WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED | \
+                                          WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED))
+
 /*! @cond doxygen_all */
 #define WOLFSENTRY_ROUTE_FLAG_TRIGGER_WILDCARD WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD /* xxx backward compatibility */
 /*! @endcond */
@@ -1083,7 +1089,7 @@ struct wolfsentry_route_metadata_exports {
     wolfsentry_time_t last_penaltybox_time;
         /*!< \brief The most recent time the route had its #WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED flag set */
     wolfsentry_time_t purge_after;
-        /*!< \brief The expiration time of the route, if any (persistent routes have `0` here) */
+        /*!< \brief The expiration time of the route, if any.  Persistent routes have `0` here, and the setting can be modified with `wolfsentry_route_purge_time_set()`. */
     uint16_t connection_count;
         /*!< \brief The current connection count (informational/approximate) */
     uint16_t derogatory_count;
@@ -1201,7 +1207,7 @@ struct wolfsentry_eventconfig {
     wolfsentry_time_t penaltybox_duration;
         /*!< \brief The duration that a route stays in penalty box status before automatic release.  Zero means time-unbounded. */
     wolfsentry_time_t route_idle_time_for_purge;
-        /*!< \brief The time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in **`config`** clauses of events (see **`events`** below).  Zero means no automatic purge. */
+        /*!< \brief The time after the most recent dispatch match for a route to be garbage-collected.  Zero means no automatic purge. */
     wolfsentry_eventconfig_flags_t flags;
         /*!< \brief Config flags */
     wolfsentry_route_flags_t route_flags_to_add_on_insert;
@@ -2273,8 +2279,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_
     wolfsentry_hitcount_t max_purgeable_routes);
     /*!< \brief Set the limit for ephemeral routes in \p table.  Caller must have a mutex on the context at entry. */
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_idle_time_get(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *table,
+    wolfsentry_time_t *max_purgeable_idle_time);
+    /*!< \brief Retrieve the current absolute maximum idle time for a purgeable route (controls forced purges of routes with nonzero ::wolfsentry_route_metadata_exports.connection_count).  Caller must have a lock on the context at entry. */
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_idle_time_set(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *table,
+    wolfsentry_time_t max_purgeable_idle_time);
+    /*!< \brief Set the maximum idle time for a purgeable route (controls forced purges of routes with nonzero ::wolfsentry_route_metadata_exports.connection_count).  Default is no limit.  Caller must have a mutex on the context at entry. */
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_purge_time_set(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route *route,
+    wolfsentry_time_t purge_after);
+    /*!< \brief Set the time after which `route` in `table` is to be subject to automatic purge.  `0` sets the route as persistent.  Caller must have a mutex on the context at entry. */
+
 /*!
-   \brief Purges stale (expired) routes from \p table
+   \brief Purges all stale (expired) routes from \p table
 
    \param table the table to purge from
    \param action_results the result bit field, pooling results from all constituent operations

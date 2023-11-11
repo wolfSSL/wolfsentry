@@ -414,6 +414,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_table_ent_get_by_id(WOLFSENTRY_CO
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_table_ent_header *ent) {
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
 
+    if (ent->id == WOLFSENTRY_ENT_ID_NONE)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     if (ent->prev_by_id)
         ent->prev_by_id->next_by_id = ent->next_by_id;
     else
@@ -425,6 +428,13 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSE
     ent->prev_by_id = ent->next_by_id = NULL;
     --wolfsentry->ents_by_id.n_ents;
     ++wolfsentry->ents_by_id.n_deletes;
+
+    /* if possible, reclaim the ID */
+    if ((! wolfsentry->mk_id_cb) && (ent->id == (wolfsentry->mk_id_cb_state.id_counter - 1)))
+        --wolfsentry->mk_id_cb_state.id_counter;
+
+    ent->id = WOLFSENTRY_ENT_ID_NONE;
+
     WOLFSENTRY_RETURN_OK;
 }
 

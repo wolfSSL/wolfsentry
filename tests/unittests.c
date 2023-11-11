@@ -4412,7 +4412,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                 &inexact_matches,
                 &action_results));
 
-        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_ACCEPT | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_USER5));
         WOLFSENTRY_EXIT_ON_FALSE(inexact_matches == WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD);
 
         /* make sure the pinhole route has the expected flags on it. */
@@ -4420,6 +4420,8 @@ static int test_json(const char *fname, const char *extra_fname) {
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&ephemeral_route));
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_flags(ephemeral_route, &ephemeral_route_flags));
+        /* make sure it's really ephemeral. */
+        WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route->meta.purge_after != 0);
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route_flags ==
                                  (WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD |
@@ -4428,9 +4430,6 @@ static int test_json(const char *fname, const char *extra_fname) {
                                   WOLFSENTRY_ROUTE_FLAG_IN_TABLE |
                                   WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED |
                                   WOLFSENTRY_ROUTE_FLAG_GREENLISTED));
-
-        /* make sure it's really ephemeral. */
-        WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route->meta.purge_after != 0);
 
         /* now trigger insertion of a tracking rule to catch a simulated port scan. */
 
@@ -4477,7 +4476,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                     &inexact_matches,
                     &action_results));
 
-            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_FALLTHROUGH | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_FALLTHROUGH | WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_USER5));
         }
 
         /* trigger the penalty boxing. */
@@ -4496,7 +4495,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                 &inexact_matches,
                 &action_results));
 
-        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UPDATE | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UPDATE | WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_USER5));
 
         /* confirm the penalty boxing. */
         action_results = WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_DEROGATORY;
@@ -4514,7 +4513,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                 &inexact_matches,
                 &action_results));
 
-        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_USER5));
 
 
 #ifdef WOLFSENTRY_UNITTEST_BENCHMARKS
@@ -4555,7 +4554,7 @@ static int test_json(const char *fname, const char *extra_fname) {
         }
 #endif
 
-            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UNREACHABLE | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+            WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_DEROGATORY | WOLFSENTRY_ACTION_RES_UNREACHABLE | WOLFSENTRY_ACTION_RES_USER5));
 
             test_action_enabled = 1;
         }
@@ -4584,7 +4583,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                 &inexact_matches,
                 &action_results));
 
-        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_COMMENDABLE | WOLFSENTRY_ACTION_RES_UPDATE | WOLFSENTRY_ACTION_RES_FALLTHROUGH | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_COMMENDABLE | WOLFSENTRY_ACTION_RES_UPDATE | WOLFSENTRY_ACTION_RES_FALLTHROUGH | WOLFSENTRY_ACTION_RES_USER5));
 
         /* recheck to confirm no update on a second match with zero initial action_results. */
         WOLFSENTRY_EXIT_ON_FAILURE(
@@ -4600,7 +4599,114 @@ static int test_json(const char *fname, const char *extra_fname) {
                 &inexact_matches,
                 &action_results));
 
-        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_FALLTHROUGH | (WOLFSENTRY_ACTION_RES_USER_BASE << 5U)));
+        WOLFSENTRY_EXIT_ON_FALSE(action_results == (WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_FALLTHROUGH | WOLFSENTRY_ACTION_RES_USER5));
+
+        {
+            struct wolfsentry_route_exports ephemeral_route_exports;
+            wolfsentry_ent_id_t reinsert_id;
+            wolfsentry_time_t purge_after_after_deletion;
+
+            /* increment connection_count. */
+            action_results = WOLFSENTRY_ACTION_RES_CONNECT;
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &remote.sa,
+                    &local.sa,
+                    WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                    "call-in-from-unit-test",
+                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                    (void *)0x12345678 /* caller_arg */,
+                    &id,
+                    &inexact_matches,
+                    &action_results));
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&ephemeral_route));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, ephemeral_route, &ephemeral_route_exports));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_delete_by_id(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    NULL /* caller_arg */,
+                    id,
+                    NULL /* trigger_label */,
+                    0 /* trigger_label_len */,
+                    &action_results));
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&ephemeral_route));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, ephemeral_route, &ephemeral_route_exports));
+            purge_after_after_deletion = ephemeral_route_exports.meta.purge_after;
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_reset_metadata_exports(&ephemeral_route_exports));
+
+            WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(
+                ALREADY_OK,
+                wolfsentry_route_insert_by_exports(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    NULL /* caller_arg */,
+                    &ephemeral_route_exports,
+                    &reinsert_id,
+                    &action_results));
+
+            WOLFSENTRY_EXIT_ON_FALSE(reinsert_id == id);
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&ephemeral_route));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, ephemeral_route, &ephemeral_route_exports));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+            WOLFSENTRY_EXIT_ON_TRUE(ephemeral_route_exports.meta.purge_after == purge_after_after_deletion);
+            WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route_exports.meta.connection_count == 1);
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_purge_time_set(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    ephemeral_route,
+                    0));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+            /* decrement connection_count. */
+            action_results = WOLFSENTRY_ACTION_RES_DISCONNECT;
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &remote.sa,
+                    &local.sa,
+                    WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                    "call-in-from-unit-test",
+                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                    (void *)0x12345678 /* caller_arg */,
+                    &id,
+                    &inexact_matches,
+                    &action_results));
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&ephemeral_route));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, ephemeral_route, &ephemeral_route_exports));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+            WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route_exports.meta.purge_after == 0);
+            WOLFSENTRY_EXIT_ON_FALSE(ephemeral_route_exports.meta.connection_count == 0);
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_purge_time_set(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    ephemeral_route,
+                    1));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL));
+
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+            WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_NOT_FOUND, wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&ephemeral_route));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        }
     }
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

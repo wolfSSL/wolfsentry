@@ -530,7 +530,7 @@ index 54a6e0e4..f234aa2f 100644
  
  #define SIZEOF_STRUCT_PBUF        LWIP_MEM_ALIGN_SIZE(sizeof(struct pbuf))
 diff --git a/src/core/tcp.c b/src/core/tcp.c
-index ea95ffee..1050c5bc 100644
+index ea95ffee..bfb65dc7 100644
 --- a/src/core/tcp.c
 +++ b/src/core/tcp.c
 @@ -367,6 +367,9 @@ tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
@@ -538,12 +538,22 @@ index ea95ffee..1050c5bc 100644
          tcp_trigger_input_pcb_close();
        } else {
 +#if LWIP_PACKET_FILTER_API
-+        (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL);
++        (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL /* force netif lookup */);
 +#endif
          tcp_free(pcb);
        }
        return ERR_OK;
-@@ -392,10 +395,16 @@ tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
+@@ -384,6 +387,9 @@ tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
+        * or for a pcb that has been used and then entered the CLOSED state
+        * is erroneous, but this should never happen as the pcb has in those cases
+        * been freed, and so any remaining handles are bogus. */
++#if LWIP_PACKET_FILTER_API
++      (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL /* force netif lookup */);
++#endif
+       if (pcb->local_port != 0) {
+         TCP_RMV(&tcp_bound_pcbs, pcb);
+       }
+@@ -392,9 +398,15 @@ tcp_close_shutdown(struct tcp_pcb *pcb, u8_t rst_on_unacked_data)
      case LISTEN:
        tcp_listen_closed(pcb);
        tcp_pcb_remove(&tcp_listen_pcbs.pcbs, pcb);
@@ -553,34 +563,33 @@ index ea95ffee..1050c5bc 100644
        tcp_free_listen(pcb);
        break;
      case SYN_SENT:
-       TCP_PCB_REMOVE_ACTIVE(pcb);
 +#if LWIP_PACKET_FILTER_API
-+      (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL);
++      (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL /* force netif lookup */);
 +#endif
+       TCP_PCB_REMOVE_ACTIVE(pcb);
        tcp_free(pcb);
        MIB2_STATS_INC(mib2.tcpattemptfails);
-       break;
-@@ -580,6 +589,9 @@ tcp_abandon(struct tcp_pcb *pcb, int reset)
+@@ -579,6 +591,9 @@ tcp_abandon(struct tcp_pcb *pcb, int reset)
+      are in an active state, call the receive function associated with
       the PCB with a NULL argument, and send an RST to the remote end. */
    if (pcb->state == TIME_WAIT) {
-     tcp_pcb_remove(&tcp_tw_pcbs, pcb);
 +#if LWIP_PACKET_FILTER_API
-+    (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL);
++    (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL /* force netif lookup */);
 +#endif
+     tcp_pcb_remove(&tcp_tw_pcbs, pcb);
      tcp_free(pcb);
    } else {
-     int send_rst = 0;
-@@ -618,6 +630,9 @@ tcp_abandon(struct tcp_pcb *pcb, int reset)
+@@ -618,6 +633,9 @@ tcp_abandon(struct tcp_pcb *pcb, int reset)
        tcp_rst(pcb, seqno, ackno, &pcb->local_ip, &pcb->remote_ip, local_port, pcb->remote_port);
      }
      last_state = pcb->state;
 +#if LWIP_PACKET_FILTER_API
-+    (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL);
++    (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL /* force netif lookup */);
 +#endif
      tcp_free(pcb);
      TCP_EVENT_ERR(last_state, errf, errf_arg, ERR_ABRT);
    }
-@@ -745,6 +760,9 @@ tcp_bind(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port)
+@@ -745,6 +763,9 @@ tcp_bind(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port)
      ip_addr_set(&pcb->local_ip, ipaddr);
    }
    pcb->local_port = port;
@@ -590,7 +599,7 @@ index ea95ffee..1050c5bc 100644
    TCP_REG(&tcp_bound_pcbs, pcb);
    LWIP_DEBUGF(TCP_DEBUG, ("tcp_bind: bind to port %"U16_F"\n", port));
    return ERR_OK;
-@@ -880,6 +898,15 @@ tcp_listen_with_backlog_and_err(struct tcp_pcb *pcb, u8_t backlog, err_t *err)
+@@ -880,6 +901,15 @@ tcp_listen_with_backlog_and_err(struct tcp_pcb *pcb, u8_t backlog, err_t *err)
      }
    }
  #endif /* SO_REUSE */
@@ -606,7 +615,7 @@ index ea95ffee..1050c5bc 100644
    lpcb = (struct tcp_pcb_listen *)memp_malloc(MEMP_TCP_PCB_LISTEN);
    if (lpcb == NULL) {
      res = ERR_MEM;
-@@ -1107,6 +1134,8 @@ tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port,
+@@ -1107,6 +1137,8 @@ tcp_connect(struct tcp_pcb *pcb, const ip_addr_t *ipaddr, u16_t port,
      ip_addr_copy(pcb->local_ip, *local_ip);
    }
  
@@ -615,27 +624,27 @@ index ea95ffee..1050c5bc 100644
  #if LWIP_IPV6 && LWIP_IPV6_SCOPES
    /* If the given IP address should have a zone but doesn't, assign one now.
     * Given that we already have the target netif, this is easy and cheap. */
-@@ -1407,6 +1436,9 @@ tcp_slowtmr_start:
-       last_state = pcb->state;
-       pcb2 = pcb;
-       pcb = pcb->next;
+@@ -1387,6 +1419,9 @@ tcp_slowtmr_start:
+ #endif /* LWIP_CALLBACK_API */
+       void *err_arg;
+       enum tcp_state last_state;
 +#if LWIP_PACKET_FILTER_API
-+      (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb2, NULL);
++      (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL /* force netif lookup */);
 +#endif
-       tcp_free(pcb2);
- 
-       tcp_active_pcbs_changed = 0;
-@@ -1465,6 +1497,9 @@ tcp_slowtmr_start:
-       }
-       pcb2 = pcb;
-       pcb = pcb->next;
+       tcp_pcb_purge(pcb);
+       /* Remove PCB from tcp_active_pcbs list. */
+       if (prev != NULL) {
+@@ -1453,6 +1488,9 @@ tcp_slowtmr_start:
+     /* If the PCB should be removed, do it. */
+     if (pcb_remove) {
+       struct tcp_pcb *pcb2;
 +#if LWIP_PACKET_FILTER_API
-+      (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb2, NULL);
++      (void)tcp_filter_dispatch_outgoing(FILT_CLOSED, pcb, NULL /* force netif lookup */);
 +#endif
-       tcp_free(pcb2);
-     } else {
-       prev = pcb;
-@@ -2693,4 +2728,99 @@ tcp_ext_arg_invoke_callbacks_passive_open(struct tcp_pcb_listen *lpcb, struct tc
+       tcp_pcb_purge(pcb);
+       /* Remove PCB from tcp_tw_pcbs list. */
+       if (prev != NULL) {
+@@ -2693,4 +2731,99 @@ tcp_ext_arg_invoke_callbacks_passive_open(struct tcp_pcb_listen *lpcb, struct tc
  }
  #endif /* LWIP_TCP_PCB_NUM_EXT_ARGS */
  
@@ -736,7 +745,7 @@ index ea95ffee..1050c5bc 100644
 +
  #endif /* LWIP_TCP */
 diff --git a/src/core/tcp_in.c b/src/core/tcp_in.c
-index 1b17e40f..7cbe082b 100644
+index 1b17e40f..bd243a70 100644
 --- a/src/core/tcp_in.c
 +++ b/src/core/tcp_in.c
 @@ -280,6 +280,16 @@ tcp_input(struct pbuf *p, struct netif *inp)
@@ -756,16 +765,16 @@ index 1b17e40f..7cbe082b 100644
    if (pcb == NULL) {
      /* If it did not go to an active connection, we check the connections
         in the TIME-WAIT state. */
-@@ -446,6 +456,9 @@ tcp_input(struct pbuf *p, struct netif *inp)
+@@ -445,6 +455,9 @@ tcp_input(struct pbuf *p, struct netif *inp)
+            application that the connection is dead before we
             deallocate the PCB. */
          TCP_EVENT_ERR(pcb->state, pcb->errf, pcb->callback_arg, ERR_RST);
-         tcp_pcb_remove(&tcp_active_pcbs, pcb);
 +#if LWIP_PACKET_FILTER_API
-+        (void)tcp_filter_dispatch_incoming(FILT_REMOTE_RESET, pcb, ip_data.current_input_netif, tcphdr);
++        (void)tcp_filter_dispatch_incoming(FILT_REMOTE_RESET, pcb, NULL /* force netif lookup */, tcphdr);
 +#endif
+         tcp_pcb_remove(&tcp_active_pcbs, pcb);
          tcp_free(pcb);
        } else {
-         err = ERR_OK;
 @@ -569,6 +582,15 @@ aborted:
        pbuf_free(inseg.p);
        inseg.p = NULL;
@@ -782,16 +791,16 @@ index 1b17e40f..7cbe082b 100644
    } else {
      /* If no matching PCB was found, send a TCP RST (reset) to the
         sender. */
-@@ -611,6 +633,9 @@ tcp_input_delayed_close(struct tcp_pcb *pcb)
+@@ -610,6 +632,9 @@ tcp_input_delayed_close(struct tcp_pcb *pcb)
+           ensure the application doesn't continue using the PCB. */
        TCP_EVENT_ERR(pcb->state, pcb->errf, pcb->callback_arg, ERR_CLSD);
      }
-     tcp_pcb_remove(&tcp_active_pcbs, pcb);
 +#if LWIP_PACKET_FILTER_API
-+    (void)tcp_filter_dispatch_incoming(FILT_CLOSED, pcb, ip_data.current_input_netif, tcphdr);
++    (void)tcp_filter_dispatch_incoming(FILT_CLOSED, pcb, NULL /* force netif lookup */, tcphdr);
 +#endif
+     tcp_pcb_remove(&tcp_active_pcbs, pcb);
      tcp_free(pcb);
      return 1;
-   }
 @@ -640,6 +665,21 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
  
    LWIP_ASSERT("tcp_listen_input: invalid pcb", pcb != NULL);

@@ -523,6 +523,24 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
         WOLFSENTRY_RETURN_OK;
     }
 
+    if (! strcmp(jps->cur_keyname, "max-purgeable-idle-time")) {
+        struct wolfsentry_route_table *route_table;
+        wolfsentry_time_t max_purgeable_idle_time;
+        wolfsentry_errcode_t ret;
+
+        if (jps->table_under_construction != T_U_C_TOPCONFIG)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
+
+        ret = convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &max_purgeable_idle_time);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        ret = wolfsentry_route_get_main_table(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, &route_table);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        ret = wolfsentry_route_table_max_purgeable_idle_time_set(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, max_purgeable_idle_time);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+        WOLFSENTRY_RETURN_OK;
+    }
+
     WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
 }
 

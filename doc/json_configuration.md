@@ -59,8 +59,8 @@ built-ins.
 `"config-update"` allows the default configuration to be updated.  It is termed an
 “update” because wolfSentry is initially configured by the `config` argument to
 `wolfsentry_init()` (which can be passed in `NULL`, signifying built-in
-defaults).  Note that times (`config.penaltybox_duration` and
-`config.route_idle_time_for_purge`) shall be passed to `wolfsentry_init()`
+defaults).  Note that times (`wolfsentry_eventconfig.penaltybox_duration` and
+`wolfsentry_eventconfig.route_idle_time_for_purge`) shall be passed to `wolfsentry_init()`
 denominated in seconds, notwithstanding the `wolfsentry_time_t` type of the
 members.
 
@@ -111,7 +111,8 @@ allowed values are as in the ABNF formal syntax later in this document.
         "action-res-filter-bits-unset" : action_res_flag_list,
         "action-res-bits-to-add" : action_res_flag_list,
         "action-res-bits-to-clear" : action_res_flag_list,
-        "max-purgeable-routes" : uint32
+        "max-purgeable-routes" : uint32,
+        "max-purgeable-idle-time" : duration
     },
     "events" : [
        { "label" : label,
@@ -214,6 +215,8 @@ allowed values are as in the ABNF formal syntax later in this document.
 * <b>`commendable-clears-derogatory`</b> -- If true, then each count from `WOLFSENTRY_ACTION_RES_COMMENDABLE` zeroes the derogatory count.
 
 * <b>`max-purgeable-routes`</b> -- Global limit on the number of ephemeral routes to allow in the route table, beyond which the least recently matched ephemeral route is forced out early.  Not allowed in <b>`config`</b> clauses of events.
+
+* <b>`max-purgeable-idle-time`</b> -- Global absolute maximum idle time for ephemeral routes, controlling purges of stale (expired) ephemeral routes with nonzero `wolfsentry_route_metadata_exports.connection_count`.  Default is no limit.  Not allowed in <b>`config`</b> clauses of events.
 
 * <b>`route-idle-time-for-purge`</b> -- If nonzero, the time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
@@ -366,7 +369,7 @@ event_config_list = "{" event_config_item *("," event_config_item) "}"
 
 top_config_list = "{" top_config_item *("," top_config_item) "}"
 
-top_config_item = event_config_item / max_purgeable_routes_clause
+top_config_item = event_config_item / max_purgeable_routes_clause / max_purgeable_idle_time_clause
 
 event_config_item =
   (DQUOTE %s"max-connection-count" DQUOTE ":" uint32) /
@@ -381,6 +384,8 @@ event_config_item =
 duration = number_sint64 / (DQUOTE number_sint64 [ %s"d" / %s"h" / %s"m" / %s"s" ] DQUOTE)
 
 max_purgeable_routes_clause = DQUOTE %s"max-purgeable-routes" DQUOTE ":" uint32
+
+max_purgeable_idle_time_clause = DQUOTE %s"max-purgeable-idle-time" DQUOTE ":" duration
 
 route_flag_list = "[" route_flag *("," route_flag) "]"
 

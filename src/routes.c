@@ -1138,7 +1138,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
         ++new_size;
     /* extra_ports storage will go here. */
 
-    if ((*new_route = WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, new_size)) == NULL)
+    if (config->config.route_private_data_alignment == 0)
+        *new_route = (struct wolfsentry_route *)WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, new_size);
+    else
+        *new_route = (struct wolfsentry_route *)WOLFSENTRY_MEMALIGN_1(dest_context->hpi.allocator, config->config.route_private_data_alignment, new_size);
+    if (*new_route == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
 
     if (src_route->data_addr_offset == config->config.route_private_data_size)

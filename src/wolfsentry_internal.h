@@ -261,7 +261,13 @@ typedef wolfsentry_errcode_t (*wolfsentry_table_ent_clone_map_fn_t)(
     struct wolfsentry_table_ent_header *new_ent,
     wolfsentry_clone_flags_t flags);
 
-struct wolfsentry_table_header {
+#ifdef __arm__
+/* must be uint64-aligned to allow warning-free casts on ARM32. */
+struct attr_align_to(8) wolfsentry_table_header
+#else
+struct wolfsentry_table_header
+#endif
+{
     struct wolfsentry_table_ent_header *head, *tail; /* these will be replaced by red-black table elements later. */
     wolfsentry_ent_cmp_fn_t cmp_fn;
     wolfsentry_table_reset_fn_t reset_fn;
@@ -399,6 +405,7 @@ struct wolfsentry_route_table {
     struct wolfsentry_table_header header;
     struct wolfsentry_list_header purge_list; /* list of purgeable routes ordered from least stale at head, to most stale at tail. */
     wolfsentry_hitcount_t max_purgeable_routes;
+    wolfsentry_time_t max_purgeable_idle_time;
     struct wolfsentry_event *default_event; /* used as the parent_event by wolfsentry_route_dispatch() for a static route match with a null parent_event. */
     struct wolfsentry_route *fallthrough_route; /* used as the rule_route when no rule_route is matched or inserted. */
     struct wolfsentry_route *last_af_wildcard_route; /* last ent in the wildcard-AF span, if any. */

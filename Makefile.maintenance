@@ -1,0 +1,119 @@
+# Makefile.maintenance
+#
+# Copyright (C) 2021-2023 wolfSSL Inc.
+#
+# This file is part of wolfSentry.
+#
+# wolfSentry is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# wolfSentry is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+
+.PHONY: release
+release:
+	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make release -- version isn't known."; exit 1; fi
+	@cd "$(SRC_TOP)" && git show "$(RELEASE):wolfsentry/wolfsentry.h" | awk '/^#define WOLFSENTRY_VERSION_MAJOR /{major=$$3; next;}/^#define WOLFSENTRY_VERSION_MINOR /{minor=$$3; next;}/^#define WOLFSENTRY_VERSION_TINY /{tiny=$$3; next;} {if ((major != "") && (minor != "") && (tiny != "")) {exit(0);}} END { if ("v" major "." minor "." tiny == "$(RELEASE)") {exit(0);} else {printf("make release: tagged version \"%s\" doesn'\''t match version in header \"v%s.%s.%s\".\n", "$(RELEASE)", major, minor, tiny) > "/dev/stderr"; exit(1);}; }'
+	@REFMAN_UPDATED_AT=$$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' doc/wolfSentry_refman.pdf 2>/dev/null); if [[ -n "$$REFMAN_UPDATED_AT" && ($$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' wolfsentry/ doc/ ChangeLog.md README.md) -gt "$$REFMAN_UPDATED_AT") ]]; then echo -e 'error: tag "$(RELEASE)" has doc/wolfSentry_refman.pdf older than header(s) and/or documentation.\nfix with: make doc/wolfSentry_refman.pdf && git commit -n doc/wolfSentry_refman.pdf && git tag -f "$(RELEASE)"' 1>&2; false; fi
+ifndef VERY_QUIET
+	@echo "generating release archive $${PWD}/wolfsentry-$(RELEASE).zip"
+endif
+	@DEST_DIR="$$PWD"; \
+	cd $(SRC_TOP) || exit $$?; \
+	git archive --format=zip --prefix="wolfsentry-$(RELEASE)/" --worktree-attributes --output="$${DEST_DIR}/wolfsentry-$(RELEASE).zip" "$(RELEASE)"
+
+.PHONY: com-bundle
+com-bundle:
+	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make commercial bundle -- version isn't known."; exit 1; fi
+ifndef VERY_QUIET
+	@echo "generating com-bundle $${PWD}/wolfsentry-$(RELEASE)-commercial.7z ..."
+endif
+	@DEST_DIR="$$PWD"; \
+	cd $(SRC_TOP) || exit $$?; \
+	read -r -p 'com bundle password? [empty to autogenerate] ' the_password; \
+	if [[ -z "$$the_password" ]]; then the_password=$$(head -c 15 /dev/urandom | base64) || exit $$?; echo "com-bundle generated password: $${the_password}"; fi; \
+	workdir=$$(mktemp -d) || exit $$?; \
+	trap "rm -rf \"$$workdir\"" EXIT; \
+	git archive --format=tar --prefix="wolfsentry-$(RELEASE)-commercial/" --worktree-attributes "$(RELEASE)" | (cd "$$workdir" && tar -xf -) || exit $$?; \
+	pushd "$$workdir" >/dev/null || exit $$?; \
+	$(SRC_TOP)/scripts/convert_copyright_boilerplate.awk $$(find . -name Makefile\* -o -name '*.[ch]' -o -name '*.sh' -o -name '*.awk') || exit $$?; \
+	if [[ -e "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" ]]; then rm "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" || exit $$?; fi; \
+	7za a -r -mmt -mhe=on -mx=9 -ms=on -p"$$the_password" "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" "wolfsentry-$(RELEASE)-commercial" 1>/dev/null || exit $$?; \
+	echo -n "com-bundle SHA256: " && sha256sum "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z"
+
+doc/wolfSentry_refman.pdf: $(SRC_TOP)/doc/wolfSentry_refman.pdf
+$(SRC_TOP)/doc/wolfSentry_refman.pdf: $(BUILD_TOP)/doc/pdf/refman.pdf
+	@cp -p "$(BUILD_TOP)/doc/pdf/refman.pdf" "$@"
+	@echo 'updated $@'
+
+DOC_SYNC_BASE_BRANCH := master
+
+.PHONY: doc-sync
+doc-sync: $(SRC_TOP)/doc/wolfSentry_refman.pdf
+	@cd $(SRC_TOP)/../documentation || exit $$?; \
+	if [[ -n '$(DOC_SYNC_NEW_BRANCH)' ]]; then \
+	    NEW_BRANCH='$(DOC_SYNC_NEW_BRANCH)'; \
+	    git checkout "$${NEW_BRANCH}" || exit $$?; \
+	else \
+	    NEW_BRANCH=$$(date +%Y%m%d)-wolfsentry-doc-sync; \
+	    [[ "$$NEW_BRANCH" != '$(DOC_SYNC_BASE_BRANCH)' ]] || { echo 'supplied DOC_SYNC_BASE_BRANCH collides with constructed branch name.' 1>&2; exit 1; }; \
+	    git fetch upstream '$(DOC_SYNC_BASE_BRANCH)' || exit $$?; \
+	    git checkout -b "$${NEW_BRANCH}" FETCH_HEAD || exit $$?; \
+	fi; \
+	cd wolfSentry/src && \
+	git ls-files --error-unmatch README.md freertos-lwip-app.md json_configuration.md ChangeLog.md >/dev/null && \
+	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
+	cp -p $(SRC_TOP)/doc/freertos-lwip-app.md $(SRC_TOP)/doc/json_configuration.md $(SRC_TOP)/ChangeLog.md . && \
+	git commit -n -a && \
+	git push --no-verify origin "$$NEW_BRANCH"; \
+	exitval=$$?; \
+	if [[ $$exitval != 0 ]]; then \
+	    git reset -q --hard; \
+	    if [[ -z '$(DOC_SYNC_NEW_BRANCH)' ]]; then \
+	        git checkout DOC_SYNC_BASE_BRANCH && git branch -D "$$NEW_BRANCH"; \
+	    fi; \
+	fi; \
+	exit $$exitval
+
+lwip-patch-sync:
+	@cd '$(SRC_TOP)'/../third/lwip && \
+	[[ -z $$(git --no-pager diff --shortstat HEAD) ]] || { echo "uncommitted changes in $$(pwd)." 1>&2; exit 1; } && \
+	PATCHED_BRANCH=20230307-LWIP_PACKET_FILTER_API && \
+	WORKING_BRANCH="$${PATCHED_BRANCH}-$$$$-new" && \
+	PATCH_BASE='$(SRC_TOP)/lwip/LWIP_PACKET_FILTER_API' && \
+	CANONICAL_LWIP_RELEASE_TAG='STABLE-2_1_3_RELEASE' && \
+	git checkout -q master && \
+	git pull -q upstream master && \
+	git checkout -q -b "$$WORKING_BRANCH" "$$PATCHED_BRANCH" && \
+	echo "working branch is $${WORKING_BRANCH}" && \
+	git rebase master && \
+	git diff master >| "$${PATCH_BASE}.patch.$$$$" && \
+	if cmp -s "$${PATCH_BASE}.patch" "$${PATCH_BASE}.patch.$$$$"; then \
+	    rm "$${PATCH_BASE}.patch.$$$$"; \
+	    echo "$${PATCH_BASE}.patch is already in sync." 1>&2; \
+	    git checkout -q "$$PATCHED_BRANCH"; \
+	    git branch -D "$$WORKING_BRANCH"; \
+	    exit 0; \
+	else \
+	    true; \
+	fi && \
+	git checkout -q "$$CANONICAL_LWIP_RELEASE_TAG" && \
+	patch --quiet -p1 < "$${PATCH_BASE}.patch.$$$$" && \
+	patch -R --quiet -p1 < "$${PATCH_BASE}.patch.$$$$" && \
+	git branch -m "$$PATCHED_BRANCH" "$${PATCHED_BRANCH}-$$$$-old" && \
+	git branch -m "$$WORKING_BRANCH" "$$PATCHED_BRANCH" && \
+	echo "renamed $${WORKING_BRANCH} to $${PATCHED_BRANCH}." && \
+	git checkout -q "$$PATCHED_BRANCH" && \
+	sed 's/$$/\r/' '$(SRC_TOP)'/lwip/LWIP_PACKET_FILTER_API.patch.$$$$ > '$(SRC_TOP)'/lwip/LWIP_PACKET_FILTER_API.CRLF.patch.$$$$ && \
+	mv '$(SRC_TOP)'/lwip/LWIP_PACKET_FILTER_API.patch.$$$$ '$(SRC_TOP)'/lwip/LWIP_PACKET_FILTER_API.patch && \
+	mv '$(SRC_TOP)'/lwip/LWIP_PACKET_FILTER_API.CRLF.patch.$$$$ '$(SRC_TOP)'/lwip/LWIP_PACKET_FILTER_API.CRLF.patch && \
+	echo 'updated $(SRC_TOP)/lwip/LWIP_PACKET_FILTER_API{,.CRLF}.patch' && \
+	git branch -D "$${PATCHED_BRANCH}-$$$$-old"

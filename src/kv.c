@@ -161,10 +161,7 @@ static wolfsentry_errcode_t wolfsentry_kv_insert_1(
 
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header, &kv_table->header, 1 /* unique_p */)) < 0)
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header));
-
-    WOLFSENTRY_ERROR_RERETURN(ret);
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header, &kv_table->header, 1 /* unique_p */));
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_insert(

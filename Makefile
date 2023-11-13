@@ -159,10 +159,10 @@ endif
 
 # JSON settings need to be extracted from $(USER_SETTINGS_FILE) to determine if JSON sources should be built.
 ifdef USER_SETTINGS_FILE
-    ifeq ($(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON$$' "$(USER_SETTINGS_FILE)" && echo 1 || echo 0), 1)
+    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
         USER_SETTINGS_NO_JSON := 1
     endif
-    ifeq ($(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON_DOM$$' "$(USER_SETTINGS_FILE)" && echo 1 || echo 0), 1)
+    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON_DOM$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
         USER_SETTINGS_NO_JSON_DOM := 1
     endif
 endif
@@ -379,8 +379,6 @@ retest:
 	@$(RM) -f $(BUILD_TOP)/.tested
 	@$(MAKE) -f $(THIS_MAKEFILE) test
 
--include $(SRC_TOP)/Makefile.analyzers
-
 ifndef INSTALL_DIR
     INSTALL_DIR := /usr/local
 endif
@@ -459,37 +457,6 @@ dist-test-clean:
 
 CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
-.PHONY: release
-release:
-	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make release -- version isn't known."; exit 1; fi
-	@cd "$(SRC_TOP)" && git show "$(RELEASE):wolfsentry/wolfsentry.h" | awk '/^#define WOLFSENTRY_VERSION_MAJOR /{major=$$3; next;}/^#define WOLFSENTRY_VERSION_MINOR /{minor=$$3; next;}/^#define WOLFSENTRY_VERSION_TINY /{tiny=$$3; next;} {if ((major != "") && (minor != "") && (tiny != "")) {exit(0);}} END { if ("v" major "." minor "." tiny == "$(RELEASE)") {exit(0);} else {printf("make release: tagged version \"%s\" doesn'\''t match version in header \"v%s.%s.%s\".\n", "$(RELEASE)", major, minor, tiny) > "/dev/stderr"; exit(1);}; }'
-	@REFMAN_UPDATED_AT=$$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' doc/wolfSentry_refman.pdf 2>/dev/null); if [[ -n "$$REFMAN_UPDATED_AT" && ($$(git --no-pager log -n 1 --pretty=format:%at '$(RELEASE)' wolfsentry/ doc/ ChangeLog.md README.md) -gt "$$REFMAN_UPDATED_AT") ]]; then echo -e 'error: tag "$(RELEASE)" has doc/wolfSentry_refman.pdf older than header(s) and/or documentation.\nfix with: make doc/wolfSentry_refman.pdf && git commit -n doc/wolfSentry_refman.pdf && git tag -f "$(RELEASE)"' 1>&2; false; fi
-ifndef VERY_QUIET
-	@echo "generating release archive $${PWD}/wolfsentry-$(RELEASE).zip"
-endif
-	@DEST_DIR="$$PWD"; \
-	cd $(SRC_TOP) || exit $$?; \
-	git archive --format=zip --prefix="wolfsentry-$(RELEASE)/" --worktree-attributes --output="$${DEST_DIR}/wolfsentry-$(RELEASE).zip" "$(RELEASE)"
-
-.PHONY: com-bundle
-com-bundle:
-	@if [[ -z "$(RELEASE)" ]]; then echo "Can't make commercial bundle -- version isn't known."; exit 1; fi
-ifndef VERY_QUIET
-	@echo "generating com-bundle $${PWD}/wolfsentry-$(RELEASE)-commercial.7z ..."
-endif
-	@DEST_DIR="$$PWD"; \
-	cd $(SRC_TOP) || exit $$?; \
-	read -r -p 'com bundle password? [empty to autogenerate] ' the_password; \
-	if [[ -z "$$the_password" ]]; then the_password=$$(head -c 15 /dev/urandom | base64) || exit $$?; echo "com-bundle generated password: $${the_password}"; fi; \
-	workdir=$$(mktemp -d) || exit $$?; \
-	trap "rm -rf \"$$workdir\"" EXIT; \
-	git archive --format=tar --prefix="wolfsentry-$(RELEASE)-commercial/" --worktree-attributes "$(RELEASE)" | (cd "$$workdir" && tar -xf -) || exit $$?; \
-	pushd "$$workdir" >/dev/null || exit $$?; \
-	$(SRC_TOP)/scripts/convert_copyright_boilerplate.awk $$(find . -name Makefile\* -o -name '*.[ch]' -o -name '*.sh' -o -name '*.awk') || exit $$?; \
-	if [[ -e "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" ]]; then rm "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" || exit $$?; fi; \
-	7za a -r -mmt -mhe=on -mx=9 -ms=on -p"$$the_password" "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z" "wolfsentry-$(RELEASE)-commercial" 1>/dev/null || exit $$?; \
-	echo -n "com-bundle SHA256: " && sha256sum "$${DEST_DIR}/wolfsentry-$(RELEASE)-commercial.7z"
-
 DOXYGEN_PREDEFINED := WOLFSENTRY_THREADSAFE WOLFSENTRY_PROTOCOL_NAMES WOLFSENTRY_HAVE_JSON_DOM WOLFSENTRY_ERROR_STRINGS LWIP_PACKET_FILTER_API __GNUC__=4 WOLFSENTRY_HAVE_GNU_ATOMICS WOLFSENTRY_NO_INLINE WOLFSENTRY_FOR_DOXYGEN attr_align_to(x)=
 DOXYGEN_EXPAND_AS_DEFINED := WOLFSENTRY_SOCKADDR_MEMBERS WOLFSENTRY_FLEXIBLE_ARRAY_SIZE attr_align_to
 DOXYGEN_EXCLUDE := wolfsentry/wolfsentry_options.h
@@ -554,39 +521,6 @@ doc: doc-html $(BUILD_TOP)/doc/pdf/refman.pdf
 
 doc-clean: doc-html-clean doc-pdf-clean
 
-doc/wolfSentry_refman.pdf: $(SRC_TOP)/doc/wolfSentry_refman.pdf
-$(SRC_TOP)/doc/wolfSentry_refman.pdf: $(BUILD_TOP)/doc/pdf/refman.pdf
-	@cp -p "$(BUILD_TOP)/doc/pdf/refman.pdf" "$@"
-	@echo 'updated $@'
-
-DOC_SYNC_BASE_BRANCH := master
-
-.PHONY: doc-sync
-doc-sync: $(SRC_TOP)/doc/wolfSentry_refman.pdf
-	@cd $(SRC_TOP)/../documentation || exit $$?; \
-	if [[ -n '$(DOC_SYNC_NEW_BRANCH)' ]]; then \
-	    NEW_BRANCH='$(DOC_SYNC_NEW_BRANCH)'; \
-	    git checkout "$${NEW_BRANCH}" || exit $$?; \
-	else \
-	    NEW_BRANCH=$$(date +%Y%m%d)-wolfsentry-doc-sync; \
-	    [[ "$$NEW_BRANCH" != '$(DOC_SYNC_BASE_BRANCH)' ]] || { echo 'supplied DOC_SYNC_BASE_BRANCH collides with constructed branch name.' 1>&2; exit 1; }; \
-	    git checkout -b "$${NEW_BRANCH}" '$(DOC_SYNC_BASE_BRANCH)' || exit $$?; \
-	fi; \
-	cd wolfSentry/src && \
-	git ls-files --error-unmatch README.md freertos-lwip-app.md json_configuration.md ChangeLog.md >/dev/null && \
-	$(README_FOR_FULL_MANUAL_RECIPE) > README.md && \
-	cp -p $(SRC_TOP)/doc/freertos-lwip-app.md $(SRC_TOP)/doc/json_configuration.md $(SRC_TOP)/ChangeLog.md . && \
-	git commit -n -a && \
-	git push --no-verify origin "$$NEW_BRANCH"; \
-	exitval=$$?; \
-	if [[ $$exitval != 0 ]]; then \
-	    git reset -q --hard; \
-	    if [[ -z '$(DOC_SYNC_NEW_BRANCH)' ]]; then \
-	        git checkout DOC_SYNC_BASE_BRANCH && git branch -D "$$NEW_BRANCH"; \
-	    fi; \
-	fi; \
-	exit $$exitval
-
 .PHONY: clean
 clean:
 ifeq "$(V)" "1"
@@ -600,5 +534,7 @@ ifndef VERY_QUIET
 	@echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
 endif
 
+-include $(SRC_TOP)/Makefile.analyzers
+-include $(SRC_TOP)/Makefile.maintenance
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d))
 -include $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd))

@@ -4,6 +4,7 @@
         "max-connection-count" : 5,
         "penalty-box-duration" : "1h",
         "max-purgeable-routes" : 10,
+        "max-purgeable-idle-time" : "1h",
         "derog-thresh-for-penalty-boxing" : 4,
         "derog-thresh-ignore-commendable" : false,
         "commendable-clears-derogatory" : false

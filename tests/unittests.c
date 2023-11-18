@@ -4626,7 +4626,8 @@ static int test_json(const char *fname, const char *extra_fname) {
             WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, ephemeral_route, &ephemeral_route_exports));
             WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
 
-            WOLFSENTRY_EXIT_ON_FAILURE(
+            WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(
+                DEFERRED,
                 wolfsentry_route_delete_by_id(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     NULL /* caller_arg */,

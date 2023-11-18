@@ -2,6 +2,60 @@
 
 <br>
 
+# wolfSentry Release 1.6.1 (November 18, 2023)
+
+Release 1.6.1 of the wolfSentry embedded firewall/IDPS has enhancements,
+additions, and improvements including:
+
+## New Features
+
+Dynamic rules with nonzero connection counts are now subject to deferred expiration, to assure traffic over established connections is allowed until all connections are closed, even with pauses in traffic flow exceeding the max idle time configured for the rule.
+
+When a rule with a nonzero connection count is deleted, actual deletion is deferred until all connections are closed or the `"max-purgeable-idle-time"` is reached (see below).  New success code `WOLFSENTRY_SUCCESS_ID_DEFERRED` is returned in that case.  If an identical rule is inserted before the deferred deletion, the existing rule is unmarked for deletion and the insertion call returns another new success code, `WOLFSENTRY_SUCCESS_ID_ALREADY_OK`.
+
+A `"max-purgeable-idle-time"` JSON configuration option has been added, forcing expiration and purge of a zombie dynamic rule even if its current connection count is nonzero.  New related APIs are also added: `wolfsentry_route_table_max_purgeable_idle_time_get()`, `wolfsentry_route_table_max_purgeable_idle_time_set()`, and `wolfsentry_route_purge_time_set()`.
+
+
+## Noteworthy Changes and Additions
+
+A new `FILT_CLOSE_WAIT` event type is added to the lwIP integration patch, and a corresponding `WOLFSENTRY_ACTION_RES_CLOSE_WAIT` result bit is added.  Appropriate callbacks are added to lwIP `tcp_process()` and `tcp_receive()`, and the lwIP glue logic now handles mapping from `FILT_CLOSE_WAIT` to `WOLFSENTRY_ACTION_RES_CLOSE_WAIT`.
+
+The lwIP patch has been rebased on upstream 5e3268cf3e (Oct 14 2023), while maintaining compatibility with lwIP 2.1.3-RELEASE.
+
+
+## Bug Fixes, Cleanups, and Debugging Aids
+
+The lwIP patch includes several fixes:
+* In `tcp_process()`, when handling passive close and entering `CLOSE_WAIT`, don't `tcp_filter_dispatch_incoming(FILT_CLOSED, ...)` -- this happens later, at deallocation.
+* Fix `TCP FILT_CLOSED` callbacks to assure accurate interface ID and local_port are passed.
+
+The route/rule system includes several fixes:
+* Add error checking to `meta.connection_count` decrement in `wolfsentry_route_event_dispatch_0()`, so that rule churn can never result in count underflow.
+* Mask out internal flags (via new macro `WOLFSENTRY_ROUTE_INTERNAL_FLAGS`) from `route_exports->flags` in `wolfsentry_route_init_by_exports()`.
+* In `wolfsentry_route_init_by_exports()`, fix pointer math in `memset()` argument to correctly treat `route_exports->private_data_size` as a byte count.
+* In `wolfsentry_route_new_by_exports()`, fix check on `route_exports->private_data_size` to properly reflect `config->route_private_data_padding`.
+* Add missing implementation of `wolfsentry_route_insert_by_exports()`.
+* In `wolfsentry_route_clone()`, fix allocation to use `WOLFSENTRY_MEMALIGN_1()` when `.route_private_data_alignment` is nonzero.
+* In `wolfsentry_route_event_dispatch_0()`, don't increment/decrement counts when `WOLFSENTRY_ACTION_RES_FALLTHROUGH`.
+
+In `src/lwip/packet_filter_glue.c`, add `action_results` and `local.sa.interface` to `WOLFSENTRY_DEBUG_LWIP` messages, and add missing gates for `LWIP_IPV6` in `WOLFSENTRY_DEBUG_LWIP` paths.
+
+In `tcp_filter_with_wolfsentry()`, don't set `WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN` for `FILT_REMOTE_RESET`, and fix typo "&event" in call to `wolfsentry_route_event_dispatch_with_inited_result()`.
+
+Remove several incorrect calls to `wolfsentry_table_ent_delete_by_id_1()` immediately following failed calls to `wolfsentry_table_ent_insert()` -- the former is implicit to the latter.
+
+
+## Self-Test Enhancements
+
+Add to `test_json()` a workout of `connection_count` and deferred deletion dynamics.
+
+`Makefile.analyzers`: add `sanitize-all-NO_POSIX_MEMALIGN-gcc`; tweak `notification-demo-build-test` to explicitly use the `master` branch of wolfssl.
+
+`Makefile`,`Makefile.analyzers`: tweaks for MacOS X compatibility.
+
+
+<br>
+
 # wolfSentry Release 1.6.0 (October 24, 2023)
 
 Release 1.6.0 of the wolfSentry embedded firewall/IDPS has enhancements,

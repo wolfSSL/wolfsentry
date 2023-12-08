@@ -20,6 +20,8 @@
 
 SHELL := bash
 
+AWK := awk
+
 ifeq "$(V)" "1"
     override undefine VERY_QUIET
 endif
@@ -257,7 +259,7 @@ endif
 ifndef USER_SETTINGS_FILE
 $(BUILD_TOP)/wolfsentry/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentry_options_h.awk $(BUILD_TOP)/.build_params
 	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
-	@echo '$(CFLAGS)' | $< > $@
+	@echo '$(CFLAGS)' | $(AWK) -f $< > $@
 endif
 
 $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(OPTIONS_FILE) $(SRC_TOP)/Makefile

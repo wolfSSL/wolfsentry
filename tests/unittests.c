@@ -1351,6 +1351,70 @@ TEST_SKIP(test_rw_locks)
 
 #ifdef TEST_STATIC_ROUTES
 
+static wolfsentry_errcode_t replace_rule_transactionally(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const char *event_label,
+    int event_label_len,
+    const struct wolfsentry_sockaddr *del_remote,
+    const struct wolfsentry_sockaddr *del_local,
+    wolfsentry_route_flags_t del_flags,
+    const struct wolfsentry_sockaddr *ins_remote,
+    const struct wolfsentry_sockaddr *ins_local,
+    wolfsentry_route_flags_t ins_flags,
+    wolfsentry_ent_id_t *ins_id,
+    wolfsentry_action_res_t *action_results)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_context *new_wolfsentry_ctx = NULL;
+    int n_deleted;
+
+    WOLFSENTRY_PROMOTABLE_OR_RETURN();
+
+    ret = wolfsentry_context_clone(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &new_wolfsentry_ctx,
+        WOLFSENTRY_CLONE_FLAG_NONE);
+    if (ret < 0)
+        goto out;
+
+    ret = wolfsentry_route_delete(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(new_wolfsentry_ctx),
+        NULL /* caller_arg */,
+        del_remote,
+        del_local,
+        del_flags,
+        event_label,
+        event_label_len,
+        action_results,
+        &n_deleted);
+    if (ret < 0)
+        goto out;
+
+    ret = wolfsentry_route_insert(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(new_wolfsentry_ctx),
+        NULL /* caller_arg */,
+        ins_remote,
+        ins_local,
+        ins_flags,
+        event_label,
+        event_label_len,
+        ins_id,
+        action_results);
+    if (ret < 0)
+        goto out;
+
+    ret = wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_OUT, new_wolfsentry_ctx);
+
+out:
+
+    if (new_wolfsentry_ctx != NULL) {
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&new_wolfsentry_ctx)));
+    }
+
+
+    WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+}
+
 static int test_static_routes(void) {
 
     struct wolfsentry_context *wolfsentry;
@@ -2130,6 +2194,104 @@ static int test_static_routes(void) {
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref, NULL /* action_results */));
 
     /* leave the route in the table, to be cleaned up by wolfsentry_shutdown(). */
+
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } alt_remote, alt_local;
+        wolfsentry_route_flags_t alt_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS;
+        wolfsentry_ent_id_t ins_id;
+
+        memcpy(&alt_remote, &remote, sizeof alt_remote);
+        memcpy(alt_remote.sa.addr,"\4\5\6\7",sizeof remote.addr_buf);
+        memcpy(&alt_local, &local, sizeof alt_local);
+        alt_flags = flags;
+        WOLFSENTRY_SET_BITS(alt_flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED);
+        WOLFSENTRY_CLEAR_BITS(alt_flags, WOLFSENTRY_ROUTE_FLAG_GREENLISTED);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            replace_rule_transactionally(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &remote.sa,
+                &local.sa,
+                flags,
+                &alt_remote.sa,
+                &alt_local.sa,
+                alt_flags,
+                &ins_id,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            replace_rule_transactionally(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &alt_remote.sa,
+                &alt_local.sa,
+                alt_flags,
+                &remote.sa,
+                &local.sa,
+                flags,
+                &ins_id,
+                &action_results));
+
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            replace_rule_transactionally(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &alt_remote.sa,
+                &alt_local.sa,
+                alt_flags,
+                &remote.sa,
+                &local.sa,
+                flags,
+                &ins_id,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            replace_rule_transactionally(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &remote.sa,
+                &local.sa,
+                flags,
+                &alt_remote.sa,
+                &alt_local.sa,
+                alt_flags,
+                &ins_id,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &alt_remote.sa,
+                &alt_local.sa,
+                alt_flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &action_results,
+                &n_deleted));
+
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            wolfsentry_route_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &remote.sa,
+                &local.sa,
+                flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &action_results,
+                &n_deleted));
+    }
 
     printf("all subtests succeeded -- %d distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
 

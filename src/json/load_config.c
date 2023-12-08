@@ -848,7 +848,7 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
          * move it to right-justified position.
          */
         if ((sa->addr_len != 0) && (sa->addr_len != addr_size)) {
-            size_t pad_bytes = WOLFSENTRY_BITS_TO_BYTES(addr_size - sa->addr_len);
+            size_t pad_bytes = WOLFSENTRY_BITS_TO_BYTES((size_t)addr_size - (size_t)sa->addr_len);
             memmove(sa->addr + pad_bytes, sa->addr, sa->addr_len);
             memset(sa->addr, 0, pad_bytes);
         }

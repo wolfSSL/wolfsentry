@@ -2,6 +2,31 @@
 
 <br>
 
+# wolfSentry Release 1.6.2 (December 29, 2023)
+
+Release 1.6.2 of the wolfSentry embedded firewall/IDPS has enhancements,
+additions, and improvements including:
+
+## Noteworthy Changes and Additions
+
+In scripts and Makefile, interpreters (`bash` and `awk`) now follow search `PATH`.  Explicit override paths to `bash` and `awk` can be supplied by passing values for `SHELL` and `AWK` to `make`.
+
+Change type of length argument to `wolfsentry_action_res_assoc_by_name()` to `int`, to allow it to accept `WOLFSENTRY_LENGTH_NULL_TERMINATED` (negative number).
+
+## Bug Fixes, Cleanups, and Debugging Aids
+
+In `handle_route_endpoint_clause()`, add casts to work around an implicit-promotion bug in gcc-7.5.
+
+Various fixes for benign `cppcheck` reports (`duplicateCondition`, `unsignedLessThanZero`, `unreadVariable`, `invalidPrintfArgType_uint`, `invalidPrintfArgType_sint`, `shadowFunction`, `constVariablePointer`, `preprocessorErrorDirective`).
+
+## Self-Test Enhancements
+
+Add `replace_rule_transactionally()`, now used in `test_static_routes()` for a thorough workout.
+
+Split cppcheck-analyze recipe into cppcheck-library, cppcheck-force-library, cppcheck-extras, and cppcheck-force-extras, with increased coverage.  Only cppcheck-library and cppcheck-extras are included in the "check-all" dependency list.
+
+<br>
+
 # wolfSentry Release 1.6.1 (November 18, 2023)
 
 Release 1.6.1 of the wolfSentry embedded firewall/IDPS has enhancements,

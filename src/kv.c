@@ -89,7 +89,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_drop_reference(
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
     (void)action_results;
-    if (kv->header.refcount <= 0)
+    if (kv->header.refcount == 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if ((kv->header.parent_table != NULL) &&
         (kv->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_KV))

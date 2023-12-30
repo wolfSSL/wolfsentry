@@ -2293,7 +2293,7 @@ static int test_static_routes(void) {
                 &n_deleted));
     }
 
-    printf("all subtests succeeded -- %d distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
+    printf("all subtests succeeded -- %u distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
@@ -4026,9 +4026,8 @@ static int test_json(const char *fname, const char *extra_fname) {
                         WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
                         WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
                         WOLFSENTRY_FORMAT_FLAG_NONE));
-            }
-            if (ret < 0)
                 break;
+            }
         }
 
         WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_BYTE_STREAM_LEN(json_out2) == WOLFSENTRY_BYTE_STREAM_LEN(json_out));
@@ -4077,9 +4076,8 @@ static int test_json(const char *fname, const char *extra_fname) {
                         WOLFSENTRY_BYTE_STREAM_PTR(json_out2),
                         WOLFSENTRY_BYTE_STREAM_SPC(json_out2),
                         WOLFSENTRY_FORMAT_FLAG_NONE));
-            }
-            if (ret < 0)
                 break;
+            }
         }
 
         WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_BYTE_STREAM_LEN(json_out2) == WOLFSENTRY_BYTE_STREAM_LEN(json_out));
@@ -4485,7 +4483,7 @@ static int test_json(const char *fname, const char *extra_fname) {
         v2 = NULL;
 
         WOLFSENTRY_EXIT_ON_TRUE((v1 = json_value_path(&p_root, "static-routes-insert")) == NULL);
-        WOLFSENTRY_EXIT_ON_TRUE((alen = json_value_array_size(v1)) <= 0);
+        WOLFSENTRY_EXIT_ON_TRUE((alen = json_value_array_size(v1)) == 0);
         for (i = 0; i < alen; ++i) {
             WOLFSENTRY_EXIT_ON_TRUE((v2 = json_value_array_get(v1, i)) == NULL);
             v3 = json_value_path(v2, "family");
@@ -4917,7 +4915,7 @@ static int test_json_corpus(void) {
             0 /*JSON_IGNOREILLUTF8VALUE*/ /* flags */
         };
         unsigned dom_flags = 0;
-        JSON_VALUE p_root, clone;
+        JSON_VALUE p_root, p_clone;
         JSON_INPUT_POS json_pos;
         DIR *corpus_dir;
         struct dirent *scenario_ent;
@@ -5005,7 +5003,7 @@ static int test_json_corpus(void) {
         }
 
         json_value_init_null(&p_root);
-        json_value_init_null(&clone);
+        json_value_init_null(&p_clone);
 
         while ((scenario_ent = readdir(corpus_dir))) {
             size_t namelen = strlen(scenario_ent->d_name);
@@ -5043,16 +5041,16 @@ static int test_json_corpus(void) {
                 goto inner_cleanup;
             }
 
-            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_root, &clone)));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_root, &p_clone)));
 
             if (dump_json) {
-                WOLFSENTRY_EXIT_ON_FAILURE(json_dom_dump(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &clone, dump_string_for_json, NULL /* user_data */, 2 /* tab_width */, JSON_DOM_DUMP_INDENTWITHSPACES | (dom_flags & JSON_DOM_MAINTAINDICTORDER ? JSON_DOM_DUMP_PREFERDICTORDER : 0)));
+                WOLFSENTRY_EXIT_ON_FAILURE(json_dom_dump(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_clone, dump_string_for_json, NULL /* user_data */, 2 /* tab_width */, JSON_DOM_DUMP_INDENTWITHSPACES | (dom_flags & JSON_DOM_MAINTAINDICTORDER ? JSON_DOM_DUMP_PREFERDICTORDER : 0)));
             }
 
         inner_cleanup:
 
             WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_root)));
-            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &clone)));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &p_clone)));
             if (scenario_fd >= 0)
                 (void)close(scenario_fd);
             if (scenario != MAP_FAILED) {
@@ -5102,7 +5100,8 @@ int main(int argc, char* argv[]) {
 #else /* !FREERTOS */
 
 int main(int argc, char* argv[]) {
-    wolfsentry_errcode_t ret = 0;
+    wolfsentry_errcode_t ret = 0; /* cppcheck-suppress unreadVariable
+                                   */
     int err = 0;
     (void)argc;
     (void)argv;

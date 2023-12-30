@@ -456,7 +456,7 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
             if (type != JSON_STRING)
                 WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-            ret = wolfsentry_action_res_assoc_by_name((const char *)data, data_size, &flag);
+            ret = wolfsentry_action_res_assoc_by_name((const char *)data, (int)data_size, &flag);
             WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
             if (! strcmp(jps->cur_keyname, "action-res-filter-bits-set"))

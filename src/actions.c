@@ -631,7 +631,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
         if (! (rule_route->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_HITS))
             WOLFSENTRY_ATOMIC_INCREMENT(i->action->header.hitcount, 1);
 #ifdef WOLFSENTRY_DEBUG_ACTIONS
-        fprintf(stderr,"calling action %s for event %s and action type %u\n", wolfsentry_action_get_label(i->action), wolfsentry_event_get_label(trigger_event), action_type);
+        fprintf(stderr,"calling action %s for event %s and action type %u\n", wolfsentry_action_get_label(i->action), wolfsentry_event_get_label(trigger_event), (unsigned)action_type);
 #endif
         if ((ret = i->action->handler(WOLFSENTRY_CONTEXT_ARGS_OUT, i->action, i->action->handler_arg, caller_arg, trigger_event, action_type, target_route, route_table, rule_route, action_results)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);

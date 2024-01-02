@@ -54,7 +54,7 @@
     /*!< \brief Macro for major version number of installed headers.  @hideinitializer */
 #define WOLFSENTRY_VERSION_MINOR 6
     /*!< \brief Macro for minor version number of installed headers.  @hideinitializer */
-#define WOLFSENTRY_VERSION_TINY 1
+#define WOLFSENTRY_VERSION_TINY 2
     /*!< \brief Macro for tiny version number of installed headers.  @hideinitializer */
 #define WOLFSENTRY_VERSION_ENCODE(major, minor, tiny) (((major) << 16U) | ((minor) << 8U) | (tiny))
     /*!< \brief Macro to convert a wolfSentry version to a single integer, for comparison to other similarly converted versions.  @hideinitializer */
@@ -1295,7 +1295,7 @@ WOLFSENTRY_API struct wolfsentry_allocator *wolfsentry_get_allocator(struct wolf
  */
 WOLFSENTRY_API const char *wolfsentry_action_res_assoc_by_flag(wolfsentry_action_res_t res, unsigned int bit);
     /*!< \brief Given a \p bit number (from 0 to 31), return the name of that bit if set in \p res, else return a null pointer. */
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_res_assoc_by_name(const char *bit_name, size_t bit_name_len, wolfsentry_action_res_t *res);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_res_assoc_by_name(const char *bit_name, int bit_name_len, wolfsentry_action_res_t *res);
     /*!< \brief Given a \p bit_name, set \p *res to the corresponding bit number if known, failing which, return `ITEM_NOT_FOUND`. */
 /*! @} */
 #endif

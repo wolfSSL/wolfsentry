@@ -315,7 +315,7 @@ WOLFSENTRY_API unsigned int _wolfsentry_call_depth(void)
     void *p = __builtin_frame_address(0);
 #ifdef WOLFSENTRY_CALL_DEPTH_RETURNS_STRING
     static const char spaces[] = "                ";
-    wolfsentry_static_assert(sizeof spaces == 17, "spaces for WOLFSENTRY_CALL_DEPTH_RETURNS_STRING must be 16 characters plus the terminating null.")
+    wolfsentry_static_assert2(sizeof spaces == 17, "spaces for WOLFSENTRY_CALL_DEPTH_RETURNS_STRING must be 16 characters plus the terminating null.")
 #endif
     if (p == 0)
         return 0;
@@ -411,13 +411,13 @@ WOLFSENTRY_API const char *wolfsentry_action_res_assoc_by_flag(wolfsentry_action
         return NULL;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_res_assoc_by_name(const char *bit_name, size_t bit_name_len, wolfsentry_action_res_t *res) {
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_res_assoc_by_name(const char *bit_name, int bit_name_len, wolfsentry_action_res_t *res) {
     unsigned int i;
     if (bit_name_len < 0)
-        bit_name_len = strlen(bit_name);
+        bit_name_len = (int)strlen(bit_name);
     for (i = 0; i < length_of_array(action_res_bit_map); ++i) {
-        if ((strncmp(action_res_bit_map[i].desc, bit_name, bit_name_len) == 0) &&
-            (strlen(action_res_bit_map[i].desc) == bit_name_len))
+        if ((strncmp(action_res_bit_map[i].desc, bit_name, (size_t)bit_name_len) == 0) &&
+            (strlen(action_res_bit_map[i].desc) == (size_t)bit_name_len))
         {
             *res = action_res_bit_map[i].res;
             WOLFSENTRY_RETURN_OK;
@@ -682,6 +682,8 @@ static void *wolfsentry_builtin_memalign(
             ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
             *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
         }
+        /* cppcheck-suppress memleak
+         */
     }
 #ifdef WOLFSENTRY_MALLOC_DEBUG
     if (ptr != NULL)

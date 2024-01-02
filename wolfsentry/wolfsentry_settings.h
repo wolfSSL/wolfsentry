@@ -344,13 +344,15 @@
 
 /*! @endcond */
 
-#ifdef SIZE_T_32
-    #define SIZET_FMT "%u"
-#elif __STDC_VERSION__ >= 199901L
-    #define SIZET_FMT "%zu"
-#else
-    #define SIZET_FMT "%lu"
-        /*!< \brief printf-style format string appropriate for pairing with `size_t` @hideinitializer */
+#ifndef SIZET_FMT
+    #ifdef SIZE_T_32
+        #define SIZET_FMT "%u"
+    #elif __STDC_VERSION__ >= 199901L
+        #define SIZET_FMT "%zu"
+    #else
+        #define SIZET_FMT "%lu"
+            /*!< \brief printf-style format string appropriate for pairing with `size_t` @hideinitializer */
+    #endif
 #endif
 
 #ifndef WOLFSENTRY_NO_STDDEF_H

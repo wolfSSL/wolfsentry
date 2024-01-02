@@ -599,7 +599,7 @@ static wolfsentry_errcode_t wolfsentry_route_drop_reference_1(
     struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
-    if (route->header.refcount <= 0)
+    if (route->header.refcount == 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if ((route->header.parent_table != NULL) &&
         (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE))

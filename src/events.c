@@ -405,7 +405,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_reference(WOLFSENTRY_CO
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_event *event, wolfsentry_action_res_t *action_results) {
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
-    if (event->header.refcount <= 0)
+    if (event->header.refcount == 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if ((event->header.parent_table != NULL) &&
         (event->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_EVENT))

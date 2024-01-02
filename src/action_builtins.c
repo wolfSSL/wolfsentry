@@ -118,7 +118,7 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
 
     /* can't pass action_results directly to _route_insert -- it would get zeroed. */
     WOLFSENTRY_WARN_ON_FAILURE(
-        ret = wolfsentry_route_insert_by_exports_into_table(
+        wolfsentry_route_insert_by_exports_into_table(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             route_table,
             NULL /* void *caller_arg*/,

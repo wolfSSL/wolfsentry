@@ -368,7 +368,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_drop_reference(
 {
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
-    if (family_bynumber->header.refcount <= 0)
+    if (family_bynumber->header.refcount == 0)
         WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
     if ((family_bynumber->header.parent_table != NULL) &&
         (family_bynumber->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ADDR_FAMILY_BYNUMBER))

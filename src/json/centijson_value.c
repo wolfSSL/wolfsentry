@@ -334,17 +334,17 @@ json_value_path(JSON_VALUE* root, const char* path)
             token_end++;
 
         if(token_end - token_beg > 2  &&  token_beg[0] == '['  &&  token_end[-1] == ']') {
-            size_t index = 0;
+            size_t path_index = 0;
 
             token_beg++;
             while('0' <= *token_beg  &&  *token_beg <= '9') {
-                index = index * 10U + (*token_beg - (unsigned)'0');
+                path_index = path_index * 10U + (*token_beg - (unsigned)'0');
                 token_beg++;
             }
             if(*token_beg != ']')
                 return NULL;
 
-            v = json_value_array_get(v, index);
+            v = json_value_array_get(v, path_index);
         } else if(token_end - token_beg > 0) {
             v = json_value_dict_get_(v, token_beg, (size_t)(token_end - token_beg));
         }
@@ -684,7 +684,7 @@ json_value_bool(const JSON_VALUE* v)
 WOLFSENTRY_API int32_t
 json_value_int32(const JSON_VALUE* v)
 {
-    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
+    const uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -708,7 +708,7 @@ json_value_int32(const JSON_VALUE* v)
 WOLFSENTRY_API uint32_t
 json_value_uint32(const JSON_VALUE* v)
 {
-    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
+    const uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -732,7 +732,7 @@ json_value_uint32(const JSON_VALUE* v)
 WOLFSENTRY_API int64_t
 json_value_int64(const JSON_VALUE* v)
 {
-    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
+    const uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -756,7 +756,7 @@ json_value_int64(const JSON_VALUE* v)
 WOLFSENTRY_API uint64_t
 json_value_uint64(const JSON_VALUE* v)
 {
-    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
+    const uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -780,7 +780,7 @@ json_value_uint64(const JSON_VALUE* v)
 WOLFSENTRY_API float
 json_value_float(const JSON_VALUE* v)
 {
-    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
+    const uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -804,7 +804,7 @@ json_value_float(const JSON_VALUE* v)
 WOLFSENTRY_API double
 json_value_double(const JSON_VALUE* v)
 {
-    uint8_t* payload = json_value_payload((JSON_VALUE*) v);
+    const uint8_t* payload = json_value_payload((JSON_VALUE*) v);
     union {
         int32_t i32;
         uint32_t u32;
@@ -1130,7 +1130,7 @@ json_value_dict_leftmost_path(RBTREE** path, RBTREE* node)
 WOLFSENTRY_API unsigned
 json_value_dict_flags(const JSON_VALUE* v)
 {
-    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
+    const DICT* d = json_value_dict_payload((JSON_VALUE*) v);
     unsigned flags = 0;
 
     if(d != NULL  &&  (v->data.data_bytes[0] & HAS_ORDERLIST))

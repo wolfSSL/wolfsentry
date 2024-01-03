@@ -209,8 +209,12 @@ endif
 
 ifdef STRIPPED
     DEBUG :=
+    LDFLAGS += -Wl,--strip-all
+endif
+
+ifdef FUNCTION_SECTIONS
     CFLAGS += -ffunction-sections -fdata-sections
-    LDFLAGS += -Wl,--gc-sections -Wl,--strip-all
+    LDFLAGS += -Wl,--gc-sections
 endif
 
 .PHONY: all

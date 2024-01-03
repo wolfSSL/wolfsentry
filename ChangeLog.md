@@ -2,7 +2,7 @@
 
 <br>
 
-# wolfSentry Release 1.6.2 (December 29, 2023)
+# wolfSentry Release 1.6.2 (January 2, 2024)
 
 Release 1.6.2 of the wolfSentry embedded firewall/IDPS has enhancements,
 additions, and improvements including:
@@ -13,15 +13,23 @@ In scripts and Makefile, interpreters (`bash` and `awk`) now follow search `PATH
 
 Change type of length argument to `wolfsentry_action_res_assoc_by_name()` to `int`, to allow it to accept `WOLFSENTRY_LENGTH_NULL_TERMINATED` (negative number).
 
+Makefile option `STRIPPED` has been split into `STRIPPED` and `FUNCTION_SECTIONS`, the latter directing the compiler and linker to cull any unused object code (with function granularity) to minimize total size.
+
 ## Bug Fixes, Cleanups, and Debugging Aids
 
 In `handle_route_endpoint_clause()`, add casts to work around an implicit-promotion bug in gcc-7.5.
+
+In `wolfsentry_route_table_max_purgeable_idle_time_get()` and `_set()`, don't use atomic operations, as the context is already locked and the operand is an `int64_t`.  This avoids an inadvertent dependency on software __atomic_load_8() and __atomic_store_8() on 32 bit targets.
 
 Various fixes for benign `cppcheck` reports (`duplicateCondition`, `unsignedLessThanZero`, `unreadVariable`, `invalidPrintfArgType_uint`, `invalidPrintfArgType_sint`, `shadowFunction`, `constVariablePointer`, `preprocessorErrorDirective`).
 
 ## Self-Test Enhancements
 
 Add `replace_rule_transactionally()`, now used in `test_static_routes()` for a thorough workout.
+
+Enhance `freertos-arm32-build-test` target to do two builds, one with and one without `FUNCTION_SECTIONS`, for more thorough coverage.
+
+In `test_lwip()` (`tests/unittests.c`), pass a trivial JSON config to `activate_wolfsentry_lwip()`, to avoid compiler optimizing away `wolfsentry_config_json_oneshot()` and its dependencies.
 
 Split cppcheck-analyze recipe into cppcheck-library, cppcheck-force-library, cppcheck-extras, and cppcheck-force-extras, with increased coverage.  Only cppcheck-library and cppcheck-extras are included in the "check-all" dependency list.
 

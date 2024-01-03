@@ -758,8 +758,10 @@ static wolfsentry_errcode_t shutdown_wolfsentry_lwip(void)
 #ifdef FREERTOS
 
 static int test_lwip(const char *json_path) {
+    static const char *trivial_json = "{ \"wolfsentry-config-version\" : 1 }";
+
     (void)json_path;
-    WOLFSENTRY_EXIT_ON_FAILURE(activate_wolfsentry_lwip(NULL, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(activate_wolfsentry_lwip(trivial_json, -1));
     WOLFSENTRY_EXIT_ON_FAILURE(shutdown_wolfsentry_lwip());
     return 0;
 }

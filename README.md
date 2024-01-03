@@ -104,7 +104,9 @@ topic.
 
 | `make` Option | Macro Option | Description |
 | -------------- | ------------ | ----------- |
-| `V` | |  Verbose `make` output <br> e.g. `make V=1 -j test` |
+| `SHELL` | | Supplies an explicit/alternative path to `bash`. |
+| `AWK` | | Supplies an explicit/alternative path to Gnu `awk`. |
+| `V` | | Verbose `make` output <br> e.g. `make V=1 -j test` |
 | `USER_MAKE_CONF` | | User-defined make clauses to include at the top of the main Makefile <br> e.g. `make -j USER_MAKE_CONF=Makefile.settings` |
 | `EXTRA_CFLAGS` | | Additional arguments to be passed verbatim to the compiler |
 | `EXTRA_LDFLAGS` | | Additional arguments to be passed verbatim to the linker |
@@ -117,6 +119,7 @@ topic.
 | `C_WARNFLAGS` | | The warning flags to use (overriding the generally applicable defaults) |
 | `STATIC` | | Build statically linked unit tests |
 | `STRIPPED` | | Strip binaries of debugging symbols |
+| `FUNCTION_SECTIONS` | | Cull any unused object code (with function granularity) to minimize total size. |
 | `BUILD_DYNAMIC` | | Build dynamically linked library |
 | `VERY_QUIET` | | Inhibit all non-error output during build |
 | `TAR` | | Path to GNU tar binary for `make dist`, should be set to `gtar` for macOS |

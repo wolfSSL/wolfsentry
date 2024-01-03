@@ -2073,7 +2073,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_idle_ti
     wolfsentry_time_t *max_purgeable_idle_time)
 {
     WOLFSENTRY_HAVE_A_LOCK_OR_RETURN();
-    *max_purgeable_idle_time = WOLFSENTRY_ATOMIC_LOAD(table->max_purgeable_idle_time);
+    *max_purgeable_idle_time = table->max_purgeable_idle_time;
     WOLFSENTRY_RETURN_OK;
 }
 
@@ -2083,9 +2083,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_idle_ti
     wolfsentry_time_t max_purgeable_idle_time)
 {
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
-
-    WOLFSENTRY_ATOMIC_STORE(table->max_purgeable_idle_time, max_purgeable_idle_time);
-
+    table->max_purgeable_idle_time = max_purgeable_idle_time;
     WOLFSENTRY_RETURN_OK;
 }
 

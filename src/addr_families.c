@@ -323,7 +323,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_clone(
     if ((*new_bynumber = (struct wolfsentry_addr_family_bynumber *)WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, sizeof **new_bynumber)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if ((*new_byname = (struct wolfsentry_addr_family_byname *)WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, byname_size)) == NULL) {
-        (void)WOLFSENTRY_FREE_1(dest_context->hpi.allocator, new_byname);
+        (void)WOLFSENTRY_FREE_1(dest_context->hpi.allocator, (void *)new_byname);
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     }
     memcpy(*new_bynumber, src_bynumber, sizeof **new_bynumber);
@@ -501,7 +501,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             wolfsentry->addr_families_byname,
             family_name,
-            (int)family_name_len,
+            family_name_len,
             &addr_family);
         WOLFSENTRY_UNLOCK_FOR_RETURN();
         if (ret >= 0) {

@@ -268,26 +268,22 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
             return (type == JSON_VALUE_INT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
                    (type == JSON_VALUE_UINT32 && json_value_int32(v) >= 0)  ||
                    (type == JSON_VALUE_UINT64 && json_value_int32(v) >= 0);
-            break;
 
         case JSON_VALUE_UINT32:
             return (type == JSON_VALUE_INT64 || type == JSON_VALUE_UINT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
                    (type == JSON_VALUE_INT32 && json_value_uint32(v) <= INT32_MAX);
-            break;
 
         case JSON_VALUE_INT64:
             return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
                    (type == JSON_VALUE_INT32 && json_value_int64(v) >= INT32_MIN && json_value_int64(v) <= INT32_MAX)  ||
                    (type == JSON_VALUE_UINT32 && json_value_int64(v) >= 0 && json_value_int64(v) <= UINT32_MAX)  ||
                    (type == JSON_VALUE_UINT64 && json_value_int64(v) >= 0);
-            break;
 
         case JSON_VALUE_UINT64:
             return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
                    (type == JSON_VALUE_INT32 && json_value_uint64(v) <= INT32_MAX)  ||
                    (type == JSON_VALUE_UINT32 && json_value_uint64(v) <= UINT32_MAX)  ||
                    (type == JSON_VALUE_INT64 && json_value_uint64(v) <= INT64_MAX);
-            break;
 
         case JSON_VALUE_FLOAT:
             return (type == JSON_VALUE_DOUBLE)  ||
@@ -295,7 +291,6 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
                    (type == JSON_VALUE_UINT32 && json_value_float(v) == (float)json_value_uint32(v))  ||
                    (type == JSON_VALUE_INT64 && json_value_float(v) == (float)json_value_int64(v))  ||
                    (type == JSON_VALUE_UINT64 && json_value_float(v) == (float)json_value_uint64(v));
-            break;
 
         case JSON_VALUE_DOUBLE:
             return (type == JSON_VALUE_FLOAT)  ||
@@ -303,7 +298,6 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
                    (type == JSON_VALUE_UINT32 && json_value_double(v) == (double)json_value_uint32(v))  ||
                    (type == JSON_VALUE_INT64 && json_value_double(v) == (double)json_value_int64(v))  ||
                    (type == JSON_VALUE_UINT64 && json_value_double(v) == (double)json_value_uint64(v));
-            break;
 
         default:
             break;
@@ -695,7 +689,7 @@ json_value_int32(const JSON_VALUE* v)
     } ret;
 
     switch(json_value_type(v)) {
-        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (int32_t) ret.i32;
+        case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return ret.i32;
         case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (int32_t) ret.u32;
         case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (int32_t) ret.i64;
         case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (int32_t) ret.u64;
@@ -720,7 +714,7 @@ json_value_uint32(const JSON_VALUE* v)
 
     switch(json_value_type(v)) {
         case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (uint32_t) ret.i32;
-        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (uint32_t) ret.u32;
+        case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return ret.u32;
         case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (uint32_t) ret.i64;
         case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (uint32_t) ret.u64;
         case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(uint32_t, ret.f);
@@ -745,7 +739,7 @@ json_value_int64(const JSON_VALUE* v)
     switch(json_value_type(v)) {
         case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (int64_t) ret.i32;
         case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (int64_t) ret.u32;
-        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (int64_t) ret.i64;
+        case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return ret.i64;
         case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (int64_t) ret.u64;
         case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(int64_t, ret.f);
         case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(int64_t, ret.d);
@@ -770,7 +764,7 @@ json_value_uint64(const JSON_VALUE* v)
         case JSON_VALUE_INT32:     memcpy(&ret.i32, payload, sizeof(int32_t)); return (uint64_t) ret.i32;
         case JSON_VALUE_UINT32:    memcpy(&ret.u32, payload, sizeof(uint32_t)); return (uint64_t) ret.u32;
         case JSON_VALUE_INT64:     memcpy(&ret.i64, payload, sizeof(int64_t)); return (uint64_t) ret.i64;
-        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return (uint64_t) ret.u64;
+        case JSON_VALUE_UINT64:    memcpy(&ret.u64, payload, sizeof(uint64_t)); return ret.u64;
         case JSON_VALUE_FLOAT:     memcpy(&ret.f, payload, sizeof(float)); return ROUNDF(uint64_t, ret.f);
         case JSON_VALUE_DOUBLE:    memcpy(&ret.d, payload, sizeof(double)); return ROUNDD(uint64_t, ret.d);
         default:            return UINT64_MAX;
@@ -1367,7 +1361,7 @@ json_value_dict_get_or_add_(
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
-    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
+    DICT* d = json_value_dict_payload(v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
 #ifdef WOLFSENTRY_NO_ALLOCA
     RBTREE *path[RBTREE_MAX_HEIGHT];
@@ -1551,7 +1545,7 @@ json_value_dict_remove_(
 #endif
     JSON_VALUE* v, const unsigned char* key, size_t key_len)
 {
-    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
+    DICT* d = json_value_dict_payload(v);
     RBTREE* node = (d != NULL) ? d->root : NULL;
     RBTREE* single_child;
 #ifdef WOLFSENTRY_NO_ALLOCA
@@ -1775,7 +1769,7 @@ json_value_dict_clean(
 #endif
     JSON_VALUE* v)
 {
-    DICT* d = json_value_dict_payload((JSON_VALUE*) v);
+    DICT* d = json_value_dict_payload(v);
     RBTREE **stack;
     int stack_size;
     RBTREE* node;
@@ -1819,7 +1813,7 @@ json_value_dict_clean(
     else
         memset(d, 0, OFFSETOF(DICT, order_head));
 
-    free(stack);
+    free((void *)stack);
 
     return 0;
 }
@@ -1959,7 +1953,7 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                     stack_size += json_value_dict_leftmost_path(stack + stack_size, src_dict_node->right);
                 }
 
-                free(stack);
+                free((void *)stack);
 
                 break;
             }

@@ -4459,7 +4459,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                                   0 /* dom_flags */, &p_root, &json_pos)) < 0) {
             void *p = memchr((const char *)(test_json_document + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
             int linelen = p ? ((int)((unsigned char *)p - (test_json_document + json_pos.offset)) + (int)json_pos.column_number - 1) :
-                ((int)((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
+                (((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
                 fprintf(stderr, "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
             else
@@ -5034,7 +5034,7 @@ static int test_json_corpus(void) {
                                       dom_flags, &p_root, &json_pos)) < 0) {
                 void *p = memchr((const char *)(scenario + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
                 int linelen = p ? ((int)((unsigned char *)p - (scenario + json_pos.offset)) + (int)json_pos.column_number - 1) :
-                    ((int)((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
+                    (((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
                 if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
                     fprintf(stderr, "%s/%s: json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", corpus_path, scenario_ent->d_name, json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
                 else

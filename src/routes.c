@@ -795,7 +795,7 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if ((unsigned)data_addr_offset > MAX_UINT_OF(uint16_t))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
-    if (new_size < offsetof(struct wolfsentry_route, data) + (size_t)data_addr_offset + WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len) + WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len))
+    if (new_size < offsetof(struct wolfsentry_route, data) + data_addr_offset + WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len) + WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len))
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
     if (! (route_exports->flags & (WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN | WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT)))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -863,10 +863,10 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
     if (data_addr_offset > 0) {
         if (route_exports->private_data != NULL) {
             memcpy(new->data, route_exports->private_data, route_exports->private_data_size); /* copy private data. */
-            if ((size_t)data_addr_offset > route_exports->private_data_size)
+            if (data_addr_offset > route_exports->private_data_size)
                 memset((byte *)new->data + route_exports->private_data_size, 0, data_addr_offset - route_exports->private_data_size); /* zero the leftovers. */
         } else
-            memset(new->data, 0, (size_t)data_addr_offset); /* zero private data. */
+            memset(new->data, 0, data_addr_offset); /* zero private data. */
     }
 
     new->meta.purge_after = route_exports->meta.purge_after;
@@ -2108,7 +2108,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_reference(
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event)) < 0)
             WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
-    ret = wolfsentry_route_lookup_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, remote, local, flags, event, exact_p, inexact_matches, (struct wolfsentry_route **)route, NULL /* action_results */);
+    ret = wolfsentry_route_lookup_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, remote, local, flags, event, exact_p, inexact_matches, route, NULL /* action_results */);
     if (event != NULL)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
     WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
@@ -3921,7 +3921,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
             ret = wolfsentry_addr_family_ntop(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, &addr_family, &family_name);
             if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
                 size_t family_name_len = strlen(family_name);
-                if (family_name_len + 2 > (size_t)*json_out_len)
+                if (family_name_len + 2 > *json_out_len)
                     ret = WOLFSENTRY_ERROR_ENCODE(BUFFER_TOO_SMALL);
                 else {
                     write_byte('"');

@@ -43,7 +43,7 @@
     /*!< \brief Evaluates to a dummy instance of `element` in `structure`, e.g. to be passed to MAX_UINT_OF().  @hideinitializer */
 #endif
 #ifndef container_of
-#define container_of(ptr, container_type, member_name) ((container_type *)(void *)(((byte *)(ptr)) - offsetof(container_type, member_name)))
+#define container_of(ptr, container_type, member_name) ((container_type *)(void *)(((byte *)(ptr)) - offsetof(container_type, member_name))) /* NOLINT(bugprone-casting-through-void) */
     /*!< \brief Evaluates to a pointer to the struct of type `container_type` within which `ptr` points to the member named `member_name`.  @hideinitializer */
 #endif
 #ifndef length_of_array

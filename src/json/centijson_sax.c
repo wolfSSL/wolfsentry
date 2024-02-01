@@ -536,12 +536,12 @@ json_string_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
     size_t off = 0;
 
     if(type == JSON_KEY) {
-        ignore_ill_utf8 = (parser->config.flags & JSON_IGNOREILLUTF8KEY);
-        fix_ill_utf8 = (parser->config.flags & JSON_FIXILLUTF8KEY);
+        ignore_ill_utf8 = ((parser->config.flags & JSON_IGNOREILLUTF8KEY) != 0);
+        fix_ill_utf8 = ((parser->config.flags & JSON_FIXILLUTF8KEY) != 0);
         max_len = parser->config.max_key_len;
     } else {
-        ignore_ill_utf8 = (parser->config.flags & JSON_IGNOREILLUTF8VALUE);
-        fix_ill_utf8 = (parser->config.flags & JSON_FIXILLUTF8VALUE);
+        ignore_ill_utf8 = ((parser->config.flags & JSON_IGNOREILLUTF8VALUE) != 0);
+        fix_ill_utf8 = ((parser->config.flags & JSON_FIXILLUTF8VALUE) != 0);
         max_len = parser->config.max_string_len;
     }
 
@@ -622,19 +622,19 @@ json_string_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
                  */
                 if(IS_IN(ch, 0xc2, 0xdf)) {
                     parser->substate = 1;
-                } else if((unsigned char) ch == 0xe0) {
+                } else if(ch == 0xe0) {
                     parser->substate = 4;
                 } else if(IS_IN(ch, 0xe1, 0xec)) {
                     parser->substate = 2;
-                } else if((unsigned char) ch == 0xed) {
+                } else if(ch == 0xed) {
                     parser->substate = 5;
                 } else if(IS_IN(ch, 0xee, 0xef)) {
                     parser->substate = 2;
-                } else if((unsigned char) ch == 0xf0) {
+                } else if(ch == 0xf0) {
                     parser->substate = 6;
                 } else if(IS_IN(ch, 0xf1, 0xf3)) {
                     parser->substate = 3;
-                } else if((unsigned char) ch == 0xf4) {
+                } else if(ch == 0xf4) {
                     parser->substate = 7;
                 } else if(fix_ill_utf8) {
                     if(json_buf_append(parser, fffd, fffd_size) < 0)
@@ -651,7 +651,7 @@ json_string_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
             }
         } else if(parser->substate <= 7) {
             /* Should be trailing UTF-8 byte. */
-            if(parser->substate <= 3  &&  ((unsigned char)(ch) & 0xc0) == 0x80) {
+            if(parser->substate <= 3  &&  (ch & 0xc0) == 0x80) {
                 parser->substate--;
             } else if(parser->substate == 4  &&  IS_IN(ch, 0xa0, 0xbf)) {
                 parser->substate = 1;
@@ -679,7 +679,7 @@ json_string_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
                  * I.e. we have to go back to the previous leading byte
                  * (including it).
                  */
-                while(((unsigned char)(parser->buf[parser->buf_used-1]) & 0xc0) == 0x80)
+                while((parser->buf[parser->buf_used-1] & 0xc0) == 0x80)
                     parser->buf_used--; /* Cancel all the trailing bytes. */
                 parser->buf_used--;     /* Cancel the leading byte. */
                 if(json_buf_append(parser, fffd, fffd_size) < 0)

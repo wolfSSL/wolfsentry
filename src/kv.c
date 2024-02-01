@@ -211,7 +211,6 @@ static inline int wolfsentry_kv_value_eq_1(struct wolfsentry_kv_pair *a, struct 
     default:
         return 0;
     }
-    return 0;
 }
 
 /* same as wolfsentry_kv_insert unless key already exists.  if it does and

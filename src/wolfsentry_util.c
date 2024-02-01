@@ -1497,19 +1497,19 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
     lock->read2write_reservation_holder = WOLFSENTRY_THREAD_NO_ID;
     lock->hpi = hpi;
 
-    if (sem_init(&lock->sem, flags & WOLFSENTRY_LOCK_FLAG_PSHARED, 0 /* value */) < 0)
+    if (sem_init(&lock->sem, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     if (sem_post(&lock->sem) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-    if (sem_init(&lock->sem_read_waiters, flags & WOLFSENTRY_LOCK_FLAG_PSHARED, 0 /* value */) < 0) {
+    if (sem_init(&lock->sem_read_waiters, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0) {
         ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
         goto free_sem;
     }
-    if (sem_init(&lock->sem_write_waiters, flags & WOLFSENTRY_LOCK_FLAG_PSHARED, 0 /* value */) < 0) {
+    if (sem_init(&lock->sem_write_waiters, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0) {
         ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
         goto free_read_waiters;
     }
-    if (sem_init(&lock->sem_read2write_waiters, flags & WOLFSENTRY_LOCK_FLAG_PSHARED, 0 /* value */) < 0) {
+    if (sem_init(&lock->sem_read2write_waiters, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0) {
         ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
         goto free_write_waiters;
     }
@@ -1519,13 +1519,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
     goto out;
 
   free_write_waiters:
-    if (sem_init(&lock->sem_write_waiters, flags & WOLFSENTRY_LOCK_FLAG_PSHARED, 0 /* value */) < 0)
+    if (sem_init(&lock->sem_write_waiters, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
   free_read_waiters:
-    if (sem_init(&lock->sem_read_waiters, flags & WOLFSENTRY_LOCK_FLAG_PSHARED, 0 /* value */) < 0)
+    if (sem_init(&lock->sem_read_waiters, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
   free_sem:
-    if (sem_init(&lock->sem, flags & WOLFSENTRY_LOCK_FLAG_PSHARED, 1 /* value */) < 0)
+    if (sem_init(&lock->sem, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 1 /* value */) < 0)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
 
   out:

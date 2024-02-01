@@ -270,7 +270,7 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
 
             if(new_path_alloc == 0)
                 new_path_alloc = 32;
-            new_path = (JSON_VALUE**) realloc(dom_parser->path, new_path_alloc * sizeof(JSON_VALUE*));
+            new_path = (JSON_VALUE**) realloc((void *)dom_parser->path, new_path_alloc * sizeof(JSON_VALUE*));
             if(new_path == NULL)
                 return JSON_ERR_OUTOFMEMORY;
 
@@ -360,7 +360,7 @@ int json_dom_clean(JSON_DOM_PARSER* dom_parser) {
     if (ret < 0)
         return ret;
 
-    free(dom_parser->path);
+    free((void *)dom_parser->path);
     dom_parser->path = NULL;
 
     dom_parser->flags &= ~JSON_DOM_FLAG_INITED;
@@ -605,9 +605,9 @@ json_dom_dump_helper(
             if(n > 0) {
                 size_t keys_size;
 #ifdef WOLFSENTRY
-                keys = json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), sizeof(JSON_VALUE*) * n);
+                keys = (const JSON_VALUE**)json_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), sizeof(JSON_VALUE*) * n);
 #else
-                keys = malloc(sizeof(JSON_VALUE*) * n);
+                keys = (const JSON_VALUE**)malloc(sizeof(JSON_VALUE*) * n);
 #endif
                 if(keys == NULL)
                     return JSON_ERR_OUTOFMEMORY;
@@ -658,9 +658,9 @@ json_dom_dump_helper(
                 }
 
 #ifdef WOLFSENTRY
-                json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), keys);
+                json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), (void *)keys);
 #else
-                free(keys);
+                free((void *)keys);
 #endif
                 if(ret < 0)
                     return ret;

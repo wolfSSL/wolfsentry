@@ -749,7 +749,8 @@ static wolfsentry_errcode_t convert_sockaddr_address(
 static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_process_state *jps, const unsigned char *data, size_t data_size, struct wolfsentry_sockaddr *sa) {
     char d_buf[64];
     char get_buf[256];
-    char p_name_buf[16], *p_name;
+    char p_name_buf[16];
+    const char *p_name;
     struct protoent protoent, *p;
     struct servent servent, *s;
 

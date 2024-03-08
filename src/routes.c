@@ -1759,7 +1759,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
      * table->last_af_wildcard_route, or end early if it's null.
      */
     if (! (target_route->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)) {
-        struct wolfsentry_route *point = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
+        const struct wolfsentry_route *point = (const struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
         if ((point == NULL) ||
             ((point->sa_family != target_route->sa_family) &&
              ((point->header.prev == NULL) ||
@@ -2991,7 +2991,7 @@ WOLFSENTRY_LOCAL_VOID wolfsentry_route_purge_list_insert(struct wolfsentry_route
     struct wolfsentry_list_ent_header *point_ent;
 
     for (wolfsentry_list_ent_get_first(&route_table->purge_list, &point_ent); point_ent; point_ent = point_ent->next) {
-        struct wolfsentry_route *point_route = WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(point_ent);
+        const struct wolfsentry_route *point_route = WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(point_ent);
         if (point_route->meta.purge_after < route_to_insert->meta.purge_after)
             break;
     }

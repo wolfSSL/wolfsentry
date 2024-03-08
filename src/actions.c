@@ -554,7 +554,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_action_list_ent *i;
-    struct wolfsentry_action_list *w_a_l = NULL;
+    const struct wolfsentry_action_list *w_a_l = NULL;
 
     if (action_results == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);

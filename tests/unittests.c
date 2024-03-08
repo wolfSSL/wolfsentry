@@ -1628,7 +1628,8 @@ static int test_static_routes(void) {
     }
 
     {
-        byte *i, *i_end;
+        byte *i;
+        const byte *i_end;
         for (i = private_data, i_end = private_data + private_data_size; i < i_end; ++i)
             *i = 'x';
     }

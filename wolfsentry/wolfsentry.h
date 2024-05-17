@@ -678,12 +678,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_either(struct wolfsentr
    \param thread pointer to the `wolfsentry_thread_context`
    \param flags optional `wolfsentry_lock_flags_t`
 
-   \return When decoded using WOLFSENTRY_ERROR_DECODE_ERROR_CODE(), WOLFSENTRY_ERROR_ID_OK if
-   it is shared lock. Or WOLFSENTRY_ERROR_ID_NOT_OK if it is not a shared lock.
+   \return When decoded using WOLFSENTRY_ERROR_DECODE_ERROR_CODE(),
+   WOLFSENTRY_ERROR_ID_OK if the supplied thread has a reservation on the lock. Or
+   WOLFSENTRY_ERROR_ID_NOT_OK if no reservation is held.
 
    \sa WOLFSENTRY_ERROR_DECODE_ERROR_CODE
 */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservation(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
+/*!
+   \brief Check if any thread holds an upgrade reservation on the lock
+
+   \param lock a pointer to the lock
+   \param thread pointer to the `wolfsentry_thread_context`
+   \param flags optional `wolfsentry_lock_flags_t`
+
+   \return When decoded using WOLFSENTRY_ERROR_DECODE_ERROR_CODE(), WOLFSENTRY_SUCCESS_ID_YES if
+   a reservation is held by some thread, or WOLFSENTRY_SUCCESS_ID_NO if not.
+
+   \sa WOLFSENTRY_ERROR_DECODE_ERROR_CODE
+*/
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_is_reserved(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags);
 /*!
    \brief Extract the current flags from the lock
 

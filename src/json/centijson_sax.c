@@ -759,7 +759,7 @@ json_string_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
                     /* parser->codepoint[0] & [1] form valid surrogate pair. */
                     uint32_t hi = parser->codepoint[0];
                     uint32_t lo = parser->codepoint[1];
-                    uint32_t codepoint = 0x10000 + (hi - 0xd800) * 0x400 + (lo - 0xdc00);
+                    uint32_t codepoint = 0x10000 + ((hi - 0xd800) * 0x400) + (lo - 0xdc00);
                     if(json_buf_append_codepoint(parser, codepoint) < 0)
                         break;
                     parser->substate = 0;

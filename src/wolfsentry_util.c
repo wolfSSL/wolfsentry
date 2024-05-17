@@ -3025,6 +3025,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_have_shared2mutex_reservatio
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
 }
 
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_is_reserved(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t flags) {
+    (void)flags;
+    WOLFSENTRY_LOCK_ASSERT_INITED(lock);
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
+    if (WOLFSENTRY_ATOMIC_LOAD(lock->read2write_reservation_holder) == WOLFSENTRY_THREAD_NO_ID)
+        WOLFSENTRY_SUCCESS_RETURN(NO);
+    else
+        WOLFSENTRY_SUCCESS_RETURN(YES);
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_get_flags(struct wolfsentry_rwlock *lock, struct wolfsentry_thread_context *thread, wolfsentry_lock_flags_t *flags) {
     (void)thread;
     WOLFSENTRY_LOCK_ASSERT_INITED(lock);

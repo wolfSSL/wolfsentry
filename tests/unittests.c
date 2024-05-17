@@ -453,25 +453,25 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t load_test_action_handlers
 static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const char *fname, wolfsentry_config_load_flags_t flags, int verbose) {
     wolfsentry_errcode_t ret;
     struct wolfsentry_json_process_state *jps;
-    FILE *f;
+    FILE *f = NULL;
     unsigned char buf[512];
     char err_buf[512];
     int fini_ret;
 
-    if (strcmp(fname,"-"))
+    if (strcmp(fname,"-")) {
         f = fopen(fname, "r");
-    else
-        f = stdin;
-    if (! f) {
-        fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
-        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        if (! f) {
+            fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        }
     }
 
     ret = wolfsentry_config_json_init(WOLFSENTRY_CONTEXT_ARGS_OUT, flags, &jps);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    if (ret < 0)
+        goto out;
 
     for (;;) {
-        size_t n = fread(buf, 1, sizeof buf, f);
+        size_t n = fread(buf, 1, sizeof buf, f ? f : stdin);
         if ((n < sizeof buf) && ferror(f)) {
             fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
             ret = WOLFSENTRY_ERROR_ENCODE(UNIT_TEST_FAILURE);
@@ -500,7 +500,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
     if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
-    if (f != stdin)
+    if (f)
         fclose(f);
 
     if ((ret < 0) && verbose)
@@ -1167,6 +1167,9 @@ usleep(10000);
 
     WAIT_FOR_PHASE(thread3_args, 1);
 
+    while (WOLFSENTRY_SUCCESS_CODE_IS(wolfsentry_lock_shared2mutex_is_reserved(lock, thread, 0), NO))
+        usleep(10000);
+
     /* this one must fail, because at this point thread2 must be in shared2mutex wait. */
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUSY, wolfsentry_lock_shared2mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
@@ -1630,7 +1633,7 @@ static int test_static_routes(void) {
     {
         byte *i;
         const byte *i_end;
-        for (i = private_data, i_end = private_data + private_data_size; i < i_end; ++i)
+        for (i = private_data, i_end = (private_data + private_data_size); i < i_end; ++i)
             *i = 'x';
     }
 
@@ -4921,6 +4924,7 @@ static int test_json_corpus(void) {
         JSON_VALUE p_root, p_clone;
         JSON_INPUT_POS json_pos;
         DIR *corpus_dir;
+        int corpus_dirfd;
         struct dirent *scenario_ent;
         int scenario_fd;
         struct stat st;
@@ -5004,6 +5008,12 @@ static int test_json_corpus(void) {
             ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
             break;
         }
+        corpus_dirfd = dirfd(corpus_dir);
+        if (corpus_dirfd < 0) {
+            perror(corpus_path);
+            ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
+            break;
+        }
 
         json_value_init_null(&p_root);
         json_value_init_null(&p_clone);
@@ -5014,7 +5024,7 @@ static int test_json_corpus(void) {
                 continue;
             if (strcmp(scenario_ent->d_name + strlen(scenario_ent->d_name) - strlen(".json"), ".json") != 0)
                 continue;
-            scenario_fd = openat(dirfd(corpus_dir), scenario_ent->d_name, O_RDONLY);
+            scenario_fd = openat(corpus_dirfd, scenario_ent->d_name, O_RDONLY);
             if (scenario_fd < 0) {
                 perror(scenario_ent->d_name);
                 continue;

@@ -56,7 +56,7 @@ static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label
     if (label_len <= 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (event_size < sizeof *event + (size_t)label_len + 1)
+    if (event_size < offsetof(struct wolfsentry_event, label) + (size_t)label_len + 1)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     memset(&event->header, 0, sizeof event->header);
@@ -134,7 +134,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_clone_bare(
     struct wolfsentry_table_ent_header ** const new_ent,
     wolfsentry_clone_flags_t flags)
 {
-    struct wolfsentry_event * const src_event = (struct wolfsentry_event * const)src_ent;
+    const struct wolfsentry_event * const src_event = (const struct wolfsentry_event * const)src_ent;
     struct wolfsentry_event ** const new_event = (struct wolfsentry_event ** const)new_ent;
     size_t new_size = sizeof *src_event + (size_t)(src_event->label_len) + 1;
 
@@ -316,11 +316,12 @@ WOLFSENTRY_API const struct wolfsentry_event *wolfsentry_event_get_aux_event(con
 
 static wolfsentry_errcode_t wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, struct wolfsentry_event **event) {
     wolfsentry_errcode_t ret;
-    struct {
-        struct wolfsentry_event event;
-        byte buf[WOLFSENTRY_MAX_LABEL_BYTES];
-    } target;
-    struct wolfsentry_event *event_1 = &target.event;
+    WOLFSENTRY_STACKBUF(
+        struct wolfsentry_event,
+        label,
+        WOLFSENTRY_MAX_LABEL_BYTES,
+        target);
+    struct wolfsentry_event *event_1 = &target.target;
 
     if (label_len == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -329,7 +330,7 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_IN, c
     if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
 
-    ret = wolfsentry_event_init_1(label, label_len, 0, NULL, &target.event, sizeof target);
+    ret = wolfsentry_event_init_1(label, label_len, 0, NULL, &target.target, sizeof target);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     ret = wolfsentry_table_ent_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->events->header, (struct wolfsentry_table_ent_header **)&event_1);

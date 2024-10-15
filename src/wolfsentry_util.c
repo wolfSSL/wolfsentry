@@ -4056,7 +4056,7 @@ WOLFSENTRY_API wolfsentry_hitcount_t wolfsentry_table_n_deletes(struct wolfsentr
     WOLFSENTRY_RETURN_VALUE(table->n_deletes);
 }
 
-static const char base64_inv_lut[0x100] =
+static const char base64_inv_lut[0x101] =
     /* ^@-\x1f */ "||||||||||||||||||||||||||||||||"
     /* \ -* */ "|||||||||||"
     /* + */ "\x3e"

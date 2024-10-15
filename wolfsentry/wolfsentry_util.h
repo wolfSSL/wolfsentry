@@ -117,6 +117,20 @@
 #define WOLFSENTRY_CLEAR_ALL_BITS(enumint) ((enumint) = 0)
    /*!< \brief Clears all bits in `enumint`.  @hideinitializer */
 
+#if defined(__STRICT_ANSI__) || defined(WOLFSENTRY_PEDANTIC_C) || \
+    ((WOLFSENTRY_FLEXIBLE_ARRAY_SIZE + 0) > 0)
+    #define WOLFSENTRY_STACKBUF_MINBUF 1
+#else
+    #define WOLFSENTRY_STACKBUF_MINBUF 0
+#endif
+
+#define WOLFSENTRY_STACKBUF(type, flex_slot, buf_size, buf_name) struct {  \
+        type buf_name;                                                     \
+        byte buf[(buf_size) > (sizeof(type) - offsetof(type, flex_slot)) ? \
+                 (buf_size) - (sizeof(type) - offsetof(type, flex_slot)) : \
+                 WOLFSENTRY_STACKBUF_MINBUF];                              \
+    } buf_name
+
 #ifndef BITS_PER_BYTE
 #define BITS_PER_BYTE 8
 #endif

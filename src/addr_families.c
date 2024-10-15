@@ -264,10 +264,11 @@ static wolfsentry_errcode_t wolfsentry_addr_family_get_byname_1(
     struct wolfsentry_addr_family_bynumber **addr_family)
 {
     wolfsentry_errcode_t ret;
-    struct {
-        struct wolfsentry_addr_family_byname target;
-        byte buf[WOLFSENTRY_MAX_LABEL_BYTES];
-    } target;
+    WOLFSENTRY_STACKBUF(
+        struct wolfsentry_addr_family_byname,
+        name,
+        WOLFSENTRY_MAX_LABEL_BYTES,
+        target);
 
     struct wolfsentry_addr_family_byname *addr_family_1 = &target.target;
 

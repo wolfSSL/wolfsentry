@@ -1902,9 +1902,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
         WOLFSENTRY_SET_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI);
         if (err_buf) {
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(jps->fini_ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, line %u, col %u, with centijson code " WOLFSENTRY_ERRCODE_FMT ": %s", (int)json_pos.offset, json_pos.line_number, json_pos.column_number, (int)jps->fini_ret, json_error_str(jps->fini_ret));
+                ret = snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, line %u, col %u, with centijson code " WOLFSENTRY_ERRCODE_FMT ": %s", (int)json_pos.offset, json_pos.line_number, json_pos.column_number, (int)jps->fini_ret, json_error_str(jps->fini_ret));
             else
-                snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, line %u, col %u, with " WOLFSENTRY_ERROR_FMT, (int)json_pos.offset, json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
+                ret = snprintf(err_buf, err_buf_size, "json_feed failed at offset %d, line %u, col %u, with " WOLFSENTRY_ERROR_FMT, (int)json_pos.offset, json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(jps->fini_ret));
+            if (ret >= (int)err_buf_size)
+                err_buf[err_buf_size - 1] = 0;
         }
         WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(jps->fini_ret));
     }
@@ -1941,9 +1943,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
     } else {
         (*jps)->fini_ret = json_fini(&(*jps)->parser, &json_pos);
         if ((*jps)->fini_ret < 0) {
-            if (err_buf != NULL)
-                snprintf(err_buf, err_buf_size, "json_fini failed at offset %d, line %u, col %u, with code " WOLFSENTRY_ERRCODE_FMT ": %s.",
-                         (int)json_pos.offset,json_pos.line_number, json_pos.column_number, (int)(*jps)->fini_ret, json_error_str((*jps)->fini_ret));
+            if (err_buf != NULL) {
+                if (snprintf(err_buf, err_buf_size, "json_fini failed at offset %d, line %u, col %u, with code " WOLFSENTRY_ERRCODE_FMT ": %s.",
+                             (int)json_pos.offset,json_pos.line_number, json_pos.column_number, (int)(*jps)->fini_ret, json_error_str((*jps)->fini_ret))
+                    >= (int)err_buf_size)
+                {
+                    err_buf[err_buf_size - 1] = 0;
+                }
+            }
             ret = wolfsentry_centijson_errcode_translate((*jps)->fini_ret);
             goto out;
         }

@@ -33,7 +33,7 @@ endif
 # lock in the expected major versions of LLVM/clang/compiler-rt-sanitizers, in
 # order of preference:
 ifndef CLANG_PATH
-	CLANG_PATH:=/usr/lib/llvm/19/bin:/usr/lib/llvm/18/bin:/usr/lib/llvm-18:/usr/lib/llvm/17/bin:/usr/lib/llvm-17:/usr/lib/llvm/16/bin:/usr/lib/llvm-16:/usr/lib/llvm/15/bin:/usr/lib/llvm-15:/usr/lib/llvm/14/bin:/usr/lib/llvm-14:/opt/homebrew/opt/llvm/bin
+	CLANG_PATH:=/usr/lib/llvm/20/bin:/usr/lib/llvm/19/bin:/usr/lib/llvm/18/bin:/usr/lib/llvm-18:/usr/lib/llvm/17/bin:/usr/lib/llvm-17:/usr/lib/llvm/16/bin:/usr/lib/llvm-16:/usr/lib/llvm/15/bin:/usr/lib/llvm-15:/usr/lib/llvm/14/bin:/usr/lib/llvm-14:/opt/homebrew/opt/llvm/bin
 endif
 
 valgrind-all-clang: PATH:=$(CLANG_PATH):$(PATH)
@@ -233,7 +233,7 @@ clang-tidy-build-test:
 
 CPPCHECK := cppcheck
 
-CPPCHECK_COMMON_ARGS = --error-exitcode=2 --inline-suppr -j $$(($$(nproc) / 2)) $(QUIET_FLAG) --std=c99 -D__STDC__ -D__STDC_VERSION__=199901L -U__STRICT_ANSI__ -UFP_NAN -UFP_INFINITE -UFP_ZERO -UFP_SUBNORMAL -UFP_NORMAL -USIZE_T_32 -DWOLFSENTRY_CPPCHECK --suppress=legacyUninitvar --suppress=constParameterPointer  --suppress=constParameterCallback --suppress=unusedStructMember --suppress=variableScope --suppress=knownConditionTrueFalse --suppress=knownArgument --suppress=syntaxError:/usr/\* --suppress=unknownMacro:/usr/\* -I. -I/usr/include -I"$(shell $(CC) -print-file-name=include)" -I"$(LWIP_TOP_FOR_TEST)/src/include" -I"$(SRC_TOP)/ports/Linux-lwIP/include" -UWOLFSENTRY_SEMAPHORE_INCLUDE -UWOLFSENTRY_THREAD_INCLUDE
+CPPCHECK_COMMON_ARGS = --error-exitcode=2 --check-level=exhaustive --inline-suppr -j $$(($$(nproc) / 2)) $(QUIET_FLAG) --std=c99 -D__STDC__ -D__STDC_VERSION__=199901L -U__STRICT_ANSI__ -UFP_NAN -UFP_INFINITE -UFP_ZERO -UFP_SUBNORMAL -UFP_NORMAL -USIZE_T_32 -DWOLFSENTRY_CPPCHECK --suppress=legacyUninitvar --suppress=constParameterPointer  --suppress=constParameterCallback --suppress=unusedStructMember --suppress=variableScope --suppress=knownConditionTrueFalse --suppress=knownArgument --suppress=syntaxError:/usr/\* --suppress=unknownMacro:/usr/\* -I. -I/usr/include -I"$(shell $(CC) -print-file-name=include)" -I"$(LWIP_TOP_FOR_TEST)/src/include" -I"$(SRC_TOP)/ports/Linux-lwIP/include" -UWOLFSENTRY_SEMAPHORE_INCLUDE -UWOLFSENTRY_THREAD_INCLUDE
 
 .PHONY: cppcheck-library
 cppcheck-library:
@@ -300,28 +300,53 @@ c99-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c99-builds" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c99-builds" EXTRA_CFLAGS+='-std=c99 -pedantic' SINGLETHREADED=1
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c99-builds" clean
-	@echo "passed: std=c99 library build tests."
+	@echo "passed: std=c99 tests."
 
 .PHONY: c89-test
 c89-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c89-builds" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c89-builds" EXTRA_CFLAGS+='-std=c89 -pedantic -DWOLFSENTRY_C89 -Wno-variadic-macros -Wno-overlength-strings' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c89-builds" clean
-	@echo "passed: std=c89 library build tests."
+	@echo "passed: std=c89 tests."
+
+.PHONY: c23-test
+c23-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c23-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c23-builds" CC=gcc-15 EXTRA_CFLAGS+='-std=c23 -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE=1 -pedantic -Wno-overlength-strings -Wno-unterminated-string-initialization' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c23-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c23-builds" CC=clang EXTRA_CFLAGS+='-std=c23 -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE=1 -pedantic -Wno-overlength-strings' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c23-builds" clean
+	@echo "passed: std=c23 tests."
 
 .PHONY: m32-test
 m32-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-builds" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-builds" EXTRA_CFLAGS+='-m32' EXTRA_LDFLAGS+=-m32 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-builds" clean
-	@echo "passed: -m32 test."
+	@echo "passed: m32 test."
 
 .PHONY: m32-c89-test
 m32-c89-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c89-builds" clean
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c89-builds" EXTRA_CFLAGS+='-m32 -std=c89 -pedantic -DWOLFSENTRY_C89 -Wno-variadic-macros -Wno-overlength-strings' EXTRA_LDFLAGS+=-m32 test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c89-builds" clean
-	@echo "passed: -m32-c89 test."
+	@echo "passed: m32-c89 test."
+
+.PHONY: m32-c23-test
+m32-c23-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c23-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c23-builds" CC=gcc-15 EXTRA_CFLAGS+='-m32 -std=c23 -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE=1 -pedantic -Wno-overlength-strings -Wno-unterminated-string-initialization' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c23-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c23-builds" CC=clang EXTRA_CFLAGS+='-m32 -std=c23 -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE=1 -pedantic -Wno-overlength-strings' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-m32-c23-builds" clean
+	@echo "passed: m32-c23 tests."
+
+.PHONY: fortify-source-test
+fortify-source-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-fortify-source-builds" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-fortify-source-builds" EXTRA_CFLAGS+='-flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Werror=format-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -fstack-protector-strong -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -pedantic -DWOLFSENTRY_PEDANTIC_C -Wno-overlength-strings -Wno-unterminated-string-initialization -Wno-inline' EXTRA_LDFLAGS='-Wl,-z,relro -Wl,--as-needed  -Wl,-z,pack-relative-relocs -Wl,-z,now -Wl,--build-id=sha1 ' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-fortify-source-builds" clean
+	@echo "passed: fortify-source tests."
 
 .PHONY: CALL_TRACE-test
 CALL_TRACE-test:
@@ -541,6 +566,24 @@ else
     LWIP_TOP_FOR_TEST := $(SRC_TOP)/../third/lwip
 endif
 
+.PHONY: freertos-arm32-thumb-build-test
+freertos-arm32-thumb-build-test:
+	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
+	@[ -d $(LWIP_TOP_FOR_TEST)/. ] || ( echo '$@: $(LWIP_TOP_FOR_TEST) not found.' >&2; exit 1)
+	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
+	@rm -rf "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds"
+#	first build without FUNCTION_SECTIONS=1 to detect any bloat or unresolved symbols anywhere in the library.
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 230000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-thumb-test-builds/tests/{freertos,lwip}
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
+#	now rebuild with FUNCTION_SECTIONS=1, to test expected text size on a parsimonious link.
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1 FUNCTION_SECTIONS=1
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 100000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-thumb-test-builds/tests/{freertos,lwip}
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
+	@echo "passed: freertos-arm32-thumb-build test."
+
 .PHONY: freertos-arm32-build-test
 freertos-arm32-build-test:
 	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
@@ -548,15 +591,15 @@ freertos-arm32-build-test:
 	@command -v arm-none-eabi-gcc >/dev/null || ( echo '$@: arm-none-eabi-gcc not found.' >&2; exit 1)
 	@rm -rf "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds"
 #	first build without FUNCTION_SECTIONS=1 to detect any bloat or unresolved symbols anywhere in the library.
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1
 	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 230000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-test-builds/tests/{freertos,lwip}
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3' UNITTEST_LIST=test_lwip clean
 #	now rebuild with FUNCTION_SECTIONS=1, to test expected text size on a parsimonious link.
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1 FUNCTION_SECTIONS=1
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1 FUNCTION_SECTIONS=1
 	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 100000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-test-builds/tests/{freertos,lwip}
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-build test."
 
 .PHONY: freertos-arm32-singlethreaded-build-test
@@ -782,7 +825,7 @@ doc-check:
 check: dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-streams-build-test minimal-build-test minimal-threaded-build-test user-settings-build-test short-enums-test no-addr-bitmask-matching-test no-ipv6-test
 
 .PHONY: check-extra
-check-extra: library-dependency-singlethreaded-build-test library-dependency-multithreaded-build-test pahole-test route-holes-test static-build-test c89-test no-inline-test m32-test m32-c89-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-test-no-ipv6 linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test
+check-extra: library-dependency-singlethreaded-build-test library-dependency-multithreaded-build-test pahole-test route-holes-test static-build-test c89-test c23-test no-inline-test m32-test m32-c89-test m32-c23-test fortify-source-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-thumb-build-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-test-no-ipv6 linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

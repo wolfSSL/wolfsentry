@@ -52,7 +52,7 @@ static wolfsentry_errcode_t wolfsentry_action_init_1(const char *label, int labe
     if (label_len <= 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
-    if (action_size < sizeof *action + (size_t)label_len + 1)
+    if (action_size < offsetof(struct wolfsentry_action, label) + (size_t)label_len + 1)
         WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
 
     memset(&action->header, 0, sizeof action->header);
@@ -107,7 +107,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_clone(
     struct wolfsentry_table_ent_header **new_ent,
     wolfsentry_clone_flags_t flags)
 {
-    struct wolfsentry_action * const src_action = (struct wolfsentry_action * const)src_ent;
+    const struct wolfsentry_action * const src_action = (const struct wolfsentry_action * const)src_ent;
     struct wolfsentry_action ** const new_action = (struct wolfsentry_action ** const)new_ent;
     size_t new_size = sizeof *src_action + (size_t)(src_action->label_len) + 1;
 
@@ -178,11 +178,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_insert(
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, wolfsentry_action_res_t *action_results) {
     wolfsentry_errcode_t ret;
-    struct {
-        struct wolfsentry_action action;
-        byte buf[WOLFSENTRY_MAX_LABEL_BYTES+1];
-    } target;
-    struct wolfsentry_action *target_p = &target.action;
+    WOLFSENTRY_STACKBUF(
+        struct wolfsentry_action,
+        label,
+        WOLFSENTRY_MAX_LABEL_BYTES+1,
+        target);
+    struct wolfsentry_action *target_p = &target.target;
 
     if ((label_len == 0) || (label == NULL))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -195,12 +196,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_delete(WOLFSENTRY_CONTEXT_
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     }
 
-    ret = wolfsentry_action_init_1(label, label_len, WOLFSENTRY_ACTION_FLAG_NONE, NULL, NULL, &target.action, sizeof target);
+    ret = wolfsentry_action_init_1(label, label_len, WOLFSENTRY_ACTION_FLAG_NONE, NULL, NULL, &target.target, sizeof target);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
-    target.action.header.parent_table = &wolfsentry->actions->header;
+    target.target.header.parent_table = &wolfsentry->actions->header;
 
     if ((ret = wolfsentry_table_ent_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_table_ent_header **)&target_p)) < 0)
         goto out;

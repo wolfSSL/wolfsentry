@@ -461,7 +461,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
     if (strcmp(fname,"-")) {
         f = fopen(fname, "r");
         if (! f) {
-            fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
+            (void)fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
             WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
         }
     }
@@ -473,7 +473,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
     for (;;) {
         size_t n = fread(buf, 1, sizeof buf, f ? f : stdin);
         if ((n < sizeof buf) && ferror(f)) {
-            fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
+            (void)fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
             ret = WOLFSENTRY_ERROR_ENCODE(UNIT_TEST_FAILURE);
             goto out;
         }
@@ -481,7 +481,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
         ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
         if (ret < 0) {
             if (verbose)
-                fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+                (void)fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
             goto out;
         }
         if ((n < sizeof buf) && feof(f))
@@ -493,7 +493,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
     fini_ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
     if (fini_ret < 0) {
         if (verbose)
-            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            (void)fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
     }
     if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
         ret = fini_ret;
@@ -504,7 +504,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
         fclose(f);
 
     if ((ret < 0) && verbose)
-        fprintf(stderr,"error processing file %s\n",fname);
+        (void)fprintf(stderr,"error processing file %s\n",fname);
 
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -1122,9 +1122,9 @@ usleep(10000);
         (measured_sequence[7] != 8)) {
     // GCOV_EXCL_START
         size_t i;
-        fprintf(stderr,"wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
+        (void)fprintf(stderr,"wrong sequence at L%d.  should be {3,7,1,2,5,6,4,8} (the middle 4 are safely permutable), but got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
-            fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
+            (void)fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
@@ -1206,9 +1206,9 @@ usleep(10000);
         (SEQ(8) - SEQ(4) != 1)) {
     // GCOV_EXCL_START
         size_t i;
-        fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
+        (void)fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
-            fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
+            (void)fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
@@ -1295,9 +1295,9 @@ usleep(10000);
         (SEQ(8) - SEQ(4) != 1)) {
     // GCOV_EXCL_START
         size_t i;
-        fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
+        (void)fprintf(stderr,"wrong sequence at L%d.  got {", __LINE__);
         for (i = 0; i < sizeof measured_sequence / sizeof measured_sequence[0]; ++i)
-            fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
+            (void)fprintf(stderr,"%d%s",measured_sequence[i], i == (sizeof measured_sequence / sizeof measured_sequence[0]) - 1 ? "}.\n" : ",");
         WOLFSENTRY_ERROR_RETURN(NOT_OK);
     // GCOV_EXCL_STOP
     }
@@ -1530,7 +1530,7 @@ static int test_static_routes(void) {
         printf("benchmark wolfsentry_route_event_dispatch() with empty route table: %.2f ns/call %.2f cycles/call\n", ns_per_call, cycles_per_call);
 #ifdef WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE
 	if (cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE) {
-            fprintf(stderr, "benchmark wolfsentry_route_event_dispatch() with empty route table: measured %.2f cycles/call exceeds max %.2f\n", cycles_per_call, (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE);
+            (void)fprintf(stderr, "benchmark wolfsentry_route_event_dispatch() with empty route table: measured %.2f cycles/call exceeds max %.2f\n", cycles_per_call, (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE);
             WOLFSENTRY_EXIT_ON_TRUE(cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_EMPTY_TABLE);
         }
 #endif
@@ -1768,7 +1768,7 @@ static int test_static_routes(void) {
     WOLFSENTRY_SET_BITS(flags_wildcard, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD);
 
     {
-        struct wolfsentry_route *new_route;
+        struct wolfsentry_route *new_route = NULL;
 
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert_and_check_out(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote_wildcard.sa, &local_wildcard.sa, flags_wildcard, 0 /* event_label_len */, 0 /* event_label */, &new_route, &action_results));
 
@@ -3994,7 +3994,7 @@ static int test_json(const char *fname, const char *extra_fname) {
             err_buf,
             sizeof err_buf);
         if (ret < 0) {
-            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            (void)fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
             WOLFSENTRY_EXIT_ON_FAILURE(ret);
         }
 
@@ -4047,7 +4047,7 @@ static int test_json(const char *fname, const char *extra_fname) {
             err_buf,
             sizeof err_buf);
         if (ret < 0) {
-            fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+            (void)fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
             WOLFSENTRY_EXIT_ON_FAILURE(ret);
         }
 
@@ -4169,7 +4169,7 @@ static int test_json(const char *fname, const char *extra_fname) {
                 val_type = "?";
             if (wolfsentry_kv_render_value(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_exports, val_buf, &val_buf_space) < 0) {
                 if (WOLFSENTRY_KV_TYPE(kv_exports) == WOLFSENTRY_KV_BYTES)
-                    snprintf(val_buf, sizeof val_buf, "<%.*s>", (int)WOLFSENTRY_KV_V_BYTES_LEN(kv_exports), WOLFSENTRY_KV_V_BYTES(kv_exports));
+                    (void)snprintf(val_buf, sizeof val_buf, "<%.*s>", (int)WOLFSENTRY_KV_V_BYTES_LEN(kv_exports), WOLFSENTRY_KV_V_BYTES(kv_exports));
                 else
                     strcpy(val_buf,"?");
             }
@@ -4465,10 +4465,10 @@ static int test_json(const char *fname, const char *extra_fname) {
             int linelen = p ? ((int)((unsigned char *)p - (test_json_document + json_pos.offset)) + (int)json_pos.column_number - 1) :
                 (((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                fprintf(stderr, "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
+                (void)fprintf(stderr, "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
             else
-                fprintf(stderr, "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT "\n", json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
-            fprintf(stderr,"%.*s\n", linelen, test_json_document + json_pos.offset - json_pos.column_number + 1);
+                (void)fprintf(stderr, "json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT "\n", json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            (void)fprintf(stderr,"%.*s\n", linelen, test_json_document + json_pos.offset - json_pos.column_number + 1);
             exit(1);
         }
 
@@ -4715,7 +4715,7 @@ static int test_json(const char *fname, const char *extra_fname) {
 
 #ifdef WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED
 	if (cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED) {
-            fprintf(stderr, "benchmark wolfsentry_route_event_dispatch_with_inited_result() with JSON-loaded route table, matching penalty-boxed route: measured %.2f cycles/call exceeds max %.2f\n", cycles_per_call, (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED);
+            (void)fprintf(stderr, "benchmark wolfsentry_route_event_dispatch_with_inited_result() with JSON-loaded route table, matching penalty-boxed route: measured %.2f cycles/call exceeds max %.2f\n", cycles_per_call, (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED);
             WOLFSENTRY_EXIT_ON_TRUE(cycles_per_call > (double)WOLFSENTRY_MAX_CYCLES_PER_CALL_JSON_LOADED);
         }
 #endif
@@ -4987,7 +4987,7 @@ static int test_json_corpus(void) {
                     }
                 }
                 if (i == sizeof centijson_flag_map / sizeof centijson_flag_map[0]) {
-                    fprintf(stderr, "unrecognized flag \"%.*s\" in JSON_TEST_CORPUS_FLAGS.\n", (int)label_len, cp);
+                    (void)fprintf(stderr, "unrecognized flag \"%.*s\" in JSON_TEST_CORPUS_FLAGS.\n", (int)label_len, cp);
                     exit(1);
                 }
                 cp += label_len;
@@ -5047,10 +5047,10 @@ static int test_json_corpus(void) {
                 int linelen = p ? ((int)((unsigned char *)p - (scenario + json_pos.offset)) + (int)json_pos.column_number - 1) :
                     (((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
                 if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
-                    fprintf(stderr, "%s/%s: json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", corpus_path, scenario_ent->d_name, json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
+                    (void)fprintf(stderr, "%s/%s: json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with centijson code %d: %s\n", corpus_path, scenario_ent->d_name, json_pos.offset,json_pos.line_number, json_pos.column_number, ret, json_dom_error_str(ret));
                 else
-                    fprintf(stderr, "%s/%s: json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT "\n", corpus_path, scenario_ent->d_name, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
-                fprintf(stderr,"%.*s\n", linelen, scenario + json_pos.offset - json_pos.column_number + 1);
+                    (void)fprintf(stderr, "%s/%s: json_dom_parse failed at offset " SIZET_FMT ", L%u, col %u, with " WOLFSENTRY_ERROR_FMT "\n", corpus_path, scenario_ent->d_name, json_pos.offset,json_pos.line_number, json_pos.column_number, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                (void)fprintf(stderr,"%.*s\n", linelen, scenario + json_pos.offset - json_pos.column_number + 1);
                 goto inner_cleanup;
             }
 
@@ -5127,7 +5127,7 @@ int main(int argc, char* argv[]) {
 #ifdef TEST_INIT
     ret = test_init();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5139,7 +5139,7 @@ int main(int argc, char* argv[]) {
     ret = test_lwip(NULL);
     #endif
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_lwip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_lwip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5147,7 +5147,7 @@ int main(int argc, char* argv[]) {
 #ifdef TEST_RWLOCKS
     ret = test_rw_locks();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_rw_locks failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_rw_locks failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5155,7 +5155,7 @@ int main(int argc, char* argv[]) {
 #ifdef TEST_STATIC_ROUTES
     ret = test_static_routes();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_static_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_static_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5163,7 +5163,7 @@ int main(int argc, char* argv[]) {
 #ifdef TEST_DYNAMIC_RULES
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5171,7 +5171,7 @@ int main(int argc, char* argv[]) {
 #ifdef TEST_USER_VALUES
     ret = test_user_values();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5179,7 +5179,7 @@ int main(int argc, char* argv[]) {
 #ifdef TEST_USER_ADDR_FAMILIES
     ret = test_user_addr_families();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_addr_families failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_addr_families failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5192,13 +5192,13 @@ int main(int argc, char* argv[]) {
     ret = test_json(TEST_JSON_CONFIG_PATH, NULL);
 #endif
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_json failed for " TEST_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
     ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH, NULL);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif
@@ -5206,7 +5206,7 @@ int main(int argc, char* argv[]) {
 #ifdef TEST_JSON_CORPUS
     ret = test_json_corpus();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
-        fprintf(stderr, "test_json_corpus failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        (void)fprintf(stderr, "test_json_corpus failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

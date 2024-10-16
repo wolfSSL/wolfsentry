@@ -839,7 +839,7 @@ json_value_string(const JSON_VALUE* v)
 WOLFSENTRY_API size_t
 json_value_string_length(const JSON_VALUE* v)
 {
-    uint8_t* payload;
+    const uint8_t* payload;
     size_t off = 0;
     size_t len = 0;
     unsigned shift = 0;

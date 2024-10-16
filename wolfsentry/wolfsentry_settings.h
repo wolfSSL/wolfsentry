@@ -154,7 +154,7 @@
  */
 
 #if !defined(WOLFSENTRY_NO_STDIO_STREAMS) && !defined(WOLFSENTRY_PRINTF_ERR)
-    #define WOLFSENTRY_PRINTF_ERR(...) fprintf(stderr, __VA_ARGS__)
+    #define WOLFSENTRY_PRINTF_ERR(...) (void)fprintf(stderr, __VA_ARGS__)
         /*!< \brief printf-like macro, expecting a format as first arg, used for rendering warning and error messages.  Can be overridden in #WOLFSENTRY_USER_SETTINGS_FILE. @hideinitializer */
 #endif
 
@@ -324,13 +324,23 @@
         /*!< \brief Define if `posix_memalign()` is not available. */
 #endif
 
-#if defined(__STRICT_ANSI__)
-#define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 1
+#if defined(WOLFSENTRY_FLEXIBLE_ARRAY_SIZE)
+    /* keep override value. */
+#elif defined(__STRICT_ANSI__) || defined(WOLFSENTRY_PEDANTIC_C)
+    #define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 1
 #elif defined(__GNUC__) && !defined(__clang__)
-#define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE
+    #define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE
     /*!< \brief Value appropriate as a size for an array that will be allocated to a variable size.  Built-in value usually works. */
 #else
-#define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 0
+    #define WOLFSENTRY_FLEXIBLE_ARRAY_SIZE 0
+#endif
+
+#if defined(__GNUC__) && !defined(__clang__) && !defined(WOLFSENTRY_NO_PRAGMAS)
+    #define WOLFSENTRY_GCC_PRAGMAS
+#endif
+
+#if defined(__clang__) && !defined(WOLFSENTRY_NO_PRAGMAS)
+    #define WOLFSENTRY_CLANG_PRAGMAS
 #endif
 
 /*! @cond doxygen_all */

@@ -486,6 +486,7 @@ struct wolfsentry_context {
     struct wolfsentry_event_table *events;
     struct wolfsentry_action_table *actions;
     struct wolfsentry_route_table *routes;
+    wolfsentry_action_res_t default_policy; /* copy of routes->default_policy for lock-free reads */
     struct wolfsentry_kv_table *user_values;
     struct wolfsentry_addr_family_bynumber_table *addr_families_bynumber;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES

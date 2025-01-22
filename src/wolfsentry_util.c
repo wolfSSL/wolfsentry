@@ -213,6 +213,10 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Operation skipped due to idempotency";
     case WOLFSENTRY_SUCCESS_ID_DEFERRED:
         return "Operation deferred awaiting state change";
+    case WOLFSENTRY_SUCCESS_ID_NO_DEADLINE:
+        return "Supplied object has no deadline";
+    case WOLFSENTRY_SUCCESS_ID_EXPIRED:
+        return "Deadline on supplied object has passed";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
         break;
@@ -292,6 +296,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
     _SUCNAME_TO_STRING(NO);
     _SUCNAME_TO_STRING(ALREADY_OK);
     _SUCNAME_TO_STRING(DEFERRED);
+    _SUCNAME_TO_STRING(NO_DEADLINE);
+    _SUCNAME_TO_STRING(EXPIRED);
 #undef _SUCNAME_TO_STRING
 
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
@@ -899,18 +905,45 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfse
     WOLFSENTRY_RETURN_OK;
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, int usecs) {
+static wolfsentry_time_t usecs_to_wolfsentry_time(struct wolfsentry_context *wolfsentry, long usecs) {
+    wolfsentry_time_t wolfsentry_time;
+    wolfsentry_errcode_t ret = WOLFSENTRY_INTERVAL_FROM_SECONDS(0, usecs * 1000L, &wolfsentry_time);
+    if (ret < 0) {
+        WOLFSENTRY_WARN_ON_FAILURE(ret);
+        return 0;
+    }
+    else
+        return wolfsentry_time;
+}
+
+static long wolfsentry_time_to_usecs(struct wolfsentry_context *wolfsentry, wolfsentry_time_t ts) {
+    time_t howlong_secs;
+    long howlong_nsecs;
+    wolfsentry_errcode_t ret = WOLFSENTRY_INTERVAL_TO_SECONDS(ts, &howlong_secs, &howlong_nsecs);
+    if (ret < 0) {
+        WOLFSENTRY_WARN_ON_FAILURE(ret);
+        return 0;
+    }
+    else if (howlong_secs * (time_t)1000000 >= (time_t)MAX_SINT_OF(long) - (time_t)1000000L)
+        return (long)MAX_SINT_OF(long);
+    else if (howlong_secs * (time_t)1000000 <= (time_t)MIN_SINT_OF(long))
+        return (long)MIN_SINT_OF(long);
+    else
+        return ((long)howlong_secs * 1000000L) + (howlong_nsecs / 1000L);
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t rel_when) {
     wolfsentry_time_t now;
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
-    if (usecs < 0)
+    if (rel_when < 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    else if (usecs > 0) {
+    else if (rel_when > 0) {
         if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
-        ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, usecs), &thread->deadline.tv_sec, &thread->deadline.tv_nsec);
+        ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, rel_when), &thread->deadline.tv_sec, &thread->deadline.tv_nsec);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         thread->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_DEADLINE;
         WOLFSENTRY_RETURN_OK;
@@ -920,6 +953,50 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY
         thread->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_DEADLINE;
         WOLFSENTRY_RETURN_OK;
     }
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long usecs) {
+    return wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_OUT, usecs_to_wolfsentry_time(wolfsentry, usecs));
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t *rel_when) {
+    WOLFSENTRY_THREAD_ASSERT_INITED(thread);
+
+    if (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE)) {
+        WOLFSENTRY_SUCCESS_RETURN(NO_DEADLINE);
+    } else {
+        wolfsentry_time_t now, deadline;
+        wolfsentry_errcode_t ret;
+        if ((ret = WOLFSENTRY_GET_TIME(&now)) < 0)
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        if ((ret = WOLFSENTRY_FROM_EPOCH_TIME(thread->deadline.tv_sec, thread->deadline.tv_nsec, &deadline)) < 0)
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        if (rel_when) {
+            *rel_when = now - deadline;
+            if (*rel_when >= 0)
+                WOLFSENTRY_RETURN_OK;
+            else
+                WOLFSENTRY_SUCCESS_RETURN(EXPIRED);
+        } else {
+            if (now >= deadline)
+                WOLFSENTRY_RETURN_OK;
+            else
+                WOLFSENTRY_SUCCESS_RETURN(EXPIRED);
+        }
+    }
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long *usecs) {
+    wolfsentry_time_t rel_when;
+    wolfsentry_errcode_t ret = wolfsentry_get_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_OUT, &rel_when);
+    if ((WOLFSENTRY_IS_FAILURE(ret)) ||
+        WOLFSENTRY_SUCCESS_CODE_IS(ret, NO_DEADLINE))
+    {
+        return ret;
+    }
+    if (usecs)
+        *usecs = wolfsentry_time_to_usecs(wolfsentry, rel_when);
+    return ret;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, time_t epoch_secs, long epoch_nsecs) {
@@ -3952,6 +4029,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
      */
     if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->routes->header, *clone, &(*clone)->routes->header, flags)) < 0)
         goto out;
+    (*clone)->default_policy = wolfsentry->routes->default_policy;
 
     if ((ret = wolfsentry_table_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &wolfsentry->user_values->header, *clone, &(*clone)->user_values->header, flags)) < 0)
         goto out;

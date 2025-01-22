@@ -392,8 +392,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_destroy_thread_context(struct wol
     /*!< \brief Perform final integrity checking on the thread state, and deallocate its ID. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfsentry_host_platform_interface *hpi, struct wolfsentry_thread_context **thread_context, wolfsentry_thread_flags_t thread_flags);
     /*!< \brief Call `wolfsentry_destroy_thread_context()` on `*thread_context`, and if that succeeds, deallocate the thread object previously allocated by wolfsentry_alloc_thread_context(). */
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, int usecs);
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t rel_when);
+    /*!< \brief Set the thread deadline to `rel_when` in the future.  The thread will not wait for a lock beyond that deadline. */
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long usecs);
     /*!< \brief Set the thread deadline to `usecs` in the future.  The thread will not wait for a lock beyond that deadline. */
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t *rel_when);
+    /*!< \brief Get the time remaining until deadline for `thread`, optionally returning the result in `rel_when`, which can be passed as a null pointer.  Test for `WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) == NO_DEADLINE`, ` == OK`, or ` == EXPIRED`, or `WOLFSENTRY_IS_FAILURE(ret)`, to test (respectively) for no deadline, deadline not reached, deadline passed, or internal error, respectively. */
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long *usecs);
+    /*!< \brief Get the time remaining until deadline for `thread`, optionally returning the result in `usecs`, which can be passed as a null pointer.  Test for `WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) == NO_DEADLINE`, ` == OK`, or ` == EXPIRED`, or `WOLFSENTRY_IS_FAILURE(ret)`, to test (respectively) for no deadline, deadline not reached, deadline passed, or internal error, respectively. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, time_t epoch_secs, long epoch_nsecs);
     /*!< \brief Set the thread deadline to the time identified by `epoch_secs` and `epoch_nsecs`.  The thread will not wait for a lock beyond that deadline. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN);

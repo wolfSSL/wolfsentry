@@ -2,7 +2,7 @@
 
 # update_copyright_boilerplate.awk
 #
-# Copyright (C) 2023 wolfSSL Inc.
+# Copyright (C) 2023-2025 wolfSSL Inc.
 #
 # This file is part of wolfSentry.
 #

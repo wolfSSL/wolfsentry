@@ -1084,14 +1084,14 @@ index c787ae0a..75c675f9 100644
  #endif /* LWIP_UDP */
 diff --git a/src/include/lwip/filter.h b/src/include/lwip/filter.h
 new file mode 100644
-index 00000000..c0757496
+index 00000000..3c1d217b
 --- /dev/null
 +++ b/src/include/lwip/filter.h
 @@ -0,0 +1,99 @@
 +/*
 + * lwip/src/include/lwip/filter.h
 + *
-+ * Copyright (c) 2021-2023 wolfSSL Inc.
++ * Copyright (c) 2021-2025 wolfSSL Inc.
 + * All rights reserved.
 + *
 + * Redistribution and use in source and binary forms, with or without modification,

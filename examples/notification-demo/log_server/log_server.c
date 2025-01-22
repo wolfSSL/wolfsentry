@@ -1,7 +1,7 @@
 /*
  * log_server.c
  *
- * Copyright (C) 2022-2023 wolfSSL Inc.
+ * Copyright (C) 2022-2025 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *

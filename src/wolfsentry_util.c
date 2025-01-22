@@ -1,7 +1,7 @@
 /*
  * wolfsentry_util.c
  *
- * Copyright (C) 2021-2023 wolfSSL Inc.
+ * Copyright (C) 2021-2025 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *

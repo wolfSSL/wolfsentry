@@ -2,6 +2,37 @@
 
 <br>
 
+# wolfSentry Release 1.6.3 (January 22, 2025)
+
+Release 1.6.3 of the wolfSentry embedded firewall/IDPS has enhancements,
+additions, and improvements including:
+
+## New Features
+
+Implemented default policy in decisions on lock failures, to better support hard deadline use cases.  The lwIP integrated firewall has been updated to leverage this change.  Client code calling the dispatch interfaces directly can now check `action_results` for disposition even on error returns.
+
+## Noteworthy Changes and Additions
+
+Add `wolfsentry_set_deadline_rel()`, `wolfsentry_get_deadline_rel()`, and `wolfsentry_get_deadline_rel_usecs()`, to facilitate deployment to deadline-scheduled runtimes.  `wolfsentry_get_deadline_rel*()` can be used within implementations of computationally expensive plugins to prevent overrun or limit it to an application-defined tolerance.
+
+Added `WOLFSENTRY_SUCCESS_ID_NO_DEADLINE`, `WOLFSENTRY_SUCCESS_ID_EXPIRED`, and `WOLFSENTRY_SUCCESS_ID_NO_WAITING`, returned by `wolfsentry_get_deadline_rel*()`.
+
+Added `wolfsentry_lock_shared2mutex_is_reserved()`.
+
+## Bug Fixes, Cleanups, and Debugging Aids
+
+Added `WOLFSENTRY_STACKBUF()` to refactor on-stack flexible-element struct instances for additional portability, clarity, and efficiency.
+
+Numerous minor fixes for analyzer hygiene on LLVM 19 and 20, gcc-15, and cppcheck 2.16.
+
+## Self-Test Enhancements
+
+Fixes for several leaks and missing error handling in unit tests.
+
+Added new C23 and `-D_FORTIFY_SOURCE=3` tests.
+
+<br>
+
 # wolfSentry Release 1.6.2 (January 2, 2024)
 
 Release 1.6.2 of the wolfSentry embedded firewall/IDPS has enhancements,

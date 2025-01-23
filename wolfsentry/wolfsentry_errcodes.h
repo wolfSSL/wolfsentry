@@ -447,6 +447,7 @@ enum wolfsentry_error_id {
     WOLFSENTRY_SUCCESS_ID_DEFERRED             =    8,
     WOLFSENTRY_SUCCESS_ID_NO_DEADLINE          =    9,
     WOLFSENTRY_SUCCESS_ID_EXPIRED              =   10,
+    WOLFSENTRY_SUCCESS_ID_NO_WAITING           =   11,
     WOLFSENTRY_SUCCESS_ID_USER_BASE            =  128
 };
 

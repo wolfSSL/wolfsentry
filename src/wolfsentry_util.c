@@ -217,6 +217,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
         return "Supplied object has no deadline";
     case WOLFSENTRY_SUCCESS_ID_EXPIRED:
         return "Deadline on supplied object has passed";
+    case WOLFSENTRY_SUCCESS_ID_NO_WAITING:
+        return "Supplied object is non-blocking";
     case WOLFSENTRY_ERROR_ID_USER_BASE:
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
         break;
@@ -298,6 +300,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
     _SUCNAME_TO_STRING(DEFERRED);
     _SUCNAME_TO_STRING(NO_DEADLINE);
     _SUCNAME_TO_STRING(EXPIRED);
+    _SUCNAME_TO_STRING(NO_WAITING);
 #undef _SUCNAME_TO_STRING
 
     case WOLFSENTRY_SUCCESS_ID_USER_BASE:
@@ -854,9 +857,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_deadline(struct wolfse
     if (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE)) {
         deadline->tv_sec = WOLFSENTRY_DEADLINE_NEVER;
         deadline->tv_nsec = WOLFSENTRY_DEADLINE_NEVER;
-    } else
+        WOLFSENTRY_SUCCESS_RETURN(NO_DEADLINE);
+    } else {
         *deadline = thread->deadline;
-    WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_RETURN_OK;
+    }
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_thread_flags(struct wolfsentry_thread_context *thread, wolfsentry_thread_flags_t *thread_flags) {
@@ -964,6 +969,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTE
 
     if (! (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE)) {
         WOLFSENTRY_SUCCESS_RETURN(NO_DEADLINE);
+    } else if (thread->deadline.tv_nsec == WOLFSENTRY_DEADLINE_NOW) {
+        *rel_when = 0;
+        WOLFSENTRY_SUCCESS_RETURN(NO_WAITING);
     } else {
         wolfsentry_time_t now, deadline;
         wolfsentry_errcode_t ret;
@@ -972,7 +980,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTE
         if ((ret = WOLFSENTRY_FROM_EPOCH_TIME(thread->deadline.tv_sec, thread->deadline.tv_nsec, &deadline)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
         if (rel_when) {
-            *rel_when = now - deadline;
+            *rel_when = deadline - now;
             if (*rel_when >= 0)
                 WOLFSENTRY_RETURN_OK;
             else
@@ -1004,11 +1012,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTE
 
     WOLFSENTRY_THREAD_ASSERT_INITED(thread);
 
-    if ((epoch_nsecs < 0) || (epoch_nsecs >= 1000000000))
+    if ((epoch_nsecs < 0) || (epoch_nsecs >= 1000000000) ||
+        (epoch_nsecs == WOLFSENTRY_DEADLINE_NEVER) ||
+        (epoch_nsecs == WOLFSENTRY_DEADLINE_NOW))
+    {
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if ((epoch_secs == WOLFSENTRY_DEADLINE_NEVER) ||
-        (epoch_secs == WOLFSENTRY_DEADLINE_NOW))
-        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
     thread->deadline.tv_sec = epoch_secs;
     thread->deadline.tv_nsec = epoch_nsecs;
     thread->current_thread_flags |= WOLFSENTRY_THREAD_FLAG_DEADLINE;
@@ -1775,7 +1784,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
     if ((abs_timeout == NULL) &&
         (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
     {
-        abs_timeout = &thread->deadline;
+        if (thread->deadline.tv_nsec == timespec_deadline_now.tv_nsec)
+            abs_timeout = &timespec_deadline_now;
+        else
+            abs_timeout = &thread->deadline;
     }
 
     /* if shared lock recursion is enabled, and the caller already holds some
@@ -2074,7 +2086,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
         thread &&
         (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
     {
-        abs_timeout = &thread->deadline;
+        if (thread->deadline.tv_nsec == timespec_deadline_now.tv_nsec)
+            abs_timeout = &timespec_deadline_now;
+        else
+            abs_timeout = &thread->deadline;
     }
 
     if (abs_timeout == NULL) {
@@ -2386,7 +2401,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed
     if ((abs_timeout == NULL) &&
         (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
     {
-        abs_timeout = &thread->deadline;
+        if (thread->deadline.tv_nsec == timespec_deadline_now.tv_nsec)
+            abs_timeout = &timespec_deadline_now;
+        else
+            abs_timeout = &thread->deadline;
     }
 
     if (abs_timeout == NULL) {
@@ -2650,7 +2668,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct
     if ((abs_timeout == NULL) &&
         (thread->current_thread_flags & WOLFSENTRY_THREAD_FLAG_DEADLINE))
     {
-        abs_timeout = &thread->deadline;
+        if (thread->deadline.tv_nsec == timespec_deadline_now.tv_nsec)
+            abs_timeout = &timespec_deadline_now;
+        else
+            abs_timeout = &thread->deadline;
     }
 
     if (abs_timeout == NULL) {

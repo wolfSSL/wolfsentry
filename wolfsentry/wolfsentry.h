@@ -54,7 +54,7 @@
     /*!< \brief Macro for major version number of installed headers.  @hideinitializer */
 #define WOLFSENTRY_VERSION_MINOR 6
     /*!< \brief Macro for minor version number of installed headers.  @hideinitializer */
-#define WOLFSENTRY_VERSION_TINY 2
+#define WOLFSENTRY_VERSION_TINY 3
     /*!< \brief Macro for tiny version number of installed headers.  @hideinitializer */
 #define WOLFSENTRY_VERSION_ENCODE(major, minor, tiny) (((major) << 16U) | ((minor) << 8U) | (tiny))
     /*!< \brief Macro to convert a wolfSentry version to a single integer, for comparison to other similarly converted versions.  @hideinitializer */
@@ -397,9 +397,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel(WOLFSENTRY_CONTE
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long usecs);
     /*!< \brief Set the thread deadline to `usecs` in the future.  The thread will not wait for a lock beyond that deadline. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t *rel_when);
-    /*!< \brief Get the time remaining until deadline for `thread`, optionally returning the result in `rel_when`, which can be passed as a null pointer.  Test for `WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) == NO_DEADLINE`, ` == OK`, or ` == EXPIRED`, or `WOLFSENTRY_IS_FAILURE(ret)`, to test (respectively) for no deadline, deadline not reached, deadline passed, or internal error, respectively. */
+    /*!< \brief Get the time remaining until deadline for `thread`, optionally returning the result in `rel_when`, which can be passed as a null pointer.  Test for `WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) == NO_DEADLINE`, ` == OK`, ` == NO_WAITING`, or ` == EXPIRED`, or `WOLFSENTRY_IS_FAILURE(ret)`, to test (respectively) for no deadline, deadline not reached, thread is non-blocking, deadline passed, or internal error, respectively. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long *usecs);
-    /*!< \brief Get the time remaining until deadline for `thread`, optionally returning the result in `usecs`, which can be passed as a null pointer.  Test for `WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) == NO_DEADLINE`, ` == OK`, or ` == EXPIRED`, or `WOLFSENTRY_IS_FAILURE(ret)`, to test (respectively) for no deadline, deadline not reached, deadline passed, or internal error, respectively. */
+    /*!< \brief Get the time remaining until deadline for `thread`, optionally returning the result in `usecs`, which can be passed as a null pointer.  Same return codes as wolfsentry_get_deadline_rel() */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_abs(WOLFSENTRY_CONTEXT_ARGS_IN, time_t epoch_secs, long epoch_nsecs);
     /*!< \brief Set the thread deadline to the time identified by `epoch_secs` and `epoch_nsecs`.  The thread will not wait for a lock beyond that deadline. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_IN);

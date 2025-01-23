@@ -1,7 +1,7 @@
 /*
  * unittests.c
  *
- * Copyright (C) 2021-2023 wolfSSL Inc.
+ * Copyright (C) 2021-2025 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *
@@ -981,10 +981,16 @@ static int test_rw_locks(void) {
         TEST_INVALID_ARGS(wolfsentry_free_thread_context(NULL, NULL, 0));
         TEST_INVALID_ARGS(wolfsentry_free_thread_context(NULL, &null_thread, 0));
         TEST_INVALID_ARGS(wolfsentry_free_thread_context(NULL, &uninited_thread, 0));
+        TEST_INVALID_ARGS(wolfsentry_set_deadline_rel(wolfsentry, null_thread, 0));
+        TEST_INVALID_ARGS(wolfsentry_set_deadline_rel(wolfsentry, uninited_thread, 0));
         TEST_INVALID_ARGS(wolfsentry_set_deadline_rel_usecs(wolfsentry, null_thread, 0));
         TEST_INVALID_ARGS(wolfsentry_set_deadline_rel_usecs(wolfsentry, uninited_thread, 0));
         TEST_INVALID_ARGS(wolfsentry_set_deadline_abs(wolfsentry, null_thread, 0, 0));
         TEST_INVALID_ARGS(wolfsentry_set_deadline_abs(wolfsentry, uninited_thread, 0, 0));
+        TEST_INVALID_ARGS(wolfsentry_get_deadline_rel(wolfsentry, null_thread, 0));
+        TEST_INVALID_ARGS(wolfsentry_get_deadline_rel(wolfsentry, uninited_thread, 0));
+        TEST_INVALID_ARGS(wolfsentry_get_deadline_rel_usecs(wolfsentry, null_thread, 0));
+        TEST_INVALID_ARGS(wolfsentry_get_deadline_rel_usecs(wolfsentry, uninited_thread, 0));
         TEST_INVALID_ARGS(wolfsentry_clear_deadline(wolfsentry, null_thread));
         TEST_INVALID_ARGS(wolfsentry_clear_deadline(wolfsentry, uninited_thread));
         TEST_INVALID_ARGS(wolfsentry_set_thread_readonly(null_thread));
@@ -1058,6 +1064,26 @@ static int test_rw_locks(void) {
         TEST_INVALID_ARGS(wolfsentry_lock_get_flags(null_lock, thread, &lock_flags));
         TEST_INVALID_ARGS(wolfsentry_lock_get_flags(lock, thread, NULL));
     }
+
+    {
+        long usecs = -1;
+        wolfsentry_time_t t = (wolfsentry_time_t)(-1);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_OUT, 0));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_get_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_OUT, &t));
+        WOLFSENTRY_EXIT_ON_FALSE(t == 0);
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(NO_WAITING, wolfsentry_get_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_OUT, &usecs));
+        WOLFSENTRY_EXIT_ON_FALSE(usecs == 0);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(NO_DEADLINE, wolfsentry_get_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_OUT, &usecs));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_OUT, 1000000));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_get_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_OUT, &usecs));
+        WOLFSENTRY_EXIT_ON_FALSE(usecs > 100000 && usecs <= 1000000);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_clear_deadline(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_thread_readonly(thread));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NOT_PERMITTED, wolfsentry_lock_mutex_timed(lock, thread, 0, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_thread_readwrite(thread));
 
     memset(&thread1_args, 0, sizeof thread1_args);
     thread1_args.wolfsentry = wolfsentry;

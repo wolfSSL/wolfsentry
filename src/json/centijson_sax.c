@@ -1,7 +1,7 @@
 /*
  * centijson_sax.c
  *
- * Copyright (C) 2021-2023 wolfSSL Inc.
+ * Copyright (C) 2021-2025 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *
@@ -429,7 +429,7 @@ json_number_automaton(JSON_PARSER* parser, const unsigned char* input, size_t si
         parser->substate = can_see_m_sign | can_see_m_first_digit;
 
     while(off < size) {
-        int ch = input[off];
+        int ch = input[off]; /* NOLINT(clang-analyzer-core.NullDereference) */ /* false positive from clang-20.0.0_pre20250118 */
 
         if((parser->substate & can_see_m_sign)  &&  ch == '-') {    /* '+' not allowed here. */
             parser->substate = can_see_m_first_digit;

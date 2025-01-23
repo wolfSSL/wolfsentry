@@ -1,7 +1,7 @@
 /*
  * lwip/packet_filter_glue.c
  *
- * Copyright (C) 2021-2023 wolfSSL Inc.
+ * Copyright (C) 2021-2025 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *
@@ -180,12 +180,11 @@ static err_t ethernet_filter_with_wolfsentry(
 #endif
             &action_results);
 
-    if (ws_ret >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-            ret = ERR_ABRT;
-        else
-            ret = ERR_OK;
-    } else
+    WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        ret = ERR_ABRT;
+    else
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
@@ -321,12 +320,11 @@ static err_t ip4_filter_with_wolfsentry(
 #endif
             &action_results);
 
-    if (ws_ret >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-            ret = ERR_ABRT;
-        else
-            ret = ERR_OK;
-    } else
+    WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        ret = ERR_ABRT;
+    else
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
@@ -457,12 +455,11 @@ static err_t ip6_filter_with_wolfsentry(
 #endif
             &action_results);
 
-    if (ws_ret >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-            ret = ERR_ABRT;
-        else
-            ret = ERR_OK;
-    } else
+    WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        ret = ERR_ABRT;
+    else
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
@@ -659,16 +656,14 @@ static err_t tcp_filter_with_wolfsentry(
 #endif
             &action_results);
 
-    if (ws_ret < 0)
+    WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+        ret = ERR_RST;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        ret = ERR_ABRT;
+    else
         ret = ERR_OK;
-    else {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
-            ret = ERR_RST;
-        else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-            ret = ERR_ABRT;
-        else
-            ret = ERR_OK;
-    }
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         WOLFSENTRY_RETURN_VALUE(ERR_MEM);
@@ -850,14 +845,13 @@ static err_t udp_filter_with_wolfsentry(
 #endif
             &action_results);
 
-    if (ws_ret >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
-            ret = ERR_RST;
-        else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-            ret = ERR_ABRT;
-        else
-            ret = ERR_OK;
-    } else
+    WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+        ret = ERR_RST;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        ret = ERR_ABRT;
+    else
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
@@ -999,12 +993,11 @@ static err_t icmp4_filter_with_wolfsentry(
 #endif
             &action_results);
 
-    if (ws_ret >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-            ret = ERR_ABRT;
-        else
-            ret = ERR_OK;
-    } else
+    WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        ret = ERR_ABRT;
+    else
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
@@ -1136,12 +1129,11 @@ static err_t icmp6_filter_with_wolfsentry(
 #endif
             &action_results);
 
-    if (ws_ret >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
-            ret = ERR_ABRT;
-        else
-            ret = ERR_OK;
-    } else
+    WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+        ret = ERR_ABRT;
+    else
         ret = ERR_OK;
 
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)

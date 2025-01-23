@@ -1,7 +1,7 @@
 /*
  * wolfsentry_errcodes.h
  *
- * Copyright (C) 2021-2023 wolfSSL Inc.
+ * Copyright (C) 2021-2025 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *
@@ -445,6 +445,9 @@ enum wolfsentry_error_id {
     WOLFSENTRY_SUCCESS_ID_NO                   =    6,
     WOLFSENTRY_SUCCESS_ID_ALREADY_OK           =    7,
     WOLFSENTRY_SUCCESS_ID_DEFERRED             =    8,
+    WOLFSENTRY_SUCCESS_ID_NO_DEADLINE          =    9,
+    WOLFSENTRY_SUCCESS_ID_EXPIRED              =   10,
+    WOLFSENTRY_SUCCESS_ID_NO_WAITING           =   11,
     WOLFSENTRY_SUCCESS_ID_USER_BASE            =  128
 };
 

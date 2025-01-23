@@ -1,7 +1,7 @@
 /*
  * routes.c
  *
- * Copyright (C) 2021-2023 wolfSSL Inc.
+ * Copyright (C) 2021-2025 wolfSSL Inc.
  *
  * This file is part of wolfSentry.
  *
@@ -1987,6 +1987,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_default_policy_set(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     WOLFSENTRY_MUTEX_OR_RETURN();
     table->default_policy = default_policy;
+    if (table == wolfsentry->routes)
+        wolfsentry->default_policy = default_policy;
     WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(OK);
 }
 
@@ -2588,10 +2590,12 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         goto done;
     }
 
-    if (! WOLFSENTRY_MASKIN_BITS(*action_results, WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_REJECT))
+    if (! WOLFSENTRY_MASKIN_BITS(*action_results, WOLFSENTRY_ACTION_RES_ACCEPT|WOLFSENTRY_ACTION_RES_REJECT)) {
         *action_results |= WOLFSENTRY_ACTION_RES_FALLTHROUGH | route_table->default_policy;
-
-    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        ret = WOLFSENTRY_SUCCESS_ENCODE(USED_FALLBACK);
+    } else {
+        ret = WOLFSENTRY_SUCCESS_ENCODE(OK);
+    }
 
   done:
 
@@ -2670,7 +2674,17 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     }
 
-    WOLFSENTRY_SHARED_OR_RETURN();
+#ifdef WOLFSENTRY_THREADSAFE
+    if (thread == NULL)
+        ret = WOLFSENTRY_MUTEX_EX(wolfsentry);
+    else
+        ret = WOLFSENTRY_SHARED_EX(wolfsentry);
+    if (WOLFSENTRY_IS_FAILURE(ret)) {
+        /* on lock timeout or other failure, return the default policy. */
+        *action_results |= wolfsentry->default_policy | WOLFSENTRY_ACTION_RES_FALLTHROUGH;
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
+#endif
 
     if (route_table == NULL)
         route_table = wolfsentry->routes;

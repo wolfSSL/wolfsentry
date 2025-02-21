@@ -714,6 +714,11 @@ typedef uint16_t wolfsentry_priority_t;
     /*!< \brief The maximum size allowed for scalar user-defined values.  Can be overridden. */
 #endif
 
+#ifndef WOLFSENTRY_RWLOCK_MAX_COUNT
+#define WOLFSENTRY_RWLOCK_MAX_COUNT ((int)MAX_SINT_OF(int))
+    /*!< \brief The maximum count allowed for any internal lock-counting value, limiting recursion.  Defaults to the maximum countable.  Can be overridden. */
+#endif
+
 #if defined(WOLFSENTRY_ENT_ID_TYPE) ||          \
     defined(WOLFSENTRY_HITCOUNT_TYPE) ||        \
     defined(WOLFSENTRY_TIME_TYPE) ||            \

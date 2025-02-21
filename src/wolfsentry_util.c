@@ -1840,6 +1840,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
                 WOLFSENTRY_ERROR_RETURN(BUSY);
         }
 
+        if ((lock->read_waiter_count == WOLFSENTRY_RWLOCK_MAX_COUNT) ||
+            (thread->shared_count == WOLFSENTRY_RWLOCK_MAX_COUNT))
+        {
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            else
+                WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+        }
+
         ++lock->read_waiter_count;
 
         if (sem_post(&lock->sem) < 0)
@@ -1899,7 +1908,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
             thread->tracked_shared_lock = lock;
             thread->recursion_of_tracked_lock = 1;
         }
-        else if (thread->tracked_shared_lock == lock)
+        else if (thread->tracked_shared_lock == lock) /* can't happen */
             ++thread->recursion_of_tracked_lock;
 
         if ((flags & (WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO)) &&
@@ -1959,6 +1968,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
                 }
             } else
                 store_reservation = 1;
+        }
+
+        if ((lock->read_waiter_count == WOLFSENTRY_RWLOCK_MAX_COUNT) ||
+            (thread->shared_count == WOLFSENTRY_RWLOCK_MAX_COUNT) ||
+            ((thread->tracked_shared_lock == lock) && (thread->recursion_of_tracked_lock == WOLFSENTRY_RWLOCK_MAX_COUNT)) ||
+            (lock->holder_count.read >= WOLFSENTRY_RWLOCK_MAX_COUNT - store_reservation) ||
+            (store_reservation && (thread->mutex_and_reservation_count == WOLFSENTRY_RWLOCK_MAX_COUNT)))
+        {
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            else
+                WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
         }
 
         if (lock->state == WOLFSENTRY_LOCK_UNLOCKED)
@@ -2031,6 +2052,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
     case WOLFSENTRY_LOCK_EXCLUSIVE:
         if (WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID) {
             if (! (flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_MUTEX)) {
+                if ((lock->holder_count.write == WOLFSENTRY_RWLOCK_MAX_COUNT) ||
+                    (thread && (thread->mutex_and_reservation_count == WOLFSENTRY_RWLOCK_MAX_COUNT)))
+                {
+                    WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+                }
                 /* recursively locking while holding write is effectively uncontended. */
                 ++lock->holder_count.write;
                 if (thread)
@@ -2047,18 +2073,22 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
             if (flags & WOLFSENTRY_LOCK_FLAG_NONRECURSIVE_MUTEX)
                 WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
             else {
+                if (thread && (thread->mutex_and_reservation_count == WOLFSENTRY_RWLOCK_MAX_COUNT))
+                    WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
                 ret = wolfsentry_lock_shared2mutex_redeem_abstimed(lock, thread, abs_timeout, flags);
                 WOLFSENTRY_RERETURN_IF_ERROR(ret);
-                ++lock->holder_count.write;
+                ++lock->holder_count.write; /* caller now holds the lock at least 2 deep. */
                 if (thread)
                     ++thread->mutex_and_reservation_count;
                 WOLFSENTRY_RETURN_OK;
             }
         }
         else if (thread && (thread->tracked_shared_lock == lock)) {
+            if (thread && (thread->mutex_and_reservation_count == WOLFSENTRY_RWLOCK_MAX_COUNT))
+                WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
             ret = wolfsentry_lock_shared2mutex_abstimed(lock, thread, abs_timeout, flags);
             WOLFSENTRY_RERETURN_IF_ERROR(ret);
-            ++lock->holder_count.write;
+            ++lock->holder_count.write; /* caller now holds the lock at least 2 deep. */
             if (thread)
                 ++thread->mutex_and_reservation_count;
             WOLFSENTRY_RETURN_OK;
@@ -2125,6 +2155,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
             WOLFSENTRY_ERROR_RETURN(BUSY);
         }
 
+        if ((lock->write_waiter_count == WOLFSENTRY_RWLOCK_MAX_COUNT) ||
+            (thread && (thread->mutex_and_reservation_count == WOLFSENTRY_RWLOCK_MAX_COUNT)))
+        {
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            else
+                WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+        }
         ++lock->write_waiter_count;
 
         if (sem_post(&lock->sem) < 0)
@@ -2272,15 +2310,29 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex2shared(struct wolfsent
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
 
+    if (thread->shared_count >= WOLFSENTRY_RWLOCK_MAX_COUNT - lock->holder_count.write) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    }
+
     if (flags & (WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO)) {
-        /* can't happen, but be sure. */
-        if (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID) {
+        if (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID) /* can't happen, but be sure. */ {
             if (sem_post(&lock->sem) < 0)
                 WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
             WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
         }
-        WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, lock->write_lock_holder);
+        if ((thread->mutex_and_reservation_count == WOLFSENTRY_RWLOCK_MAX_COUNT) ||
+            (lock->holder_count.write == WOLFSENTRY_RWLOCK_MAX_COUNT))
+        {
+            if (sem_post(&lock->sem) < 0)
+                WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+            else
+                WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+        }
         ++thread->mutex_and_reservation_count;
+        WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, lock->write_lock_holder);
         lock->read2write_waiter_read_count = lock->holder_count.write;
         /* note, not incrementing write_waiter_count, to allow shared lockers to get locks until the redemption phase. */
     }
@@ -2344,6 +2396,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct 
             WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
     }
 
+    if (thread->mutex_and_reservation_count == WOLFSENTRY_RWLOCK_MAX_COUNT)
+        WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+
     for (;;) {
         int ret = sem_wait(&lock->sem);
         if (ret == 0)
@@ -2367,6 +2422,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_reserve(struct 
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         WOLFSENTRY_ERROR_RETURN(BUSY);
+    }
+
+    if (lock->holder_count.read == WOLFSENTRY_RWLOCK_MAX_COUNT) {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
     }
 
     WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_GET_ID);
@@ -2455,6 +2517,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_redeem_abstimed
         if (sem_post(&lock->sem) < 0)
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+
+    if ((thread->mutex_and_reservation_count >= WOLFSENTRY_RWLOCK_MAX_COUNT - lock->read2write_waiter_read_count) ||
+        (lock->write_waiter_count == WOLFSENTRY_RWLOCK_MAX_COUNT))
+    {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
     }
 
     if (lock->holder_count.read == lock->read2write_waiter_read_count + 1) {
@@ -2711,6 +2782,17 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct
             WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
         else
             WOLFSENTRY_ERROR_RETURN(BUSY);
+    }
+
+    if ((thread->mutex_and_reservation_count
+         >=
+         ((thread->tracked_shared_lock == lock) ? WOLFSENTRY_RWLOCK_MAX_COUNT : (WOLFSENTRY_RWLOCK_MAX_COUNT - thread->recursion_of_tracked_lock))) ||
+        (lock->write_waiter_count == WOLFSENTRY_RWLOCK_MAX_COUNT))
+    {
+        if (sem_post(&lock->sem) < 0)
+            WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+        else
+            WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
     }
 
     if ((lock->holder_count.read == 1)

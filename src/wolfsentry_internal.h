@@ -203,11 +203,11 @@ struct wolfsentry_table_ent_header
 #endif
 {
     struct wolfsentry_table_header *parent_table;
-    struct wolfsentry_table_ent_header *prev, *next; /* these will be replaced by red-black table elements later. */
+    struct wolfsentry_table_ent_header *prev, *next; /* these will be supplemented by red-black table elements later. */
     struct wolfsentry_table_ent_header *prev_by_id, *next_by_id; /* these will be replaced by red-black table elements later. */
-    wolfsentry_hitcount_t hitcount;
     wolfsentry_ent_id_t id;
-    uint32_t _pad1;
+    uint32_t _pad1; /* this will later hold color bits for the red-black table elements */
+    wolfsentry_hitcount_t hitcount;
     wolfsentry_refcount_t refcount;
 };
 

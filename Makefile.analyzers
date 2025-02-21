@@ -33,7 +33,7 @@ endif
 # lock in the expected major versions of LLVM/clang/compiler-rt-sanitizers, in
 # order of preference:
 ifndef CLANG_PATH
-	CLANG_PATH:=/usr/lib/llvm/20/bin:/usr/lib/llvm/19/bin:/usr/lib/llvm/18/bin:/usr/lib/llvm-18:/usr/lib/llvm/17/bin:/usr/lib/llvm-17:/usr/lib/llvm/16/bin:/usr/lib/llvm-16:/usr/lib/llvm/15/bin:/usr/lib/llvm-15:/usr/lib/llvm/14/bin:/usr/lib/llvm-14:/opt/homebrew/opt/llvm/bin
+	CLANG_PATH:=/usr/lib/llvm/21/bin:/usr/lib/llvm/20/bin:/usr/lib/llvm/19/bin:/usr/lib/llvm/18/bin:/usr/lib/llvm-18:/usr/lib/llvm/17/bin:/usr/lib/llvm-17:/usr/lib/llvm/16/bin:/usr/lib/llvm-16:/usr/lib/llvm/15/bin:/usr/lib/llvm-15:/usr/lib/llvm/14/bin:/usr/lib/llvm-14:/opt/homebrew/opt/llvm/bin
 endif
 
 valgrind-all-clang: PATH:=$(CLANG_PATH):$(PATH)

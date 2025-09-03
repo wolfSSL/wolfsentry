@@ -3751,7 +3751,7 @@ WOLFSENTRY_API int wolfsentry_inet4_ntoa(const byte *addr, unsigned int addr_bit
         *buflen -= buflen2;
         if (i < 3) {
             if (*buflen < 2)
-                WOLFSENTRY_RETURN_OK;
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
             *buf++ = '.';
             --*buflen;
         }

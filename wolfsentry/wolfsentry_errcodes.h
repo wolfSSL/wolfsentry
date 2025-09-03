@@ -337,9 +337,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 
 #if !defined(WOLFSENTRY_NO_STDIO_STREAMS) && !defined(WOLFSENTRY_NO_DIAG_MSGS)
 
-#ifndef WOLFSENTRY_NETXDUO /* netxduo has its own errno.h */
 #include <errno.h>
-#endif
 
 #ifdef __STRICT_ANSI__
 #define WOLFSENTRY_WARN(fmt,...) WOLFSENTRY_PRINTF_ERR("%s@L%d " fmt, __FILE__, __LINE__, __VA_ARGS__)

@@ -1509,6 +1509,73 @@ static int freertos_sem_destroy( sem_t * sem )
 
 #define sem_destroy freertos_sem_destroy
 
+#elif defined(THREADX)
+
+    #ifndef ETIMEDOUT
+        #define ETIMEDOUT       110 /* Connection timed out */
+    #endif
+
+    #define sem_init threadx_sem_init
+    static int threadx_sem_init( sem_t * sem,
+                int pshared,
+                unsigned value )
+    {
+        (void)pshared;
+        if (tx_semaphore_create(sem, NULL, value) != TX_SUCCESS) {
+            errno = EINVAL;
+            WOLFSENTRY_RETURN_VALUE(-1);
+        }
+        WOLFSENTRY_RETURN_VALUE(0);
+    }
+    #define sem_post threadx_sem_post
+    static int threadx_sem_post( sem_t * sem )
+    {
+        if (tx_semaphore_put(sem) != TX_SUCCESS) {
+            errno = EINVAL;
+            WOLFSENTRY_RETURN_VALUE(-1);
+        }
+        WOLFSENTRY_RETURN_VALUE(0);
+    }
+    #define sem_timedwait threadx_sem_timedwait
+    static int threadx_sem_timedwait( sem_t * sem,
+                    const struct timespec * abstime )
+    {
+        if (tx_semaphore_get(sem, (uint32_t)(TX_TICK_TIME_MS *
+            (abstime->tv_sec * 1000) + (abstime->tv_nsec / 1000000))) != TX_SUCCESS) {
+            errno = EINVAL;
+            WOLFSENTRY_RETURN_VALUE(-1);
+        }
+        WOLFSENTRY_RETURN_VALUE(0);
+    }
+    #define sem_wait threadx_sem_wait
+    static int threadx_sem_wait( sem_t * sem )
+    {
+        if (tx_semaphore_get(sem, TX_WAIT_FOREVER) != TX_SUCCESS) {
+            errno = EINVAL;
+            WOLFSENTRY_RETURN_VALUE(-1);
+        }
+        WOLFSENTRY_RETURN_VALUE(0);
+    }
+    #define sem_trywait threadx_sem_trywait
+    static int threadx_sem_trywait( sem_t * sem )
+    {
+        if (tx_semaphore_get(sem, TX_NO_WAIT) != TX_SUCCESS) {
+            errno = EINVAL;
+            WOLFSENTRY_RETURN_VALUE(-1);
+        }
+        WOLFSENTRY_RETURN_VALUE(0);
+    }
+    static int threadx_sem_destroy( sem_t * sem )
+    {
+        if (tx_semaphore_delete(sem) != TX_SUCCESS) {
+            errno = EINVAL;
+            WOLFSENTRY_RETURN_VALUE(-1);
+        }
+        WOLFSENTRY_RETURN_VALUE(0);
+    }
+
+    #define sem_destroy threadx_sem_destroy
+
 #else
 
 #error Semaphore builtins not implemented for target -- build wolfSentry with -DWOLFSENTRY_NO_SEM_BUILTIN, and supply semaphore implementation with struct wolfsentry_host_platform_interface argument to wolfsentry_init().
@@ -2847,7 +2914,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_abstimed(struct
                     WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
             }
         }
-    } else 
+    } else
         ret = sem_timedwait(&lock->sem_read2write_waiters, abs_timeout);
 
     if (ret < 0) {
@@ -3313,6 +3380,19 @@ static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentr
     struct timespec ts;
     (void)context;
     freertos_now(&ts);
+    *now = ((wolfsentry_time_t)ts.tv_sec * (wolfsentry_time_t)1000000) + ((wolfsentry_time_t)ts.tv_nsec / (wolfsentry_time_t)1000);
+    WOLFSENTRY_RETURN_OK;
+}
+
+#elif defined(THREADX)
+
+static wolfsentry_errcode_t wolfsentry_builtin_get_time(void *context, wolfsentry_time_t *now) {
+    struct timespec ts;
+    uint32_t tick_count;
+    (void)context;
+    tick_count = tx_time_get();
+    ts.tv_sec = (long)tick_count / TX_TICK_TIME_MS;
+    ts.tv_nsec = (long)(tick_count % TX_TICK_TIME_MS) * 1000000;
     *now = ((wolfsentry_time_t)ts.tv_sec * (wolfsentry_time_t)1000000) + ((wolfsentry_time_t)ts.tv_nsec / (wolfsentry_time_t)1000);
     WOLFSENTRY_RETURN_OK;
 }

@@ -33,6 +33,8 @@
 
 #ifdef WOLFSENTRY_LWIP
 #include "lwip/sockets.h"
+#elif defined(WOLFSENTRY_NETXDUO)
+#include "wolfsentry/wolfsentry_netxduo.h"
 #else
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -1294,7 +1296,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             WOLFSENTRY_ERROR_RERETURN(ret);
         case JSON_FALSE:
             ret = wolfsentry_user_value_store_bool(
-                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                 jps->cur_keyname,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 WOLFSENTRY_KV_FALSE,
@@ -1303,7 +1305,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             WOLFSENTRY_ERROR_RERETURN(ret);
         case JSON_TRUE:
             ret = wolfsentry_user_value_store_bool(
-                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                 jps->cur_keyname,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 WOLFSENTRY_KV_TRUE,
@@ -1316,7 +1318,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
                 if ((ret = convert_sint64(json_type, data, data_size, &i)) < 0)
                     break;
                 ret = wolfsentry_user_value_store_sint(
-                    JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                    JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                     jps->cur_keyname,
                     WOLFSENTRY_LENGTH_NULL_TERMINATED,
                     i,
@@ -1327,7 +1329,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
                 if ((ret = convert_double(json_type, data, data_size, &d)) < 0)
                     WOLFSENTRY_ERROR_RERETURN(ret);
                 ret = wolfsentry_user_value_store_double(
-                    JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                    JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                     jps->cur_keyname,
                     WOLFSENTRY_LENGTH_NULL_TERMINATED,
                     d,
@@ -1339,7 +1341,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             if (data_size >= WOLFSENTRY_KV_MAX_VALUE_BYTES)
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
             ret = wolfsentry_user_value_store_string(
-                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                 jps->cur_keyname,
                 WOLFSENTRY_LENGTH_NULL_TERMINATED,
                 (const char *)data,
@@ -1454,7 +1456,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             if ((ret = convert_sint64(json_type, data, data_size, &i)) < 0)
                 WOLFSENTRY_ERROR_RERETURN(ret);
             WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_sint(
-                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 i,
@@ -1465,7 +1467,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             if ((ret = convert_double(json_type, data, data_size, &d)) < 0)
                 WOLFSENTRY_ERROR_RERETURN(ret);
             WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_double(
-                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 d,
@@ -1475,7 +1477,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             if (data_size >= WOLFSENTRY_KV_MAX_VALUE_BYTES)
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
             WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_string(
-                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 (const char *)data,
@@ -1486,7 +1488,7 @@ static wolfsentry_errcode_t handle_user_value_clause(struct wolfsentry_json_proc
             if (data_size >= WOLFSENTRY_KV_MAX_VALUE_BYTES)
                 WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
             WOLFSENTRY_ERROR_RERETURN(wolfsentry_user_value_store_bytes_base64(
-                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, 
+                JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
                 jps->o_u_c.user_value.label,
                 jps->o_u_c.user_value.label_len,
                 (const char *)data,

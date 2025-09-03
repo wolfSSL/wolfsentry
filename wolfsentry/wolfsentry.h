@@ -85,9 +85,9 @@ typedef enum {
 /*! @endcond */
 #endif
 
-#include <wolfsentry/wolfsentry_settings.h>
-#include <wolfsentry/wolfsentry_af.h>
-#include <wolfsentry/wolfsentry_errcodes.h>
+#include "wolfsentry/wolfsentry_settings.h"
+#include "wolfsentry/wolfsentry_af.h"
+#include "wolfsentry/wolfsentry_errcodes.h"
 
 struct wolfsentry_allocator;
 struct wolfsentry_context;
@@ -3012,7 +3012,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_action_list_done(
 /*! @} (end wolfsentry_event) */
 
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
-#include <wolfsentry/centijson_dom.h>
+#include "wolfsentry/centijson_dom.h"
 #endif
 
 /*! \addtogroup wolfsentry_kv
@@ -3345,7 +3345,7 @@ WOLFSENTRY_API int wolfsentry_inet6_ntoa(const byte *addr, unsigned int addr_bit
     (((((len)+3)/4)*3) - ((len) > 1 ? \
                           ((buf)[(len)-1] == '=') : \
                           0) \
-     - ((len) > 2 ? ((buf)[(len)-2] == '=') : 0)) \
+     - ((len) > 2 ? ((buf)[(len)-2] == '=') : 0))
     /*!< \brief Given valid base64 string `buf` of length `len`, evaluates to the exact decoded length. @hideinitializer */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(
@@ -3362,10 +3362,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(
     #include "wolfsentry/wolfsentry_lwip.h"
 #endif
 
+#ifdef WOLFSENTRY_NETXDUO
+    #include "wolfsentry/wolfsentry_netxduo.h"
+#endif
+
 /* conditionally include wolfsentry_util.h last -- none of the above rely on it.
  */
 #ifndef WOLFSENTRY_NO_UTIL_H
-#include <wolfsentry/wolfsentry_util.h>
+#include "wolfsentry/wolfsentry_util.h"
+#endif
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+#include "wolfsentry/wolfsentry_json.h"
 #endif
 
 #endif /* WOLFSENTRY_H */

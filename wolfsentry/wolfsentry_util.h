@@ -165,13 +165,79 @@
 #define WOLFSENTRY_ATOMIC_CMPXCHG(ptr, expected, desired, weak_p, success_memorder, failure_memorder) __atomic_compare_exchange_n(ptr, expected, desired, weak_p, success_memorder, failure_memorder)
    /*!< \brief Sets `*ptr` to `desired` and returns true iff `*ptr` has the value `*expected`, otherwise sets `*expected` to the actual value of `*ptr` and returns false.  @hideinitializer */
 
+#elif defined(THREADX)
+
+/* ThreadX atomic operation implementations */
+#include "tx_api.h"
+
+/* ThreadX interrupt control for atomic operations */
+#define WOLFSENTRY_ATOMIC_INCREMENT(i, x) ({ \
+    UINT posture = tx_interrupt_control(TX_INT_DISABLE); \
+    __typeof__(i) result = (i) + (x); \
+    (i) = result; \
+    (void)tx_interrupt_control(posture); \
+    result; \
+})
+
+#define WOLFSENTRY_ATOMIC_DECREMENT(i, x) ({ \
+    UINT posture = tx_interrupt_control(TX_INT_DISABLE); \
+    __typeof__(i) result = (i) - (x); \
+    (i) = result; \
+    (void)tx_interrupt_control(posture); \
+    result; \
+})
+
+#define WOLFSENTRY_ATOMIC_POSTINCREMENT(i, x) ({ \
+    UINT posture = tx_interrupt_control(TX_INT_DISABLE); \
+    __typeof__(i) old_val = (i); \
+    (i) += (x); \
+    (void)tx_interrupt_control(posture); \
+    old_val; \
+})
+
+#define WOLFSENTRY_ATOMIC_POSTDECREMENT(i, x) ({ \
+    UINT posture = tx_interrupt_control(TX_INT_DISABLE); \
+    __typeof__(i) old_val = (i); \
+    (i) -= (x); \
+    (void)tx_interrupt_control(posture); \
+    old_val; \
+})
+
+#define WOLFSENTRY_ATOMIC_STORE(i, x) ({ \
+    UINT posture = tx_interrupt_control(TX_INT_DISABLE); \
+    (i) = (x); \
+    (void)tx_interrupt_control(posture); \
+    (i); \
+})
+
+#define WOLFSENTRY_ATOMIC_LOAD(i) ({ \
+    UINT posture = tx_interrupt_control(TX_INT_DISABLE); \
+    __typeof__(i) val = (i); \
+    (void)tx_interrupt_control(posture); \
+    val; \
+})
+
+#define WOLFSENTRY_ATOMIC_CMPXCHG(ptr, expected, desired, weak_p, success_memorder, failure_memorder) ({ \
+    UINT posture = tx_interrupt_control(TX_INT_DISABLE); \
+    int result = 0; \
+    if (*(ptr) == *(expected)) { \
+        *(ptr) = (desired); \
+        result = 1; \
+    } else { \
+        *(expected) = *(ptr); \
+        result = 0; \
+    } \
+    (void)tx_interrupt_control(posture); \
+    result; \
+})
+
 #else
 
 #if !defined(WOLFSENTRY_ATOMIC_INCREMENT) || !defined(WOLFSENTRY_ATOMIC_DECREMENT) || \
     !defined(WOLFSENTRY_ATOMIC_POSTINCREMENT) || !defined(WOLFSENTRY_ATOMIC_POSTDECREMENT) || \
     !defined(WOLFSENTRY_ATOMIC_STORE) || !defined(WOLFSENTRY_ATOMIC_LOAD) || \
     !defined(WOLFSENTRY_ATOMIC_CMPXCHG)
-#error Missing required atomic implementation(s)
+   #error Missing required atomic implementation(s)
 #endif
 
 #endif /* WOLFSENTRY_HAVE_GNU_ATOMICS */

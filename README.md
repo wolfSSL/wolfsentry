@@ -115,7 +115,7 @@ topic.
 | `DEBUG` | | Compiler debugging flag to use (default `-ggdb`) |
 | `OPTIM` | | The optimizer flag to use (default `-O3`) |
 | `HOST` | | The target host tuple, for cross-compilation (default unset, i.e. native targeting) |
-| `RUNTIME` | | The target runtime ecosystem -- default unset, `FreeRTOS-lwIP` and `Linux-lwIP` are recognized |
+| `RUNTIME` | | The target runtime ecosystem -- default unset, `FreeRTOS-lwIP`, `Linux-lwIP` and `ThreadX-NetXDuo` are recognized |
 | `C_WARNFLAGS` | | The warning flags to use (overriding the generally applicable defaults) |
 | `STATIC` | | Build statically linked unit tests |
 | `STRIPPED` | | Strip binaries of debugging symbols |

@@ -22,8 +22,6 @@
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_ROUTES_C
 
-#include "wolfsentry_internal.h"
-
 #ifndef WOLFSENTRY_NO_ALLOCA
 #include <alloca.h>
 #endif
@@ -31,6 +29,8 @@
 #ifdef WOLFSENTRY_LWIP
 #include <lwip/inet.h>
 #include <lwip/sockets.h>
+#elif defined(WOLFSENTRY_NETXDUO)
+#include "wolfsentry/wolfsentry_netxduo.h"
 #else
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -39,6 +39,8 @@
 #ifndef WOLFSENTRY_NO_GETPROTOBY
 #include <netdb.h>
 #endif
+
+#include "wolfsentry_internal.h"
 
 static inline int cmp_addrs_prefixful(
     const byte *left_addr,

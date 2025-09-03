@@ -110,6 +110,20 @@
     #endif
 #endif
 
+#ifdef THREADX
+    #ifdef NEED_THREADX_TYPES
+        #include <types.h>
+        #include <stdio.h>
+    #endif
+    #include <tx_api.h>
+
+    #if !defined(SIZE_T_32) && !defined(SIZE_T_64)
+        /* size_t is "unsigned int" by default */
+        #define SIZE_T_32
+    #endif
+#endif
+
+
 /*! \addtogroup wolfsentry_init
  * @{
  */
@@ -193,13 +207,13 @@
 #endif
 
 #ifndef WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
-    #if defined(__MACH__) || defined(FREERTOS) || defined(_WIN32)
+    #if defined(__MACH__) || defined(FREERTOS) || defined(_WIN32) || defined(THREADX)
         #define WOLFSENTRY_USE_NONPOSIX_SEMAPHORES
     #endif
 #endif
 
 #ifndef WOLFSENTRY_USE_NONPOSIX_THREADS
-    #if defined(FREERTOS) || defined(_WIN32)
+    #if defined(FREERTOS) || defined(_WIN32) || defined(THREADX)
         #define WOLFSENTRY_USE_NONPOSIX_THREADS
     #endif
 #endif
@@ -543,6 +557,10 @@ typedef uint16_t wolfsentry_priority_t;
 
 #define sem_t StaticSemaphore_t
 
+#elif defined(THREADX)
+
+#define sem_t TX_SEMAPHORE
+
 #else
 
 /*! @} */
@@ -589,6 +607,8 @@ typedef uint16_t wolfsentry_priority_t;
         typedef pthread_t wolfsentry_thread_id_t;
     #elif defined(FREERTOS)
         typedef TaskHandle_t wolfsentry_thread_id_t;
+    #elif defined(THREADX)
+        typedef TX_THREAD* wolfsentry_thread_id_t;
     #else
         #error Must supply WOLFSENTRY_THREAD_ID_T for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
@@ -598,6 +618,8 @@ typedef uint16_t wolfsentry_priority_t;
        #define WOLFSENTRY_THREAD_GET_ID_HANDLER pthread_self
     #elif defined(FREERTOS)
        #define WOLFSENTRY_THREAD_GET_ID_HANDLER xTaskGetCurrentTaskHandle
+    #elif defined(THREADX)
+       #define WOLFSENTRY_THREAD_GET_ID_HANDLER tx_thread_identify
     #else
         #error Must supply WOLFSENTRY_THREAD_GET_ID_HANDLER for WOLFSENTRY_THREADSAFE on non-POSIX targets.
     #endif
@@ -752,7 +774,8 @@ enum wolfsentry_build_flags {
     WOLFSENTRY_CONFIG_FLAG_LWIP = (1U << 11U),
     WOLFSENTRY_CONFIG_FLAG_SHORT_ENUMS = (1U << 12U),
     WOLFSENTRY_CONFIG_FLAG_ADDR_BITMASKS = (1U << 13U),
-    WOLFSENTRY_CONFIG_FLAG_MAX = WOLFSENTRY_CONFIG_FLAG_ADDR_BITMASKS,
+    WOLFSENTRY_CONFIG_FLAG_NETXDUO = (1U << 14U),
+    WOLFSENTRY_CONFIG_FLAG_MAX = WOLFSENTRY_CONFIG_FLAG_NETXDUO,
     WOLFSENTRY_CONFIG_FLAG_ENDIANNESS_ZERO = (0U << 31U)
 };
 
@@ -836,6 +859,12 @@ struct wolfsentry_build_settings {
     #define _WOLFSENTRY_CONFIG_FLAG_VALUE_LWIP 0
 #endif
 
+#ifdef WOLFSENTRY_NETXDUO
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NETXDUO WOLFSENTRY_CONFIG_FLAG_NETXDUO
+#else
+    #define _WOLFSENTRY_CONFIG_FLAG_VALUE_NETXDUO 0
+#endif
+
 /* with compilers that can't evaluate the below expression as a compile-time
  * constant, WOLFSENTRY_SHORT_ENUMS can be defined in user settings to 0 or
  * 1 to avoid the dependency.
@@ -872,6 +901,7 @@ struct wolfsentry_build_settings {
     _WOLFSENTRY_CONFIG_FLAG_VALUE_HAVE_JSON_DOM | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_DEBUG_CALL_TRACE | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_LWIP | \
+    _WOLFSENTRY_CONFIG_FLAG_VALUE_NETXDUO | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_SHORT_ENUMS | \
     _WOLFSENTRY_CONFIG_FLAG_VALUE_ADDR_BITMASKS)
 

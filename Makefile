@@ -19,11 +19,12 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
 
 SHELL := bash
-
 AWK := awk
 
+ Q?=@
 ifeq "$(V)" "1"
     override undefine VERY_QUIET
+    Q=
 endif
 
 THIS_MAKEFILE := $(lastword $(MAKEFILE_LIST))
@@ -34,10 +35,17 @@ endif
 
 SRCS := wolfsentry_util.c wolfsentry_internal.c addr_families.c routes.c events.c actions.c kv.c action_builtins.c
 
-ifndef SRC_TOP
-    SRC_TOP := $(shell pwd -P)
+# Set PWD command based on OS - Windows uses 'pwd', others use 'pwd -P'
+ifeq ($(OS),Windows_NT)
+    PWD := pwd
+    SRC_TOP := .
 else
-    SRC_TOP := $(shell cd $(SRC_TOP) && pwd -P)
+    PWD := pwd -P
+    ifndef SRC_TOP
+        SRC_TOP := $(shell $(PWD))
+    else
+        SRC_TOP := $(shell cd $(SRC_TOP) && $(PWD))
+    endif
 endif
 
 ifndef BUILD_TOP
@@ -93,6 +101,17 @@ ifdef RUNTIME
         ifndef LWIP
             LWIP := 1
         endif
+    else ifeq "$(RUNTIME)" "ThreadX-NetXDuo"
+        ifndef THREADX_TOP
+            $(error THREADX_TOP not supplied with RUNTIME=$(RUNTIME))
+        endif
+        ifndef NETXDUO
+            NETXDUO := 1
+        endif
+        RUNTIME_CFLAGS += -DTHREADX -I$(THREADX_TOP)
+        ifdef NEED_THREADX_TYPES
+            RUNTIME_CFLAGS += -DNEED_THREADX_TYPES -I$(THREADX_TYPES_TOP)
+        endif
     else
         $(error unrecognized runtime "$(RUNTIME)")
     endif
@@ -110,7 +129,14 @@ ifdef LWIP
         SRCS += lwip/packet_filter_glue.c
 endif
 
-CC_V := $(shell $(CC) -v 2>&1 | sed "s/'/'\\\\''/g")
+ifdef NETXDUO
+        ifndef NETXDUO_TOP
+            NETXDUO_TOP=$(THREADX_TOP)
+        endif
+        LWIP_CFLAGS += -DWOLFSENTRY_NETXDUO -I$(NETXDUO_TOP) -D_NETINET_IN_H -DWOLFSENTRY_NO_GETPROTOBY
+endif
+
+CC_V := $(shell $(CC) -v 2>&1 | sed "s/[\`']/'\\\\''/g")
 
 CC_IS_GCC := $(shell if [[ '$(CC_V)' =~ 'gcc version' ]]; then echo 1; else echo 0; fi)
 
@@ -126,9 +152,9 @@ ifndef CLANG
     CLANG := clang
 endif
 
-AS_VERSION := $(shell $(AS) --version 2>&1 | sed "s/'/'\\\\''/g")
-LD_VERSION := $(shell $(LD) --version 2>&1 | sed "s/'/'\\\\''/g")
-AR_VERSION := $(shell $(AR) --version 2>&1 | sed "s/'/'\\\\''/g")
+AS_VERSION := $(shell $(AS) --version 2>&1 | sed "s/[\`']/'\\\\''/g")
+LD_VERSION := $(shell $(LD) --version 2>&1 | sed "s/[\`']/'\\\\''/g")
+AR_VERSION := $(shell $(AR) --version 2>&1 | sed "s/[\`']/'\\\\''/g")
 
 AR_IS_GNU_AR := $(shell if [[ '$(AR_VERSION)' =~ 'GNU' ]]; then echo 1; else echo 0; fi)
 
@@ -178,7 +204,7 @@ else
     ifdef NO_JSON_DOM
         CFLAGS += -DWOLFSENTRY_NO_JSON_DOM
     else ifdef USER_SETTINGS_NO_JSON_DOM
-	NO_JSON_DOM := 1
+        NO_JSON_DOM := 1
     else
         SRCS += json/centijson_dom.c json/centijson_value.c
     endif
@@ -191,7 +217,9 @@ endif
 ifdef SINGLETHREADED
     CFLAGS += -DWOLFSENTRY_SINGLETHREADED
 else
-    ifneq "$(RUNTIME)" "FreeRTOS-lwIP"
+    ifeq "$(RUNTIME)" "ThreadX-NetXDuo"
+    else ifeq "$(RUNTIME)" "FreeRTOS-lwIP"
+    else
         LDFLAGS += -pthread
     endif
 endif
@@ -252,18 +280,18 @@ BUILD_PARAMS := (echo 'CC_V:'; echo '$(CC_V)'; echo 'SRC_TOP: $(SRC_TOP)'; echo 
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force
-	@cd $(SRC_TOP) && [ -d .git ] || exit 0 && ([ -d .git/hooks ] || mkdir .git/hooks) && ([ -e .git/hooks/pre-push ] || ln -s ../../scripts/pre-push.sh .git/hooks/pre-push 2>/dev/null || exit 0)
-	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	$(Q)cd $(SRC_TOP) && [ -d .git ] || exit 0 && ([ -d .git/hooks ] || mkdir .git/hooks) && ([ -e .git/hooks/pre-push ] || ln -s ../../scripts/pre-push.sh .git/hooks/pre-push 2>/dev/null || exit 0)
+	$(Q)[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifdef VERY_QUIET
-	@{ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi; exit 0
+	$(Q){ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev != 0 ]; then $(BUILD_PARAMS) > $@; fi; exit 0
 else
-	@{ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
+	$(Q){ $(BUILD_PARAMS) | cmp -s - $@; } 2>/dev/null; cmp_ev=$$?; if [ $$cmp_ev = 0 ]; then echo 'Build parameters unchanged.'; else $(BUILD_PARAMS) > $@; if [ $$cmp_ev = 1 ]; then echo 'Rebuilding with changed build parameters.'; else echo 'Building fresh.'; fi; fi; exit 0
 endif
 
 ifndef USER_SETTINGS_FILE
 $(BUILD_TOP)/wolfsentry/wolfsentry_options.h: $(SRC_TOP)/scripts/build_wolfsentry_options_h.awk $(BUILD_TOP)/.build_params
-	@[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
-	@echo '$(CFLAGS)' | $(AWK) -f $< > $@
+	$(Q)[ -d $(BUILD_TOP)/wolfsentry ] || mkdir -p $(BUILD_TOP)/wolfsentry
+	$(Q)echo '$(CFLAGS)' | $(AWK) -f $< > $@
 endif
 
 $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(OPTIONS_FILE) $(SRC_TOP)/Makefile
@@ -271,48 +299,31 @@ $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRC
 INTERNAL_CFLAGS := -DBUILDING_LIBWOLFSENTRY -MMD
 
 $(BUILD_TOP)/src/%.o: $(SRC_TOP)/src/%.c
-	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
-	@rm -f $(@:.o=.gcda)
-ifeq "$(V)" "1"
-	$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
-else
+	$(Q)[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	$(Q)rm -f $(@:.o=.gcda)
 ifndef VERY_QUIET
-	@echo "$(CC) ... -o $@"
+	$(Q)echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
-endif
+	$(Q)$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_TOP)/$(LIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o))
-ifdef VERY_QUIET
-	@rm -f $@
-	@$(AR) $(AR_FLAGS) $@ $+
-else
-	@rm -f $@
-	$(AR) $(AR_FLAGS) $@ $+
-endif
+	$(Q)rm -f $@
+	$(Q)$(AR) $(AR_FLAGS) $@ $+
 
 
 # again, but to build the shared object:
 $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)): $(BUILD_TOP)/.build_params $(SRC_TOP)/Makefile
 
 $(BUILD_TOP)/src/%.So: $(SRC_TOP)/src/%.c
-	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
-	@rm -f $(@:.So=.gcda)
-ifeq "$(V)" "1"
-	$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
-else
+	$(Q)[ -d $(dir $@) ] || mkdir -p $(dir $@)
+	$(Q)rm -f $(@:.So=.gcda)
 ifndef VERY_QUIET
-	@echo "$(CC) ... -o $@"
+	$(Q)echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
-endif
+	$(Q)$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
 
 $(BUILD_TOP)/$(DYNLIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So))
-ifdef VERY_QUIET
-	@$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
-else
-	$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
-endif
+	$(Q)$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
 
 UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules test_user_values test_user_addr_families $(UNITTEST_LIST_EXTRAS)
 
@@ -329,30 +340,22 @@ endif
 
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(OPTIONS_FILE)
-	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
-ifeq "$(V)" "1"
-	$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h,$^)
-else
+	$(Q)[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifndef VERY_QUIET
-	@echo "$(CC) ... -o $@"
+	$(Q)echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h,$^)
-endif
+	$(Q)$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h,$^)
 
 
 UNITTEST_LIST_SHARED=test_all_shared
 UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]')) $(TEST_JSON_CFLAGS)
 
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(OPTIONS_FILE)
-	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
-ifeq "$(V)" "1"
-	$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
-else
+	$(Q)[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifndef VERY_QUIET
-	@echo "$(CC) ... -o $@"
+	$(Q)echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
-endif
+	$(Q)$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
 
 ifdef BUILD_DYNAMIC
 $(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED))
@@ -364,26 +367,26 @@ test: $(BUILD_TOP)/.tested
 
 $(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST))
 ifdef VERY_QUIET
-	@for test in $(basename $(UNITTEST_LIST)); do $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then echo "$${test} failed" 1>&2; break; fi; done; exit $$exitcode
+	$(Q)for test in $(basename $(UNITTEST_LIST)); do $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then echo "$${test} failed" 1>&2; break; fi; done; exit $$exitcode
 else
 ifeq "$(V)" "1"
-	@for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; echo $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test"; $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
+	$(Q)for test in $(basename $(UNITTEST_LIST)); do echo "$${test}:"; echo $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test"; $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test"; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo "$${test} succeeded"; echo; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
 else
-	@for test in $(basename $(UNITTEST_LIST)); do echo -n "$${test}..."; $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo ' succeeded'; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
+	$(Q)for test in $(basename $(UNITTEST_LIST)); do echo -n "$${test}..."; $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null; exitcode=$$?; if [ $$exitcode != 0 ]; then break; fi; echo ' succeeded'; done; if [ "$$exitcode" = 0 ]; then echo 'all subtests succeeded.'; else exit $$exitcode; fi
 endif
 endif
 ifdef BUILD_DYNAMIC
-	@for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH=$(BUILD_TOP) $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null || exit $?; done
+	$(Q)for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH=$(BUILD_TOP) $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_TOP)/tests/$$test" >/dev/null || exit $?; done
 ifndef VERY_QUIET
-	@echo '$(UNITTEST_LIST_SHARED) succeeded.'
+	$(Q)echo '$(UNITTEST_LIST_SHARED) succeeded.'
 endif
 endif
-	@touch $(BUILD_TOP)/.tested
+	$(Q)touch $(BUILD_TOP)/.tested
 
 .PHONY: retest
 retest:
-	@$(RM) -f $(BUILD_TOP)/.tested
-	@$(MAKE) -f $(THIS_MAKEFILE) test
+	$(Q)$(RM) -f $(BUILD_TOP)/.tested
+	$(Q)$(MAKE) -f $(THIS_MAKEFILE) test
 
 ifndef INSTALL_DIR
     INSTALL_DIR := /usr/local
@@ -404,9 +407,9 @@ install: $(BUILD_TOP)/.tested
 install-untested: all
 
 install install-untested:
-	@mkdir -p $(INSTALL_LIBDIR)
+	$(Q)mkdir -p $(INSTALL_LIBDIR)
 	install -p -m 0644 $(INSTALL_LIBS) $(INSTALL_LIBDIR)
-	@mkdir -p $(INSTALL_INCDIR)/wolfsentry
+	$(Q)mkdir -p $(INSTALL_INCDIR)/wolfsentry
 	install -p -m 0644 $(INSTALL_HEADERS) $(INSTALL_INCDIR)/wolfsentry
 
 .PHONY: uninstall
@@ -431,11 +434,11 @@ endif
 
 .PHONY: dist
 dist:
-	@if [[ ! -d "$(SRC_TOP)/.git" ]]; then echo 'dist target requires git artifacts.' 1>&2; exit 1; fi
+	$(Q)if [[ ! -d "$(SRC_TOP)/.git" ]]; then echo 'dist target requires git artifacts.' 1>&2; exit 1; fi
 ifndef VERY_QUIET
-	@echo "generating dist archive wolfsentry-$(VERSION).tgz"
+	$(Q)echo "generating dist archive wolfsentry-$(VERSION).tgz"
 endif
-	@DEST_DIR="$$PWD"; \
+	$(Q)DEST_DIR="$$PWD"; \
 	cd $(SRC_TOP); \
 	if [[ "$(VERSION)" =~ -dirty$$ ]]; then \
 		if [[ -n "$$(git ls-files -d)" ]]; then \
@@ -449,21 +452,21 @@ endif
 	fi
 
 dist-test: dist
-	@rm -rf $(BUILD_TOP)/dist-test
-	@mkdir -p $(BUILD_TOP)/dist-test
+	$(Q)rm -rf $(BUILD_TOP)/dist-test
+	$(Q)mkdir -p $(BUILD_TOP)/dist-test
 ifdef VERY_QUIET
-	@DEST_DIR="$$PWD" && cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
+	$(Q)DEST_DIR="$$PWD" && cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) --quiet test
 else
-	@DEST_DIR="$$PWD" && cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) test
+	$(Q)DEST_DIR="$$PWD" && cd $(BUILD_TOP)/dist-test && $(TAR) -xf "$${DEST_DIR}/wolfsentry-$(VERSION).tgz" && cd wolfsentry-$(VERSION) && $(MAKE) test
 endif
 
 dist-test-clean:
-	@DEST_DIR="$$PWD" && [ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $${DEST_DIR}/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $${DEST_DIR}/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
-	@[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
+	$(Q)DEST_DIR="$$PWD" && [ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && [ -f $${DEST_DIR}/wolfsentry-$(VERSION).tgz ] && cd $(BUILD_TOP)/dist-test && $(TAR) -tf $${DEST_DIR}/wolfsentry-$(VERSION).tgz | grep -E -v '/$$' | xargs $(RM) -f
+	$(Q)[ -d $(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) ] && $(MAKE) $(EXTRA_MAKE_FLAGS) -f $(THIS_MAKEFILE) BUILD_TOP=$(BUILD_TOP)/dist-test/wolfsentry-$(VERSION) clean && rmdir $(BUILD_TOP)/dist-test
 
 CLEAN_RM_ARGS = -f $(BUILD_TOP)/.build_params $(BUILD_TOP)/wolfsentry/wolfsentry_options.h $(BUILD_TOP)/.tested $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.o)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.d)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.Sd)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcno)) $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.gcda)) $(BUILD_TOP)/$(LIB_NAME) $(BUILD_TOP)/$(DYNLIB_NAME) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)) $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST))) $(addprefix $(BUILD_TOP)/tests/,$(addsuffix .d,$(UNITTEST_LIST_SHARED))) $(ANALYZER_BUILD_ARTIFACTS)
 
-DOXYGEN_PREDEFINED := WOLFSENTRY_THREADSAFE WOLFSENTRY_PROTOCOL_NAMES WOLFSENTRY_HAVE_JSON_DOM WOLFSENTRY_ERROR_STRINGS LWIP_PACKET_FILTER_API __GNUC__=4 WOLFSENTRY_HAVE_GNU_ATOMICS WOLFSENTRY_NO_INLINE WOLFSENTRY_FOR_DOXYGEN attr_align_to(x)=
+DOXYGEN_PREDEFINED := WOLFSENTRY_THREADSAFE WOLFSENTRY_PROTOCOL_NAMES WOLFSENTRY_HAVE_JSON_DOM WOLFSENTRY_ERROR_STRINGS LWIP_PACKET_FILTER_API NETXDUO_PACKET_FILTER_API __GNUC__=4 WOLFSENTRY_HAVE_GNU_ATOMICS WOLFSENTRY_NO_INLINE WOLFSENTRY_FOR_DOXYGEN attr_align_to(x)=
 DOXYGEN_EXPAND_AS_DEFINED := WOLFSENTRY_SOCKADDR_MEMBERS WOLFSENTRY_FLEXIBLE_ARRAY_SIZE attr_align_to
 DOXYGEN_EXCLUDE := wolfsentry/wolfsentry_options.h
 
@@ -473,8 +476,8 @@ README_FOR_FULL_MANUAL_RECIPE = grep -v -E -e 'doc/[-_[:alnum:]]+\.md|ChangeLog\
 
 .PHONY: doc-html
 doc-html:
-	@command -v doxygen >/dev/null || doxygen
-	@mkdir -p '$(BUILD_TOP)/doc' && \
+	$(Q)command -v doxygen >/dev/null || doxygen
+	$(Q)mkdir -p '$(BUILD_TOP)/doc' && \
 	RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf html && \
@@ -491,13 +494,13 @@ doc-html:
 
 .PHONY: doc-html-clean
 doc-html-clean:
-	@rm -rf '$(BUILD_TOP)/doc/html'
+	$(Q)rm -rf '$(BUILD_TOP)/doc/html'
 
 $(BUILD_TOP)/doc/pdf/refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsentry_options.h,$(INSTALL_HEADERS)) ChangeLog.md README.md doc/freertos-lwip-app.md doc/json_configuration.md)
-	@command -v doxygen >/dev/null || doxygen
-	@command -v pdflatex >/dev/null || pdflatex
-	@command -v makeindex >/dev/null || makeindex
-	@mkdir -p '$(BUILD_TOP)/doc' && \
+	$(Q)command -v doxygen >/dev/null || doxygen
+	$(Q)command -v pdflatex >/dev/null || pdflatex
+	$(Q)command -v makeindex >/dev/null || makeindex
+	$(Q)mkdir -p '$(BUILD_TOP)/doc' && \
 	RELEASE_PER_HEADERS=$$($(PRINT_VERSION_RECIPE)) && \
 	cd '$(BUILD_TOP)/doc' && \
 	rm -rf pdf && \
@@ -521,7 +524,7 @@ doc-pdf: $(BUILD_TOP)/doc/pdf/refman.pdf
 
 .PHONY: doc-pdf-clean
 doc-pdf-clean:
-	@rm -rf '$(BUILD_TOP)/doc/pdf'
+	$(Q)rm -rf '$(BUILD_TOP)/doc/pdf'
 
 doc: doc-html $(BUILD_TOP)/doc/pdf/refman.pdf
 
@@ -529,15 +532,11 @@ doc-clean: doc-html-clean doc-pdf-clean
 
 .PHONY: clean
 clean:
-ifeq "$(V)" "1"
-	rm $(CLEAN_RM_ARGS)
-else
-	@rm $(CLEAN_RM_ARGS)
-endif
-	@rm -rf $(addsuffix .dSYM,$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST) $(UNITTEST_LIST_SHARED)))
-	@[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,ports,lwip,wolfsentry,examples,scripts,FreeRTOS,.github,doc} -depth -type d -print0 2>/dev/null | xargs -0 rmdir && rmdir "${BUILD_TOP}" || exit 0
+	$(Q)rm $(CLEAN_RM_ARGS)
+	$(Q)rm -rf $(addsuffix .dSYM,$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST) $(UNITTEST_LIST_SHARED)))
+	$(Q)[[ -d "$(BUILD_TOP)/wolfsentry" && ! "$(BUILD_TOP)" -ef "$(SRC_TOP)" ]] && find $(BUILD_TOP)/{src,tests,ports,lwip,wolfsentry,examples,scripts,FreeRTOS,.github,doc} -depth -type d -print0 2>/dev/null | xargs -0 rmdir && rmdir "${BUILD_TOP}" || exit 0
 ifndef VERY_QUIET
-	@echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
+	$(Q)echo 'cleaned all targets and ephemera in $(BUILD_TOP)'
 endif
 
 -include $(SRC_TOP)/Makefile.analyzers

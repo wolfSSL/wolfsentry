@@ -69,6 +69,13 @@ int lwip_inet_pton(int af, const char *src, void *dst) {
 
 #endif /* !TEST_LWIP */
 
+#elif defined(WOLFSENTRY_NETXDUO)
+
+#include "nxd_bsd.h"
+/* undef OK this conflicts with the _OK macros in wolfsentry_errcodes.h */
+#undef OK
+
+
 #else /* !WOLFSENTRY_LWIP */
 
 #include <sys/socket.h>

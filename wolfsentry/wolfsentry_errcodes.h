@@ -39,7 +39,7 @@
 #endif
 
 typedef int32_t wolfsentry_errcode_t; /*!< \brief The structured result code type for wolfSentry.  It encodes a failure or success code, a source code file ID, and a line number. */
-#ifdef FREERTOS
+#if defined(FREERTOS) || defined(THREADX)
 #define WOLFSENTRY_ERRCODE_FMT "%d"
 #elif defined(PRId32)
 #define WOLFSENTRY_ERRCODE_FMT "%" PRId32
@@ -143,7 +143,7 @@ static inline int WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(wolfsentry_errcode_t x) {
 
 #define WOLFSENTRY_ERROR_ENCODE(name) WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_ERROR_ID_ ## name)
     /*!< \brief Compute a `wolfsentry_errcode_t` encoding the current source ID and line number, and the designated short-form error `name` (e.g. `INVALID_ARG`). @hideinitializer */
-#define WOLFSENTRY_SUCCESS_ENCODE(x) WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_SUCCESS_ID_ ## x)
+#define WOLFSENTRY_SUCCESS_ENCODE(name) WOLFSENTRY_ERROR_ENCODE_0(WOLFSENTRY_SUCCESS_ID_ ## name)
     /*!< \brief Compute a `wolfsentry_errcode_t` encoding the current source ID and line number, and the designated short-form success `name` (e.g. `OK`). @hideinitializer */
 
 #ifdef WOLFSENTRY_FOR_DOXYGEN
@@ -337,7 +337,9 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_name(wolfsentry_errcode_t e)
 
 #if !defined(WOLFSENTRY_NO_STDIO_STREAMS) && !defined(WOLFSENTRY_NO_DIAG_MSGS)
 
+#ifndef WOLFSENTRY_NETXDUO /* netxduo has its own errno.h */
 #include <errno.h>
+#endif
 
 #ifdef __STRICT_ANSI__
 #define WOLFSENTRY_WARN(fmt,...) WOLFSENTRY_PRINTF_ERR("%s@L%d " fmt, __FILE__, __LINE__, __VA_ARGS__)

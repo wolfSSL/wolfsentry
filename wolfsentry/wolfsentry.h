@@ -3337,6 +3337,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_end(
     struct wolfsentry_cursor **cursor);
     /*!< \brief End an iteration loop started with wolfsentry_user_values_iterate_start().  Caller must have a lock on the context at entry. */
 
+WOLFSENTRY_API int wolfsentry_inet4_ntoa(const byte *addr, unsigned int addr_bits, char *buf, int *buflen);
+
+WOLFSENTRY_API int wolfsentry_inet6_ntoa(const byte *addr, unsigned int addr_bits, char *buf, int *buflen);
+
 #define WOLFSENTRY_BASE64_DECODED_BUFSPC(buf, len) \
     (((((len)+3)/4)*3) - ((len) > 1 ? \
                           ((buf)[(len)-1] == '=') : \

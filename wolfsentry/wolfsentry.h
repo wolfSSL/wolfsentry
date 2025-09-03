@@ -3338,8 +3338,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_values_iterate_end(
     /*!< \brief End an iteration loop started with wolfsentry_user_values_iterate_start().  Caller must have a lock on the context at entry. */
 
 WOLFSENTRY_API int wolfsentry_inet4_ntoa(const byte *addr, unsigned int addr_bits, char *buf, int *buflen);
+    /*!< \brief Convert a network order IPv4 binary address with prefix length into ASCII presentation form (without string termination), with `buflen` supplying available space and returning used space. */
 
 WOLFSENTRY_API int wolfsentry_inet6_ntoa(const byte *addr, unsigned int addr_bits, char *buf, int *buflen);
+    /*!< \brief Convert a network order IPv6 binary address with prefix length into ASCII presentation form (without string termination), with `buflen` supplying available space and returning used space. */
 
 #define WOLFSENTRY_BASE64_DECODED_BUFSPC(buf, len) \
     (((((len)+3)/4)*3) - ((len) > 1 ? \

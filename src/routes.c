@@ -3704,12 +3704,165 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_iterate_end(
     WOLFSENTRY_RETURN_OK;
 }
 
+static int ws_decimal_ntoa(int d, char *buf, int *buflen) {
+    if (d >= 1000) {
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+    }
+    else if (d >= 100) {
+        if (*buflen < 3)
+            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+        *buf++ = (char)('0' + (d/100));
+        d %= 100;
+        *buf++ = (char)('0' + (d/10));
+        d %= 10;
+        *buf = (char)('0' + d);
+        *buflen = 3;
+        WOLFSENTRY_RETURN_OK;
+    }
+    else if (d >= 10) {
+        if (*buflen < 2)
+            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+        *buf++ = (char)('0' + (d/10));
+        d %= 10;
+        *buf = (char)('0' + d);
+        *buflen = 2;
+        WOLFSENTRY_RETURN_OK;
+    }
+    else {
+        if (*buflen < 1)
+            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+        *buf = (char)('0' + d);
+        *buflen = 1;
+        WOLFSENTRY_RETURN_OK;
+    }
+}
+
+WOLFSENTRY_API int wolfsentry_inet4_ntoa(const byte *addr, unsigned int addr_bits, char *buf, int *buflen) {
+    const int b = (int)WOLFSENTRY_BITS_TO_BYTES(addr_bits);
+    int i;
+    const char *start_buf = buf;
+
+    for (i=0; i<4; ++i) {
+        int ret;
+        int buflen2 = *buflen;
+        ret = ws_decimal_ntoa(b > i ? (int)addr[i] : 0, buf, &buflen2);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        buf += buflen2;
+        *buflen -= buflen2;
+        if (i < 3) {
+            if (*buflen < 2)
+                WOLFSENTRY_RETURN_OK;
+            *buf++ = '.';
+            --*buflen;
+        }
+    }
+
+    *buflen = (int)(buf - start_buf);
+    WOLFSENTRY_RETURN_OK;
+}
+
 static inline char hexdigit_ntoa(unsigned int d) {
     d &= 0xf;
     if (d < 10)
         return (char)('0' + d);
     else
         return (char)('a' + (d - 0xa));
+}
+
+WOLFSENTRY_API int wolfsentry_inet6_ntoa(const byte *addr, unsigned int addr_bits, char *buf, int *buflen) {
+    const int b = (int)WOLFSENTRY_BITS_TO_BYTES(addr_bits);
+    int i;
+    const char *start_buf = buf;
+    int this_zerospan_length = 0;
+    int this_zerospan_offset;
+    int longest_zerospan_length = 0;
+    int longest_zerospan_offset = 0;
+
+    for (i=0; i<16; i += 2) {
+        unsigned int octet0 = b > i ? addr[i] : 0;
+        unsigned int octet1 = b > i + 1 ? addr[i+1] : 0;
+        if ((octet0 == 0) && (octet1 == 0)) {
+            if (this_zerospan_length == 0) {
+                this_zerospan_length = 2;
+                this_zerospan_offset = i;
+            }
+            else
+                this_zerospan_length += 2;
+        }
+        else if (this_zerospan_length > 0) {
+            if (longest_zerospan_length < this_zerospan_length) {
+                longest_zerospan_length = this_zerospan_length;
+                longest_zerospan_offset = this_zerospan_offset;
+            }
+            this_zerospan_length = 0;
+        }
+    }
+
+    if (longest_zerospan_length < this_zerospan_length) {
+        longest_zerospan_length = this_zerospan_length;
+        longest_zerospan_offset = this_zerospan_offset;
+    }
+
+    if (longest_zerospan_length < 4)
+        longest_zerospan_offset = -1;
+
+    for (i=0; i<16; i += 2) {
+        unsigned int octet0 = b > i ? addr[i] : 0;
+        unsigned int octet1 = b > i + 1 ? addr[i+1] : 0;
+        if (i == longest_zerospan_offset) {
+            if (i == 0) {
+                if (*buflen < 2)
+                    WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+                *buf++ = ':';
+                --*buflen;
+            }
+            if (*buflen < 1)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            *buf++ = ':';
+            --*buflen;
+            i += longest_zerospan_length - 2;
+            continue;
+        }
+        if (octet0 >> 4) {
+            if (*buflen < 4)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            *buf++ = hexdigit_ntoa(octet0 >> 4);
+            *buf++ = hexdigit_ntoa(octet0);
+            *buf++ = hexdigit_ntoa(octet1 >> 4);
+            *buf++ = hexdigit_ntoa(octet1);
+            *buflen -= 4;
+        }
+        else if (octet0) {
+            if (*buflen < 3)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            *buf++ = hexdigit_ntoa(octet0);
+            *buf++ = hexdigit_ntoa(octet1 >> 4);
+            *buf++ = hexdigit_ntoa(octet1);
+            *buflen -= 3;
+        }
+        else if (octet1 >> 4) {
+            if (*buflen < 2)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            *buf++ = hexdigit_ntoa(octet1 >> 4);
+            *buf++ = hexdigit_ntoa(octet1);
+            *buflen -= 2;
+        }
+        else {
+            if (*buflen < 1)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            *buf++ = hexdigit_ntoa(octet1);
+            *buflen -= 1;
+        }
+        if (i < 14) {
+            if (*buflen < 1)
+                WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+            *buf++ = ':';
+            --*buflen;
+        }
+    }
+
+    *buflen = (int)(buf - start_buf);
+    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
@@ -3749,21 +3902,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
         *buflen = (int)(buf - buf_at_start);
         WOLFSENTRY_RETURN_OK;
     } else if (sa_family == WOLFSENTRY_AF_INET) {
-        byte addr_buf[sizeof(struct in_addr)];
-        memset(addr_buf, 0, sizeof addr_buf);
-        memcpy(addr_buf, addr, WOLFSENTRY_BITS_TO_BYTES(addr_bits));
-        if (inet_ntop(AF_INET, addr_buf, buf, (socklen_t)*buflen) == NULL)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-        *buflen = (int)strlen(buf);
-        WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_ERROR_RERETURN(wolfsentry_inet4_ntoa(addr, addr_bits, buf, buflen));
     } else if (sa_family == WOLFSENTRY_AF_INET6) {
-        byte addr_buf[sizeof(struct in6_addr)];
-        memset(addr_buf, 0, sizeof addr_buf);
-        memcpy(addr_buf, addr, WOLFSENTRY_BITS_TO_BYTES(addr_bits));
-        if (inet_ntop(AF_INET6, addr_buf, buf, (socklen_t)*buflen) == NULL)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-        *buflen = (int)strlen(buf);
-        WOLFSENTRY_RETURN_OK;
+        WOLFSENTRY_ERROR_RERETURN(wolfsentry_inet6_ntoa(addr, addr_bits, buf, buflen));
     } else if (sa_family == WOLFSENTRY_AF_LOCAL) {
         if (WOLFSENTRY_BITS_TO_BYTES(addr_bits) >= (size_t)*buflen)
             WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
@@ -4281,24 +4422,18 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
                 WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         }
     } else if (sa_family == WOLFSENTRY_AF_INET) {
-        byte addr_buf[4];
-        if (addr_bytes > sizeof addr_buf)
-            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-        memset(addr_buf, 0, sizeof addr_buf);
-        memcpy(addr_buf, addr, addr_bytes);
-        if (inet_ntop(AF_INET, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-        if (fprintf(f, "%s/%u", fmt_buf, addr_bits) < 0)
+        int fmt_buf_len = (int)sizeof(fmt_buf);
+        int ret = wolfsentry_inet4_ntoa(addr, addr_bits, fmt_buf, &fmt_buf_len);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (fprintf(f, "%.*s/%u", fmt_buf_len, fmt_buf, addr_bits) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else if (sa_family == WOLFSENTRY_AF_INET6) {
-        byte addr_buf[16];
-        if (addr_bytes > sizeof addr_buf)
-            WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-        memset(addr_buf, 0, sizeof addr_buf);
-        memcpy(addr_buf, addr, addr_bytes);
-        if (inet_ntop(AF_INET6, addr_buf, fmt_buf, sizeof fmt_buf) == NULL)
-            WOLFSENTRY_ERROR_RETURN(SYS_OP_FAILED);
-        if (fprintf(f, "[%s]/%u", fmt_buf, addr_bits) < 0)
+        int fmt_buf_len = (int)sizeof(fmt_buf);
+        int ret = wolfsentry_inet6_ntoa(addr, addr_bits, fmt_buf, &fmt_buf_len);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (fprintf(f, "%.*s/%u", fmt_buf_len, fmt_buf, addr_bits) < 0)
+            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+        if (fprintf(f, "[%.*s]/%u", fmt_buf_len, fmt_buf, addr_bits) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else if (sa_family == WOLFSENTRY_AF_LOCAL) {
         if (fprintf(f, "\"%.*s\"", (int)addr_bytes, addr) < 0)

@@ -103,7 +103,7 @@
    /*!< \brief Evaluates to the largest representable `unsigned int` in a word the size of `x`.  @hideinitializer */
 #define MAX_SINT_OF(x) ((int64_t)((((uint64_t)1 << ((sizeof(x) * (uint64_t)BITS_PER_BYTE) - (uint64_t)2)) - (uint64_t)1) | ((uint64_t)1 << ((sizeof(x) * (uint64_t)BITS_PER_BYTE) - (uint64_t)2))))
    /*!< \brief Evaluates to the largest representable `signed int` in a word the size of `x`.  @hideinitializer */
-#define MIN_SINT_OF(x) ((int64_t)((uint64_t)1 << ((sizeof(x) * (uint64_t)BITS_PER_BYTE) - (uint64_t)1)))
+#define MIN_SINT_OF(x) (-MAX_SINT_OF(x) - 1)
    /*!< \brief Evaluates to the largest negative representable `signed int` in a word the size of `x`.  @hideinitializer */
 
 #define WOLFSENTRY_SET_BITS(enumint, bits) ((enumint) |= (bits))

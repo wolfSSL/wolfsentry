@@ -69,6 +69,8 @@ WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t
         return "lwip/packet_filter_glue.c";
     case WOLFSENTRY_SOURCE_ID_ACTION_BUILTINS_C:
         return "action_builtins.c";
+    case WOLFSENTRY_SOURCE_ID_WOLFIP_PACKET_FILTER_GLUE_C:
+        return "wolfip/packet_filter_glue.c";
 
     case WOLFSENTRY_SOURCE_ID_USER_BASE:
         break;

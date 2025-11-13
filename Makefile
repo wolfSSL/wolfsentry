@@ -129,6 +129,23 @@ ifdef LWIP
         SRCS += lwip/packet_filter_glue.c
 endif
 
+ifdef WOLFIP
+        ifndef WOLFIP_TOP
+            WOLFIP_TOP := $(SRC_TOP)/../wolfip
+        endif
+        ifndef WOLFIP_CONFIG_DIR
+            WOLFIP_CONFIG_DIR := $(WOLFIP_TOP)
+        endif
+        ifndef WOLFIP_ENABLE_IPFILTER
+            WOLFIP_ENABLE_IPFILTER := 1
+        endif
+        WOLFIP_CFLAGS += -DWOLFSENTRY_WOLFIP -I$(WOLFIP_CONFIG_DIR) -I$(WOLFIP_TOP)
+        ifeq ($(WOLFIP_ENABLE_IPFILTER),1)
+            WOLFIP_CFLAGS += -DCONFIG_IPFILTER=1
+        endif
+        SRCS += wolfip/packet_filter_glue.c
+endif
+
 ifdef NETXDUO
         ifndef NETXDUO_TOP
             NETXDUO_TOP=$(THREADX_TOP)
@@ -166,7 +183,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) $(C_WARNFLAGS) $(LWIP_CFLAGS) $(RUNTIME_CFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) $(C_WARNFLAGS) $(LWIP_CFLAGS) $(WOLFIP_CFLAGS) $(RUNTIME_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1

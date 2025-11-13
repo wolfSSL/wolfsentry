@@ -1,0 +1,39 @@
+{
+  "wolfsentry-config-version": 1,
+  "events": [
+    {
+      "label": "wolfip-ethernet",
+      "match-actions": [ ]
+    },
+    {
+      "label": "wolfip-icmp",
+      "match-actions": [ "icmp-mod7" ]
+    }
+  ],
+  "default-policies": {
+    "default-policy": "accept",
+    "default-event": "wolfip-ethernet"
+  },
+  "routes": [
+    {
+      "parent-event": "wolfip-ethernet",
+      "family": 118,
+      "direction-in": true,
+      "direction-out": true,
+      "remote": {
+        "address": "00:00:00:00:00:00",
+        "prefix-bits": 0
+      }
+    },
+    {
+      "parent-event": "wolfip-icmp",
+      "family": 2,
+      "protocol": 1,
+      "direction-in": true,
+      "remote": {
+        "address": "0.0.0.0",
+        "prefix-bits": 0
+      }
+    }
+  ]
+}

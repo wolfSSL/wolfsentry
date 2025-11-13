@@ -1,0 +1,33 @@
+#ifndef WOLFIP_CONFIG_H
+#define WOLFIP_CONFIG_H
+
+#define CONFIG_IPFILTER 1
+
+#define ETHERNET
+#define LINK_MTU 1536
+
+#define MAX_TCPSOCKETS 4
+#define MAX_UDPSOCKETS 2
+#define RXBUF_SIZE (LINK_MTU * 16)
+#define TXBUF_SIZE (LINK_MTU * 16)
+
+#define MAX_NEIGHBORS 16
+
+#ifndef WOLFIP_MAX_INTERFACES
+#define WOLFIP_MAX_INTERFACES 2
+#endif
+
+#ifndef WOLFIP_ENABLE_FORWARDING
+#define WOLFIP_ENABLE_FORWARDING 0
+#endif
+
+#ifndef WOLFIP_ENABLE_LOOPBACK
+#define WOLFIP_ENABLE_LOOPBACK 0
+#endif
+
+#define WOLFIP_IP "10.10.10.2"
+#define WOLFIP_NETMASK "255.255.255.0"
+#define HOST_STACK_IP "10.10.10.1"
+#define TAP_IFNAME "wolfip0"
+
+#endif /* WOLFIP_CONFIG_H */

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #define _GNU_SOURCE
 #include <errno.h>
 #include <arpa/inet.h>
@@ -358,3 +360,4 @@ int main(void)
     printf("Exiting.\n");
     return 0;
 }
+#include <errno.h>

@@ -25,6 +25,7 @@ wolfsentry/wolfsentry_options.h
 
 /examples/notification-demo/log_server/log_server
 /examples/notification-demo/udp_to_dbus/udp_to_dbus
+/examples/Linux-wolfIP/wolfip-wolfsentry-demo
 
 /scripts/analyzer-config.sh
 

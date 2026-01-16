@@ -141,7 +141,7 @@ struct wolfsentry_allocator {
         /*!< \brief Required pointer. */
     wolfsentry_memalign_cb_t memalign;
         /*!< \brief Optional pointer.
-         * Required only if a `struct wolfsentry_eventconfig` is passed in (e.g. to wolfsentry_init()`) with a nonzero `route_private_data_alignment`.
+         * Required only if a `struct wolfsentry_eventconfig` is passed in (e.g. to `wolfsentry_init()`) with a nonzero `route_private_data_alignment`.
          */
     wolfsentry_free_aligned_cb_t free_aligned;
         /*!< \brief Optional pointer.  Required (and allowed) only if `memalign` pointer is non-null. */

@@ -406,7 +406,7 @@ static const struct {
     { WOLFSENTRY_ACTION_RES_USER7, "user+7" }
 };
 
-wolfsentry_static_assert(length_of_array(action_res_bit_map) == 1U + sizeof(wolfsentry_action_res_t) * BITS_PER_BYTE)
+wolfsentry_static_assert(length_of_array(action_res_bit_map) == 1U + (sizeof(wolfsentry_action_res_t) * BITS_PER_BYTE))
 
 WOLFSENTRY_API const char *wolfsentry_action_res_assoc_by_flag(wolfsentry_action_res_t res, unsigned int bit) {
     if (bit > 31)

@@ -332,7 +332,7 @@ json_value_path(JSON_VALUE* root, const char* path)
 
             token_beg++;
             while('0' <= *token_beg  &&  *token_beg <= '9') {
-                path_index = path_index * 10U + (*token_beg - (unsigned)'0');
+                path_index = (path_index * 10U) + (*token_beg - (unsigned)'0');
                 token_beg++;
             }
             if(*token_beg != ']')

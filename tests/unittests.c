@@ -4494,7 +4494,7 @@ static int test_json(const char *fname, const char *extra_fname) {
 
         if ((ret = json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), test_json_document, (size_t)st.st_size, &centijson_config,
                                   0 /* dom_flags */, &p_root, &json_pos)) < 0) {
-            void *p = memchr((const char *)(test_json_document + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
+            const void *p = memchr((const char *)(test_json_document + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
             int linelen = p ? ((int)((unsigned char *)p - (test_json_document + json_pos.offset)) + (int)json_pos.column_number - 1) :
                 (((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
             if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)
@@ -5076,7 +5076,7 @@ static int test_json_corpus(void) {
 
             if ((ret = json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), scenario, (size_t)st.st_size, &centijson_config,
                                       dom_flags, &p_root, &json_pos)) < 0) {
-                void *p = memchr((const char *)(scenario + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
+                const void *p = memchr((const char *)(scenario + json_pos.offset), '\n', (size_t)st.st_size - json_pos.offset);
                 int linelen = p ? ((int)((unsigned char *)p - (scenario + json_pos.offset)) + (int)json_pos.column_number - 1) :
                     (((int)st.st_size - (int)json_pos.offset) + (int)json_pos.column_number - 1);
                 if (WOLFSENTRY_ERROR_DECODE_SOURCE_ID(ret) == WOLFSENTRY_SOURCE_ID_UNSET)

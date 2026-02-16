@@ -688,12 +688,12 @@ endif
 $(BUILD_TOP)/tests/lwip/%.o: $(LWIP_TOP)/%.c
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifeq "$(V)" "1"
-	$(CC) $(CFLAGS) -Wno-conversion -c $< -o $@
+	$(CC) $(CFLAGS) -Wno-conversion -Wno-format -c $< -o $@
 else
 ifndef VERY_QUIET
 	@echo "$(CC) ... -o $@"
 endif
-	@$(CC) $(CFLAGS) -Wno-conversion -c $< -o $@
+	@$(CC) $(CFLAGS) -Wno-conversion -Wno-format -c $< -o $@
 endif
 
 $(BUILD_TOP)/tests/freertos/%.o: $(FREERTOS_TOP)/%.c

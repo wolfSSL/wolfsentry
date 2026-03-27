@@ -1794,15 +1794,21 @@ json_value_dict_clean(
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->key);
-        if (ret < 0)
+        if (ret < 0) {
+            free(node);
+            free((void *)stack);
             return ret;
+        }
         ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->json_value);
-        if (ret < 0)
+        if (ret < 0) {
+            free(node);
+            free((void *)stack);
             return ret;
+        }
         free(node);
 
         stack_size += json_value_dict_leftmost_path(stack + stack_size, right);
@@ -1928,6 +1934,8 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                         break;
                     }
                     ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_dict_node->json_value, dest_node);
+                    if (ret < 0)
+                        break;
                     src_dict_node = src_dict_node->order_next;
                 }
             } else {
@@ -1954,8 +1962,6 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                 }
 
                 free((void *)stack);
-
-                break;
             }
             if (ret < 0) {
                 int ret2 = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);

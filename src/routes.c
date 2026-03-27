@@ -4439,8 +4439,6 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
         int fmt_buf_len = (int)sizeof(fmt_buf);
         int ret = wolfsentry_inet6_ntoa(addr, addr_bits, fmt_buf, &fmt_buf_len);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        if (fprintf(f, "%.*s/%u", fmt_buf_len, fmt_buf, addr_bits) < 0)
-            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         if (fprintf(f, "[%.*s]/%u", fmt_buf_len, fmt_buf, addr_bits) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else if (sa_family == WOLFSENTRY_AF_LOCAL) {
@@ -4523,7 +4521,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_rou
         } else
             already = 1;
         if (rendername == NULL) {
-            if (fprintf(stderr, "unk-0x%x", masked_flags) < 0)
+            if (fprintf(f, "unk-0x%x", masked_flags) < 0)
                 WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         } else {
             if (fputs(rendername, f) < 0)
@@ -4542,7 +4540,7 @@ static wolfsentry_errcode_t wolfsentry_route_render_endpoint(WOLFSENTRY_CONTEXT_
     const byte *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
 
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
-        if (fputs("*", stdout) < 0)
+        if (fputs("*", f) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
@@ -4648,7 +4646,7 @@ static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(WOLFSENTRY_
     const byte *addr = (sa_local_p ? r->local_address : r->remote_address);
 
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
-        if (fputs("*", stdout) < 0)
+        if (fputs("*", f) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING

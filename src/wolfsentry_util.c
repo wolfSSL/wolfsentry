@@ -1613,7 +1613,7 @@ static const struct wolfsentry_semcbs builtin_sem_methods =
 
 #define sem_init (hpi->semcbs.sem_init ? hpi->semcbs.sem_init : builtin_sem_methods.sem_init)
 #define sem_post (hpi->semcbs.sem_post ? hpi->semcbs.sem_post : builtin_sem_methods.sem_post)
-#define sem_wait (hpi->emcbs->sem_wait ? hpi->emcbs->sem_wait : builtin_sem_methods.sem_wait)
+#define sem_wait (hpi->semcbs.sem_wait ? hpi->semcbs.sem_wait : builtin_sem_methods.sem_wait)
 #define sem_timedwait (hpi->semcbs.sem_timedwait ? hpi->semcbs.sem_timedwait : builtin_sem_methods.sem_timedwait)
 #define sem_trywait (hpi->semcbs.sem_trywait ? hpi->semcbs.sem_trywait : builtin_sem_methods.sem_trywait)
 #define sem_destroy (hpi->semcbs.sem_destroy ? hpi->semcbs.sem_destroy : builtin_sem_methods.sem_destroy)
@@ -1622,7 +1622,7 @@ static const struct wolfsentry_semcbs builtin_sem_methods =
 
 #define sem_init (hpi->semcbs.sem_init)
 #define sem_post (hpi->semcbs.sem_post)
-#define sem_wait (hpi->emcbs->sem_wait)
+#define sem_wait (hpi->semcbs.sem_wait)
 #define sem_timedwait (hpi->semcbs.sem_timedwait)
 #define sem_trywait (hpi->semcbs.sem_trywait)
 #define sem_destroy (hpi->semcbs.sem_destroy)
@@ -1674,14 +1674,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_init(struct wolfsentry_host_
     goto out;
 
   free_write_waiters:
-    if (sem_init(&lock->sem_write_waiters, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    (void)sem_destroy(&lock->sem_write_waiters);
   free_read_waiters:
-    if (sem_init(&lock->sem_read_waiters, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 0 /* value */) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    (void)sem_destroy(&lock->sem_read_waiters);
   free_sem:
-    if (sem_init(&lock->sem, (flags & WOLFSENTRY_LOCK_FLAG_PSHARED) != 0, 1 /* value */) < 0)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+    (void)sem_destroy(&lock->sem);
 
   out:
 
@@ -1961,7 +1958,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
             if (sem_trywait(&lock->sem_read_waiters) == 0) {
                 if (sem_post(&lock->sem) < 0)
                     WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
-                WOLFSENTRY_RETURN_OK;
+                goto got_read;
             }
 
             --lock->read_waiter_count;
@@ -1971,6 +1968,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared_abstimed(struct wolfs
 
             WOLFSENTRY_ERROR_RERETURN(ret);
         }
+
+    got_read:
 
         ++thread->shared_count;
         if (! thread->tracked_shared_lock) {
@@ -2276,6 +2275,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_mutex_abstimed(struct wolfse
             if (sem_trywait(&lock->sem_write_waiters) == 0) {
                 if (sem_post(&lock->sem) < 0)
                     WOLFSENTRY_ERROR_RETURN(SYS_OP_FATAL);
+                WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_GET_ID);
                 if (thread)
                     ++thread->mutex_and_reservation_count;
                 WOLFSENTRY_RETURN_OK;

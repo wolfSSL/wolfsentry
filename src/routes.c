@@ -3545,9 +3545,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_get_default_event(
     char *event_label,
     int *event_label_len)
 {
-    if (table->default_event == NULL)
-        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
     WOLFSENTRY_SHARED_OR_RETURN();
+    if (table->default_event == NULL)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(ITEM_NOT_FOUND);
     if (table->default_event->label_len >= *event_label_len)
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(BUFFER_TOO_SMALL);
     memcpy(event_label, table->default_event->label, (size_t)(table->default_event->label_len + 1));
@@ -3776,7 +3776,7 @@ WOLFSENTRY_API int wolfsentry_inet6_ntoa(const byte *addr, unsigned int addr_bit
     int i;
     const char *start_buf = buf;
     int this_zerospan_length = 0;
-    int this_zerospan_offset;
+    int this_zerospan_offset = 0;
     int longest_zerospan_length = 0;
     int longest_zerospan_offset = 0;
 

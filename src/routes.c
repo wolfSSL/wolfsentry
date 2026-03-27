@@ -520,7 +520,7 @@ static int compare_match_exactness(const struct wolfsentry_route *target, const 
         } else
 #endif
         {
-            right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(right), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(right));
+            right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_REMOTE_ADDR(target), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(target), WOLFSENTRY_ROUTE_REMOTE_ADDR(right), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(right));
         }
     }
 
@@ -2562,9 +2562,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                    (WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
                     >= config->config.derogatory_threshold_for_penaltybox)
                    :
-                   (WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
-                    - WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count)
-                    >= (int)config->config.derogatory_threshold_for_penaltybox)))
+                   ((WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
+                     >= WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count))
+                    && ((wolfsentry_hitcount_t)(WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
+                                                - WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count))
+                        >= config->config.derogatory_threshold_for_penaltybox))))
     {
         wolfsentry_route_flags_t flags_before;
         WOLFSENTRY_WARN_ON_FAILURE(
@@ -2961,6 +2963,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_1(
             goto out;
     }
 
+    if (route->header.parent_table == NULL) {
+        ret = WOLFSENTRY_ERROR_ENCODE(INTERNAL_CHECK_FATAL);
+        goto out;
+    }
     if (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE) {
         ret = WOLFSENTRY_ERROR_ENCODE(WRONG_OBJECT);
         goto out;
@@ -3095,7 +3101,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
                 (! (route->flags & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
                 ((table->max_purgeable_idle_time == 0) || (now - route->meta.last_hit_time > table->max_purgeable_idle_time)))
             {
-                continue;
+                break;
             }
         }
 #ifdef WOLFSENTRY_THREADSAFE

@@ -26,6 +26,7 @@
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_JSON_LOAD_CONFIG_C
 
 #include <stdlib.h>
+#include <limits.h>
 
 #define MAX_IPV4_ADDR_BITS (sizeof(struct in_addr) * BITS_PER_BYTE)
 #define MAX_IPV6_ADDR_BITS (sizeof(struct in6_addr) * BITS_PER_BYTE)
@@ -384,12 +385,18 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
 
     switch (*endptr) {
     case 'd':
+        if (conv > LONG_MAX / 24 || conv < LONG_MIN / 24)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         conv *= 24;
         /* fallthrough */
     case 'h':
+        if (conv > LONG_MAX / 60 || conv < LONG_MIN / 60)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         conv *= 60;
         /* fallthrough */
     case 'm':
+        if (conv > LONG_MAX / 60 || conv < LONG_MIN / 60)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         conv *= 60;
         /* fallthrough */
     case 's':
@@ -1968,7 +1975,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
         struct wolfsentry_route_table *old_route_table, *new_route_table;
         if ((ret = wolfsentry_route_get_main_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &old_route_table)) < 0)
             goto out;
-        if ((ret = wolfsentry_route_get_main_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &new_route_table)) < 0)
+        if ((ret = wolfsentry_route_get_main_table(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT, &new_route_table)) < 0)
             goto out;
         if (wolfsentry_table_n_deletes((struct wolfsentry_table_header *)new_route_table)
             != wolfsentry_table_n_deletes((struct wolfsentry_table_header *)old_route_table))

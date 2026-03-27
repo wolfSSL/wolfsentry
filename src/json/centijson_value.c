@@ -1943,31 +1943,31 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                 RBTREE **stack = (RBTREE **)malloc(rbtree_stack_size_needed(src_dict)); /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
                 if (! stack) {
                     ret = JSON_ERR_OUTOFMEMORY;
-                    break;
-                }
+                } else {
+                    stack_size = json_value_dict_leftmost_path(stack, src_dict->root);
 
-                stack_size = json_value_dict_leftmost_path(stack, src_dict->root);
-
-                while(stack_size > 0) {
-                    src_dict_node = stack[--stack_size];
-                    dest_node = json_value_dict_get_or_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_string(&src_dict_node->key), json_value_string_length(&src_dict_node->key));
-                    if (! dest_node) {
-                        ret = JSON_ERR_OUTOFMEMORY;
-                        break;
+                    while(stack_size > 0) {
+                        src_dict_node = stack[--stack_size];
+                        dest_node = json_value_dict_get_or_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone, json_value_string(&src_dict_node->key), json_value_string_length(&src_dict_node->key));
+                        if (! dest_node) {
+                            ret = JSON_ERR_OUTOFMEMORY;
+                            break;
+                        }
+                        ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_dict_node->json_value, dest_node);
+                        if (ret < 0)
+                            break;
+                        stack_size += json_value_dict_leftmost_path(stack + stack_size, src_dict_node->right);
                     }
-                    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_dict_node->json_value, dest_node);
-                    if (ret < 0)
-                        break;
-                    stack_size += json_value_dict_leftmost_path(stack + stack_size, src_dict_node->right);
-                }
 
-                free((void *)stack);
+                    free((void *)stack);
+                }
             }
             if (ret < 0) {
                 int ret2 = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);
                 if (ret2 < 0)
                     WOLFSENTRY_WARN("json_value_fini: %s\n", json_error_str(ret2));
             }
+            break;
         }
     }
 

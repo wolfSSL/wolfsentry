@@ -232,7 +232,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_error_string(wolfsentry_errcode_t 
             return "unknown user defined error code";
     } else if (i >= WOLFSENTRY_SUCCESS_ID_USER_BASE) {
         if (user_defined_successes[i - WOLFSENTRY_SUCCESS_ID_USER_BASE])
-            return user_defined_errors[i - WOLFSENTRY_SUCCESS_ID_USER_BASE];
+            return user_defined_successes[i - WOLFSENTRY_SUCCESS_ID_USER_BASE];
         else
             return "unknown user defined success code";
     } else if (i >= 0)
@@ -634,7 +634,7 @@ static void *wolfsentry_builtin_malloc(
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
 #ifdef WOLFSENTRY_MALLOC_DEBUG
     {
-        ret = malloc(size);
+        void *ret = malloc(size);
         if (ret != NULL)
             WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
         WOLFSENTRY_RETURN_VALUE(ret);
@@ -989,9 +989,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTE
                 WOLFSENTRY_SUCCESS_RETURN(EXPIRED);
         } else {
             if (now >= deadline)
-                WOLFSENTRY_RETURN_OK;
-            else
                 WOLFSENTRY_SUCCESS_RETURN(EXPIRED);
+            else
+                WOLFSENTRY_RETURN_OK;
         }
     }
 }

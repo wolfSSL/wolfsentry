@@ -2366,6 +2366,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     wolfsentry_route_flags_t current_rule_route_flags;
     wolfsentry_errcode_t ret;
     wolfsentry_time_t now;
+    int penalty_triggered = 0;
+    wolfsentry_hitcount_t derog_snap;
+    wolfsentry_hitcount_t commend_snap;
 
     if (target_route == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -2553,20 +2556,25 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         }
     }
 
+    /* Snapshot atomic counts once so the guard and arithmetic operate on the
+     * same values (avoid TOCTOU between successive loads). */
+    derog_snap = WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count);
+    commend_snap = WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count);
+    if (config->config.derogatory_threshold_for_penaltybox > 0) {
+        if (config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE) {
+            penalty_triggered = (derog_snap >= config->config.derogatory_threshold_for_penaltybox);
+        } else {
+            penalty_triggered = (derog_snap >= commend_snap)
+                && ((derog_snap - commend_snap)
+                    >= config->config.derogatory_threshold_for_penaltybox);
+        }
+    }
+
     if (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED) {
         *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
         goto done;
-    } else if ((config->config.derogatory_threshold_for_penaltybox > 0)
-               && ((config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE) ?
-                   (WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
-                    >= config->config.derogatory_threshold_for_penaltybox)
-                   :
-                   ((WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
-                     >= WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count))
-                    && ((wolfsentry_hitcount_t)(WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
-                                                - WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count))
-                        >= config->config.derogatory_threshold_for_penaltybox))))
+    } else if (penalty_triggered)
     {
         wolfsentry_route_flags_t flags_before;
         WOLFSENTRY_WARN_ON_FAILURE(

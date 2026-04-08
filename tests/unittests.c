@@ -2332,6 +2332,59 @@ static int test_static_routes(void) {
                 &n_deleted));
     }
 
+    /* test that wolfsentry_route_event_dispatch_by_route does not leak
+     * its shared lock when wolfsentry_event_get_reference fails.
+     */
+    {
+        struct wolfsentry_route *checked_out_route = NULL;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert_and_check_out(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &remote.sa, &local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &checked_out_route,
+                &action_results));
+
+        id = wolfsentry_get_object_id(checked_out_route);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_drop_reference(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                checked_out_route,
+                &action_results));
+
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            wolfsentry_route_event_dispatch_by_route(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                checked_out_route,
+                "nonexistent_event",
+                -1 /* event_label_len */,
+                NULL /* caller_arg */,
+                &action_results));
+
+#ifdef WOLFSENTRY_THREADSAFE
+        /* if the shared lock leaked, this unlock would succeed. */
+        WOLFSENTRY_EXIT_ON_SUCCESS(
+            wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+#endif
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &remote.sa, &local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &action_results, &n_deleted));
+        WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
+    }
+
     /* test partial-byte subnet prefix comparison with high-valued addresses.
      * 192.168.1.0/25 should match 192.168.1.100 but not 192.168.1.200.
      */

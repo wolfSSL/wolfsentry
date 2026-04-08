@@ -2890,7 +2890,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_id_1(
 
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &trigger_event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            goto out;
     }
 
     if ((ret = wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&route)) < 0)
@@ -2958,7 +2958,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_1(
 
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &trigger_event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            goto out;
     }
 
     if (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE) {

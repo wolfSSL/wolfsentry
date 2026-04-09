@@ -900,8 +900,8 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
         int left_over_bits = route_exports->remote.addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *remote_lsb = WOLFSENTRY_ROUTE_REMOTE_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len) - 1;
-            if (*remote_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
-                *remote_lsb = (byte)(*remote_lsb & (0xffU << left_over_bits));
+            if (*remote_lsb & (0xffU >> left_over_bits))
+                *remote_lsb = (byte)(*remote_lsb & (0xffU << (BITS_PER_BYTE - left_over_bits)));
         }
     }
 
@@ -917,8 +917,8 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
         int left_over_bits = route_exports->local.addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *local_lsb = WOLFSENTRY_ROUTE_LOCAL_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len) - 1;
-            if (*local_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
-                *local_lsb = (byte)(*local_lsb & (0xffU << left_over_bits));
+            if (*local_lsb & (0xffU >> left_over_bits))
+                *local_lsb = (byte)(*local_lsb & (0xffU << (BITS_PER_BYTE - left_over_bits)));
         }
     }
 

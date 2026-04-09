@@ -2357,6 +2357,9 @@ static int test_static_routes(void) {
                 checked_out_route,
                 &action_results));
 
+        /* checked_out_route pointer is still valid -- the route table holds
+         * its own reference, so the object is not freed by drop_reference.
+         */
         WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
             ITEM_NOT_FOUND,
             wolfsentry_route_event_dispatch_by_route(
@@ -2617,6 +2620,97 @@ static int test_static_routes(void) {
                 0 /* event_label */,
                 &action_results, &n_deleted));
         WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
+    }
+
+    /* test partial-byte subnet masking via the insert_by_exports path
+     * (wolfsentry_route_init_by_exports). 192.168.1.0/25 should match
+     * 192.168.1.100 but not 192.168.1.200.
+     */
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } dispatch_remote_exp, dispatch_local_exp;
+        struct wolfsentry_route_exports exp_route;
+        byte exp_remote_addr[4];
+        wolfsentry_ent_id_t exp_id;
+
+        memset(&exp_route, 0, sizeof exp_route);
+        memset(&dispatch_remote_exp, 0, sizeof dispatch_remote_exp);
+        memset(&dispatch_local_exp, 0, sizeof dispatch_local_exp);
+
+        exp_route.sa_family = AF_INET;
+        exp_route.sa_proto = IPPROTO_TCP;
+        exp_route.flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+                        | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+                        | WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED
+                        | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
+
+        /* 192.168.1.0/25 -- intentionally set a low bit that must be masked */
+        memcpy(exp_remote_addr, "\xC0\xA8\x01\x01", 4);
+        exp_route.remote_address = exp_remote_addr;
+        exp_route.remote.addr_len = 25;
+        exp_route.remote.sa_port = 0;
+        exp_route.local.addr_len = 0;
+        exp_route.local.sa_port = 0;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert_by_exports(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &exp_route,
+                &exp_id, &action_results));
+
+        /* 192.168.1.100 (0x64) -- same /25 subnet, should match */
+        dispatch_remote_exp.sa.sa_family = AF_INET;
+        dispatch_remote_exp.sa.sa_proto = IPPROTO_TCP;
+        dispatch_remote_exp.sa.addr_len = 32;
+        memcpy(dispatch_remote_exp.sa.addr, "\xC0\xA8\x01\x64", 4);
+
+        dispatch_local_exp.sa.sa_family = AF_INET;
+        dispatch_local_exp.sa.sa_proto = IPPROTO_TCP;
+        dispatch_local_exp.sa.addr_len = 0;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &dispatch_remote_exp.sa, &dispatch_local_exp.sa,
+                exp_route.flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &route_id, &inexact_matches,
+                &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(route_id == exp_id);
+
+        /* 192.168.1.200 (0xC8) -- different /25, should NOT match */
+        memcpy(dispatch_remote_exp.sa.addr, "\xC0\xA8\x01\xC8", 4);
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_SUCCESS_CODE_IS(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &dispatch_remote_exp.sa, &dispatch_local_exp.sa,
+                    exp_route.flags,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id, &inexact_matches,
+                    &action_results),
+                USED_FALLBACK));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete_by_id(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                exp_id,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &action_results));
     }
 
     printf("all subtests succeeded -- %u distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);

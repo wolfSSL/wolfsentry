@@ -2373,6 +2373,25 @@ static int test_static_routes(void) {
             wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
 #endif
 
+        /* likewise test that dispatch_by_id does not leak its shared lock
+         * when wolfsentry_event_get_reference fails.
+         */
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            wolfsentry_route_event_dispatch_by_id(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                id,
+                "nonexistent_event",
+                -1 /* event_label_len */,
+                NULL /* caller_arg */,
+                &action_results));
+
+#ifdef WOLFSENTRY_THREADSAFE
+        /* if the shared lock leaked, this unlock would succeed. */
+        WOLFSENTRY_EXIT_ON_SUCCESS(
+            wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+#endif
+
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_route_delete(
                 WOLFSENTRY_CONTEXT_ARGS_OUT,

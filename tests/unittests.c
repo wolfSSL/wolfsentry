@@ -2372,8 +2372,7 @@ static int test_static_routes(void) {
 
 #ifdef WOLFSENTRY_THREADSAFE
         /* if the shared lock leaked, this unlock would succeed. */
-        WOLFSENTRY_EXIT_ON_SUCCESS(
-            wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->lock.state == WOLFSENTRY_LOCK_UNLOCKED);
 #endif
 
         /* likewise test that dispatch_by_id does not leak its shared lock
@@ -2391,8 +2390,7 @@ static int test_static_routes(void) {
 
 #ifdef WOLFSENTRY_THREADSAFE
         /* if the shared lock leaked, this unlock would succeed. */
-        WOLFSENTRY_EXIT_ON_SUCCESS(
-            wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->lock.state == WOLFSENTRY_LOCK_UNLOCKED);
 #endif
 
         WOLFSENTRY_EXIT_ON_FAILURE(
@@ -2651,7 +2649,7 @@ static int test_static_routes(void) {
                         | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
 
         /* 192.168.1.0/25 -- intentionally set a low bit that must be masked */
-        memcpy(exp_remote_addr, "\xC0\xA8\x01\x01", 4);
+        memcpy(exp_remote_addr, "\xC0\xA8\x01\x01", 4); /* NOLINT(bugprone-not-null-terminated-result) */
         exp_route.remote_address = exp_remote_addr;
         exp_route.remote.addr_len = 25;
         exp_route.remote.sa_port = 0;

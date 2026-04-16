@@ -2332,6 +2332,385 @@ static int test_static_routes(void) {
                 &n_deleted));
     }
 
+    /* test that wolfsentry_route_event_dispatch_by_route does not leak
+     * its shared lock when wolfsentry_event_get_reference fails.
+     */
+    {
+        struct wolfsentry_route *checked_out_route = NULL;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert_and_check_out(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &remote.sa, &local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &checked_out_route,
+                &action_results));
+
+        id = wolfsentry_get_object_id(checked_out_route);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_drop_reference(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                checked_out_route,
+                &action_results));
+
+        /* checked_out_route pointer is still valid -- the route table holds
+         * its own reference, so the object is not freed by drop_reference.
+         */
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            wolfsentry_route_event_dispatch_by_route(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                checked_out_route,
+                "nonexistent_event",
+                -1 /* event_label_len */,
+                NULL /* caller_arg */,
+                &action_results));
+
+#ifdef WOLFSENTRY_THREADSAFE
+        /* if the shared lock leaked, this unlock would succeed. */
+        WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->lock.state == WOLFSENTRY_LOCK_UNLOCKED);
+#endif
+
+        /* likewise test that dispatch_by_id does not leak its shared lock
+         * when wolfsentry_event_get_reference fails.
+         */
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            wolfsentry_route_event_dispatch_by_id(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                id,
+                "nonexistent_event",
+                -1 /* event_label_len */,
+                NULL /* caller_arg */,
+                &action_results));
+
+#ifdef WOLFSENTRY_THREADSAFE
+        /* if the shared lock leaked, this unlock would succeed. */
+        WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->lock.state == WOLFSENTRY_LOCK_UNLOCKED);
+#endif
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &remote.sa, &local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &action_results, &n_deleted));
+        WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
+    }
+
+    /* test partial-byte subnet prefix comparison with high-valued addresses.
+     * 192.168.1.0/25 should match 192.168.1.100 but not 192.168.1.200.
+     */
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } subnet_remote, subnet_local, dispatch_remote;
+        wolfsentry_ent_id_t subnet_id;
+
+        memset(&subnet_remote, 0, sizeof subnet_remote);
+        memset(&subnet_local, 0, sizeof subnet_local);
+        memset(&dispatch_remote, 0, sizeof dispatch_remote);
+
+        subnet_remote.sa.sa_family = AF_INET;
+        subnet_remote.sa.sa_proto = IPPROTO_TCP;
+        subnet_remote.sa.sa_port = 0;
+        subnet_remote.sa.interface = 0;
+        /* 192.168.1.0/25 */
+        subnet_remote.sa.addr_len = 25;
+        memcpy(subnet_remote.sa.addr, "\xC0\xA8\x01\x00", 4);
+
+        subnet_local.sa.sa_family = AF_INET;
+        subnet_local.sa.sa_proto = IPPROTO_TCP;
+        subnet_local.sa.sa_port = 0;
+        subnet_local.sa.interface = 0;
+        subnet_local.sa.addr_len = 0;
+
+        flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+              | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+              | WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED
+              | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+              | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+              | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+              | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+              | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &subnet_remote.sa, &subnet_local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &subnet_id, &action_results));
+
+        /* 192.168.1.100 (0x64) -- same /25 subnet, should match */
+        dispatch_remote = subnet_remote;
+        dispatch_remote.sa.addr_len = 32;
+        memcpy(dispatch_remote.sa.addr, "\xC0\xA8\x01\x64", 4);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &dispatch_remote.sa, &subnet_local.sa,
+                flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &route_id, &inexact_matches,
+                &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(route_id == subnet_id);
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_CHECK_BITS(inexact_matches,
+                WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD));
+
+        /* 192.168.1.200 (0xC8) -- different /25, should NOT match */
+        memcpy(dispatch_remote.sa.addr, "\xC0\xA8\x01\xC8", 4);
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_SUCCESS_CODE_IS(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &dispatch_remote.sa, &subnet_local.sa,
+                    flags,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id, &inexact_matches,
+                    &action_results),
+                USED_FALLBACK));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &subnet_remote.sa, &subnet_local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &action_results, &n_deleted));
+        WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
+
+        /* /31 prefix: 7 significant bits in last byte.
+         * 10.0.0.FE/31 should match 10.0.0.FF but not 10.0.0.FC.
+         */
+        subnet_remote.sa.addr_len = 31;
+        memcpy(subnet_remote.sa.addr, "\x0A\x00\x00\xFE", 4);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &subnet_remote.sa, &subnet_local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &subnet_id, &action_results));
+
+        dispatch_remote = subnet_remote;
+        dispatch_remote.sa.addr_len = 32;
+        /* 10.0.0.255 -- same /31, should match */
+        memcpy(dispatch_remote.sa.addr, "\x0A\x00\x00\xFF", 4);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &dispatch_remote.sa, &subnet_local.sa,
+                flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &route_id, &inexact_matches,
+                &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(route_id == subnet_id);
+
+        /* 10.0.0.252 -- different /31, should NOT match */
+        memcpy(dispatch_remote.sa.addr, "\x0A\x00\x00\xFC", 4);
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_SUCCESS_CODE_IS(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &dispatch_remote.sa, &subnet_local.sa,
+                    flags,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id, &inexact_matches,
+                    &action_results),
+                USED_FALLBACK));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &subnet_remote.sa, &subnet_local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &action_results, &n_deleted));
+        WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
+
+        /* /28 prefix: 4 significant bits in last byte.
+         * 172.16.0.F0/28 should match 172.16.0.F9 but not 172.16.0.E1.
+         */
+        subnet_remote.sa.addr_len = 28;
+        memcpy(subnet_remote.sa.addr, "\xAC\x10\x00\xF0", 4);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &subnet_remote.sa, &subnet_local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &subnet_id, &action_results));
+
+        dispatch_remote = subnet_remote;
+        dispatch_remote.sa.addr_len = 32;
+        /* 172.16.0.249 -- same /28, should match */
+        memcpy(dispatch_remote.sa.addr, "\xAC\x10\x00\xF9", 4);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &dispatch_remote.sa, &subnet_local.sa,
+                flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &route_id, &inexact_matches,
+                &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(route_id == subnet_id);
+
+        /* 172.16.0.225 -- different /28, should NOT match */
+        memcpy(dispatch_remote.sa.addr, "\xAC\x10\x00\xE1", 4);
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_SUCCESS_CODE_IS(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &dispatch_remote.sa, &subnet_local.sa,
+                    flags,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id, &inexact_matches,
+                    &action_results),
+                USED_FALLBACK));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &subnet_remote.sa, &subnet_local.sa,
+                flags,
+                0 /* event_label_len */,
+                0 /* event_label */,
+                &action_results, &n_deleted));
+        WOLFSENTRY_EXIT_ON_FALSE(n_deleted == 1);
+    }
+
+    /* test partial-byte subnet masking via the insert_by_exports path
+     * (wolfsentry_route_init_by_exports). 192.168.1.0/25 should match
+     * 192.168.1.100 but not 192.168.1.200.
+     */
+    {
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } dispatch_remote_exp, dispatch_local_exp;
+        struct wolfsentry_route_exports exp_route;
+        byte exp_remote_addr[4];
+        wolfsentry_ent_id_t exp_id;
+
+        memset(&exp_route, 0, sizeof exp_route);
+        memset(&dispatch_remote_exp, 0, sizeof dispatch_remote_exp);
+        memset(&dispatch_local_exp, 0, sizeof dispatch_local_exp);
+
+        exp_route.sa_family = AF_INET;
+        exp_route.sa_proto = IPPROTO_TCP;
+        exp_route.flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+                        | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+                        | WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED
+                        | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+                        | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
+
+        /* 192.168.1.0/25 -- intentionally set a low bit that must be masked */
+        memcpy(exp_remote_addr, "\xC0\xA8\x01\x01", 4); /* NOLINT(bugprone-not-null-terminated-result) */
+        exp_route.remote_address = exp_remote_addr;
+        exp_route.remote.addr_len = 25;
+        exp_route.remote.sa_port = 0;
+        exp_route.local.addr_len = 0;
+        exp_route.local.sa_port = 0;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert_by_exports(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &exp_route,
+                &exp_id, &action_results));
+
+        /* 192.168.1.100 (0x64) -- same /25 subnet, should match */
+        dispatch_remote_exp.sa.sa_family = AF_INET;
+        dispatch_remote_exp.sa.sa_proto = IPPROTO_TCP;
+        dispatch_remote_exp.sa.addr_len = 32;
+        memcpy(dispatch_remote_exp.sa.addr, "\xC0\xA8\x01\x64", 4);
+
+        dispatch_local_exp.sa.sa_family = AF_INET;
+        dispatch_local_exp.sa.sa_proto = IPPROTO_TCP;
+        dispatch_local_exp.sa.addr_len = 0;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &dispatch_remote_exp.sa, &dispatch_local_exp.sa,
+                exp_route.flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &route_id, &inexact_matches,
+                &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(route_id == exp_id);
+
+        /* 192.168.1.200 (0xC8) -- different /25, should NOT match */
+        memcpy(dispatch_remote_exp.sa.addr, "\xC0\xA8\x01\xC8", 4);
+
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_SUCCESS_CODE_IS(
+                wolfsentry_route_event_dispatch(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &dispatch_remote_exp.sa, &dispatch_local_exp.sa,
+                    exp_route.flags,
+                    NULL /* event_label */,
+                    0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &route_id, &inexact_matches,
+                    &action_results),
+                USED_FALLBACK));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete_by_id(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                exp_id,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                &action_results));
+    }
+
     printf("all subtests succeeded -- %u distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

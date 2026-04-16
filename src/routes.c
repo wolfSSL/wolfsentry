@@ -84,8 +84,8 @@ static inline int cmp_addrs_prefixful(
                     if ((cmp = memcmp(left_addr, right_addr, min_bytes - 1)))
                         return cmp;
                 }
-                if ((left_addr[min_bytes - 1] >> (min_addr_len & 0x7)) ==
-                    (right_addr[min_bytes - 1] >> (min_addr_len & 0x7)))
+                if ((left_addr[min_bytes - 1] >> (8 - (min_addr_len & 0x7))) ==
+                    (right_addr[min_bytes - 1] >> (8 - (min_addr_len & 0x7))))
                     *inexact_p = 1;
                 else if (left_addr[min_bytes - 1] < right_addr[min_bytes - 1])
                     return -1;
@@ -738,8 +738,8 @@ static wolfsentry_errcode_t wolfsentry_route_init(
         int left_over_bits = remote->addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *remote_lsb = WOLFSENTRY_ROUTE_REMOTE_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) - 1;
-            if (*remote_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
-                *remote_lsb = (byte)(*remote_lsb & (0xffU << left_over_bits));
+            if (*remote_lsb & (0xffU >> left_over_bits))
+                *remote_lsb = (byte)(*remote_lsb & (0xffU << (BITS_PER_BYTE - left_over_bits)));
         }
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
@@ -754,8 +754,8 @@ static wolfsentry_errcode_t wolfsentry_route_init(
         int left_over_bits = local->addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *local_lsb = WOLFSENTRY_ROUTE_LOCAL_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len) - 1;
-            if (*local_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
-                *local_lsb = (byte)(*local_lsb & (0xffU << left_over_bits));
+            if (*local_lsb & (0xffU >> left_over_bits))
+                *local_lsb = (byte)(*local_lsb & (0xffU << (BITS_PER_BYTE - left_over_bits)));
         }
     }
 
@@ -900,8 +900,8 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
         int left_over_bits = route_exports->remote.addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *remote_lsb = WOLFSENTRY_ROUTE_REMOTE_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(route_exports->remote.addr_len) - 1;
-            if (*remote_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
-                *remote_lsb = (byte)(*remote_lsb & (0xffU << left_over_bits));
+            if (*remote_lsb & (0xffU >> left_over_bits))
+                *remote_lsb = (byte)(*remote_lsb & (0xffU << (BITS_PER_BYTE - left_over_bits)));
         }
     }
 
@@ -917,8 +917,8 @@ static wolfsentry_errcode_t wolfsentry_route_init_by_exports(
         int left_over_bits = route_exports->local.addr_len % BITS_PER_BYTE;
         if (left_over_bits) {
             byte *local_lsb = WOLFSENTRY_ROUTE_LOCAL_ADDR(new) + WOLFSENTRY_BITS_TO_BYTES(route_exports->local.addr_len) - 1;
-            if (*local_lsb & (0xffU >> (BITS_PER_BYTE - left_over_bits)))
-                *local_lsb = (byte)(*local_lsb & (0xffU << left_over_bits));
+            if (*local_lsb & (0xffU >> left_over_bits))
+                *local_lsb = (byte)(*local_lsb & (0xffU << (BITS_PER_BYTE - left_over_bits)));
         }
     }
 
@@ -2890,7 +2890,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_id_1(
 
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &trigger_event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            goto out;
     }
 
     if ((ret = wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&route)) < 0)
@@ -2958,7 +2958,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_1(
 
     if (event_label) {
         if ((ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &trigger_event)) < 0)
-            WOLFSENTRY_ERROR_RERETURN(ret);
+            goto out;
     }
 
     if (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE) {

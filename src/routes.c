@@ -520,7 +520,7 @@ static int compare_match_exactness(const struct wolfsentry_route *target, const 
         } else
 #endif
         {
-            right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_LOCAL_ADDR(target), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(target), WOLFSENTRY_ROUTE_LOCAL_ADDR(right), WOLFSENTRY_ROUTE_LOCAL_ADDR_BITS(right));
+            right_match_score = addr_prefix_match_size(WOLFSENTRY_ROUTE_REMOTE_ADDR(target), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(target), WOLFSENTRY_ROUTE_REMOTE_ADDR(right), WOLFSENTRY_ROUTE_REMOTE_ADDR_BITS(right));
         }
     }
 
@@ -2366,6 +2366,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     wolfsentry_route_flags_t current_rule_route_flags;
     wolfsentry_errcode_t ret;
     wolfsentry_time_t now;
+    int penalty_triggered = 0;
+    wolfsentry_hitcount_t derog_snap;
+    wolfsentry_hitcount_t commend_snap;
 
     if (target_route == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -2553,18 +2556,25 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         }
     }
 
+    /* Snapshot atomic counts once so the guard and arithmetic operate on the
+     * same values (avoid TOCTOU between successive loads). */
+    derog_snap = WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count);
+    commend_snap = WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count);
+    if (config->config.derogatory_threshold_for_penaltybox > 0) {
+        if (config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE) {
+            penalty_triggered = (derog_snap >= config->config.derogatory_threshold_for_penaltybox);
+        } else {
+            penalty_triggered = (derog_snap >= commend_snap)
+                && ((derog_snap - commend_snap)
+                    >= config->config.derogatory_threshold_for_penaltybox);
+        }
+    }
+
     if (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED) {
         *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
         goto done;
-    } else if ((config->config.derogatory_threshold_for_penaltybox > 0)
-               && ((config->config.flags & WOLFSENTRY_EVENTCONFIG_FLAG_DEROGATORY_THRESHOLD_IGNORE_COMMENDABLE) ?
-                   (WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
-                    >= config->config.derogatory_threshold_for_penaltybox)
-                   :
-                   (WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.derogatory_count)
-                    - WOLFSENTRY_ATOMIC_LOAD(rule_route->meta.commendable_count)
-                    >= (int)config->config.derogatory_threshold_for_penaltybox)))
+    } else if (penalty_triggered)
     {
         wolfsentry_route_flags_t flags_before;
         WOLFSENTRY_WARN_ON_FAILURE(
@@ -2961,6 +2971,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_1(
             goto out;
     }
 
+    if (route->header.parent_table == NULL) {
+        ret = WOLFSENTRY_ERROR_ENCODE(INTERNAL_CHECK_FATAL);
+        goto out;
+    }
     if (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE) {
         ret = WOLFSENTRY_ERROR_ENCODE(WRONG_OBJECT);
         goto out;
@@ -3095,7 +3109,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
                 (! (route->flags & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
                 ((table->max_purgeable_idle_time == 0) || (now - route->meta.last_hit_time > table->max_purgeable_idle_time)))
             {
-                continue;
+                break;
             }
         }
 #ifdef WOLFSENTRY_THREADSAFE
@@ -3545,9 +3559,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_get_default_event(
     char *event_label,
     int *event_label_len)
 {
-    if (table->default_event == NULL)
-        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
     WOLFSENTRY_SHARED_OR_RETURN();
+    if (table->default_event == NULL)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(ITEM_NOT_FOUND);
     if (table->default_event->label_len >= *event_label_len)
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(BUFFER_TOO_SMALL);
     memcpy(event_label, table->default_event->label, (size_t)(table->default_event->label_len + 1));
@@ -3776,7 +3790,7 @@ WOLFSENTRY_API int wolfsentry_inet6_ntoa(const byte *addr, unsigned int addr_bit
     int i;
     const char *start_buf = buf;
     int this_zerospan_length = 0;
-    int this_zerospan_offset;
+    int this_zerospan_offset = 0;
     int longest_zerospan_length = 0;
     int longest_zerospan_offset = 0;
 
@@ -4433,8 +4447,6 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
         int fmt_buf_len = (int)sizeof(fmt_buf);
         int ret = wolfsentry_inet6_ntoa(addr, addr_bits, fmt_buf, &fmt_buf_len);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
-        if (fprintf(f, "%.*s/%u", fmt_buf_len, fmt_buf, addr_bits) < 0)
-            WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         if (fprintf(f, "[%.*s]/%u", fmt_buf_len, fmt_buf, addr_bits) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     } else if (sa_family == WOLFSENTRY_AF_LOCAL) {
@@ -4517,7 +4529,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render_flags(wolfsentry_rou
         } else
             already = 1;
         if (rendername == NULL) {
-            if (fprintf(stderr, "unk-0x%x", masked_flags) < 0)
+            if (fprintf(f, "unk-0x%x", masked_flags) < 0)
                 WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         } else {
             if (fputs(rendername, f) < 0)
@@ -4536,7 +4548,7 @@ static wolfsentry_errcode_t wolfsentry_route_render_endpoint(WOLFSENTRY_CONTEXT_
     const byte *addr = (sa_local_p ? WOLFSENTRY_ROUTE_LOCAL_ADDR(r) : WOLFSENTRY_ROUTE_REMOTE_ADDR(r));
 
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
-        if (fputs("*", stdout) < 0)
+        if (fputs("*", f) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
@@ -4642,7 +4654,7 @@ static wolfsentry_errcode_t wolfsentry_route_exports_render_endpoint(WOLFSENTRY_
     const byte *addr = (sa_local_p ? r->local_address : r->remote_address);
 
     if (sa_local_p ? (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) : (r->flags & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) {
-        if (fputs("*", stdout) < 0)
+        if (fputs("*", f) < 0)
             WOLFSENTRY_ERROR_RETURN(IO_FAILED);
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING

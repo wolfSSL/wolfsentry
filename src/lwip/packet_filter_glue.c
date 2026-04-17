@@ -1098,10 +1098,10 @@ static err_t icmp6_filter_with_wolfsentry(
     else
         memset(&local.local.addr, 0, sizeof *laddr);
 
-    remote.remote.sa_proto = IPPROTO_ICMP;
+    remote.remote.sa_proto = IPPROTO_ICMPV6;
     remote.remote.sa_port = 0;
 
-    local.local.sa_proto = IPPROTO_ICMP;
+    local.local.sa_proto = IPPROTO_ICMPV6;
     local.local.sa_port = icmp6_type;
 
     if (event->netif)

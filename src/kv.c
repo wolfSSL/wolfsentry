@@ -1054,7 +1054,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_json(
     struct wolfsentry_kv_pair_internal **user_value_record)
 {
     wolfsentry_errcode_t ret;
-    if ((ret = wolfsentry_kv_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_STRING, user_value_record)) < 0)
+    if ((ret = wolfsentry_kv_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_JSON, user_value_record)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *value = WOLFSENTRY_KV_V_JSON(&(*user_value_record)->kv);
     WOLFSENTRY_RETURN_OK;

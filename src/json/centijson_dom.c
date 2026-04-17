@@ -266,10 +266,17 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
          * append their json_values. */
         if(dom_parser->path_size >= dom_parser->path_alloc) {
             JSON_VALUE** new_path;
-            size_t new_path_alloc = dom_parser->path_alloc * 2;
+            size_t new_path_alloc;
 
-            if(new_path_alloc == 0)
+            if(dom_parser->path_alloc == 0) {
                 new_path_alloc = 32;
+            }
+            else if(dom_parser->path_alloc > SIZE_MAX / 2 / sizeof(JSON_VALUE*)) {
+                return JSON_ERR_OUTOFMEMORY;
+            }
+            else {
+                new_path_alloc = dom_parser->path_alloc * 2;
+            }
             new_path = (JSON_VALUE**) realloc((void *)dom_parser->path, new_path_alloc * sizeof(JSON_VALUE*));
             if(new_path == NULL)
                 return JSON_ERR_OUTOFMEMORY;
@@ -617,8 +624,14 @@ json_dom_dump_helper(
                     keys_size = json_value_dict_keys_ordered(node, keys, n);
                 else
                     keys_size = json_value_dict_keys_sorted(node, keys, n);
-                if (keys_size != n)
+                if (keys_size != n) {
+#ifdef WOLFSENTRY
+                    json_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), (void *)keys);
+#else
+                    free((void *)keys);
+#endif
                     return JSON_ERR_INTERNAL;
+                }
 
                 for(i = 0; i < n; i++) {
                     JSON_VALUE* json_value;

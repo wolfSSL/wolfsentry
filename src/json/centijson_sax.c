@@ -857,10 +857,11 @@ json_feed(JSON_PARSER* parser, const unsigned char* input, size_t size)
     {
         /* Update parser->pos to point to the exact place. */
         while(parser->pos.offset < parser->config.max_total_len) {
+            ch = input[off];
+            off++;
             parser->pos.offset++;
             parser->pos.column_number++;
-            off++;
-            json_handle_new_line(parser, input[off]);
+            json_handle_new_line(parser, ch);
         }
 
         json_raise(parser, JSON_ERR_MAXTOTALLEN);
@@ -891,10 +892,18 @@ json_feed(JSON_PARSER* parser, const unsigned char* input, size_t size)
 
             if(parser->nesting_level >= parser->nesting_stack_size) {
                 unsigned char* new_nesting_stack;
-                size_t new_nesting_stack_size = parser->nesting_stack_size * 2;
+                size_t new_nesting_stack_size;
 
-                if(new_nesting_stack_size == 0)
+                if(parser->nesting_stack_size == 0) {
                     new_nesting_stack_size = 32;
+                }
+                else if(parser->nesting_stack_size > SIZE_MAX / 2) {
+                    json_raise(parser, JSON_ERR_OUTOFMEMORY);
+                    break;
+                }
+                else {
+                    new_nesting_stack_size = parser->nesting_stack_size * 2;
+                }
                 new_nesting_stack = (unsigned char *)realloc(parser->nesting_stack, new_nesting_stack_size);
                 if(new_nesting_stack == NULL) {
                     json_raise(parser, JSON_ERR_OUTOFMEMORY);

@@ -2124,6 +2124,42 @@ static int test_static_routes(void) {
                                  &inexact_matches,
                                  &route_ref));
 
+    /* regression test: a route that is both PENALTYBOXED and GREENLISTED must
+     * reject (penaltybox takes precedence), not accept and reject together.
+     */
+    {
+        wolfsentry_route_flags_t flags_before, flags_after;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_update_flags(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       route_ref,
+                                       WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED,
+                                       WOLFSENTRY_ROUTE_FLAG_NONE,
+                                       &flags_before,
+                                       &flags_after,
+                                       &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(flags_after, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(flags_after, WOLFSENTRY_ROUTE_FLAG_GREENLISTED));
+
+        WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch_with_inited_result(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       &remote.sa, &local.sa, flags,
+                                       NULL /* event_label */, 0 /* event_label_len */,
+                                       NULL /* caller_arg */,
+                                       &route_id, &inexact_matches, &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_update_flags(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       route_ref,
+                                       WOLFSENTRY_ROUTE_FLAG_NONE,
+                                       WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED,
+                                       &flags_before,
+                                       &flags_after,
+                                       &action_results));
+    }
+
 
     {
         int old_derogatory_count;

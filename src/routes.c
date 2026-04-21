@@ -1991,6 +1991,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_default_policy_set(
 {
     if (WOLFSENTRY_MASKOUT_BITS(default_policy, WOLFSENTRY_ROUTE_DEFAULT_POLICY_MASK) != WOLFSENTRY_ACTION_RES_NONE)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if ((default_policy != WOLFSENTRY_ACTION_RES_NONE) &&
+        (! WOLFSENTRY_MASKIN_BITS(default_policy, WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT)))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     WOLFSENTRY_MUTEX_OR_RETURN();
     table->default_policy = default_policy;
     if (table == wolfsentry->routes)
@@ -2500,7 +2503,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
             (void)ret;
         }
 
-        if (! (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)) {
+        if ((! (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)) &&
+            (config->config.max_connection_count > 0))
+        {
             if (*action_results & WOLFSENTRY_ACTION_RES_CONNECT) {
                 if (rule_route->meta.connection_count >= config->config.max_connection_count) {
                     *action_results |= WOLFSENTRY_ACTION_RES_REJECT;

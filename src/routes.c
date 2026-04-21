@@ -583,10 +583,10 @@ static void wolfsentry_route_update_flags_1(
 
 static void wolfsentry_route_free_1(
     WOLFSENTRY_CONTEXT_ARGS_IN,
-    struct wolfsentry_eventconfig_internal *config,
+    size_t route_private_data_alignment,
     struct wolfsentry_route *route)
 {
-    if (config->config.route_private_data_alignment == 0)
+    if (route_private_data_alignment == 0)
         WOLFSENTRY_FREE(route);
     else
         WOLFSENTRY_FREE_ALIGNED(route);
@@ -599,6 +599,10 @@ static wolfsentry_errcode_t wolfsentry_route_drop_reference_1(
     wolfsentry_action_res_t *action_results)
 {
     struct wolfsentry_eventconfig_internal *config = (route->parent_event && route->parent_event->config) ? route->parent_event->config : &wolfsentry->config;
+    /* snapshot the alignment before dropping the event reference, since the
+     * event (and its config) may be freed by the drop.
+     */
+    size_t route_private_data_alignment = config->config.route_private_data_alignment;
     wolfsentry_errcode_t ret;
     wolfsentry_refcount_t refs_left;
     if (route->header.refcount == 0)
@@ -612,7 +616,7 @@ static wolfsentry_errcode_t wolfsentry_route_drop_reference_1(
         WOLFSENTRY_RETURN_OK;
     if (route->parent_event)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, route->parent_event, NULL /* action_results */));
-    wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config, route);
+    wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, route_private_data_alignment, route);
     if (action_results)
         WOLFSENTRY_SET_BITS(*action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED);
     WOLFSENTRY_RETURN_OK;
@@ -995,7 +999,7 @@ static wolfsentry_errcode_t wolfsentry_route_new(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     ret = wolfsentry_route_init(parent_event, remote, local, flags, (int)config->config.route_private_data_size, new_size, *new);
     if (ret < 0) {
-        wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config, *new);
+        wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config->config.route_private_data_alignment, *new);
         *new = NULL;
     } else {
         if (parent_event != NULL) {
@@ -1054,7 +1058,7 @@ static wolfsentry_errcode_t wolfsentry_route_new_by_exports(
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     ret = wolfsentry_route_init_by_exports(parent_event, route_exports, config->config.route_private_data_size, new_size, *new);
     if (ret < 0) {
-        wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config, *new);
+        wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config->config.route_private_data_alignment, *new);
         *new = NULL;
     } else {
         if (parent_event != NULL) {
@@ -1174,7 +1178,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
 #ifdef WOLFSENTRY_THREADSAFE
                                     thread,
 #endif
-                                    config, *new_route);
+                                    config->config.route_private_data_alignment, *new_route);
             WOLFSENTRY_ERROR_RERETURN(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT((*new_route)->parent_event->header.refcount, ret);
@@ -1330,7 +1334,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
 
     if (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD) {
         if ((route_table->last_af_wildcard_route == NULL) ||
-            (wolfsentry_route_key_cmp_1(route_to_insert, route_table->last_af_wildcard_route, 0 /* match_wildcards_p */, NULL /* inexact_matches */) < 0))
+            (wolfsentry_route_key_cmp_1(route_to_insert, route_table->last_af_wildcard_route, 0 /* match_wildcards_p */, NULL /* inexact_matches */) > 0))
         {
             route_table->last_af_wildcard_route = route_to_insert;
         }
@@ -2162,10 +2166,19 @@ static wolfsentry_errcode_t wolfsentry_route_delete_0(
         wolfsentry_route_update_flags_1(route, WOLFSENTRY_ROUTE_FLAG_NONE, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, &flags_before, &flags_after);
     }
 
-    if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route->header)) < 0) {
-        wolfsentry_route_flags_t flags_before, flags_after;
-        wolfsentry_route_update_flags_1(route, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, WOLFSENTRY_ROUTE_FLAG_NONE, &flags_before, &flags_after);
-        WOLFSENTRY_ERROR_RERETURN(ret);
+    /* snapshot linked-list neighbor before delete_1 nullifies prev/next. */
+    {
+        struct wolfsentry_route *prev_route = (struct wolfsentry_route *)route->header.prev;
+        if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route->header)) < 0) {
+            wolfsentry_route_flags_t flags_before, flags_after;
+            wolfsentry_route_update_flags_1(route, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, WOLFSENTRY_ROUTE_FLAG_NONE, &flags_before, &flags_after);
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        }
+        if (route_table->last_af_wildcard_route == route) {
+            while (prev_route && ! (prev_route->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD))
+                prev_route = (struct wolfsentry_route *)prev_route->header.prev;
+            route_table->last_af_wildcard_route = prev_route;
+        }
     }
 
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
@@ -2190,9 +2203,6 @@ static wolfsentry_errcode_t wolfsentry_route_delete_0(
         if (ret < 0)
             WOLFSENTRY_WARN("wolfsentry_action_list_dispatch for wolfsentry_route_delete_0 returned " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
-
-    if (route_table->last_af_wildcard_route == route)
-        route_table->last_af_wildcard_route = (struct wolfsentry_route *)route->header.prev;
 
     {
         wolfsentry_priority_t effective_priority = route->parent_event ? route->parent_event->priority : 0;
@@ -3904,7 +3914,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
         WOLFSENTRY_RETURN_OK;
     }
 
-    if (sa_family == WOLFSENTRY_AF_LINK) {
+    if (sa_family == WOLFSENTRY_AF_LINK || sa_family == WOLFSENTRY_AF_LINK64) {
         unsigned int i;
         if ((addr_bits >> 3) * 3 > (size_t)*buflen)
             WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
@@ -4431,7 +4441,7 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
         WOLFSENTRY_RETURN_OK;
     }
 
-    if (sa_family == WOLFSENTRY_AF_LINK) {
+    if (sa_family == WOLFSENTRY_AF_LINK || sa_family == WOLFSENTRY_AF_LINK64) {
         unsigned int i;
         for (i=0; i < (addr_bits >> 3); ++i) {
             if (fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]) < 0)

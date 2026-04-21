@@ -1573,6 +1573,16 @@ static int test_static_routes(void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_NONE));
 
+    /* non-decisional default_policy values (STOP/ERROR alone) must be rejected. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_STOP));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ERROR));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_STOP | WOLFSENTRY_ACTION_RES_ERROR));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label_len */, 0 /* event_label */, &id, &action_results));
 
@@ -2747,6 +2757,70 @@ static int test_static_routes(void) {
                 &action_results));
     }
 
+    /* max_connection_count == 0 means "no limit": CONNECT dispatches must not
+     * be rejected regardless of how many times we fire them.
+     */
+    {
+        struct wolfsentry_eventconfig nolimit_config = config;
+        wolfsentry_ent_id_t nolimit_route_id;
+        wolfsentry_route_flags_t nolimit_flags;
+        unsigned int i;
+
+        nolimit_config.max_connection_count = 0;
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_insert(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       "nolimit-conn-test",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       0 /* priority */,
+                                       &nolimit_config,
+                                       WOLFSENTRY_EVENT_FLAG_NONE,
+                                       NULL /* id */));
+
+        WOLFSENTRY_CLEAR_ALL_BITS(nolimit_flags);
+        WOLFSENTRY_SET_BITS(nolimit_flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+                                         | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+                                         | WOLFSENTRY_ROUTE_FLAG_GREENLISTED);
+        memcpy(remote.sa.addr, "\7\10\11\12", sizeof remote.addr_buf);
+        memcpy(local.sa.addr, "\377\376\375\374", sizeof local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       NULL /* caller_arg */,
+                                       &remote.sa, &local.sa, nolimit_flags,
+                                       "nolimit-conn-test",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       &nolimit_route_id, &action_results));
+
+        /* 20 iterations covers the "unlimited" no-reject behavior; the
+         * UINT16_MAX saturation path is covered by
+         * WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE itself, not
+         * exercised here to avoid a 65535-iteration CI cost.
+         */
+        for (i = 0; i < 20; ++i) {
+            WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+            WOLFSENTRY_SET_BITS(action_results, WOLFSENTRY_ACTION_RES_CONNECT);
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_event_dispatch_with_inited_result(
+                                           WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                           &remote.sa, &local.sa, nolimit_flags,
+                                           NULL /* event_label */, 0 /* event_label_len */,
+                                           NULL /* caller_arg */,
+                                           &id, &inexact_matches, &action_results));
+            WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       NULL /* caller_arg */,
+                                       nolimit_route_id,
+                                       NULL /* event_label */, 0 /* event_label_len */,
+                                       &action_results));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       "nolimit-conn-test",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       &action_results));
+    }
+
     printf("all subtests succeeded -- %u distinct ents inserted and deleted.\n",wolfsentry->mk_id_cb_state.id_counter);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
@@ -3703,6 +3777,46 @@ static int test_user_values(void) {
 
     }
 
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    /* strings rendered as JSON must escape quotes and backslashes. */
+    {
+        static const char raw[] = "a\"b\\c";
+        const struct wolfsentry_kv_pair *kv_exports;
+        char render_buf[64];
+        int render_buf_space = (int)sizeof render_buf;
+
+        memset(render_buf, 0, sizeof render_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_store_string(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       "json_escape_string",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       raw,
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       0));
+        {
+            const char *value = NULL;
+            int value_len = -1;
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_string(
+                                           WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                           "json_escape_string",
+                                           WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                           &value, &value_len, &kv_ref));
+        }
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_pair_export(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_ref, &kv_exports));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_render_value(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_exports, render_buf, &render_buf_space));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FALSE(strstr(render_buf, "\\\"") != NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(strstr(render_buf, "\\\\") != NULL);
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_release_record(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_ref));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_delete(
+                                       WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                       "json_escape_string",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    }
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
         BAD_VALUE,
         wolfsentry_user_value_store_string(
@@ -4086,6 +4200,25 @@ static int test_user_addr_families(void) {
                 family_number,
                 &bits));
         WOLFSENTRY_EXIT_ON_FALSE(bits == 48);
+
+        /* LINK64 must roundtrip through pton → ntop → verify label. */
+        {
+            struct wolfsentry_addr_family_bynumber *addr_family = NULL;
+            const char *family_name = NULL;
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_addr_family_pton(
+                                           WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                           "LINK64",
+                                           WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                           &family_number));
+            WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_addr_family_ntop(
+                                           WOLFSENTRY_CONTEXT_ARGS_OUT,
+                                           family_number,
+                                           &addr_family,
+                                           &family_name));
+            WOLFSENTRY_EXIT_ON_FALSE((family_name != NULL) && (! strcmp(family_name, "LINK64")));
+            if (addr_family)
+                WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, &action_results));
+        }
     }
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 

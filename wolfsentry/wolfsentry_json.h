@@ -48,6 +48,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_centijson_errcode_translate(wolfs
     /*!< \brief Can be overridden. */
 #endif
 
+#ifndef WOLFSENTRY_MAX_JSON_TOTAL_LEN
+#define WOLFSENTRY_MAX_JSON_TOTAL_LEN (10 * 1024 * 1024)
+    /*!< \brief Default cap on total JSON input length, matching centijson's
+     *          upstream default.  Set to 0 for unlimited, or override at
+     *          build time.  Can also be overridden per-call via the
+     *          `JSON_CONFIG` parameter of wolfsentry_config_json_init_ex().
+     */
+#endif
+
 typedef uint32_t wolfsentry_config_load_flags_t;
     /*!< \brief Type for holding flag bits from #wolfsentry_config_load_flags */
 

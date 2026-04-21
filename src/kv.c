@@ -434,7 +434,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
         *out_len = snprintf(out, out_space, "%.10f", WOLFSENTRY_KV_V_FLOAT(kv));
         break;
     case WOLFSENTRY_KV_STRING: {
-#ifndef HAVE_JSON_DOM
+#ifndef WOLFSENTRY_HAVE_JSON_DOM
         *out_len = snprintf(out, out_space, "\"%.*s\"", (int)WOLFSENTRY_KV_V_STRING_LEN(kv), WOLFSENTRY_KV_V_STRING(kv));
         break;
 #else
@@ -517,8 +517,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_clone(
     if (WOLFSENTRY_KV_TYPE(&src_kv_pair->kv) == WOLFSENTRY_KV_JSON) {
         int ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(dest_context)),
                                    &src_kv_pair->kv.a.v_json, &(*new_kv_pair)->kv.a.v_json);
-        if (ret < 0)
+        if (ret < 0) {
+            WOLFSENTRY_FREE_1(dest_context->hpi.allocator, *new_kv_pair);
+            *new_kv_pair = NULL;
             WOLFSENTRY_ERROR_RERETURN(wolfsentry_centijson_errcode_translate(ret));
+        }
     }
 #endif
 

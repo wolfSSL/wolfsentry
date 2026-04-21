@@ -1711,6 +1711,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     struct wolfsentry_json_process_state **jps)
 {
     wolfsentry_errcode_t ret;
+    int locked = 0;
     static const JSON_CALLBACKS json_callbacks = {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
         .process =
@@ -1720,7 +1721,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 
     static const JSON_CONFIG default_json_config = {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
-        .max_total_len = 0,
+        .max_total_len = WOLFSENTRY_MAX_JSON_TOTAL_LEN,
         .max_total_values = 0,
         .max_number_len = 20,
         .max_string_len = WOLFSENTRY_KV_MAX_VALUE_BYTES,
@@ -1728,7 +1729,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         .max_nesting_level = WOLFSENTRY_MAX_JSON_NESTING,
         .flags = JSON_NOSCALARROOT
 #else
-        0,
+        WOLFSENTRY_MAX_JSON_TOTAL_LEN,
         0,
         20,
         WOLFSENTRY_KV_MAX_VALUE_BYTES,
@@ -1760,28 +1761,28 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
         (*jps)->dom_parser_flags |= JSON_DOM_DUPKEY_ABORT;
 #else
-        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+        { ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING); goto out; }
 #endif
     }
     if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USEFIRST)) {
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
         (*jps)->dom_parser_flags |= JSON_DOM_DUPKEY_USEFIRST;
 #else
-        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+        { ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING); goto out; }
 #endif
     }
     if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USELAST)) {
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
         (*jps)->dom_parser_flags |= JSON_DOM_DUPKEY_USELAST;
 #else
-        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+        { ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING); goto out; }
 #endif
     }
     if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_MAINTAINDICTORDER)) {
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
         (*jps)->dom_parser_flags |= JSON_DOM_MAINTAINDICTORDER;
 #else
-        WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
+        { ret = WOLFSENTRY_ERROR_ENCODE(IMPLEMENTATION_MISSING); goto out; }
 #endif
     }
 
@@ -1789,15 +1790,20 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     if ((! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) ||
         (thread == NULL))
     {
-        WOLFSENTRY_MUTEX_OR_RETURN();
-    } else if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN))
-        WOLFSENTRY_SHARED_OR_RETURN();
-    else {
+        if ((ret = WOLFSENTRY_MUTEX_EX(wolfsentry)) < 0)
+            goto out;
+    } else if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN)) {
+        /* thread == NULL is already routed to the mutex path above. */
+        if ((ret = WOLFSENTRY_SHARED_EX(wolfsentry)) < 0)
+            goto out;
+    } else {
         ret = WOLFSENTRY_PROMOTABLE_EX(wolfsentry);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (ret < 0)
+            goto out;
         if (WOLFSENTRY_SUCCESS_CODE_IS(ret, LOCK_OK_AND_GOT_RESV))
             (*jps)->got_reservation = 1;
     }
+    locked = 1;
 #endif
 
     (*jps)->wolfsentry_actual = wolfsentry;
@@ -1834,7 +1840,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 
     /* initialize with defaults already set in context, particularly to pick up route_private_data* fields. */
     ret = wolfsentry_defaultconfig_get(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT, &(*jps)->default_config);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    if (ret < 0)
+        goto out;
 
     if (! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN|WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH|WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT)) {
         if (WOLFSENTRY_CHECK_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES)) {
@@ -1856,7 +1863,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 
     if (ret < 0) {
 #ifdef WOLFSENTRY_THREADSAFE
-        {
+        if (locked) {
             wolfsentry_errcode_t _lock_ret;
             if ((*jps)->got_reservation)
                 _lock_ret = wolfsentry_context_unlock_and_abandon_reservation(wolfsentry, thread);

@@ -134,7 +134,7 @@ static inline int addr_prefix_match_size(
     for (; ret < min_len; ++ret) {
         int byte_number = ret / 8;
         int bit_number = ret % 8;
-        if ((a[byte_number] & (1U << bit_number)) != (b[byte_number] & (1U << bit_number)))
+        if ((a[byte_number] & (0x80U >> bit_number)) != (b[byte_number] & (0x80U >> bit_number)))
             break;
     }
 

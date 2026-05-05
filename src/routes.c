@@ -4625,7 +4625,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(WOLFSENTRY_CONTEXT_A
         }
     }
 
-    wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
+    WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_proto(r->sa_proto, r->flags, f));
 
     if (r->parent_event != NULL) {
         if (fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event->label_len, r->parent_event->label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "") < 0)
@@ -4728,7 +4728,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_C
         }
     }
 
-    wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
+    WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_proto(r->sa_proto, r->flags, f));
 
     if (r->parent_event_label_len > 0) {
         if (fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event_label_len, r->parent_event_label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "") < 0)

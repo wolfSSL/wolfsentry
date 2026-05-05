@@ -3617,6 +3617,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
              ((config->route_private_data_alignment & (config->route_private_data_alignment - 1)) != 0) ||
              (config->route_private_data_alignment > config->route_private_data_size)))
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        if (config->route_private_data_size > MAX_UINT_OF(((struct wolfsentry_route *)0)->data_addr_offset))
+            WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     }
 
     if (config->route_private_data_alignment > 0) {

@@ -1955,6 +1955,8 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_1(
     const size_t addr_buf_size = WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len);
     struct wolfsentry_route *target;
 
+    if (addr_buf_size > (size_t)WOLFSENTRY_MAX_ADDR_BYTES * 2)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     target = (struct wolfsentry_route *)alloca(sizeof(*target) + addr_buf_size);
     #define LOOKUP_TARGET target
 #endif
@@ -4012,24 +4014,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_flag_assoc_by_name(const ch
 
 static wolfsentry_errcode_t ws_itoa(int i, unsigned char **out, size_t *spc) {
     int out_chars;
-    int digit_thresh;
+    unsigned int u;
+    unsigned int digit_thresh;
     int neg;
     if (i < 0) {
         neg = 1;
-        i = -i;
+        u = -(unsigned int)i;
         out_chars = 2;
     } else {
         neg = 0;
+        u = (unsigned int)i;
         out_chars = 1;
     }
     for (digit_thresh = 10; ; digit_thresh *= 10) {
-        if (i >= digit_thresh)
+        if (u >= digit_thresh)
             ++out_chars;
         else {
             digit_thresh /= 10;
             break;
         }
-        if (digit_thresh == 1000000000)
+        if (digit_thresh == 1000000000U)
             break;
     }
     if (*spc < (size_t)out_chars)
@@ -4038,8 +4042,8 @@ static wolfsentry_errcode_t ws_itoa(int i, unsigned char **out, size_t *spc) {
     if (neg)
         *(*out)++ = '-';
     while (digit_thresh >= 1) {
-        int quotient = i / digit_thresh;
-        i %= digit_thresh;
+        unsigned int quotient = u / digit_thresh;
+        u %= digit_thresh;
         digit_thresh /= 10;
         *(*out)++ = (unsigned char)('0' + quotient);
     }

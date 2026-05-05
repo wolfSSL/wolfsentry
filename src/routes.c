@@ -2767,7 +2767,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         if ((rule_route->parent_event == NULL) && (route_table->default_event != NULL)) {
             rule_route->parent_event = route_table->default_event;
             WOLFSENTRY_REFCOUNT_INCREMENT(rule_route->parent_event->header.refcount, ret);
-            WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+            if (ret < 0) {
+                rule_route->parent_event = NULL;
+                goto just_free_resources;
+            }
         }
     }
 
@@ -4719,11 +4722,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_C
         ret = wolfsentry_addr_family_ntop(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, &addr_family, &family_name);
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
             if (fprintf(f, ", AF = %s", family_name) < 0)
-                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+                ret = WOLFSENTRY_ERROR_ENCODE(IO_FAILED);
             if (addr_family) {
-                if ((ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ )) < 0)
-                    WOLFSENTRY_ERROR_RERETURN(ret);
+                wolfsentry_errcode_t drop_ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ );
+                if (drop_ret < 0)
+                    WOLFSENTRY_ERROR_RERETURN(drop_ret);
             }
+            if (ret < 0)
+                WOLFSENTRY_ERROR_RERETURN(ret);
         } else
 #endif
         {

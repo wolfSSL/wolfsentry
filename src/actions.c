@@ -240,11 +240,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_get_reference(WOLFSENTRY_C
         label_len = (int)strlen(label);
     if (label_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+    WOLFSENTRY_SHARED_OR_RETURN();
     if ((action_template = (struct wolfsentry_action *)WOLFSENTRY_MALLOC(sizeof *action_template + (size_t)label_len)) == NULL)
-        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(SYS_RESOURCE_FAILED);
     action_template->label_len = (byte)label_len;
     memcpy(action_template->label, label, (size_t)label_len);
-    WOLFSENTRY_SHARED_OR_RETURN();
     ret = wolfsentry_action_get_reference_1(WOLFSENTRY_CONTEXT_ARGS_OUT, action_template, action);
     WOLFSENTRY_FREE(action_template);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
@@ -470,7 +470,10 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_clone(
 
         new_ale->action = new_action;
         WOLFSENTRY_REFCOUNT_INCREMENT(new_action->header.refcount, ret);
-        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+        if (ret < 0) {
+            WOLFSENTRY_FREE_1(dest_context->hpi.allocator, new_ale);
+            goto out;
+        }
         wolfsentry_list_ent_append(&dest_action_list->header, &new_ale->header);
     }
     ret = WOLFSENTRY_ERROR_ENCODE(OK);

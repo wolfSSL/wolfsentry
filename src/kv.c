@@ -536,10 +536,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_delete(
     struct wolfsentry_kv_pair_internal *kv_template;
     struct wolfsentry_kv_pair_internal *old = NULL;
     wolfsentry_errcode_t ret;
-    if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
-        WOLFSENTRY_ERROR_RERETURN(ret);
 
     WOLFSENTRY_MUTEX_OR_RETURN();
+
+    if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
     ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &old);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));

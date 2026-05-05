@@ -134,7 +134,7 @@ static inline int addr_prefix_match_size(
     for (; ret < min_len; ++ret) {
         int byte_number = ret / 8;
         int bit_number = ret % 8;
-        if ((a[byte_number] & (1U << bit_number)) != (b[byte_number] & (1U << bit_number)))
+        if ((a[byte_number] & (0x80U >> bit_number)) != (b[byte_number] & (0x80U >> bit_number)))
             break;
     }
 
@@ -1955,6 +1955,8 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_1(
     const size_t addr_buf_size = WOLFSENTRY_BITS_TO_BYTES(remote->addr_len) + WOLFSENTRY_BITS_TO_BYTES(local->addr_len);
     struct wolfsentry_route *target;
 
+    if (addr_buf_size > (size_t)WOLFSENTRY_MAX_ADDR_BYTES * 2)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     target = (struct wolfsentry_route *)alloca(sizeof(*target) + addr_buf_size);
     #define LOOKUP_TARGET target
 #endif
@@ -2765,7 +2767,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         if ((rule_route->parent_event == NULL) && (route_table->default_event != NULL)) {
             rule_route->parent_event = route_table->default_event;
             WOLFSENTRY_REFCOUNT_INCREMENT(rule_route->parent_event->header.refcount, ret);
-            WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+            if (ret < 0) {
+                rule_route->parent_event = NULL;
+                goto just_free_resources;
+            }
         }
     }
 
@@ -4012,24 +4017,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_flag_assoc_by_name(const ch
 
 static wolfsentry_errcode_t ws_itoa(int i, unsigned char **out, size_t *spc) {
     int out_chars;
-    int digit_thresh;
+    unsigned int u;
+    unsigned int digit_thresh;
     int neg;
     if (i < 0) {
         neg = 1;
-        i = -i;
+        u = -(unsigned int)i;
         out_chars = 2;
     } else {
         neg = 0;
+        u = (unsigned int)i;
         out_chars = 1;
     }
     for (digit_thresh = 10; ; digit_thresh *= 10) {
-        if (i >= digit_thresh)
+        if (u >= digit_thresh)
             ++out_chars;
         else {
             digit_thresh /= 10;
             break;
         }
-        if (digit_thresh == 1000000000)
+        if (digit_thresh == 1000000000U)
             break;
     }
     if (*spc < (size_t)out_chars)
@@ -4038,8 +4045,8 @@ static wolfsentry_errcode_t ws_itoa(int i, unsigned char **out, size_t *spc) {
     if (neg)
         *(*out)++ = '-';
     while (digit_thresh >= 1) {
-        int quotient = i / digit_thresh;
-        i %= digit_thresh;
+        unsigned int quotient = u / digit_thresh;
+        u %= digit_thresh;
         digit_thresh /= 10;
         *(*out)++ = (unsigned char)('0' + quotient);
     }
@@ -4625,7 +4632,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_render(WOLFSENTRY_CONTEXT_A
         }
     }
 
-    wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
+    WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_proto(r->sa_proto, r->flags, f));
 
     if (r->parent_event != NULL) {
         if (fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event->label_len, r->parent_event->label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "") < 0)
@@ -4715,11 +4722,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_C
         ret = wolfsentry_addr_family_ntop(WOLFSENTRY_CONTEXT_ARGS_OUT, r->sa_family, &addr_family, &family_name);
         if (WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
             if (fprintf(f, ", AF = %s", family_name) < 0)
-                WOLFSENTRY_ERROR_RETURN(IO_FAILED);
+                ret = WOLFSENTRY_ERROR_ENCODE(IO_FAILED);
             if (addr_family) {
-                if ((ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ )) < 0)
-                    WOLFSENTRY_ERROR_RERETURN(ret);
+                wolfsentry_errcode_t drop_ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ );
+                if (drop_ret < 0)
+                    WOLFSENTRY_ERROR_RERETURN(drop_ret);
             }
+            if (ret < 0)
+                WOLFSENTRY_ERROR_RERETURN(ret);
         } else
 #endif
         {
@@ -4728,7 +4738,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_exports_render(WOLFSENTRY_C
         }
     }
 
-    wolfsentry_route_render_proto(r->sa_proto, r->flags, f);
+    WOLFSENTRY_RERETURN_IF_ERROR(wolfsentry_route_render_proto(r->sa_proto, r->flags, f));
 
     if (r->parent_event_label_len > 0) {
         if (fprintf(f, ", ev = \"%.*s\"%s", (int)r->parent_event_label_len, r->parent_event_label, WOLFSENTRY_CHECK_BITS(r->flags, WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD) ? "[*]" : "") < 0)

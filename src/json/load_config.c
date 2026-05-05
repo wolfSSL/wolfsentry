@@ -368,16 +368,22 @@ static wolfsentry_errcode_t convert_eventconfig_flag(JSON_TYPE type, wolfsentry_
 
 static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_context *wolfsentry, JSON_TYPE type, const unsigned char *data, size_t data_size, wolfsentry_time_t *out) {
     wolfsentry_errcode_t ret;
+    char buf[24];
     char *endptr;
     long conv;
 
     if ((type != JSON_STRING) && (type != JSON_NUMBER))
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
+    if (data_size >= sizeof buf)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+    memcpy(buf, data, data_size);
+    buf[data_size] = 0;
+
 #ifndef WOLFSENTRY_NO_ERRNO_H
     errno = 0;
 #endif
-    conv = strtol((const char *)data, &endptr, 0);
+    conv = strtol(buf, &endptr, 0);
 #ifndef WOLFSENTRY_NO_ERRNO_H
     if (errno != 0)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -405,7 +411,7 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
     default:
         break;
     }
-    if ((size_t)(endptr - (char *)data) != data_size)
+    if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if ((ret = wolfsentry_interval_from_seconds(wolfsentry, conv, 0 /* howlong_nsecs */, out)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
@@ -602,6 +608,10 @@ static inline int convert_hex_byte(const unsigned char **in, size_t *in_len, byt
         return d1;
     ++(*in);
     --(*in_len);
+    if (*in_len < 1) {
+        *out = (byte)d1;
+        return 0;
+    }
     d2 = convert_hex_digit(**in);
     if (d2 < 0) {
         *out = (byte)d1;

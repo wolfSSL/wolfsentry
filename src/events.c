@@ -363,7 +363,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(WOLFSENTRY_CO
     WOLFSENTRY_MUTEX_OR_RETURN();
 
     ret = wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, &event);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
 
     if (event->config == NULL) {
         if ((event->config = (struct wolfsentry_eventconfig_internal *)WOLFSENTRY_MALLOC(sizeof *event->config)) == NULL)
@@ -618,7 +618,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_set_aux_event(
     WOLFSENTRY_MUTEX_OR_RETURN();
 
     ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     if (WOLFSENTRY_CHECK_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT)) {
         ret = WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
         goto out;

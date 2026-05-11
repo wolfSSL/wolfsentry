@@ -876,6 +876,8 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
     }
 #endif
     else if (! strcmp(jps->cur_keyname, "prefix-bits")) {
+        wolfsentry_addr_bits_t max_bits;
+        wolfsentry_errcode_t ret;
         if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
@@ -888,7 +890,16 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
             WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
         }
 #endif
-        WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &sa->addr_len));
+        ret = convert_uint16(type, data, data_size, &sa->addr_len);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        ret = wolfsentry_addr_family_max_addr_bits(
+            JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
+            sa->sa_family,
+            &max_bits);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        if (sa->addr_len > max_bits)
+            WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+        WOLFSENTRY_RETURN_OK;
     }
     else if (! strcmp(jps->cur_keyname, "interface")) {
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,

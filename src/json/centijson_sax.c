@@ -311,7 +311,12 @@ json_buf_append(JSON_PARSER* parser, const unsigned char* data, size_t size)
 {
     if(parser->buf_used + size > parser->buf_alloced) {
         unsigned char* new_buf;
-        size_t new_alloced = (parser->buf_used + size) * 2;
+        size_t new_alloced;
+        if(parser->buf_used > SIZE_MAX / 2 || size > SIZE_MAX / 2 - parser->buf_used) {
+            json_raise(parser, JSON_ERR_OUTOFMEMORY);
+            WOLFSENTRY_RETURN_VALUE(-1);
+        }
+        new_alloced = (parser->buf_used + size) * 2;
 
         new_buf = (unsigned char *)realloc(parser->buf, new_alloced);
         if(new_buf == NULL) {

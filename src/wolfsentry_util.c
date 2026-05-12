@@ -666,9 +666,9 @@ static void *wolfsentry_builtin_realloc(
 #ifdef WOLFSENTRY_MALLOC_DEBUG
     {
         void *ret = realloc(ptr, size);
-        if ((ptr == null) && (ret != NULL))
+        if ((ptr == NULL) && (ret != NULL))
             WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
-        else if ((ptr != null) && (ret == NULL))
+        else if ((ptr != NULL) && (ret == NULL))
             WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
         return ret;
     }
@@ -1775,7 +1775,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_destroy(struct wolfsentry_rw
         (lock->read_waiter_count != 0) ||
         (lock->write_waiter_count != 0) ||
         (lock->read2write_waiter_read_count != 0) ||
-        (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID) ||
         (lock->promoted_at_count != 0))
     {
         WOLFSENTRY_WARN("attempt to destroy lock with corrupted state {%u,%d,%d,%d,%d,%d,%d}\n", (unsigned int)lock->state, lock->holder_count.read, lock->read_waiter_count, lock->write_waiter_count, lock->read2write_waiter_read_count, lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID, lock->promoted_at_count);
@@ -3618,6 +3617,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
              ((config->route_private_data_alignment & (config->route_private_data_alignment - 1)) != 0) ||
              (config->route_private_data_alignment > config->route_private_data_size)))
             WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        if (config->route_private_data_size > MAX_UINT_OF(((struct wolfsentry_route *)0)->data_addr_offset))
+            WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     }
 
     if (config->route_private_data_alignment > 0) {

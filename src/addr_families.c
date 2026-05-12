@@ -773,6 +773,8 @@ static wolfsentry_errcode_t wolfsentry_addr_family_ntop_1(
         { *family_name = "HYLINK"; WOLFSENTRY_RETURN_OK; }
     case WOLFSENTRY_AF_LINK:
         { *family_name = "LINK"; WOLFSENTRY_RETURN_OK; }
+    case WOLFSENTRY_AF_LINK64:
+        { *family_name = "LINK64"; WOLFSENTRY_RETURN_OK; }
     case WOLFSENTRY_AF_COIP:
         { *family_name = "COIP"; WOLFSENTRY_RETURN_OK; }
     case WOLFSENTRY_AF_CNT:

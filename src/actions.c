@@ -425,7 +425,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_insert_after(
     }
     ret = wolfsentry_action_list_insert_after_1(WOLFSENTRY_CONTEXT_ARGS_OUT, action_list, action, point_action);
     ret2 = wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, point_action, NULL /* action_results */);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret2);
+    /* a drop-reference failure here leaks one refcount on point_action, but
+     * don't promote it to the caller's return code: the insert result is the
+     * caller-visible outcome, and returning ret2 would invite a bogus rollback.
+     */
+    WOLFSENTRY_WARN_ON_FAILURE(ret2);
     if (ret < 0) {
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, action, NULL /* action_results */));
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);

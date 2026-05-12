@@ -1228,7 +1228,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_icmp_callback
     WOLFSENTRY_MUTEX_OR_RETURN();
     if (icmp_mask) {
         wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
 #endif
 #if LWIP_ICMP
@@ -1270,7 +1270,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_tcp_callback(
     WOLFSENTRY_MUTEX_OR_RETURN();
     if (tcp_mask) {
         wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
         tcp_filter(tcp_filter_with_wolfsentry);
         /* make sure wolfSentry sees the close/reset events that balance earlier
          * accepts, for concurrent-connection accounting purposes.

@@ -547,6 +547,58 @@ doc: doc-html $(BUILD_TOP)/doc/pdf/refman.pdf
 
 doc-clean: doc-html-clean doc-pdf-clean
 
+# SBOM generation (CRA compliance)
+SBOM_VERSION := $(shell awk '/^#define WOLFSENTRY_VERSION_MAJOR/{maj=$$3} /^#define WOLFSENTRY_VERSION_MINOR/{min=$$3} /^#define WOLFSENTRY_VERSION_TINY/{tiny=$$3} END{print maj"."min"."tiny}' \
+    '$(SRC_TOP)/wolfsentry/wolfsentry.h' 2>/dev/null)
+SBOM_CDX     = wolfsentry-$(SBOM_VERSION).cdx.json
+SBOM_SPDX    = wolfsentry-$(SBOM_VERSION).spdx.json
+SBOM_SPDX_TV = wolfsentry-$(SBOM_VERSION).spdx
+
+.PHONY: sbom
+
+sbom:
+	$(Q)if [ -z "$(SBOM_VERSION)" ] || [ "$(SBOM_VERSION)" = ".." ]; then \
+	    echo "ERROR: could not extract version from wolfsentry/wolfsentry.h" 1>&2; \
+	    exit 1; \
+	fi
+	$(Q)if [ -n "$(GEN_SBOM)" ]; then \
+	    _gen_sbom="$(GEN_SBOM)"; \
+	elif [ -n "$(WOLFSSL_DIR)" ]; then \
+	    _gen_sbom="$(WOLFSSL_DIR)/scripts/gen-sbom"; \
+	else \
+	    echo "ERROR: set WOLFSSL_DIR (path to wolfssl repo) or GEN_SBOM (path to gen-sbom script)" 1>&2; \
+	    exit 1; \
+	fi; \
+	if [ ! -f "$$_gen_sbom" ]; then \
+	    echo "ERROR: gen-sbom not found: $$_gen_sbom" 1>&2; \
+	    exit 1; \
+	fi; \
+	if ! command -v python3 >/dev/null 2>&1; then \
+	    echo "ERROR: python3 not found in PATH" 1>&2; \
+	    exit 1; \
+	fi; \
+	_defines_h=$$(mktemp "$${TMPDIR:-/tmp}/wolfsentry-defines.XXXXXX"); \
+	trap 'rm -f "$$_defines_h"' EXIT; \
+	if ! $(CC) -dM -E -I'$(SRC_TOP)' -x c /dev/null >"$$_defines_h" 2>/dev/null; then \
+	    echo "ERROR: $(CC) -dM -E failed" 1>&2; \
+	    exit 1; \
+	fi; \
+	_srcs=""; \
+	for _f in $(SRCS); do _srcs="$$_srcs $(SRC_TOP)/src/$$_f"; done; \
+	python3 "$$_gen_sbom" \
+	    --name wolfsentry \
+	    --version "$(SBOM_VERSION)" \
+	    --supplier "wolfSSL Inc." \
+	    --license-file "$(SRC_TOP)/LICENSING" \
+	    --options-h "$$_defines_h" \
+	    --srcs $$_srcs \
+	    --cdx-out "$(BUILD_TOP)/$(SBOM_CDX)" \
+	    --spdx-out "$(BUILD_TOP)/$(SBOM_SPDX)"
+ifndef VERY_QUIET
+	$(Q)echo "SBOM written: $(BUILD_TOP)/$(SBOM_CDX)"
+	$(Q)echo "              $(BUILD_TOP)/$(SBOM_SPDX)"
+endif
+
 .PHONY: clean
 clean:
 	$(Q)rm $(CLEAN_RM_ARGS)

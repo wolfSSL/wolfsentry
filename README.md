@@ -219,3 +219,25 @@ build with wolfSentry integration, and use `--with-wolfsentry=/the/install/path`
 if wolfSentry is installed in a nonstandard location.  The wolfSSL test
 client/server can be loaded with user-supplied wolfSentry JSON configurations
 from the command line, using `--wolfsentry-config <file>`.
+
+## SBOM / EU CRA Compliance
+
+wolfSentry generates a Software Bill of Materials (SBOM) in CycloneDX 1.6 and
+SPDX 2.3 formats to support compliance with the EU Cyber Resilience Act (CRA).
+
+```sh
+make sbom WOLFSSL_DIR=/path/to/wolfssl
+```
+
+Requires `python3` and `pyspdxtools` (`pip install spdx-tools`). `WOLFSSL_DIR`
+must point to a wolfssl source tree containing `scripts/gen-sbom` (branch
+`feat/sbom-embedded`, or `master` once wolfSSL/wolfssl#10343 merges).
+
+Output: `wolfsentry-<version>.cdx.json`, `wolfsentry-<version>.spdx.json`, `wolfsentry-<version>.spdx`
+
+```sh
+make install-sbom    # installs to $(datadir)/doc/wolfsentry/
+make uninstall-sbom
+```
+
+For further CRA guidance see [wolfssl/doc/CRA.md](https://github.com/wolfSSL/wolfssl/blob/master/doc/CRA.md).

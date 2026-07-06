@@ -548,7 +548,7 @@ doc: doc-html $(BUILD_TOP)/doc/pdf/refman.pdf
 doc-clean: doc-html-clean doc-pdf-clean
 
 # SBOM generation (CRA compliance)
-SBOM_VERSION := $(shell awk '/^#define WOLFSENTRY_VERSION_MAJOR/{maj=$$3} /^#define WOLFSENTRY_VERSION_MINOR/{min=$$3} /^#define WOLFSENTRY_VERSION_TINY/{tiny=$$3} END{print maj"."min"."tiny}' '$(SRC_TOP)/wolfsentry/wolfsentry.h' 2>/dev/null)
+SBOM_VERSION := $(shell awk '/^\#define WOLFSENTRY_VERSION_MAJOR/{maj=$$3} /^\#define WOLFSENTRY_VERSION_MINOR/{min=$$3} /^\#define WOLFSENTRY_VERSION_TINY/{tiny=$$3} END{print maj"."min"."tiny}' '$(SRC_TOP)/wolfsentry/wolfsentry.h' 2>/dev/null)
 SBOM_CDX     = wolfsentry-$(SBOM_VERSION).cdx.json
 SBOM_SPDX    = wolfsentry-$(SBOM_VERSION).spdx.json
 SBOM_SPDX_TV = wolfsentry-$(SBOM_VERSION).spdx

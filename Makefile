@@ -551,13 +551,12 @@ doc-clean: doc-html-clean doc-pdf-clean
 SBOM_VERSION := $(shell awk '/^\#define WOLFSENTRY_VERSION_MAJOR/{maj=$$3} /^\#define WOLFSENTRY_VERSION_MINOR/{min=$$3} /^\#define WOLFSENTRY_VERSION_TINY/{tiny=$$3} END{print maj"."min"."tiny}' '$(SRC_TOP)/wolfsentry/wolfsentry.h' 2>/dev/null)
 SBOM_CDX     = wolfsentry-$(SBOM_VERSION).cdx.json
 SBOM_SPDX    = wolfsentry-$(SBOM_VERSION).spdx.json
-SBOM_SPDX_TV = wolfsentry-$(SBOM_VERSION).spdx
 
 .PHONY: sbom
 
 sbom:
-	$(Q)if [ -z "$(SBOM_VERSION)" ] || [ "$(SBOM_VERSION)" = ".." ]; then \
-	    echo "ERROR: could not extract version from wolfsentry/wolfsentry.h" 1>&2; \
+	$(Q)if ! printf '%s' "$(SBOM_VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+	    echo "ERROR: could not extract a valid version (got '$(SBOM_VERSION)') from wolfsentry/wolfsentry.h" 1>&2; \
 	    exit 1; \
 	fi
 	$(Q)if [ -n "$(GEN_SBOM)" ]; then \
@@ -578,12 +577,13 @@ sbom:
 	fi; \
 	_defines_h=$$(mktemp "$${TMPDIR:-/tmp}/wolfsentry-defines.XXXXXX"); \
 	trap 'rm -f "$$_defines_h"' EXIT; \
-	if ! $(CC) -dM -E -I'$(SRC_TOP)' -x c /dev/null >"$$_defines_h" 2>/dev/null; then \
+	if ! $(CC) $(CPPFLAGS) $(CFLAGS) -dM -E -x c /dev/null >"$$_defines_h" 2>/dev/null; then \
 	    echo "ERROR: $(CC) -dM -E failed" 1>&2; \
 	    exit 1; \
 	fi; \
 	_srcs=""; \
 	for _f in $(SRCS); do _srcs="$$_srcs $(SRC_TOP)/src/$$_f"; done; \
+	mkdir -p "$(BUILD_TOP)"; \
 	python3 "$$_gen_sbom" \
 	    --name wolfsentry \
 	    --version "$(SBOM_VERSION)" \

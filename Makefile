@@ -547,6 +547,76 @@ doc: doc-html $(BUILD_TOP)/doc/pdf/refman.pdf
 
 doc-clean: doc-html-clean doc-pdf-clean
 
+# SBOM generation (CRA compliance)
+SBOM_VERSION := $(shell $(AWK) '/^\#define WOLFSENTRY_VERSION_MAJOR/{maj=$$3} /^\#define WOLFSENTRY_VERSION_MINOR/{min=$$3} /^\#define WOLFSENTRY_VERSION_TINY/{tiny=$$3} END{print maj"."min"."tiny}' '$(SRC_TOP)/wolfsentry/wolfsentry.h' 2>/dev/null)
+SBOM_CDX     = wolfsentry-$(SBOM_VERSION).cdx.json
+SBOM_SPDX    = wolfsentry-$(SBOM_VERSION).spdx.json
+
+.PHONY: sbom
+
+# The effective build configuration comes from $(OPTIONS_FILE): either the
+# generated $(BUILD_TOP)/wolfsentry/wolfsentry_options.h (distilled from the
+# real CFLAGS by build_wolfsentry_options_h.awk) or, under USER_SETTINGS_FILE,
+# the user's own settings header, which gen-sbom parses with --user-settings
+# since it is not a flat define dump.
+ifdef USER_SETTINGS_FILE
+    SBOM_OPTIONS_ARG = --user-settings "$(OPTIONS_FILE)"
+else
+    SBOM_OPTIONS_ARG = --options-h "$(OPTIONS_FILE)"
+endif
+
+sbom: $(OPTIONS_FILE)
+	$(Q)if ! printf '%s' "$(SBOM_VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+	    echo "ERROR: could not extract a valid version (got '$(SBOM_VERSION)') from wolfsentry/wolfsentry.h" 1>&2; \
+	    exit 1; \
+	fi
+	$(Q)if [ -n "$(GEN_SBOM)" ]; then \
+	    _gen_sbom="$(GEN_SBOM)"; \
+	elif [ -n "$(WOLFSSL_DIR)" ]; then \
+	    _gen_sbom="$(WOLFSSL_DIR)/scripts/gen-sbom"; \
+	else \
+	    echo "ERROR: set WOLFSSL_DIR (path to wolfssl repo) or GEN_SBOM (path to gen-sbom script)" 1>&2; \
+	    exit 1; \
+	fi; \
+	if [ ! -f "$$_gen_sbom" ]; then \
+	    echo "ERROR: gen-sbom not found: $$_gen_sbom" 1>&2; \
+	    exit 1; \
+	fi; \
+	if ! command -v python3 >/dev/null 2>&1; then \
+	    echo "ERROR: python3 not found in PATH" 1>&2; \
+	    exit 1; \
+	fi; \
+	_srcs=""; \
+	for _f in $(SRCS); do _srcs="$$_srcs $(SRC_TOP)/src/$$_f"; done; \
+	mkdir -p "$(BUILD_TOP)"; \
+	python3 "$$_gen_sbom" \
+	    --name wolfsentry \
+	    --version "$(SBOM_VERSION)" \
+	    --supplier "wolfSSL Inc." \
+	    --license-file "$(SRC_TOP)/LICENSING" \
+	    $(SBOM_OPTIONS_ARG) \
+	    --srcs $$_srcs \
+	    --cdx-out "$(BUILD_TOP)/$(SBOM_CDX)" \
+	    --spdx-out "$(BUILD_TOP)/$(SBOM_SPDX)"
+ifndef VERY_QUIET
+	$(Q)echo "SBOM written: $(BUILD_TOP)/$(SBOM_CDX)"
+	$(Q)echo "              $(BUILD_TOP)/$(SBOM_SPDX)"
+endif
+
+ifndef INSTALL_DOCDIR
+    INSTALL_DOCDIR := $(INSTALL_DIR)/share/doc/wolfsentry
+endif
+
+.PHONY: install-sbom
+install-sbom: sbom
+	$(Q)mkdir -p $(INSTALL_DOCDIR)
+	install -p -m 0644 $(BUILD_TOP)/$(SBOM_CDX) $(BUILD_TOP)/$(SBOM_SPDX) $(INSTALL_DOCDIR)
+
+.PHONY: uninstall-sbom
+uninstall-sbom:
+	$(RM) $(INSTALL_DOCDIR)/$(SBOM_CDX) $(INSTALL_DOCDIR)/$(SBOM_SPDX)
+	@rmdir $(INSTALL_DOCDIR) 2>/dev/null || exit 0
+
 .PHONY: clean
 clean:
 	$(Q)rm $(CLEAN_RM_ARGS)

@@ -236,7 +236,7 @@ must point to a wolfssl source tree containing `scripts/gen-sbom` (branch
 Output: `wolfsentry-<version>.cdx.json`, `wolfsentry-<version>.spdx.json`, `wolfsentry-<version>.spdx`
 
 ```sh
-make install-sbom    # installs to $(datadir)/doc/wolfsentry/
+make install-sbom    # installs to $(INSTALL_DOCDIR), default /usr/local/share/doc/wolfsentry/
 make uninstall-sbom
 ```
 

@@ -1389,6 +1389,48 @@ TEST_SKIP(test_rw_locks)
 
 #ifdef TEST_STATIC_ROUTES
 
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+/* mock clock for exact-boundary subtests.  single-threaded use only. */
+static wolfsentry_time_t mock_now;
+static wolfsentry_errcode_t mock_get_time(void *context, wolfsentry_time_t *now) {
+    (void)context;
+    *now = mock_now;
+    WOLFSENTRY_RETURN_OK;
+}
+static wolfsentry_time_t mock_diff_time(wolfsentry_time_t later, wolfsentry_time_t earlier) {
+    return later - earlier;
+}
+static wolfsentry_time_t mock_add_time(wolfsentry_time_t a, wolfsentry_time_t b) {
+    return a + b;
+}
+static wolfsentry_errcode_t mock_to_epoch_time(wolfsentry_time_t when, time_t *epoch_secs, long *epoch_nsecs) {
+    *epoch_secs = (time_t)(when / 1000000);
+    *epoch_nsecs = (long)((when % 1000000) * 1000);
+    WOLFSENTRY_RETURN_OK;
+}
+static wolfsentry_errcode_t mock_from_epoch_time(time_t epoch_secs, long epoch_nsecs, wolfsentry_time_t *when) {
+    *when = ((wolfsentry_time_t)epoch_secs * 1000000) + ((wolfsentry_time_t)epoch_nsecs / 1000);
+    WOLFSENTRY_RETURN_OK;
+}
+/* allocator and semcbs left zero: wolfsentry_init_ex falls back to defaults. */
+static const struct wolfsentry_host_platform_interface mock_clock_hpi = {
+    .caller_build_settings = {
+        .version = WOLFSENTRY_VERSION,
+        .config = WOLFSENTRY_CONFIG_SIGNATURE
+    },
+    .timecbs = {
+        .context = NULL,
+        .get_time = mock_get_time,
+        .diff_time = mock_diff_time,
+        .add_time = mock_add_time,
+        .to_epoch_time = mock_to_epoch_time,
+        .from_epoch_time = mock_from_epoch_time,
+        .interval_to_seconds = mock_to_epoch_time,
+        .interval_from_seconds = mock_from_epoch_time
+    }
+};
+#endif /* WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS */
+
 static wolfsentry_errcode_t replace_rule_transactionally(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *event_label,
@@ -2825,6 +2867,455 @@ static int test_static_routes(void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
+    /* derogatory_threshold_for_penaltybox == 0 disables auto-penaltybox. */
+    {
+        struct wolfsentry_eventconfig sub_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+            .route_private_data_size = PRIVATE_DATA_SIZE,
+            .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+            .max_connection_count = 10,
+            .derogatory_threshold_for_penaltybox = 0, /* disabled */
+            .penaltybox_duration = 300,
+            .route_idle_time_for_purge = 0,
+            .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#else
+            PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 300, 0,
+            WOLFSENTRY_EVENTCONFIG_FLAG_NONE, 0, 0, 0, 0, 0, 0
+#endif
+        };
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } sub_remote, sub_local;
+        wolfsentry_action_res_t sub_ar;
+        wolfsentry_route_flags_t sub_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+            | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+            | WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+        wolfsentry_route_flags_t sub_im;
+        wolfsentry_ent_id_t sub_id, sub_rid;
+        unsigned int i;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                &sub_config,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        sub_remote.sa.sa_family = sub_local.sa.sa_family = AF_INET;
+        sub_remote.sa.sa_proto = sub_local.sa.sa_proto = IPPROTO_TCP;
+        sub_remote.sa.sa_port = 12345;
+        sub_local.sa.sa_port = 443;
+        sub_remote.sa.addr_len = sub_local.sa.addr_len = sizeof sub_remote.addr_buf * BITS_PER_BYTE;
+        sub_remote.sa.interface = sub_local.sa.interface = 1;
+        memcpy(sub_remote.sa.addr,"\3\4\5\6",sizeof sub_remote.addr_buf);
+        memcpy(sub_local.sa.addr,"\373\372\371\370",sizeof sub_local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, 0, 0, &sub_id, &sub_ar));
+
+        for (i = 0; i < 8; ++i) {
+            WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+            WOLFSENTRY_SET_BITS(sub_ar, WOLFSENTRY_ACTION_RES_DEROGATORY);
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                    NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+            WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+            WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_ACCEPT));
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    }
+
+    /* penaltybox_duration == 0 means permanent penaltybox. */
+    {
+        struct wolfsentry_eventconfig sub_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+            .route_private_data_size = PRIVATE_DATA_SIZE,
+            .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+            .max_connection_count = 10,
+            .derogatory_threshold_for_penaltybox = 4,
+            .penaltybox_duration = 0, /* permanent */
+            .route_idle_time_for_purge = 0,
+            .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#else
+            PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 4, 0, 0,
+            WOLFSENTRY_EVENTCONFIG_FLAG_NONE, 0, 0, 0, 0, 0, 0
+#endif
+        };
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } sub_remote, sub_local;
+        wolfsentry_action_res_t sub_ar;
+        wolfsentry_route_flags_t sub_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+            | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+            | WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+        wolfsentry_route_flags_t sub_im;
+        wolfsentry_ent_id_t sub_id, sub_rid;
+        unsigned int i;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                &sub_config,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        sub_remote.sa.sa_family = sub_local.sa.sa_family = AF_INET;
+        sub_remote.sa.sa_proto = sub_local.sa.sa_proto = IPPROTO_TCP;
+        sub_remote.sa.sa_port = 12345;
+        sub_local.sa.sa_port = 443;
+        sub_remote.sa.addr_len = sub_local.sa.addr_len = sizeof sub_remote.addr_buf * BITS_PER_BYTE;
+        sub_remote.sa.interface = sub_local.sa.interface = 1;
+        memcpy(sub_remote.sa.addr,"\7\10\11\12",sizeof sub_remote.addr_buf);
+        memcpy(sub_local.sa.addr,"\373\372\371\370",sizeof sub_local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, 0, 0, &sub_id, &sub_ar));
+
+        /* trigger penaltybox. */
+        for (i = 1; i <= (unsigned int)sub_config.derogatory_threshold_for_penaltybox; ++i) {
+            WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+            WOLFSENTRY_SET_BITS(sub_ar, WOLFSENTRY_ACTION_RES_DEROGATORY);
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                    NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+        }
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+
+        /* advance time well past any nonzero duration. */
+        sleep(1);
+
+        WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    }
+
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    /* At elapsed time exactly equal to penaltybox_duration, the route must
+     * still be penaltyboxed.  Mock clock pins elapsed to the boundary value.
+     */
+    {
+        struct wolfsentry_eventconfig sub_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+            .route_private_data_size = PRIVATE_DATA_SIZE,
+            .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+            .max_connection_count = 10,
+            .derogatory_threshold_for_penaltybox = 4,
+            .penaltybox_duration = 1, /* 1 second */
+            .route_idle_time_for_purge = 0,
+            .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#else
+            PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 4, 1, 0,
+            WOLFSENTRY_EVENTCONFIG_FLAG_NONE, 0, 0, 0, 0, 0, 0
+#endif
+        };
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } sub_remote, sub_local;
+        wolfsentry_action_res_t sub_ar;
+        wolfsentry_route_flags_t sub_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+            | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+            | WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+        wolfsentry_route_flags_t sub_im;
+        wolfsentry_ent_id_t sub_id, sub_rid;
+        unsigned int i;
+
+        mock_now = 1000000000;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&mock_clock_hpi),
+                &sub_config,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        sub_remote.sa.sa_family = sub_local.sa.sa_family = AF_INET;
+        sub_remote.sa.sa_proto = sub_local.sa.sa_proto = IPPROTO_TCP;
+        sub_remote.sa.sa_port = 12345;
+        sub_local.sa.sa_port = 443;
+        sub_remote.sa.addr_len = sub_local.sa.addr_len = sizeof sub_remote.addr_buf * BITS_PER_BYTE;
+        sub_remote.sa.interface = sub_local.sa.interface = 1;
+        memcpy(sub_remote.sa.addr,"\13\14\15\16",sizeof sub_remote.addr_buf);
+        memcpy(sub_local.sa.addr,"\373\372\371\370",sizeof sub_local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, 0, 0, &sub_id, &sub_ar));
+
+        /* trigger penaltybox at mock_now = T0. */
+        for (i = 1; i <= (unsigned int)sub_config.derogatory_threshold_for_penaltybox; ++i) {
+            WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+            WOLFSENTRY_SET_BITS(sub_ar, WOLFSENTRY_ACTION_RES_DEROGATORY);
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                    NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+        }
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+
+        /* elapsed time exactly equal to penaltybox_duration (1s = 1e6 us). */
+        mock_now += 1000000;
+
+        WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+        /* one tick past the boundary clears the flag. */
+        mock_now += 1;
+        WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    }
+#endif /* WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS */
+
+    /* WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS bypasses the
+     * connection-count cap.
+     */
+    {
+        struct wolfsentry_eventconfig sub_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+            .route_private_data_size = PRIVATE_DATA_SIZE,
+            .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+            .max_connection_count = 2,
+            .derogatory_threshold_for_penaltybox = 4,
+            .penaltybox_duration = 300,
+            .route_idle_time_for_purge = 0,
+            .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#else
+            PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 2, 4, 300, 0,
+            WOLFSENTRY_EVENTCONFIG_FLAG_NONE, 0, 0, 0, 0, 0, 0
+#endif
+        };
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } sub_remote, sub_local;
+        wolfsentry_action_res_t sub_ar;
+        wolfsentry_route_flags_t sub_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+            | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+            | WOLFSENTRY_ROUTE_FLAG_GREENLISTED
+            | WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS;
+        wolfsentry_route_flags_t sub_im;
+        wolfsentry_ent_id_t sub_id, sub_rid;
+        unsigned int i;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                &sub_config,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        sub_remote.sa.sa_family = sub_local.sa.sa_family = AF_INET;
+        sub_remote.sa.sa_proto = sub_local.sa.sa_proto = IPPROTO_TCP;
+        sub_remote.sa.sa_port = 12345;
+        sub_local.sa.sa_port = 443;
+        sub_remote.sa.addr_len = sub_local.sa.addr_len = sizeof sub_remote.addr_buf * BITS_PER_BYTE;
+        sub_remote.sa.interface = sub_local.sa.interface = 1;
+        memcpy(sub_remote.sa.addr,"\17\20\21\22",sizeof sub_remote.addr_buf);
+        memcpy(sub_local.sa.addr,"\373\372\371\370",sizeof sub_local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, 0, 0, &sub_id, &sub_ar));
+
+        for (i = 0; i < 5; ++i) {
+            WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+            WOLFSENTRY_SET_BITS(sub_ar, WOLFSENTRY_ACTION_RES_CONNECT);
+            WOLFSENTRY_EXIT_ON_FAILURE(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                    NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+            WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+            WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_ACCEPT));
+        }
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    }
+
+    /* action_res_filter_bits_unset: route matches only when all listed bits
+     * are absent from action_results.
+     */
+    {
+        struct wolfsentry_eventconfig sub_base = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+            .route_private_data_size = PRIVATE_DATA_SIZE,
+            .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+            .max_connection_count = 10,
+            .derogatory_threshold_for_penaltybox = 4,
+            .penaltybox_duration = 300,
+            .route_idle_time_for_purge = 0,
+            .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#else
+            PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 4, 300, 0,
+            WOLFSENTRY_EVENTCONFIG_FLAG_NONE, 0, 0, 0, 0, 0, 0
+#endif
+        };
+        struct wolfsentry_eventconfig sub_event_config = sub_base;
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } sub_remote, sub_local;
+        wolfsentry_action_res_t sub_ar;
+        wolfsentry_route_flags_t sub_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+            | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+            | WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+        wolfsentry_route_flags_t sub_im;
+        wolfsentry_ent_id_t sub_id, sub_rid;
+
+        sub_event_config.action_res_filter_bits_unset = WOLFSENTRY_ACTION_RES_USER0;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                &sub_base,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_REJECT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "evt_filter", -1,
+                10, &sub_event_config,
+                WOLFSENTRY_EVENT_FLAG_NONE,
+                &sub_id));
+
+        sub_remote.sa.sa_family = sub_local.sa.sa_family = AF_INET;
+        sub_remote.sa.sa_proto = sub_local.sa.sa_proto = IPPROTO_TCP;
+        sub_remote.sa.sa_port = 12345;
+        sub_local.sa.sa_port = 443;
+        sub_remote.sa.addr_len = sub_local.sa.addr_len = sizeof sub_remote.addr_buf * BITS_PER_BYTE;
+        sub_remote.sa.interface = sub_local.sa.interface = 1;
+        memcpy(sub_remote.sa.addr,"\27\30\31\32",sizeof sub_remote.addr_buf);
+        memcpy(sub_local.sa.addr,"\373\372\371\370",sizeof sub_local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, "evt_filter", (int)strlen("evt_filter"), &sub_id, &sub_ar));
+
+        WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+        WOLFSENTRY_SET_BITS(sub_ar, WOLFSENTRY_ACTION_RES_USER0);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+        WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_ACCEPT));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(sub_ar, WOLFSENTRY_ACTION_RES_REJECT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    }
+
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    /* Stale-purge: a route whose purge_after equals the current time is purged. */
+    {
+        struct wolfsentry_eventconfig sub_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+            .route_private_data_size = PRIVATE_DATA_SIZE,
+            .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+            .max_connection_count = 10,
+            .derogatory_threshold_for_penaltybox = 4,
+            .penaltybox_duration = 300,
+            .route_idle_time_for_purge = 0,
+            .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
+#else
+            PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 4, 300, 0,
+            WOLFSENTRY_EVENTCONFIG_FLAG_NONE, 0, 0, 0, 0, 0, 0
+#endif
+        };
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } sub_remote, sub_local;
+        wolfsentry_action_res_t sub_ar;
+        wolfsentry_route_flags_t sub_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+            | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+        wolfsentry_ent_id_t sub_id;
+        struct wolfsentry_route *sub_route;
+
+        mock_now = 1000000000;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&mock_clock_hpi),
+                &sub_config,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        sub_remote.sa.sa_family = sub_local.sa.sa_family = AF_INET;
+        sub_remote.sa.sa_proto = sub_local.sa.sa_proto = IPPROTO_TCP;
+        sub_remote.sa.sa_port = 12345;
+        sub_local.sa.sa_port = 443;
+        sub_remote.sa.addr_len = sub_local.sa.addr_len = sizeof sub_remote.addr_buf * BITS_PER_BYTE;
+        sub_remote.sa.interface = sub_local.sa.interface = 1;
+        memcpy(sub_remote.sa.addr,"\33\34\35\36",sizeof sub_remote.addr_buf);
+        memcpy(sub_local.sa.addr,"\373\372\371\370",sizeof sub_local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, 0, 0, &sub_id, &sub_ar));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, sub_id,
+                (struct wolfsentry_table_ent_header **)&sub_route));
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_purge_time_set(WOLFSENTRY_CONTEXT_ARGS_OUT, sub_route, mock_now));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+            ITEM_NOT_FOUND,
+            wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, sub_id,
+                (struct wolfsentry_table_ent_header **)&sub_route));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    }
+#endif /* WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS */
+
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
     WOLFSENTRY_RETURN_OK;
@@ -2833,6 +3324,33 @@ static int test_static_routes(void) {
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
+
+static unsigned int action_invocation_count;
+static wolfsentry_errcode_t counting_action_handler(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_arg,
+    void *caller_arg,
+    const struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    (void)action;
+    (void)handler_arg;
+    (void)caller_arg;
+    (void)trigger_event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+    ++action_invocation_count;
+    WOLFSENTRY_RETURN_OK;
+}
 
 static wolfsentry_errcode_t wolfsentry_action_dummy_callback(
     WOLFSENTRY_CONTEXT_ARGS_IN,
@@ -3462,6 +3980,143 @@ static int test_dynamic_rules(void) {
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
+    /* WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS suppresses action dispatch. */
+    {
+        struct wolfsentry_eventconfig sub_config = {
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+            .route_private_data_size = PRIVATE_DATA_SIZE,
+            .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT,
+            .max_connection_count = 10,
+            .derogatory_threshold_for_penaltybox = 4,
+            .penaltybox_duration = 300,
+            .route_idle_time_for_purge = 0,
+            .flags = WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS
+#else
+            PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 4, 300, 0,
+            WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS, 0, 0, 0, 0, 0, 0
+#endif
+        };
+        struct {
+            struct wolfsentry_sockaddr sa;
+            byte addr_buf[4];
+        } sub_remote, sub_local;
+        wolfsentry_action_res_t sub_ar;
+        wolfsentry_route_flags_t sub_flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+            | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+            | WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+        wolfsentry_route_flags_t sub_im;
+        wolfsentry_ent_id_t sub_id, sub_rid;
+
+        action_invocation_count = 0;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                &sub_config,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "count_action", -1,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                counting_action_handler,
+                NULL,
+                &sub_id));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "evt_inhibit", -1,
+                10, NULL,
+                WOLFSENTRY_EVENT_FLAG_NONE,
+                &sub_id));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_action_append(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "evt_inhibit", -1,
+                WOLFSENTRY_ACTION_TYPE_DECISION,
+                "count_action", -1));
+
+        sub_remote.sa.sa_family = sub_local.sa.sa_family = AF_INET;
+        sub_remote.sa.sa_proto = sub_local.sa.sa_proto = IPPROTO_TCP;
+        sub_remote.sa.sa_port = 12345;
+        sub_local.sa.sa_port = 443;
+        sub_remote.sa.addr_len = sub_local.sa.addr_len = sizeof sub_remote.addr_buf * BITS_PER_BYTE;
+        sub_remote.sa.interface = sub_local.sa.interface = 1;
+        memcpy(sub_remote.sa.addr,"\23\24\25\26",sizeof sub_remote.addr_buf);
+        memcpy(sub_local.sa.addr,"\373\372\371\370",sizeof sub_local.addr_buf);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, "evt_inhibit", (int)strlen("evt_inhibit"), &sub_id, &sub_ar));
+
+        WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_invocation_count == 0);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+        /* companion run with the flag cleared confirms the action plumbing
+         * fires, so the zero count above can't be a wiring artefact.
+         */
+        action_invocation_count = 0;
+        sub_config.flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_init_ex(
+                wolfsentry_build_settings,
+                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                &sub_config,
+                &wolfsentry,
+                WOLFSENTRY_INIT_FLAG_NONE));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_action_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "count_action", -1,
+                WOLFSENTRY_ACTION_FLAG_NONE,
+                counting_action_handler,
+                NULL,
+                &sub_id));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "evt_inhibit", -1,
+                10, NULL,
+                WOLFSENTRY_EVENT_FLAG_NONE,
+                &sub_id));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_event_action_append(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "evt_inhibit", -1,
+                WOLFSENTRY_ACTION_TYPE_DECISION,
+                "count_action", -1));
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, &sub_remote.sa, &sub_local.sa,
+                sub_flags, "evt_inhibit", (int)strlen("evt_inhibit"), &sub_id, &sub_ar));
+
+        WOLFSENTRY_CLEAR_ALL_BITS(sub_ar);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch_with_inited_result(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, &sub_remote.sa, &sub_local.sa, sub_flags,
+                NULL, 0, NULL, &sub_rid, &sub_im, &sub_ar));
+
+        WOLFSENTRY_EXIT_ON_FALSE(action_invocation_count >= 1);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    }
+
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
     WOLFSENTRY_RETURN_OK;
@@ -3755,6 +4410,17 @@ static int test_user_values(void) {
                 WOLFSENTRY_CONTEXT_ARGS_OUT,
                 "test_string",
                 WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NOT_PERMITTED, ret);
+
+        WOLFSENTRY_EXIT_ON_SUCCESS(
+            ret = wolfsentry_user_value_store_string(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                "test_string",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                "different",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                1 /* overwrite_p */));
 
         WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NOT_PERMITTED, ret);
 

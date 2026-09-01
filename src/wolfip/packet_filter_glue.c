@@ -129,6 +129,26 @@ static int wolfip_action_rejects(wolfsentry_action_res_t action_results)
     return 0;
 }
 
+/* On a dispatch failure the action_results are not trustworthy.  Fall back to
+ * the context's configured default policy: reject only if that policy rejects,
+ * or if it can't be determined (including a NULL context).
+ */
+static int wolfip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_IN)
+{
+    wolfsentry_action_res_t default_policy;
+    wolfsentry_errcode_t ws_ret;
+    if (wolfsentry == NULL)
+        return 1;
+    ws_ret = wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        return 1;
+    ws_ret = wolfsentry_route_default_policy_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &default_policy);
+    (void)wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        return 1;
+    return WOLFSENTRY_MASKIN_BITS(default_policy, WOLFSENTRY_ACTION_RES_REJECT) ? 1 : 0;
+}
+
 static int wolfip_dispatch_event(
     struct wolfsentry_context *wolfsentry,
     wolfsentry_route_flags_t route_flags,
@@ -138,10 +158,11 @@ static int wolfip_dispatch_event(
     const struct wolfIP_filter_event *event)
 {
     wolfsentry_errcode_t ws_ret;
+    int reject;
     WOLFSENTRY_THREAD_HEADER_DECLS
 
     if (wolfsentry == NULL)
-        return 0;
+        return -WOLFIP_EACCES;
 
     if (WOLFSENTRY_THREAD_HEADER_INIT(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         return -WOLFIP_EACCES;
@@ -160,10 +181,15 @@ static int wolfip_dispatch_event(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        reject = wolfip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    else
+        reject = wolfip_action_rejects(*action_results);
+
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         return -WOLFIP_EACCES;
 
-    if (wolfip_action_rejects(*action_results))
+    if (reject)
         return -WOLFIP_EACCES;
 
     return 0;
@@ -209,7 +235,7 @@ static int wolfip_filter_ethernet(
         action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     default:
-        return 0;
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_link_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -261,7 +287,7 @@ static int wolfip_filter_ipv4(
         action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     default:
-        return 0;
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -360,7 +386,7 @@ static int wolfip_filter_tcp(
         action_results = WOLFSENTRY_ACTION_RES_DEROGATORY;
         break;
     default:
-        return 0;
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -442,7 +468,7 @@ static int wolfip_filter_udp(
             WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
     default:
-        return 0;
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -504,7 +530,7 @@ static int wolfip_filter_icmp(
         action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     default:
-        return 0;
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -518,8 +544,10 @@ static int wolfip_filter_with_wolfsentry(void *arg, const struct wolfIP_filter_e
 {
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
 
-    if ((wolfsentry == NULL) || (event == NULL))
-        return 0;
+    if (wolfsentry == NULL)
+        return -WOLFIP_EACCES;
+    if (event == NULL)
+        return -WOLFIP_EACCES;
 
     switch (event->meta.ip_proto) {
     case WOLFIP_FILTER_PROTO_ETH:
@@ -533,7 +561,7 @@ static int wolfip_filter_with_wolfsentry(void *arg, const struct wolfIP_filter_e
     case WOLFIP_FILTER_PROTO_ICMP:
         return wolfip_filter_icmp(wolfsentry, event);
     default:
-        return 0;
+        return -WOLFIP_EACCES;
     }
 }
 

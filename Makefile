@@ -146,6 +146,34 @@ ifdef WOLFIP
         SRCS += wolfip/packet_filter_glue.c
 endif
 
+ifneq (,$(filter -DWOLFSENTRY_WOLFCOSE%,$(EXTRA_CFLAGS)))
+    EXTRA_CFLAGS_WOLFCOSE := 1
+    WOLFCOSE := 1
+endif
+
+ifdef USER_SETTINGS_FILE
+    USER_SETTINGS_WOLFCOSE := $(shell grep -q -E -e '^[[:space:]]*\#[[:space:]]*define[[:space:]]+WOLFSENTRY_WOLFCOSE([[:space:]]|$$)' '$(USER_SETTINGS_FILE)' && echo 1)
+    ifdef USER_SETTINGS_WOLFCOSE
+        WOLFCOSE := 1
+    endif
+endif
+
+ifdef WOLFCOSE
+        ifndef WOLFCOSE_TOP
+            WOLFCOSE_TOP := $(SRC_TOP)/../wolfCOSE
+        endif
+        ifndef WOLFCOSE_LIB
+            WOLFCOSE_LIB := $(WOLFCOSE_TOP)/libwolfcose.a
+        endif
+        ifeq (,$(USER_SETTINGS_WOLFCOSE)$(EXTRA_CFLAGS_WOLFCOSE))
+            WOLFCOSE_CFLAGS += -DWOLFSENTRY_WOLFCOSE
+        endif
+        WOLFCOSE_CFLAGS += -I$(WOLFCOSE_TOP)/include
+        TEST_LIBS += $(WOLFCOSE_LIB)
+        DYNLIB_LIBS += $(WOLFCOSE_LIB)
+        WOLFCOSE_LINK_DEPS += $(WOLFCOSE_LIB)
+endif
+
 ifdef NETXDUO
         ifndef NETXDUO_TOP
             NETXDUO_TOP=$(THREADX_TOP)
@@ -183,7 +211,7 @@ ifndef C_WARNFLAGS
     endif
 endif
 
-CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) $(C_WARNFLAGS) $(LWIP_CFLAGS) $(WOLFIP_CFLAGS) $(RUNTIME_CFLAGS) $(EXTRA_CFLAGS)
+CFLAGS := -I$(BUILD_TOP) -I$(SRC_TOP) $(OPTIM) $(DEBUG) $(C_WARNFLAGS) $(LWIP_CFLAGS) $(WOLFIP_CFLAGS) $(WOLFCOSE_CFLAGS) $(RUNTIME_CFLAGS) $(EXTRA_CFLAGS)
 LDFLAGS := $(EXTRA_LDFLAGS)
 
 VISIBILITY_CFLAGS := -fvisibility=hidden -DHAVE_VISIBILITY=1
@@ -204,18 +232,20 @@ endif
 
 # JSON settings need to be extracted from $(USER_SETTINGS_FILE) to determine if JSON sources should be built.
 ifdef USER_SETTINGS_FILE
-    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
-        USER_SETTINGS_NO_JSON := 1
-    endif
-    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON_DOM$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
-        USER_SETTINGS_NO_JSON_DOM := 1
-    endif
+    USER_SETTINGS_NO_JSON := $(shell grep -q -E -e '^[[:space:]]*\#[[:space:]]*define[[:space:]]+WOLFSENTRY_NO_JSON([[:space:]]|$$)' '$(USER_SETTINGS_FILE)' && echo 1)
+    USER_SETTINGS_NO_JSON_DOM := $(shell grep -q -E -e '^[[:space:]]*\#[[:space:]]*define[[:space:]]+WOLFSENTRY_NO_JSON_DOM([[:space:]]|$$)' '$(USER_SETTINGS_FILE)' && echo 1)
 endif
 
 ifdef NO_JSON
     CFLAGS += -DWOLFSENTRY_NO_JSON -DWOLFSENTRY_NO_JSON_DOM
+    ifdef WOLFCOSE
+        SRCS += json/load_config.c
+    endif
 else ifdef USER_SETTINGS_NO_JSON
     NO_JSON := 1
+    ifdef WOLFCOSE
+        SRCS += json/load_config.c
+    endif
 else
     SRCS += json/centijson_sax.c json/json_util.c json/load_config.c
     ifdef NO_JSON_DOM
@@ -225,6 +255,55 @@ else
     else
         SRCS += json/centijson_dom.c json/centijson_value.c
     endif
+endif
+
+ifdef MINIMAL_CONFIG
+    CFLAGS += -DWOLFSENTRY_CONFIG_MINIMAL
+endif
+ifdef NO_CONFIG_ROUTES
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_ROUTES
+endif
+ifdef NO_CONFIG_ADDR_FAMILY_NAMES
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES
+endif
+ifdef NO_CONFIG_ROUTE_ENDPOINTS
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS
+endif
+ifdef NO_CONFIG_EVENTS
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_EVENTS
+endif
+ifdef NO_CONFIG_USER_VALUES
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_USER_VALUES
+endif
+ifdef NO_CONFIG_EVENTCONFIG
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_EVENTCONFIG
+endif
+ifdef NO_CONFIG_TRANSACTIONS
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_TRANSACTIONS
+endif
+ifdef NO_CONFIG_LEGACY_EVENT_SYNTAX
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX
+endif
+ifdef NO_CONFIG_TEXT_NUMBERS
+    ifndef WOLFCOSE
+        $(error NO_CONFIG_TEXT_NUMBERS requires WOLFCOSE=1)
+    endif
+    ifndef NO_JSON
+        $(error NO_CONFIG_TEXT_NUMBERS requires NO_JSON=1)
+    endif
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_TEXT_NUMBERS
+endif
+ifdef NO_CONFIG_TEXT_ADDRESSES
+    ifndef WOLFCOSE
+        $(error NO_CONFIG_TEXT_ADDRESSES requires WOLFCOSE=1)
+    endif
+    ifndef NO_JSON
+        $(error NO_CONFIG_TEXT_ADDRESSES requires NO_JSON=1)
+    endif
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_TEXT_ADDRESSES
+endif
+ifdef NO_CONFIG_ERROR_MESSAGES
+    CFLAGS += -DWOLFSENTRY_CONFIG_NO_ERROR_MESSAGES
 endif
 
 ifdef CALL_TRACE
@@ -268,7 +347,7 @@ LIB_NAME := libwolfsentry.a
 
 INSTALL_LIBS := $(BUILD_TOP)/$(LIB_NAME)
 
-INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_json.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h wolfsentry/wolfssl_test.h
+INSTALL_HEADERS := wolfsentry/wolfsentry.h wolfsentry/wolfsentry_settings.h wolfsentry/wolfsentry_errcodes.h wolfsentry/wolfsentry_af.h wolfsentry/wolfsentry_util.h wolfsentry/wolfsentry_config.h wolfsentry/wolfsentry_json.h wolfsentry/wolfsentry_cbor.h wolfsentry/wolfsentry_wolfip.h wolfsentry/centijson_sax.h wolfsentry/centijson_dom.h wolfsentry/centijson_value.h wolfsentry/wolfssl_test.h
 
 ifdef USER_SETTINGS_FILE
     OPTIONS_FILE := $(USER_SETTINGS_FILE)
@@ -293,7 +372,7 @@ all: $(BUILD_TOP)/$(DYNLIB_NAME)
 endif
 
 #https://stackoverflow.com/questions/3236145/force-gnu-make-to-rebuild-objects-affected-by-compiler-definition/3237349#3237349
-BUILD_PARAMS := (echo 'CC_V:'; echo '$(CC_V)'; echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS) $(VISIBILITY_CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'AS_VERSION:'; echo '$(AS_VERSION)'; echo 'LD_VERSION:'; echo '$(LD_VERSION)'; echo 'AR_VERSION:'; echo '$(AR_VERSION)'; echo 'ARFLAGS: $(AR_FLAGS)')
+BUILD_PARAMS := (echo 'CC_V:'; echo '$(CC_V)'; echo 'SRC_TOP: $(SRC_TOP)'; echo 'CFLAGS: $(CFLAGS) $(VISIBILITY_CFLAGS)'; echo 'LDFLAGS: $(LDFLAGS)'; echo 'WOLFCOSE_LINK_DEPS: $(WOLFCOSE_LINK_DEPS)'; echo 'AS_VERSION:'; echo '$(AS_VERSION)'; echo 'LD_VERSION:'; echo '$(LD_VERSION)'; echo 'AR_VERSION:'; echo '$(AR_VERSION)'; echo 'ARFLAGS: $(AR_FLAGS)')
 
 .PHONY: force
 $(BUILD_TOP)/.build_params: force
@@ -339,10 +418,14 @@ ifndef VERY_QUIET
 endif
 	$(Q)$(CC) $(INTERNAL_CFLAGS) $(CFLAGS) $(DYNAMIC_CFLAGS) $(VISIBILITY_CFLAGS) -MF $(@:.So=.Sd) -c $< -o $@
 
-$(BUILD_TOP)/$(DYNLIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So))
-	$(Q)$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $+
+$(BUILD_TOP)/$(DYNLIB_NAME): $(addprefix $(BUILD_TOP)/src/,$(SRCS:.c=.So)) $(WOLFCOSE_LINK_DEPS)
+	$(Q)$(CC) $(LD_FLAGS) $(DYNAMIC_LDFLAGS) -o $@ $(filter-out $(WOLFCOSE_LINK_DEPS),$+) $(DYNLIB_LIBS)
 
 UNITTEST_LIST := test_init test_rwlocks test_static_routes test_dynamic_rules test_user_values test_user_addr_families $(UNITTEST_LIST_EXTRAS)
+
+ifdef WOLFCOSE
+    UNITTEST_LIST += test_cbor
+endif
 
 ifneq "$(NO_JSON)" "1"
     UNITTEST_LIST += test_json
@@ -356,23 +439,23 @@ ifneq "$(NO_JSON)" "1"
 endif
 
 $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): UNITTEST_GATE=-D$(shell basename '$@' | tr '[:lower:]' '[:upper:]')
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(OPTIONS_FILE)
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(LIB_NAME) $(OPTIONS_FILE) $(WOLFCOSE_LINK_DEPS)
 	$(Q)[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifndef VERY_QUIET
 	$(Q)echo "$(CC) ... -o $@"
 endif
-	$(Q)$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h,$^)
+	$(Q)$(CC) $(CFLAGS) $(UNITTEST_GATE) $(LDFLAGS) -o $@ $(filter-out %.h $(WOLFCOSE_LINK_DEPS),$^) $(TEST_LIBS)
 
 
 UNITTEST_LIST_SHARED=test_all_shared
 UNITTEST_SHARED_FLAGS := $(addprefix -D,$(shell echo '$(UNITTEST_LIST)' | tr '[:lower:]' '[:upper:]')) $(TEST_JSON_CFLAGS)
 
-$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(OPTIONS_FILE)
+$(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED)): $(SRC_TOP)/tests/unittests.c $(BUILD_TOP)/$(DYNLIB_NAME) $(OPTIONS_FILE) $(WOLFCOSE_LINK_DEPS)
 	$(Q)[ -d $(dir $@) ] || mkdir -p $(dir $@)
 ifndef VERY_QUIET
 	$(Q)echo "$(CC) ... -o $@"
 endif
-	$(Q)$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME)
+	$(Q)$(CC) $(CFLAGS) $(UNITTEST_SHARED_FLAGS) $(LDFLAGS) -o $@ $< $(BUILD_TOP)/$(DYNLIB_NAME) $(TEST_LIBS)
 
 ifdef BUILD_DYNAMIC
 $(BUILD_TOP)/.tested: $(addprefix $(BUILD_TOP)/tests/,$(UNITTEST_LIST_SHARED))
@@ -513,7 +596,7 @@ doc-html:
 doc-html-clean:
 	$(Q)rm -rf '$(BUILD_TOP)/doc/html'
 
-$(BUILD_TOP)/doc/pdf/refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsentry_options.h,$(INSTALL_HEADERS)) ChangeLog.md README.md doc/freertos-lwip-app.md doc/json_configuration.md)
+$(BUILD_TOP)/doc/pdf/refman.pdf: $(addprefix $(SRC_TOP)/, $(filter-out %/wolfsentry_options.h,$(INSTALL_HEADERS)) ChangeLog.md README.md doc/freertos-lwip-app.md doc/json_configuration.md doc/cbor_configuration.md)
 	$(Q)command -v doxygen >/dev/null || doxygen
 	$(Q)command -v pdflatex >/dev/null || pdflatex
 	$(Q)command -v makeindex >/dev/null || makeindex

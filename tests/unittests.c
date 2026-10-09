@@ -4231,6 +4231,1189 @@ static int test_user_addr_families(void) {
 
 #endif /* TEST_USER_ADDR_FAMILIES */
 
+#ifdef TEST_CBOR
+
+#include <wolfsentry/wolfsentry_cbor.h>
+#ifndef FREERTOS
+#include <locale.h>
+#endif
+
+#ifdef WOLFSENTRY_CONFIG_NO_TRANSACTIONS
+    #define TEST_CBOR_COMMIT_FLAGS WOLFSENTRY_CONFIG_LOAD_FLAG_NONE
+#else
+    #define TEST_CBOR_COMMIT_FLAGS WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT
+#endif
+
+#if !defined(WOLFSENTRY_TEST_CBOR_TOTAL_LIMIT) && \
+    !defined(WOLFSENTRY_TEST_CBOR_NESTING_LIMIT)
+static int test_cbor_rejections(WOLFSENTRY_CONTEXT_ARGS_IN)
+{
+    static const unsigned char empty_map[] = { 0xa0 };
+    static const unsigned char trailing_data[] = {
+        0xa1, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x00
+    };
+    static const unsigned char non_text_key[] = { 0xa1, 0x01, 0x01 };
+    static const unsigned char tagged_root[] = { 0xc0, 0xa0 };
+    static const unsigned char indefinite_map[] = { 0xbf, 0xff };
+    static const unsigned char simple_root[] = { 0xf7 };
+    static const unsigned char truncated_map[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01
+    };
+    static const unsigned char byte_string_value[] = {
+        0xa1, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x41, 0x01
+    };
+    static const unsigned char nonpreferred_version[] = {
+        0xa1, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01
+    };
+    static const unsigned char float_version[] = {
+        0xa1, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0xf9, 0x3c, 0x00
+    };
+    static const unsigned char typed_string_number[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65,
+        0x72, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x61, 0x78,
+        0xa1, 0x66, 0x73, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x01
+    };
+    static const unsigned char typed_base64_number[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65,
+        0x72, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x61, 0x78,
+        0xa1, 0x66, 0x62, 0x61, 0x73, 0x65, 0x36, 0x34, 0x01
+    };
+    static const unsigned char byte_string_default_event[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x70, 0x64, 0x65, 0x66,
+        0x61, 0x75, 0x6c, 0x74, 0x2d, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x69,
+        0x65, 0x73, 0xa1, 0x6d, 0x64, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
+        0x2d, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x41, 0x78
+    };
+    static const unsigned char byte_string_parent_event[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x72, 0x6f, 0x75,
+        0x74, 0x65, 0x73, 0x81, 0xa1, 0x6c, 0x70, 0x61, 0x72, 0x65, 0x6e,
+        0x74, 0x2d, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x41, 0x78
+    };
+    static const struct {
+        const unsigned char *data;
+        size_t len;
+    } invalid[] = {
+        { empty_map, sizeof empty_map },
+        { trailing_data, sizeof trailing_data },
+        { non_text_key, sizeof non_text_key },
+        { tagged_root, sizeof tagged_root },
+        { indefinite_map, sizeof indefinite_map },
+        { simple_root, sizeof simple_root },
+        { truncated_map, sizeof truncated_map },
+        { byte_string_value, sizeof byte_string_value },
+        { nonpreferred_version, sizeof nonpreferred_version },
+        { float_version, sizeof float_version },
+        { typed_string_number, sizeof typed_string_number },
+        { typed_base64_number, sizeof typed_base64_number },
+        { byte_string_default_event, sizeof byte_string_default_event },
+        { byte_string_parent_event, sizeof byte_string_parent_event }
+    };
+    char error[160];
+    wolfsentry_errcode_t ret;
+    size_t i;
+
+    for (i = 0U; i < (sizeof invalid / sizeof invalid[0]); ++i) {
+        ret = wolfsentry_config_cbor_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            invalid[i].data,
+            invalid[i].len,
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+                TEST_CBOR_COMMIT_FLAGS,
+            error,
+            sizeof error);
+        WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+    }
+
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        float_version,
+        sizeof float_version,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+#ifndef WOLFSENTRY_CONFIG_NO_ERROR_MESSAGES
+    WOLFSENTRY_EXIT_ON_FALSE(strstr(error, "wolfSentry code") != NULL);
+#endif
+
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        float_version,
+        sizeof float_version,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN |
+            WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT,
+        error,
+        sizeof error);
+#ifdef WOLFSENTRY_CONFIG_NO_TRANSACTIONS
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, IMPLEMENTATION_MISSING));
+#else
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(ret, INVALID_ARG));
+#endif
+
+    return 0;
+}
+
+#if !defined(WOLFSENTRY_CONFIG_NO_ROUTES) && \
+    !defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS)
+static int test_cbor_binary_route(WOLFSENTRY_CONTEXT_ARGS_IN)
+{
+    static const byte expected_remote[] = { 0xc0, 0x00, 0x02, 0x01 };
+    static const byte expected_local[] = { 0xc6, 0x33, 0x64, 0x02 };
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    static const byte expected_masked_remote[] = {
+        0xcb, 0x00, 0x71, 0x00, 0xff, 0xff, 0xff, 0x00
+    };
+    static const byte expected_masked_local[] = {
+        0xc6, 0x33, 0x64, 0x00, 0xff, 0xff, 0xff, 0xf0
+    };
+#endif
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_cursor *cursor = NULL;
+    struct wolfsentry_route *route;
+    struct wolfsentry_route_exports exports;
+    wolfsentry_errcode_t ret;
+    int found = 0;
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    int found_masked = 0;
+#endif
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(
+        WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_start(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        main_routes,
+        &cursor));
+    for (ret = wolfsentry_route_table_iterate_current(
+             main_routes, cursor, &route);
+         ret >= 0;
+         ret = wolfsentry_route_table_iterate_next(
+             main_routes, cursor, &route))
+    {
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_export(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            &exports));
+        if ((exports.sa_family == WOLFSENTRY_AF_INET) &&
+            (exports.remote.addr_len == 32U) &&
+            (exports.local.addr_len == 32U) &&
+            (memcmp(exports.remote_address,
+                    expected_remote,
+                    sizeof expected_remote) == 0) &&
+            (memcmp(exports.local_address,
+                    expected_local,
+                    sizeof expected_local) == 0))
+        {
+            found = 1;
+        }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        if ((exports.sa_family == WOLFSENTRY_AF_INET) &&
+            (exports.remote.addr_len == 64U) &&
+            (exports.local.addr_len == 64U) &&
+            WOLFSENTRY_MASKIN_BITS(
+                exports.flags,
+                WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK |
+                    WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) &&
+            (memcmp(exports.remote_address,
+                    expected_masked_remote,
+                    sizeof expected_masked_remote) == 0) &&
+            (memcmp(exports.local_address,
+                    expected_masked_local,
+                    sizeof expected_masked_local) == 0))
+        {
+            found_masked = 1;
+        }
+#endif
+    }
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        main_routes,
+        &cursor));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(
+        WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(found != 0);
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    WOLFSENTRY_EXIT_ON_FALSE(found_masked != 0);
+#endif
+
+    return 0;
+}
+#endif
+#endif
+
+#if defined(WOLFSENTRY_TEST_CBOR_TOTAL_LIMIT) || \
+    defined(WOLFSENTRY_TEST_CBOR_NESTING_LIMIT)
+static int test_cbor_limits(void)
+{
+#ifdef WOLFSENTRY_TEST_CBOR_TOTAL_LIMIT
+    static const unsigned char at_limit[] = {
+        0xa1, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01
+    };
+    static const unsigned char over_limit[] = {
+        0xa1, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x00
+    };
+#else
+    static const unsigned char at_limit[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65,
+        0x72, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x61, 0x78,
+        0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0x80
+    };
+    static const unsigned char over_limit[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65,
+        0x72, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x61, 0x78,
+        0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0x81, 0x80
+    };
+#endif
+    struct wolfsentry_context *wolfsentry = NULL;
+    struct wolfsentry_eventconfig initial_config;
+    char error[160];
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    memset(&initial_config, 0, sizeof initial_config);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init(
+        wolfsentry_build_settings,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+        &initial_config,
+        &wolfsentry));
+#ifdef WOLFSENTRY_TEST_CBOR_TOTAL_LIMIT
+    WOLFSENTRY_EXIT_ON_FALSE(
+        sizeof at_limit == WOLFSENTRY_MAX_CBOR_TOTAL_LEN);
+#else
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_MAX_CBOR_NESTING == 4U);
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        at_limit,
+        sizeof at_limit,
+        TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        over_limit,
+        sizeof over_limit,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+#ifdef WOLFSENTRY_TEST_CBOR_TOTAL_LIMIT
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, NUMERIC_ARG_TOO_BIG));
+#else
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_UNEXPECTED));
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(
+        WOLFSENTRY_THREAD_FLAG_NONE));
+
+    return 0;
+}
+#endif
+
+static int test_cbor(void)
+{
+#if defined(WOLFSENTRY_TEST_CBOR_TOTAL_LIMIT) || \
+    defined(WOLFSENTRY_TEST_CBOR_NESTING_LIMIT)
+    return test_cbor_limits();
+#else
+#ifdef WOLFSENTRY_CONFIG_NO_TEXT_NUMBERS
+    static const unsigned char text_number_cbor[] = {
+        0xa1, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x61, 0x31
+    };
+#endif
+#if !defined(WOLFSENTRY_CONFIG_NO_ROUTES) && \
+    !defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS)
+    static const unsigned char binary_address_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x72, 0x6f, 0x75, 0x74, 0x65, 0x73,
+        0x81, 0xa4, 0x6c, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e,
+        0x2d, 0x69, 0x6e, 0xf5, 0x66, 0x66, 0x61, 0x6d, 0x69, 0x6c, 0x79, 0x02,
+        0x66, 0x72, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0xa2, 0x67, 0x61, 0x64, 0x64,
+        0x72, 0x65, 0x73, 0x73, 0x44, 0xc0, 0x00, 0x02, 0x01, 0x6b, 0x70, 0x72,
+        0x65, 0x66, 0x69, 0x78, 0x2d, 0x62, 0x69, 0x74, 0x73, 0x18, 0x20, 0x65,
+        0x6c, 0x6f, 0x63, 0x61, 0x6c, 0xa2, 0x67, 0x61, 0x64, 0x64, 0x72, 0x65,
+        0x73, 0x73, 0x44, 0xc6, 0x33, 0x64, 0x02, 0x6b, 0x70, 0x72, 0x65, 0x66,
+        0x69, 0x78, 0x2d, 0x62, 0x69, 0x74, 0x73, 0x18, 0x20
+    };
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    static const unsigned char binary_bitmask_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x72, 0x6f, 0x75,
+        0x74, 0x65, 0x73, 0x81, 0xa4, 0x6c, 0x64, 0x69, 0x72, 0x65, 0x63,
+        0x74, 0x69, 0x6f, 0x6e, 0x2d, 0x69, 0x6e, 0xf5, 0x66, 0x66, 0x61,
+        0x6d, 0x69, 0x6c, 0x79, 0x02, 0x66, 0x72, 0x65, 0x6d, 0x6f, 0x74,
+        0x65, 0xa2, 0x67, 0x62, 0x69, 0x74, 0x6d, 0x61, 0x73, 0x6b, 0x44,
+        0xff, 0xff, 0xff, 0x00, 0x67, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73,
+        0x73, 0x44, 0xcb, 0x00, 0x71, 0x01, 0x65, 0x6c, 0x6f, 0x63, 0x61,
+        0x6c, 0xa2, 0x67, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x44,
+        0xc6, 0x33, 0x64, 0x05, 0x67, 0x62, 0x69, 0x74, 0x6d, 0x61, 0x73,
+        0x6b, 0x44, 0xff, 0xff, 0xff, 0xf0
+    };
+#endif
+    static const unsigned char can_address_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x72, 0x6f, 0x75,
+        0x74, 0x65, 0x73, 0x81, 0xa3, 0x6c, 0x64, 0x69, 0x72, 0x65, 0x63,
+        0x74, 0x69, 0x6f, 0x6e, 0x2d, 0x69, 0x6e, 0xf5, 0x66, 0x66, 0x61,
+        0x6d, 0x69, 0x6c, 0x79, 0x18, 0x1d, 0x66, 0x72, 0x65, 0x6d, 0x6f,
+        0x74, 0x65, 0xa1, 0x67, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73,
+        0x1a, 0xff, 0xff, 0xff, 0xff
+    };
+    static const unsigned char can_address_overflow_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x72, 0x6f, 0x75,
+        0x74, 0x65, 0x73, 0x81, 0xa3, 0x6c, 0x64, 0x69, 0x72, 0x65, 0x63,
+        0x74, 0x69, 0x6f, 0x6e, 0x2d, 0x69, 0x6e, 0xf5, 0x66, 0x66, 0x61,
+        0x6d, 0x69, 0x6c, 0x79, 0x18, 0x1d, 0x66, 0x72, 0x65, 0x6d, 0x6f,
+        0x74, 0x65, 0xa1, 0x67, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73,
+        0x1b, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00
+    };
+    static const unsigned char can_address_negative_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74,
+        0x72, 0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76,
+        0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x72, 0x6f, 0x75,
+        0x74, 0x65, 0x73, 0x81, 0xa3, 0x6c, 0x64, 0x69, 0x72, 0x65, 0x63,
+        0x74, 0x69, 0x6f, 0x6e, 0x2d, 0x69, 0x6e, 0xf5, 0x66, 0x66, 0x61,
+        0x6d, 0x69, 0x6c, 0x79, 0x18, 0x1d, 0x66, 0x72, 0x65, 0x6d, 0x6f,
+        0x74, 0x65, 0xa1, 0x67, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73,
+        0x20
+    };
+#ifdef WOLFSENTRY_CONFIG_NO_TEXT_ADDRESSES
+    static const unsigned char text_address_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x72, 0x6f, 0x75, 0x74, 0x65, 0x73,
+        0x81, 0xa3, 0x6c, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e,
+        0x2d, 0x69, 0x6e, 0xf5, 0x66, 0x66, 0x61, 0x6d, 0x69, 0x6c, 0x79, 0x02,
+        0x66, 0x72, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0xa1, 0x67, 0x61, 0x64, 0x64,
+        0x72, 0x65, 0x73, 0x73, 0x69, 0x31, 0x39, 0x32, 0x2e, 0x30, 0x2e, 0x32,
+        0x2e, 0x31
+    };
+#endif
+#endif
+#if defined(WOLFSENTRY_CONFIG_NO_ROUTES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_USER_VALUES) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTCONFIG) || \
+    defined(WOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX)
+    static const unsigned char config_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x70, 0x64, 0x65, 0x66, 0x61, 0x75, 0x6c,
+        0x74, 0x2d, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x69, 0x65, 0x73, 0xa1, 0x6e,
+        0x64, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x2d, 0x70, 0x6f, 0x6c, 0x69,
+        0x63, 0x79, 0x66, 0x72, 0x65, 0x6a, 0x65, 0x63, 0x74
+    };
+#if defined(WOLFSENTRY_CONFIG_NO_ROUTES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_USER_VALUES) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTCONFIG)
+    static const unsigned char disabled_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01,
+#if defined(WOLFSENTRY_CONFIG_NO_ROUTES)
+        0x66, 0x72, 0x6f, 0x75, 0x74, 0x65, 0x73, 0x80
+#elif defined(WOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES)
+        0x66, 0x72, 0x6f, 0x75, 0x74, 0x65, 0x73, 0x81, 0xa1, 0x66, 0x66, 0x61,
+        0x6d, 0x69, 0x6c, 0x79, 0x64, 0x69, 0x6e, 0x65, 0x74
+#elif defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS)
+        0x66, 0x72, 0x6f, 0x75, 0x74, 0x65, 0x73, 0x81, 0xa1, 0x66, 0x72, 0x65,
+        0x6d, 0x6f, 0x74, 0x65, 0xa0
+#elif defined(WOLFSENTRY_CONFIG_NO_EVENTS)
+        0x66, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73, 0x80
+#elif defined(WOLFSENTRY_CONFIG_NO_USER_VALUES)
+        0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73,
+        0xa0
+#else
+        0x6d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x75, 0x70, 0x64, 0x61,
+        0x74, 0x65, 0xa0
+#endif
+    };
+#endif
+#if defined(WOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX) && \
+    !defined(WOLFSENTRY_CONFIG_NO_EVENTS)
+    static const unsigned char current_event_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73,
+        0x81, 0xa2, 0x65, 0x6c, 0x61, 0x62, 0x65, 0x6c, 0x6d, 0x63, 0x75, 0x72,
+        0x72, 0x65, 0x6e, 0x74, 0x2d, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x6d, 0x6d,
+        0x61, 0x74, 0x63, 0x68, 0x2d, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x73,
+        0x81, 0x6e, 0x25, 0x74, 0x72, 0x61, 0x63, 0x6b, 0x2d, 0x70, 0x65, 0x65,
+        0x72, 0x2d, 0x76, 0x31
+    };
+    static const unsigned char legacy_event_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x66, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x73,
+        0x81, 0xa2, 0x65, 0x6c, 0x61, 0x62, 0x65, 0x6c, 0x6c, 0x6c, 0x65, 0x67,
+        0x61, 0x63, 0x79, 0x2d, 0x65, 0x76, 0x65, 0x6e, 0x74, 0x67, 0x61, 0x63,
+        0x74, 0x69, 0x6f, 0x6e, 0x73, 0x80
+    };
+#endif
+    struct wolfsentry_context *wolfsentry = NULL;
+    struct wolfsentry_eventconfig initial_config;
+    wolfsentry_action_res_t default_policy = WOLFSENTRY_ACTION_RES_NONE;
+    char error[160];
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    memset(&initial_config, 0, sizeof initial_config);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init(
+        wolfsentry_build_settings,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+        &initial_config,
+        &wolfsentry));
+#ifdef WOLFSENTRY_CONFIG_NO_TEXT_NUMBERS
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        text_number_cbor,
+        sizeof text_number_cbor,
+        TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+#endif
+#ifdef WOLFSENTRY_CONFIG_NO_TRANSACTIONS
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        config_cbor,
+        sizeof config_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, IMPLEMENTATION_MISSING));
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        config_cbor,
+        sizeof config_cbor,
+        TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    WOLFSENTRY_EXIT_ON_FALSE(test_cbor_rejections(
+        WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+#if defined(WOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX) && \
+    !defined(WOLFSENTRY_CONFIG_NO_EVENTS)
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        current_event_cbor,
+        sizeof current_event_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        legacy_event_cbor,
+        sizeof legacy_event_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_KEY));
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(
+        WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_get(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &default_policy));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(
+        WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_MASKIN_BITS(
+        default_policy,
+        WOLFSENTRY_ACTION_RES_REJECT));
+
+#if !defined(WOLFSENTRY_CONFIG_NO_ROUTES) && \
+    !defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS)
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        binary_address_cbor,
+        sizeof binary_address_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        binary_bitmask_cbor,
+        sizeof binary_bitmask_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+#endif
+    WOLFSENTRY_EXIT_ON_FALSE(test_cbor_binary_route(
+        WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        can_address_cbor,
+        sizeof can_address_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        can_address_overflow_cbor,
+        sizeof can_address_overflow_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, NUMERIC_ARG_TOO_BIG));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        can_address_negative_cbor,
+        sizeof can_address_negative_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+#ifdef WOLFSENTRY_CONFIG_NO_TEXT_ADDRESSES
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        text_address_cbor,
+        sizeof text_address_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+#endif
+#endif
+
+#if defined(WOLFSENTRY_CONFIG_NO_ROUTES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_USER_VALUES) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTCONFIG)
+#ifdef WOLFSENTRY_CONFIG_NO_ERROR_MESSAGES
+    error[0] = 'x';
+#endif
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        disabled_cbor,
+        sizeof disabled_cbor,
+        TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+#ifdef WOLFSENTRY_CONFIG_NO_ERROR_MESSAGES
+    WOLFSENTRY_EXIT_ON_FALSE(error[0] == 'x');
+#endif
+#endif
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(
+        WOLFSENTRY_THREAD_FLAG_NONE));
+    return 0;
+#else
+    static const unsigned char config_cbor[] = {
+        0xa5, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+        0x2d, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0xa2, 0x74, 0x6d, 0x61, 0x78,
+        0x2d, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x2d,
+        0x63, 0x6f, 0x75, 0x6e, 0x74, 0x05, 0x78, 0x1f, 0x64, 0x65, 0x72, 0x6f,
+        0x67, 0x2d, 0x74, 0x68, 0x72, 0x65, 0x73, 0x68, 0x2d, 0x69, 0x67, 0x6e,
+        0x6f, 0x72, 0x65, 0x2d, 0x63, 0x6f, 0x6d, 0x6d, 0x65, 0x6e, 0x64, 0x61,
+        0x62, 0x6c, 0x65, 0xf4, 0x70, 0x64, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74,
+        0x2d, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x69, 0x65, 0x73, 0xa1, 0x6e, 0x64,
+        0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x2d, 0x70, 0x6f, 0x6c, 0x69, 0x63,
+        0x79, 0x66, 0x72, 0x65, 0x6a, 0x65, 0x63, 0x74, 0x6d, 0x65, 0x76, 0x65,
+        0x6e, 0x74, 0x73, 0x2d, 0x69, 0x6e, 0x73, 0x65, 0x72, 0x74, 0x81, 0xa2,
+        0x65, 0x6c, 0x61, 0x62, 0x65, 0x6c, 0x6a, 0x63, 0x62, 0x6f, 0x72, 0x2d,
+        0x65, 0x76, 0x65, 0x6e, 0x74, 0x68, 0x70, 0x72, 0x69, 0x6f, 0x72, 0x69,
+        0x74, 0x79, 0x05, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76, 0x61, 0x6c,
+        0x75, 0x65, 0x73, 0xa5, 0x68, 0x67, 0x72, 0x65, 0x65, 0x74, 0x69, 0x6e,
+        0x67, 0x65, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x66, 0x61, 0x6e, 0x73, 0x77,
+        0x65, 0x72, 0x18, 0x2a, 0x67, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64,
+        0xf5, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0xf9, 0x3e, 0x00, 0x68, 0x6e,
+        0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x21
+    };
+    static const unsigned char float_types_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa3, 0x63, 0x6f, 0x6e, 0x65, 0xf9, 0x3c,
+        0x00, 0x6d, 0x6e, 0x65, 0x67, 0x61, 0x74, 0x69, 0x76, 0x65, 0x2d, 0x7a,
+        0x65, 0x72, 0x6f, 0xfb, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x64, 0x68, 0x75, 0x67, 0x65, 0xfb, 0xff, 0xef, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff
+    };
+    static const unsigned char implicit_int64_overflow_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x67, 0x74, 0x6f, 0x6f, 0x2d, 0x62,
+        0x69, 0x67, 0x1b, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    static const unsigned char implicit_uint64_max_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x6b, 0x77, 0x61, 0x79, 0x2d, 0x74,
+        0x6f, 0x6f, 0x2d, 0x62, 0x69, 0x67, 0x1b, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff
+    };
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    static const unsigned char nested_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x66, 0x6e, 0x65, 0x73, 0x74, 0x65,
+        0x64, 0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0xa2, 0x61, 0x61, 0x83, 0x01,
+        0xf5, 0xf6, 0x61, 0x73, 0x61, 0x78
+    };
+    static const unsigned char json_integer_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x6c, 0x6a, 0x73, 0x6f, 0x6e, 0x2d,
+        0x69, 0x6e, 0x74, 0x65, 0x67, 0x65, 0x72, 0xa1, 0x64, 0x6a, 0x73, 0x6f,
+        0x6e, 0x01
+    };
+    static const unsigned char json_float_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x6a, 0x6a, 0x73, 0x6f, 0x6e, 0x2d,
+        0x66, 0x6c, 0x6f, 0x61, 0x74, 0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0xfb,
+        0x3f, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    static const unsigned char json_nan_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x68, 0x6a, 0x73, 0x6f, 0x6e, 0x2d,
+        0x6e, 0x61, 0x6e, 0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0x81, 0xfb, 0x7f,
+        0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+#ifndef WOLFSENTRY_JSON_VALUE_MAX_BYTES
+    static const unsigned char json_key_at_limit_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x69, 0x6b, 0x65, 0x79, 0x2d, 0x6c,
+        0x69, 0x6d, 0x69, 0x74, 0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0xa1, 0x78,
+        0x20, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61,
+        0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61,
+        0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0xf6
+    };
+    static const unsigned char json_key_over_limit_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x68, 0x6b, 0x65, 0x79, 0x2d, 0x6f,
+        0x76, 0x65, 0x72, 0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0xa1, 0x78, 0x21,
+        0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61,
+        0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61,
+        0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0xf6
+    };
+#endif
+#if defined(WOLFSENTRY_JSON_VALUE_MAX_BYTES) && \
+    (WOLFSENTRY_JSON_VALUE_MAX_BYTES == 10)
+    static const unsigned char json_string_size_10_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x67, 0x73, 0x69, 0x7a, 0x65, 0x2d,
+        0x31, 0x30, 0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0x69, 0x61, 0x61, 0x61,
+        0x61, 0x61, 0x61, 0x61, 0x61, 0x61
+    };
+    static const unsigned char json_string_size_11_cbor[] = {
+        0xa2, 0x78, 0x19, 0x77, 0x6f, 0x6c, 0x66, 0x73, 0x65, 0x6e, 0x74, 0x72,
+        0x79, 0x2d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x2d, 0x76, 0x65, 0x72,
+        0x73, 0x69, 0x6f, 0x6e, 0x01, 0x6b, 0x75, 0x73, 0x65, 0x72, 0x2d, 0x76,
+        0x61, 0x6c, 0x75, 0x65, 0x73, 0xa1, 0x67, 0x73, 0x69, 0x7a, 0x65, 0x2d,
+        0x31, 0x31, 0xa1, 0x64, 0x6a, 0x73, 0x6f, 0x6e, 0x6a, 0x61, 0x61, 0x61,
+        0x61, 0x61, 0x61, 0x61, 0x61, 0x61, 0x61
+    };
+#endif
+#endif
+    struct wolfsentry_context *wolfsentry = NULL;
+    struct wolfsentry_eventconfig initial_config;
+    struct wolfsentry_eventconfig loaded_config;
+    struct wolfsentry_kv_pair_internal *reference = NULL;
+    const char *string_value = NULL;
+    int string_len = 0;
+    int64_t answer = 0;
+    int64_t negative = 0;
+    wolfsentry_kv_type_t enabled = WOLFSENTRY_KV_FALSE;
+    double ratio = 0.0;
+    double float_value = 0.0;
+    uint64_t float_bits = 0U;
+    wolfsentry_action_res_t default_policy = WOLFSENTRY_ACTION_RES_NONE;
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    JSON_VALUE *json_value = NULL;
+#ifndef FREERTOS
+    const char *old_numeric_locale;
+    char saved_numeric_locale[64];
+    int changed_numeric_locale = 0;
+#endif
+#endif
+    char error[160];
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    memset(&initial_config, 0, sizeof initial_config);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init(
+        wolfsentry_build_settings,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+        &initial_config,
+        &wolfsentry));
+
+#ifdef WOLFSENTRY_CONFIG_NO_TEXT_NUMBERS
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        text_number_cbor,
+        sizeof text_number_cbor,
+        TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+#endif
+
+#ifdef WOLFSENTRY_CONFIG_NO_TRANSACTIONS
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        config_cbor,
+        sizeof config_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, IMPLEMENTATION_MISSING));
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        config_cbor,
+        sizeof config_cbor,
+        TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    WOLFSENTRY_EXIT_ON_FALSE(test_cbor_rejections(
+        WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_defaultconfig_get(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &loaded_config));
+    WOLFSENTRY_EXIT_ON_FALSE(loaded_config.max_connection_count == 5U);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(
+        WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_get(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &default_policy));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(
+        WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_MASKIN_BITS(
+        default_policy,
+        WOLFSENTRY_ACTION_RES_REJECT));
+
+#if !defined(WOLFSENTRY_CONFIG_NO_ROUTES) && \
+    !defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS)
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        binary_address_cbor,
+        sizeof binary_address_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        binary_bitmask_cbor,
+        sizeof binary_bitmask_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+#endif
+    WOLFSENTRY_EXIT_ON_FALSE(test_cbor_binary_route(
+        WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        can_address_cbor,
+        sizeof can_address_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        can_address_overflow_cbor,
+        sizeof can_address_overflow_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, NUMERIC_ARG_TOO_BIG));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        can_address_negative_cbor,
+        sizeof can_address_negative_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+#ifdef WOLFSENTRY_CONFIG_NO_TEXT_ADDRESSES
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        text_address_cbor,
+        sizeof text_address_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+#endif
+#endif
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_get_config(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "cbor-event",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &loaded_config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_string(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "greeting",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &string_value,
+        &string_len,
+        &reference));
+    WOLFSENTRY_EXIT_ON_FALSE(string_len == 5);
+    WOLFSENTRY_EXIT_ON_FALSE(memcmp(string_value, "hello", 5U) == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_release_record(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &reference));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_sint(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "answer",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &answer));
+    WOLFSENTRY_EXIT_ON_FALSE(answer == 42);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_sint(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "negative",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &negative));
+    WOLFSENTRY_EXIT_ON_FALSE(negative == -2);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_bool(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "enabled",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &enabled));
+    WOLFSENTRY_EXIT_ON_FALSE(enabled == WOLFSENTRY_KV_TRUE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "ratio",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &ratio));
+    WOLFSENTRY_EXIT_ON_FALSE(ratio == 1.5);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        float_types_cbor,
+        sizeof float_types_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "one",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &float_value));
+    WOLFSENTRY_EXIT_ON_FALSE(float_value == 1.0);
+    ret = wolfsentry_user_value_get_sint(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "one",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &answer);
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "negative-zero",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &float_value));
+    memcpy(&float_bits, &float_value, sizeof float_bits);
+    WOLFSENTRY_EXIT_ON_FALSE(float_bits == UINT64_C(0x8000000000000000));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "huge",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &float_value));
+    WOLFSENTRY_EXIT_ON_FALSE(float_value < -1.0e300);
+
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        implicit_int64_overflow_cbor,
+        sizeof implicit_int64_overflow_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        implicit_uint64_max_cbor,
+        sizeof implicit_uint64_max_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_VALUE));
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_integer_cbor,
+        sizeof json_integer_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_json(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "json-integer",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &json_value,
+        &reference));
+    WOLFSENTRY_EXIT_ON_FALSE(json_value != NULL);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_release_record(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &reference));
+
+#if defined(WOLFSENTRY_JSON_VALUE_MAX_BYTES) && \
+    (WOLFSENTRY_JSON_VALUE_MAX_BYTES < 9)
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_float_cbor,
+        sizeof json_float_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_JSON_VALUE_SIZE));
+#else
+#ifndef FREERTOS
+    old_numeric_locale = setlocale(LC_NUMERIC, NULL);
+    if ((old_numeric_locale != NULL) &&
+        (strlen(old_numeric_locale) < sizeof saved_numeric_locale))
+    {
+        memcpy(saved_numeric_locale,
+               old_numeric_locale,
+               strlen(old_numeric_locale) + 1U);
+        if (setlocale(LC_NUMERIC, "de_DE.UTF-8") != NULL)
+            changed_numeric_locale = 1;
+    }
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_float_cbor,
+        sizeof json_float_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+#ifndef FREERTOS
+    if (changed_numeric_locale != 0)
+        WOLFSENTRY_EXIT_ON_FALSE(setlocale(
+            LC_NUMERIC,
+            saved_numeric_locale) != NULL);
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_json(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "json-float",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &json_value,
+        &reference));
+    WOLFSENTRY_EXIT_ON_FALSE(json_value != NULL);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_release_record(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &reference));
+#endif
+
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_nan_cbor,
+        sizeof json_nan_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+
+#ifndef WOLFSENTRY_JSON_VALUE_MAX_BYTES
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_key_at_limit_cbor,
+        sizeof json_key_at_limit_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_key_over_limit_cbor,
+        sizeof json_key_over_limit_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_KEY));
+#endif
+
+#if defined(WOLFSENTRY_JSON_VALUE_MAX_BYTES) && \
+    (WOLFSENTRY_JSON_VALUE_MAX_BYTES == 10)
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_string_size_10_cbor,
+        sizeof json_string_size_10_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        json_string_size_11_cbor,
+        sizeof json_string_size_11_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_JSON_VALUE_SIZE));
+#endif
+
+#if defined(WOLFSENTRY_JSON_VALUE_MAX_BYTES) && \
+    (WOLFSENTRY_JSON_VALUE_MAX_BYTES < 11)
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        nested_cbor,
+        sizeof nested_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_JSON_VALUE_SIZE));
+#else
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        nested_cbor,
+        sizeof nested_cbor,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_json(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "nested",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &json_value,
+        &reference));
+    WOLFSENTRY_EXIT_ON_FALSE(json_value != NULL);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_release_record(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &reference));
+#endif
+#endif
+
+#ifdef WOLFSENTRY_CONFIG_NO_ERROR_MESSAGES
+    error[0] = 'x';
+#endif
+    ret = wolfsentry_config_cbor_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        config_cbor,
+        sizeof config_cbor - 1U,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH |
+            TEST_CBOR_COMMIT_FLAGS,
+        error,
+        sizeof error);
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+#ifdef WOLFSENTRY_CONFIG_NO_ERROR_MESSAGES
+    WOLFSENTRY_EXIT_ON_FALSE(error[0] == 'x');
+#endif
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_sint(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        "answer",
+        WOLFSENTRY_LENGTH_NULL_TERMINATED,
+        &answer));
+    WOLFSENTRY_EXIT_ON_FALSE(answer == 42);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(
+        WOLFSENTRY_THREAD_FLAG_NONE));
+
+    return 0;
+#endif
+#endif
+}
+
+#undef TEST_CBOR_COMMIT_FLAGS
+
+#endif /* TEST_CBOR */
+
 #ifdef TEST_JSON
 
 #include "wolfsentry/wolfsentry_json.h"
@@ -4239,6 +5422,138 @@ static int test_user_addr_families(void) {
 #endif
 
 static int test_json(const char *fname, const char *extra_fname) {
+#if defined(WOLFSENTRY_CONFIG_NO_TRANSACTIONS) || \
+    defined(WOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX)
+#if defined(WOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX) && \
+    !defined(WOLFSENTRY_CONFIG_NO_EVENTS)
+    static const unsigned char valid_config[] =
+        "{\"wolfsentry-config-version\":1,\"events\":[{\"label\":"
+        "\"current-event\",\"match-actions\":[\"%track-peer-v1\"]}]}";
+    static const unsigned char legacy_config[] =
+        "{\"wolfsentry-config-version\":1,\"events\":[{\"label\":"
+        "\"legacy-event\",\"actions\":[]}]}";
+#else
+    static const unsigned char valid_config[] =
+        "{\"wolfsentry-config-version\":1,\"default-policies\":"
+        "{\"default-policy\":\"reject\"}}";
+#endif
+    struct wolfsentry_context *wolfsentry = NULL;
+    struct wolfsentry_eventconfig config;
+    wolfsentry_config_load_flags_t test_load_flags;
+#if defined(WOLFSENTRY_CONFIG_NO_TRANSACTIONS) || \
+    !defined(WOLFSENTRY_CONFIG_NO_EVENTS)
+    wolfsentry_errcode_t ret;
+#endif
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    (void)fname;
+    (void)extra_fname;
+    memset(&config, 0, sizeof config);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init(
+        wolfsentry_build_settings,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+        &config,
+        &wolfsentry));
+#ifdef WOLFSENTRY_CONFIG_NO_TRANSACTIONS
+    ret = wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        valid_config,
+        sizeof valid_config - 1U,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT,
+        NULL,
+        0U);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, IMPLEMENTATION_MISSING));
+    test_load_flags = WOLFSENTRY_CONFIG_LOAD_FLAG_NONE;
+#else
+    test_load_flags = WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT;
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        valid_config,
+        sizeof valid_config - 1U,
+        test_load_flags,
+        NULL,
+        0U));
+#if defined(WOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX) && \
+    !defined(WOLFSENTRY_CONFIG_NO_EVENTS)
+    ret = wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        legacy_config,
+        sizeof legacy_config - 1U,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH | test_load_flags,
+        NULL,
+        0U);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(ret, CONFIG_INVALID_KEY));
+#endif
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(
+        WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+#elif defined(WOLFSENTRY_CONFIG_NO_ROUTES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES) || \
+    defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTS) || \
+    defined(WOLFSENTRY_CONFIG_NO_USER_VALUES) || \
+    defined(WOLFSENTRY_CONFIG_NO_EVENTCONFIG)
+    static const unsigned char valid_config[] =
+        "{\"wolfsentry-config-version\":1,\"default-policies\":"
+        "{\"default-policy\":\"reject\"}}";
+#if defined(WOLFSENTRY_CONFIG_NO_ROUTES)
+    static const unsigned char disabled_config[] =
+        "{\"wolfsentry-config-version\":1,\"routes\":[]}";
+#elif defined(WOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES)
+    static const unsigned char disabled_config[] =
+        "{\"wolfsentry-config-version\":1,\"routes\":[{\"family\":\"inet\"}]}";
+#elif defined(WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS)
+    static const unsigned char disabled_config[] =
+        "{\"wolfsentry-config-version\":1,\"routes\":[{\"remote\":{}}]}";
+#elif defined(WOLFSENTRY_CONFIG_NO_EVENTS)
+    static const unsigned char disabled_config[] =
+        "{\"wolfsentry-config-version\":1,\"events\":[]}";
+#elif defined(WOLFSENTRY_CONFIG_NO_USER_VALUES)
+    static const unsigned char disabled_config[] =
+        "{\"wolfsentry-config-version\":1,\"user-values\":{}}";
+#else
+    static const unsigned char disabled_config[] =
+        "{\"wolfsentry-config-version\":1,\"config-update\":{}}";
+#endif
+    struct wolfsentry_context *wolfsentry = NULL;
+    struct wolfsentry_eventconfig config;
+    wolfsentry_errcode_t ret;
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    (void)fname;
+    (void)extra_fname;
+    memset(&config, 0, sizeof config);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init(
+        wolfsentry_build_settings,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+        &config,
+        &wolfsentry));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        valid_config,
+        sizeof valid_config - 1U,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT,
+        NULL,
+        0U));
+    ret = wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        disabled_config,
+        sizeof disabled_config - 1U,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT,
+        NULL,
+        0U);
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(
+        WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+#else
     wolfsentry_errcode_t ret;
     struct wolfsentry_context *wolfsentry;
     wolfsentry_ent_id_t id;
@@ -5462,6 +6777,7 @@ static int test_json(const char *fname, const char *extra_fname) {
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
     WOLFSENTRY_RETURN_OK;
+#endif
 }
 
 #endif /* TEST_JSON */
@@ -5761,6 +7077,14 @@ int main(int argc, char* argv[]) {
     ret = test_user_addr_families();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_addr_families failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
+
+#ifdef TEST_CBOR
+    ret = test_cbor();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_cbor failed\n");
         err = 1;
     }
 #endif

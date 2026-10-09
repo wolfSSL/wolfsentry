@@ -302,6 +302,33 @@ c99-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c99-builds" clean
 	@echo "passed: std=c99 tests."
 
+WOLFCOSE_TEST_TOP ?= $(SRC_TOP)/../wolfCOSE
+WOLFCOSE_TEST_LIB ?= $(WOLFCOSE_TEST_TOP)/libwolfcose.a
+
+.PHONY: wolfcose-test
+ifneq (,$(wildcard $(WOLFCOSE_TEST_TOP)/Makefile)$(wildcard $(WOLFCOSE_TEST_LIB)))
+wolfcose-test:
+	@if [ ! -r "$(WOLFCOSE_TEST_LIB)" ]; then $(MAKE) -C "$(WOLFCOSE_TEST_TOP)" all; fi
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-builds" WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" EXTRA_CFLAGS='-DWOLFSENTRY_WOLFCOSE' "$(BUILD_PARENT)/wolfsentry-wolfcose-builds/tests/test_cbor"
+	@"$(BUILD_PARENT)/wolfsentry-wolfcose-builds/tests/test_cbor"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-no-json-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_JSON=1 "$(BUILD_PARENT)/wolfsentry-wolfcose-no-json-builds/tests/test_cbor"
+	@"$(BUILD_PARENT)/wolfsentry-wolfcose-no-json-builds/tests/test_cbor"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-c99-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_JSON=1 SINGLETHREADED=1 EXTRA_CFLAGS+='-std=c99 -pedantic' "$(BUILD_PARENT)/wolfsentry-wolfcose-c99-builds/tests/test_cbor"
+	@"$(BUILD_PARENT)/wolfsentry-wolfcose-c99-builds/tests/test_cbor"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-reduced-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_JSON=1 SINGLETHREADED=1 NO_CONFIG_USER_VALUES=1 NO_CONFIG_ADDR_FAMILY_NAMES=1 NO_CONFIG_TRANSACTIONS=1 NO_CONFIG_LEGACY_EVENT_SYNTAX=1 NO_CONFIG_TEXT_NUMBERS=1 NO_CONFIG_TEXT_ADDRESSES=1 NO_CONFIG_ERROR_MESSAGES=1 "$(BUILD_PARENT)/wolfsentry-wolfcose-reduced-builds/tests/test_cbor"
+	@"$(BUILD_PARENT)/wolfsentry-wolfcose-reduced-builds/tests/test_cbor"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-legacy-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_CONFIG_LEGACY_EVENT_SYNTAX=1 "$(BUILD_PARENT)/wolfsentry-wolfcose-legacy-builds/tests/test_cbor"
+	@"$(BUILD_PARENT)/wolfsentry-wolfcose-legacy-builds/tests/test_cbor"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-total-limit-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_MAX_CBOR_TOTAL_LEN=29 -DWOLFSENTRY_TEST_CBOR_TOTAL_LIMIT' "$(BUILD_PARENT)/wolfsentry-wolfcose-total-limit-builds/tests/test_cbor"
+	@"$(BUILD_PARENT)/wolfsentry-wolfcose-total-limit-builds/tests/test_cbor"
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-nesting-limit-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_MAX_CBOR_NESTING=4 -DWOLFSENTRY_TEST_CBOR_NESTING_LIMIT' "$(BUILD_PARENT)/wolfsentry-wolfcose-nesting-limit-builds/tests/test_cbor"
+	@"$(BUILD_PARENT)/wolfsentry-wolfcose-nesting-limit-builds/tests/test_cbor"
+	@echo "passed: wolfCOSE configuration tests."
+else
+wolfcose-test:
+	@echo "wolfCOSE sources not found, skipping wolfcose-test."
+endif
+
 .PHONY: c89-test
 c89-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-c89-builds" clean
@@ -828,7 +855,7 @@ doc-check:
 	@echo "passed: doc-check."
 
 .PHONY: check
-check: dynamic-build-test c99-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-streams-build-test minimal-build-test minimal-threaded-build-test user-settings-build-test short-enums-test no-addr-bitmask-matching-test no-ipv6-test
+check: dynamic-build-test c99-test wolfcose-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-streams-build-test minimal-build-test minimal-threaded-build-test user-settings-build-test short-enums-test no-addr-bitmask-matching-test no-ipv6-test
 
 .PHONY: check-extra
 check-extra: library-dependency-singlethreaded-build-test library-dependency-multithreaded-build-test pahole-test route-holes-test static-build-test c89-test c23-test no-inline-test m32-test m32-c89-test m32-c23-test fortify-source-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-thumb-build-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-test-no-ipv6 linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test

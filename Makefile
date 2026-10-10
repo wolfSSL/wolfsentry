@@ -204,12 +204,8 @@ endif
 
 # JSON settings need to be extracted from $(USER_SETTINGS_FILE) to determine if JSON sources should be built.
 ifdef USER_SETTINGS_FILE
-    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
-        USER_SETTINGS_NO_JSON := 1
-    endif
-    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON_DOM$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
-        USER_SETTINGS_NO_JSON_DOM := 1
-    endif
+    USER_SETTINGS_NO_JSON := $(shell grep -q -x '\#define WOLFSENTRY_NO_JSON' '$(USER_SETTINGS_FILE)' && echo 1)
+    USER_SETTINGS_NO_JSON_DOM := $(shell grep -q -x '\#define WOLFSENTRY_NO_JSON_DOM' '$(USER_SETTINGS_FILE)' && echo 1)
 endif
 
 ifdef NO_JSON

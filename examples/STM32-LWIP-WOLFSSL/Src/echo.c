@@ -28,7 +28,7 @@ struct thread_data {
 	struct tcp_pcb *pcb;
 };
 
-const char cert[] = "-----BEGIN CERTIFICATE-----"
+const unsigned char cert[] = "-----BEGIN CERTIFICATE-----"
 "MIIB2TCCAX+gAwIBAgIUclisQ2ZFuLig1QRSSpfRgt7F3jswCgYIKoZIzj0EAwIw"
 "QjELMAkGA1UEBhMCWFgxFTATBgNVBAcMDERlZmF1bHQgQ2l0eTEcMBoGA1UECgwT"
 "RGVmYXVsdCBDb21wYW55IEx0ZDAeFw0yMjAzMjgxNjE5MjFaFw0yMzAzMjgxNjE5"
@@ -41,7 +41,7 @@ const char cert[] = "-----BEGIN CERTIFICATE-----"
 "lVmbi+AeY3ZjiYQCIAy/eYMMhFGMnIukdTMIP/Qf3KqfcBvlpLqiI3OaBZw4"
 "-----END CERTIFICATE-----";
 
-const char key[] = "-----BEGIN EC PARAMETERS-----"
+const unsigned char key[] = "-----BEGIN EC PARAMETERS-----"
 "BggqhkjOPQMBBw=="
 "-----END EC PARAMETERS-----"
 "-----BEGIN EC PRIVATE KEY-----"
@@ -117,7 +117,7 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 }
 
 /* Init the TCP listener */
-int echo_ssl()
+int echo_ssl(void)
 {
 	int ret;
 
@@ -131,7 +131,7 @@ int echo_ssl()
 
     /* Load server certificates into WOLFSSL_CTX */
     if ((ret = wolfSSL_CTX_use_certificate_buffer(wolf_ctx, cert,
-    		strlen(cert), WOLFSSL_FILETYPE_PEM))
+		sizeof cert - 1, WOLFSSL_FILETYPE_PEM))
         != WOLFSSL_SUCCESS) {
         fprintf(stderr, "ERROR: failed to load certificate buffer.\n");
         return -1;
@@ -139,26 +139,26 @@ int echo_ssl()
 
     /* Load server key into WOLFSSL_CTX */
     if ((ret = wolfSSL_CTX_use_PrivateKey_buffer(wolf_ctx, key,
-    		strlen(key), WOLFSSL_FILETYPE_PEM))
+		sizeof key - 1, WOLFSSL_FILETYPE_PEM))
         != WOLFSSL_SUCCESS) {
         fprintf(stderr, "ERROR: failed to load key buffer.\n");
         return -1;
     }
     return 0;
 }
-void echo_init()
+void echo_init(void)
 {
 	struct tcp_pcb *pcb;
     /* Create lwIP TCP instance */
     pcb = tcp_new();
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %x\n", pcb));
+    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %p\n", (void *)pcb));
     /* Bind port 11111 */
     int r = tcp_bind(pcb, IP_ADDR_ANY, 8080);
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: tcp_bind: %d\n", r));
     /* Enable listening */
     tcp_arg(pcb, NULL);
     pcb = tcp_listen(pcb);
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %x\n", pcb));
+    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %p\n", (void *)pcb));
     /* Set accept connection callback */
     tcp_accept(pcb, echo_msgaccept);
     fprintf(stderr, "Accept ready!\n");

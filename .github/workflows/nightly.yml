@@ -1,0 +1,232 @@
+name: Nightly CI
+
+on:
+  schedule:
+    # 09:00 UTC is overnight in Pacific time.
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: nightly-ci
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    name: Run all CI and report failures
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    if: github.repository == 'wolfSSL/wolfsentry'
+
+    steps:
+    - name: Dispatch workflows, wait, and report results
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const FAILURE_LABEL = 'nightly-failure';
+          const ISSUE_MARKER = '<!-- wolfsentry-nightly-ci -->';
+          const POLL_INTERVAL_MS = 60 * 1000;
+          const POLL_TIMEOUT_MS = 120 * 60 * 1000;
+          const dispatchToken = `nightly-${context.runId}-${context.runAttempt}`;
+          const workflows = [
+            'codeql.yml',
+            'coverage.yml',
+            'examples.yml',
+            'macos-check.yml',
+            'multi-compiler.yml',
+            'options-matrix.yml',
+            'sanitizers.yml',
+            'semgrep.yml',
+            'static-analysis.yml',
+            'ubuntu-check.yml',
+            'wolfssl-versions.yml',
+          ];
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const basename = (path) => (path || '').split('/').pop();
+          const since = new Date(Date.now() - 60 * 1000).toISOString();
+          const dispatchErrors = new Map();
+          const dispatched = new Set();
+
+          for (const workflow of workflows) {
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflow,
+                ref: 'master',
+                inputs: { nightly_run_id: dispatchToken },
+              });
+              dispatched.add(workflow);
+              core.info(`Triggered ${workflow}`);
+            } catch (error) {
+              dispatchErrors.set(workflow, error.message);
+              core.warning(`Failed to trigger ${workflow}: ${error.message}`);
+            }
+          }
+
+          async function collectRuns() {
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                event: 'workflow_dispatch',
+                created: `>=${since}`,
+                per_page: 100,
+              }
+            );
+            const latest = new Map();
+            for (const run of runs) {
+              const workflow = basename(run.path);
+              if (!dispatched.has(workflow) || run.display_title !== dispatchToken) {
+                continue;
+              }
+              const previous = latest.get(workflow);
+              if (previous === undefined || run.run_number > previous.run_number) {
+                latest.set(workflow, run);
+              }
+            }
+            return latest;
+          }
+
+          await sleep(30 * 1000);
+
+          const deadline = Date.now() + POLL_TIMEOUT_MS;
+          let latest = new Map();
+          while (true) {
+            latest = await collectRuns();
+            const pending = [...latest.values()]
+              .filter((run) => run.status !== 'completed');
+            core.info(
+              `Tracking ${latest.size}/${workflows.length} runs, ` +
+              `${pending.length} still running`
+            );
+            if (latest.size >= dispatched.size && pending.length === 0) {
+              break;
+            }
+            if (Date.now() >= deadline) {
+              core.warning('Timed out waiting for nightly runs to complete');
+              break;
+            }
+            await sleep(POLL_INTERVAL_MS);
+          }
+
+          const states = new Map();
+          let allPassed = dispatchErrors.size === 0;
+          for (const workflow of workflows) {
+            const run = latest.get(workflow);
+            let state;
+            if (dispatchErrors.has(workflow)) {
+              state = 'dispatch failed';
+            } else if (run === undefined) {
+              state = 'run not found';
+            } else if (run.status !== 'completed') {
+              state = run.status;
+            } else {
+              state = run.conclusion || 'unknown';
+            }
+            states.set(workflow, state);
+            if (state !== 'success') {
+              allPassed = false;
+            }
+          }
+
+          let summary = '## Nightly CI Results\n\n';
+          summary += '| Workflow | Result | Run |\n|---|---|---|\n';
+          for (const workflow of workflows) {
+            const run = latest.get(workflow);
+            const link = run ? `[run #${run.run_number}](${run.html_url})` : '-';
+            summary += `| ${workflow} | ${states.get(workflow)} | ${link} |\n`;
+          }
+          await core.summary.addRaw(summary).write();
+
+          const openIssues = await github.paginate(
+            github.rest.issues.listForRepo,
+            {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: FAILURE_LABEL,
+              per_page: 100,
+            }
+          );
+          const nightlyIssues = openIssues.filter(
+            (issue) => !issue.pull_request && issue.body?.includes(ISSUE_MARKER)
+          );
+          const runUrl =
+            `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
+            `/actions/runs/${context.runId}`;
+
+          if (allPassed) {
+            for (const issue of nightlyIssues) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Nightly CI recovered in [run #${context.runNumber}](${runUrl}). Closing this issue.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'completed',
+              });
+              core.info(`Closed recovered nightly failure issue #${issue.number}`);
+            }
+            core.info('All nightly workflows passed');
+            return;
+          }
+
+          try {
+            await github.rest.issues.createLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: FAILURE_LABEL,
+              color: 'b60205',
+              description: 'Automated nightly CI failure report',
+            });
+          } catch (error) {
+            if (error.status !== 422) {
+              throw error;
+            }
+          }
+
+          const today = new Date().toISOString().slice(0, 10);
+          let body = `${ISSUE_MARKER}\nNightly CI reported failures on ${today}.\n\n`;
+          body += '| Workflow | Result | Run |\n|---|---|---|\n';
+          for (const workflow of workflows) {
+            const run = latest.get(workflow);
+            const link = run ? `[run #${run.run_number}](${run.html_url})` : '-';
+            body += `| ${workflow} | ${states.get(workflow)} | ${link} |\n`;
+          }
+          for (const [workflow, message] of dispatchErrors) {
+            body += `\nDispatch error for ${workflow}: \`${message}\`\n`;
+          }
+          body += `\nTriggered by nightly run [#${context.runNumber}](${runUrl}).\n`;
+
+          if (nightlyIssues.length > 0) {
+            const issue = nightlyIssues[0];
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body,
+            });
+            core.info(`Updated existing issue #${issue.number}`);
+          } else {
+            const created = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Nightly CI failure',
+              body,
+              labels: [FAILURE_LABEL],
+            });
+            core.info(`Opened issue #${created.data.number}`);
+          }
+
+          core.setFailed('One or more nightly workflows failed');

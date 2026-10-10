@@ -54,6 +54,7 @@ static int notnormal = 0;
         break;                                                          \
     }                                                                   \
     (ptr) += _len;                                                      \
+    (ptr_len_left) -= _len;                                             \
 }
 
 #define WARN_ON_JSON_FAILURE(x) do { int _x = (x); if (_x < 0) { fprintf(stderr, "ERROR: %s L %d: JSON call (%s) failed with code %d (%s)\n", __FILE__, __LINE__, #x, _x, json_error_str(_x)); } } while (0)

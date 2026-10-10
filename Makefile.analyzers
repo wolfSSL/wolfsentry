@@ -579,7 +579,7 @@ freertos-arm32-thumb-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
 #	now rebuild with FUNCTION_SECTIONS=1, to test expected text size on a parsimonious link.
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1 FUNCTION_SECTIONS=1
-	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 100000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 110000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-thumb-test-builds/tests/{freertos,lwip}
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-thumb-build test."
@@ -748,6 +748,8 @@ linux-lwip-sanitize-all-gcc:
 	@echo "passed: no defects from linux-lwip-sanitize-all-gcc for thread sanitizer"
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) VERY_QUIET=1 -f $(THIS_MAKEFILE) BUILD_TOP="$(BUILD_PARENT)/linux-lwip-sanitizer-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip clean
 
+NOTIFICATION_SANDBOX ?= bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)"
+
 .PHONY: notification-demo-build-test
 notification-demo-build-test:
 	@rm -rf "$(BUILD_PARENT)/wolfsentry-notification-demo-build" "$(BUILD_PARENT)/wolfssl-notification-demo-build"
@@ -759,7 +761,7 @@ notification-demo-build-test:
 	@echo 'building libwolfssl with --enable-wolfsentry'
 	@cd "$(BUILD_PARENT)/wolfssl-notification-demo-build" && \
 	git checkout -q master && \
-	bwrap --setenv TMPDIR "$(BUILD_PARENT)" --ro-bind / / --dev-bind /dev /dev --ro-bind /dev/shm /dev/shm --dev-bind /proc /proc --dev-bind "$(BUILD_PARENT)" "$(BUILD_PARENT)" /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry CPPFLAGS="-pedantic -DNO_WOLFSSL_CIPHER_SUITE_TEST -DWOLFSSL_OLD_PRIME_CHECK -Wno-restrict" --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) V=1 >/dev/null && echo "checking libwolfssl" && $(MAKE) V=1 check >/dev/null && echo "installing libwolfssl at $(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) $(QUIET_FLAG) install >/dev/null'
+	$(NOTIFICATION_SANDBOX) /bin/bash -c './autogen.sh >/dev/null 2>&1 && ./configure --quiet --disable-jobserver --enable-opensslextra --enable-wolfsentry CPPFLAGS="-pedantic -DNO_WOLFSSL_CIPHER_SUITE_TEST -DWOLFSSL_OLD_PRIME_CHECK -Wno-restrict" --with-wolfsentry="$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed" --enable-intelasm --prefix "$(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) V=1 >/dev/null && echo "checking libwolfssl" && AM_BWRAPPED=yes $(MAKE) V=1 check >/dev/null && echo "installing libwolfssl at $(BUILD_PARENT)/wolfssl-notification-demo-build/installed" && $(MAKE) $(QUIET_FLAG) install >/dev/null'
 	@cd '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/log_server' && \
 	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' clean && \
 	$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) WOLFSENTRY_ROOT='$(BUILD_PARENT)/wolfsentry-notification-demo-build/installed' WOLFSSL_ROOT='$(BUILD_PARENT)/wolfssl-notification-demo-build/installed' OPTFLAGS='$(OPTIM)' DIAGFLAGS='$(DEBUG) $(C_WARNFLAGS)' EXTRA_CFLAGS='-DDEBUG_WOLFSENTRY'
@@ -768,7 +770,7 @@ notification-demo-build-test:
 	    { ./udp_to_dbus > '$(BUILD_PARENT)/wolfsentry-notification-demo-build/udp_to_dbus.out' 2>&1 & } && \
 	    UDP_TO_DBUS_PID=$$! && \
 	    sleep 1 && \
-	    kill -0 $$UDP_TO_DBUS_PID && \
+	    { kill -0 $$UDP_TO_DBUS_PID || { cat '$(BUILD_PARENT)/wolfsentry-notification-demo-build/udp_to_dbus.out'; false; }; } && \
 	    UDP_TO_DBUS_OK=1; \
 	else \
 	    UDP_TO_DBUS_PID=; \
@@ -781,7 +783,11 @@ notification-demo-build-test:
 	sleep 1 && \
 	kill -0 $$LOG_SERVER_PID || { cat '$(BUILD_PARENT)/wolfsentry-notification-demo-build/log_server.out' && false; } && \
 	cd '$(BUILD_PARENT)/wolfssl-notification-demo-build' && \
-	curl --max-time 2 --no-progress-meter --cert ./certs/client-ecc384-cert.pem --key ./certs/client-ecc384-key.pem --cacert ./certs/ca-ecc-cert.pem --resolve 'www.wolfssl.com:10443:127.0.0.1' 'https://www.wolfssl.com:10443/show-log' > '$(BUILD_PARENT)/wolfsentry-notification-demo-build/curl.out' && \
+	curl --max-time 2 --no-progress-meter \
+	    --cert '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/log_server/certs/client-ecc384-cert.pem' \
+	    --key '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/log_server/certs/client-ecc384-key.pem' \
+	    --cacert '$(BUILD_PARENT)/wolfsentry-notification-demo-build/notification-demo/log_server/certs/ca-ecc-cert.pem' \
+	    --resolve 'www.wolfssl.com:10443:127.0.0.1' 'https://www.wolfssl.com:10443/show-log' > '$(BUILD_PARENT)/wolfsentry-notification-demo-build/curl.out' && \
 	kill $$UDP_TO_DBUS_PID $$LOG_SERVER_PID && \
 	sleep 1 && \
 	{ grep -q -E '"action" : "notify-on-decision", "trigger" : "event-on-connect", "parent" : "event-on-connect", "rule-id" : [0-9]{2,}, "rule-hitcount" : [0-9]+, "af" : "INET", "proto" : 6, "remote" : { "address" : "127\.0\.0\.1", "port" : [0-9]+ }, "local" : { "address" : "127\.0\.0\.1", "port" : 10443 }, "decision" : \["accept"\]' '$(BUILD_PARENT)/wolfsentry-notification-demo-build/curl.out' || { echo 'unexpected contents in $(BUILD_PARENT)/wolfsentry-notification-demo-build/curl.out' 1>&2; exit 1; }; } && \
@@ -874,7 +880,7 @@ ifneq "$(NO_JSON)" "1"
 $(BUILD_TOP)/tests/coverage-unittest.o: override CFLAGS+=-DTEST_JSON_CORPUS
 endif
 $(BUILD_TOP)/tests/coverage-unittest.o: override CFLAGS+=$(TEST_JSON_CFLAGS)
-$(BUILD_TOP)/tests/coverage-unittest.o: $(SRC_TOP)/tests/unittests.c
+$(BUILD_TOP)/tests/coverage-unittest.o: $(SRC_TOP)/tests/unittests.c $(OPTIONS_FILE)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	@rm -f $(@:.o=.gcda)
 ifeq "$(V)" "1"

@@ -1,0 +1,40 @@
+# Deterministic wolfSentry security rules. Style and maintainability checks
+# belong to cppcheck and clang-tidy; these rules cover unsafe primitives.
+
+rules:
+  - id: wolfsentry-unsafe-libc
+    languages: [c]
+    severity: ERROR
+    message: Use a length-bounded alternative to this unsafe C library call.
+    paths:
+      include:
+        - src/
+        - wolfsentry/
+    pattern-either:
+      - pattern: gets(...)
+      - pattern: strcpy(...)
+      - pattern: strcat(...)
+      - pattern: sprintf(...)
+      - pattern: vsprintf(...)
+
+  - id: wolfsentry-shell-execution
+    languages: [c]
+    severity: ERROR
+    message: Core library code must not invoke a command shell.
+    paths:
+      include:
+        - src/
+        - wolfsentry/
+    pattern-either:
+      - pattern: system(...)
+      - pattern: popen(...)
+
+  - id: wolfsentry-insecure-temporary-name
+    languages: [c]
+    severity: ERROR
+    message: mktemp is race-prone; use mkstemp or an equivalent safe primitive.
+    paths:
+      include:
+        - src/
+        - wolfsentry/
+    pattern: mktemp(...)

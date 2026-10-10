@@ -41,7 +41,7 @@ static err_t echo_msgrecv(void *arg, struct tcp_pcb *pcb, struct pbuf *p,
 
         for (q = p; q != NULL; q = q->next)
         {
-            printf("Got: %.*s\n", q->len, q->payload);
+            printf("Got: %.*s\n", q->len, (const char *)q->payload);
         }
     }
     else if (err == ERR_OK && p == NULL)
@@ -98,13 +98,13 @@ int echo_init(void)
 
     /* Create lwIP TCP instance */
     pcb = tcp_new();
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %x\n", pcb));
+    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %p\n", (void *)pcb));
     /* Bind port 11111 */
     int r = tcp_bind(pcb, IP_ADDR_ANY, 11111);
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: tcp_bind: %d\n", r));
     /* Enable listening */
     pcb = tcp_listen(pcb);
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %x\n", pcb));
+    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %p\n", (void *)pcb));
     /* Set accept connection callback */
     tcp_accept(pcb, echo_msgaccept);
 

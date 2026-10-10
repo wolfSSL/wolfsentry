@@ -101,7 +101,7 @@
 #define IP_OPTIONS                      1
 #define ICMP_TTL                      255
 #define LWIP_DHCP                       0
-#define DHCP_DOES_ARP_CHECK             1
+#define DHCP_DOES_ARP_CHECK             0
 #define UDP_TTL                       255
 
 /* #define STATS */

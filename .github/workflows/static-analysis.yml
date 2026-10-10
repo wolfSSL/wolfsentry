@@ -1,0 +1,81 @@
+name: Static Analysis
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+    branches: [ 'master', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  cppcheck:
+    name: cppcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Run cppcheck
+      run: |
+        cppcheck -j2 --enable=warning,performance,portability \
+          --error-exitcode=1 --inline-suppr --suppress=missingIncludeSystem \
+          --suppress=constParameterPointer --suppress=constParameter \
+          --suppress=knownConditionTrueFalse --suppress=unusedStructMember \
+          --suppress=allocaCalled -DSIZE_T_64 -D__GNUC__=13 \
+          -I. -Iwolfsentry src tests/unittests.c
+
+  clang-analyzer:
+    name: Clang Static Analyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Run scan-build
+      run: |
+        scan-build -sarif --keep-empty \
+          -o scan-results make -j2 CC=clang test
+        python3 tests/filter-clang-analyzer.py scan-results
+    - name: Upload analyzer reports
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: clang-static-analyzer
+        path: scan-results/
+
+  gcc-analyzer:
+    name: GCC -fanalyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Build and test with GCC analyzer
+      run: make -j2 CC=gcc EXTRA_CFLAGS=-fanalyzer test

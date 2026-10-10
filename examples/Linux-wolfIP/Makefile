@@ -9,11 +9,10 @@ CFLAGS ?= -O2 -g
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += -DCONFIG_IPFILTER=1
 CFLAGS += -Wall -Wextra -Wpedantic -std=c99
-CFLAGS += -std=c99
 CFLAGS += -I.
 CFLAGS += -I./wolfip
-CFLAGS += -I../../../wolfsentry/wolfsentry
-CFLAGS += -I../../../wolfsentry
+CFLAGS += -I$(WOLFSENTRY_PATH)/wolfsentry
+CFLAGS += -I$(WOLFSENTRY_PATH)
 CFLAGS += -I$(WOLFIP_PATH)
 CFLAGS += -I$(WOLFIP_PATH)/src
 CFLAGS += -I$(WOLFIP_PATH)/src/port/posix
@@ -39,6 +38,8 @@ all: $(TARGET)
 
 $(TARGET): $(APP_OBJS) $(TAP_OBJ) $(WOLFIP_LIB) $(WOLFSENTRY_LIB)
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+
+$(APP_OBJS): $(WOLFSENTRY_LIB)
 
 $(APP_OBJS): %.o : %.c
 	$(CC) $(CFLAGS) -c $< -o $@

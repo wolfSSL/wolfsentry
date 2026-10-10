@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#define _GNU_SOURCE
 #include <errno.h>
 #include <arpa/inet.h>
 #include <signal.h>
@@ -355,7 +354,12 @@ int main(void)
 
     stop_ping_process();
     wolfsentry_cleanup_wolfip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(sentry, NULL), NULL);
-    wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&sentry, NULL));
+    ret = wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&sentry, NULL));
+    if (ret < 0) {
+        fprintf(stderr, "wolfsentry_shutdown failed: "
+                WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        return EXIT_FAILURE;
+    }
 
     printf("Exiting.\n");
     return 0;

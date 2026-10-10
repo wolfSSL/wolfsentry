@@ -3,7 +3,6 @@
 #include <wolfsentry/wolfsentry.h>
 #include <wolfsentry/wolfsentry_util.h>
 #include <wolfsentry/wolfsentry_json.h>
-#include "lwip/sockets.h"
 #include "lwip/etharp.h"
 #include "lwip/tcp.h"
 #include "sentry.h"
@@ -104,7 +103,7 @@ static const char *wolfsentry_config_data = "{\n"
 /* Callback that is fired when an action is taken, this can be used for
  * debugging for now */
 static wolfsentry_errcode_t test_action(
-    struct wolfsentry_context *wolfsentry,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -112,12 +111,13 @@ static wolfsentry_errcode_t test_action(
     wolfsentry_action_type_t action_type,
     const struct wolfsentry_route *target_route,
     struct wolfsentry_route_table *route_table,
-    const struct wolfsentry_route *rule_route,
+    struct wolfsentry_route *rule_route,
     wolfsentry_action_res_t *action_results)
 {
     const struct wolfsentry_event *parent_event = wolfsentry_route_parent_event(rule_route);
-    (void)wolfsentry;
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
     (void)handler_arg;
+    (void)parent_event;
     (void)route_table;
     (void)action_results;
 
@@ -132,22 +132,24 @@ static wolfsentry_errcode_t test_action(
 }
 
 /* Initialize wolfSentry with a config file */
-int sentry_init()
+int sentry_init(void)
 {
     wolfsentry_errcode_t ret;
     wolfsentry_ent_id_t id;
 
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .route_private_data_alignment = 16 };
-    ret =  wolfsentry_init(wolfsentry_build_settings, NULL /* hpi */, &config,
+    ret =  wolfsentry_init(wolfsentry_build_settings,
+                           WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(NULL /* hpi */, NULL /* thread */), &config,
                            &wolfsentry);
 
     if (ret < 0)
     {
-        printf("unable to initialize wolfSentry, code: %ld\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
+        printf("unable to initialize wolfSentry, " WOLFSENTRY_ERROR_FMT "\n",
+            WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
     /* Insert the possible actions into wolfSentry */
-    wolfsentry_action_insert(      wolfsentry,
+    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                                    "handle-insert",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -156,7 +158,7 @@ int sentry_init()
                                    &id);
 
     wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
         "handle-delete",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -165,7 +167,7 @@ int sentry_init()
         &id);
 
     wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
         "handle-match",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -174,7 +176,7 @@ int sentry_init()
         &id);
 
     wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
         "notify-on-match",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -183,7 +185,7 @@ int sentry_init()
         &id);
 
     wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
         "handle-connect",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -192,7 +194,7 @@ int sentry_init()
         &id);
 
     wolfsentry_action_insert(
-        wolfsentry,
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
         "handle-connect2",
         WOLFSENTRY_LENGTH_NULL_TERMINATED,
         WOLFSENTRY_ACTION_FLAG_NONE,
@@ -206,26 +208,33 @@ int sentry_init()
 
     /* Initalize the wolfSentry JSON parser */
     if ((ret = wolfsentry_config_json_init(
-                   wolfsentry,
+                   WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
                    WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
                    &jps)) < 0)
     {
-        printf("error while initializing wolfSentry config parser, code: %ld\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret));
+        printf("error while initializing wolfSentry config parser, "
+            WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
     }
 
     /* wolfSentry uses a streaming reader/parser for the config file */
     /* Send the read data into the JSON parser */
-	ret = wolfsentry_config_json_feed(jps, wolfsentry_config_data, strlen(wolfsentry_config_data), err_buf, sizeof err_buf);
+	ret = wolfsentry_config_json_feed(jps,
+        (const unsigned char *)wolfsentry_config_data,
+        strlen(wolfsentry_config_data), err_buf, sizeof err_buf);
 
 	if (ret < 0)
 	{
-		printf("error while loading wolfSentry config data, code: %ld, msg: %s\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret), err_buf);
+		printf("error while loading wolfSentry config data, "
+            WOLFSENTRY_ERROR_FMT ", msg: %s\n",
+            WOLFSENTRY_ERROR_FMT_ARGS(ret), err_buf);
 	}
 
     /* Clean up the JSON parser */
     if ((ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf)) < 0)
     {
-        printf("error while loading wolfSentry config data, code: %ld, msg: %s\n", WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret), err_buf);
+        printf("error while loading wolfSentry config data, "
+            WOLFSENTRY_ERROR_FMT ", msg: %s\n",
+            WOLFSENTRY_ERROR_FMT_ARGS(ret), err_buf);
     }
 
     return 0;
@@ -234,7 +243,7 @@ int sentry_init()
 
 /* Check a TCP connection with wolfSentry. This is called for connect and
  * disconnect so wolfSentry can count the simultaneous connections */
-int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_port, in_port_t remote_port, sentry_action_type action)
+int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, uint16_t local_port, uint16_t remote_port, sentry_action_type action)
 {
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t action_results;
@@ -262,7 +271,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
 
     /* Setup sockaddr information to send to wolfSentry */
     remote.sa.sa_family = WOLFSENTRY_AF_INET;
-    remote.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_proto = IP_PROTO_TCP;
     remote.sa.sa_port = remote_port;
     /* Essentially a prefix size, wolfSentry uses the lesser of this and the
      * rule in JSON as to how much of the IP address to compare */
@@ -271,7 +280,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
     memcpy(remote.sa.addr, &remoteip, 4);
 
     local.sa.sa_family = WOLFSENTRY_AF_INET;
-    local.sa.sa_proto = IPPROTO_TCP;
+    local.sa.sa_proto = IP_PROTO_TCP;
     local.sa.sa_port = local_port;
     local.sa.addr_len = 32;
     local.sa.interface = 0;
@@ -279,7 +288,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, in_port_t local_por
 
     /* Send the details of this to wolfSentry and get the result */
     ret = wolfsentry_route_event_dispatch_with_inited_result(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
             &local.sa,
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -318,14 +327,14 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
     /* ICMP protocol check. The ICMP packet type is the port number for this
      * check */
     remote.sa.sa_family = WOLFSENTRY_AF_INET;
-    remote.sa.sa_proto = IPPROTO_ICMP;
+    remote.sa.sa_proto = IP_PROTO_ICMP;
     remote.sa.sa_port = type;
     remote.sa.addr_len = 32;
     remote.sa.interface = 0;
     memcpy(remote.sa.addr, &addr->addr, 4);
 
     ret = wolfsentry_route_event_dispatch(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
             &remote.sa, // Reuse for now
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -366,7 +375,7 @@ int sentry_action_mac(struct eth_addr *addr)
     memcpy(remote.sa.addr, &addr->addr, 6);
 
     ret = wolfsentry_route_event_dispatch(
-            wolfsentry,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
             &remote.sa, // Reuse for now
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,

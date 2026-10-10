@@ -1,0 +1,76 @@
+name: Build Options
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+    branches: [ 'master', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  options:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Dynamic library
+            target: dynamic-build-test
+          - name: C99
+            target: c99-test
+          - name: No alloca
+            target: no-alloca-test
+          - name: Single-threaded
+            target: singlethreaded-test
+          - name: No JSON
+            target: no-json-test
+          - name: No JSON DOM
+            target: no-json-dom-test
+          - name: No error strings
+            target: no-error-strings-test
+          - name: No protocol names
+            target: no-protocol-names-test
+          - name: No getprotoby
+            target: no-getprotoby-test
+          - name: No stdio streams
+            target: no-stdio-streams-build-test
+          - name: Minimal
+            target: minimal-build-test
+          - name: Minimal threaded
+            target: minimal-threaded-build-test
+          - name: User settings
+            target: user-settings-build-test
+          - name: Short enums
+            target: short-enums-test
+          - name: Prefix-only address matching
+            target: no-addr-bitmask-matching-test
+          - name: No IPv6
+            target: no-ipv6-test
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Test configuration
+      run: make -j2 ${{ matrix.target }}

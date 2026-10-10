@@ -1,0 +1,123 @@
+name: wolfSSL Version Matrix
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+    branches: [ 'master', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  discover:
+    name: Resolve wolfSSL versions
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    outputs:
+      matrix: ${{ steps.versions.outputs.matrix }}
+    steps:
+    - name: Build matrix
+      id: versions
+      run: |
+        LATEST=$(git ls-remote --tags --refs \
+          https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
+          | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+        test -n "$LATEST"
+        if [[ ! "$LATEST" =~ ^v[0-9]+(\.[0-9]+)+-stable$ ]]; then
+          echo "Unexpected wolfSSL stable tag: $LATEST" >&2
+          exit 1
+        fi
+        # v4.8.0 introduced --enable-wolfsentry. Keep it as a non-blocking
+        # customer-era probe because current wolfSentry APIs may not compile
+        # against that first integration.
+        MATRIX=$(jq -nc --arg latest "$LATEST" '{
+          include: [
+            {"name":"historical v4.8 integration probe","ref":"v4.8.0-stable","allow_failure":true},
+            {"name":"legacy compatibility","ref":"v5.8.0-stable","allow_failure":false},
+            {"name":"latest stable","ref":$latest,"allow_failure":false},
+            {"name":"master","ref":"master","allow_failure":false}
+          ]
+        }')
+        echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  integration:
+    name: ${{ matrix.name }} (${{ matrix.ref }})
+    needs: discover
+    continue-on-error: ${{ matrix.allow_failure }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Build and install wolfSentry
+      run: |
+        make -j2 test
+        make INSTALL_DIR="$HOME/wolfsentry-install" install
+    - name: Build wolfSSL with wolfSentry hooks
+      env:
+        WOLFSSL_REF: ${{ matrix.ref }}
+      run: |
+        git clone --depth 1 --branch "$WOLFSSL_REF" \
+          https://github.com/wolfSSL/wolfssl.git "$HOME/wolfssl"
+        cd "$HOME/wolfssl"
+        ./autogen.sh
+        ./configure --enable-wolfsentry \
+          --with-wolfsentry="$HOME/wolfsentry-install" \
+          --enable-opensslextra --disable-shared
+        make -j2 examples/server/server examples/client/client
+    - name: Run wolfSSL client/server with wolfSentry filtering
+      run: |
+        cd "$HOME/wolfssl"
+        runtime_dir=$(mktemp -d)
+        policy="$GITHUB_WORKSPACE/tests/wolfssl-allow-all.json"
+        ./examples/server/server -p 12345 -d \
+          -R "$runtime_dir/server.ready" \
+          --wolfsentry-config "$policy" \
+          > "$runtime_dir/server.log" 2>&1 &
+        server_pid=$!
+        trap 'test -z "${server_pid:-}" || kill "$server_pid" 2>/dev/null || true' EXIT
+        for attempt in $(seq 1 30); do
+          test -f "$runtime_dir/server.ready" && break
+          if [ "$attempt" -eq 30 ]; then
+            cat "$runtime_dir/server.log"
+            exit 1
+          fi
+          sleep 1
+        done
+        ./examples/client/client -h 127.0.0.1 -p 12345 \
+          --wolfsentry-config "$policy" \
+          > "$runtime_dir/client.log" 2>&1
+        if ! wait "$server_pid"; then
+          cat "$runtime_dir/server.log"
+          exit 1
+        fi
+        server_pid=
+        cat "$runtime_dir/client.log"
+        cat "$runtime_dir/server.log"
+        grep -F 'decision=1 (ACCEPT)' "$runtime_dir/client.log"
+        grep -F 'decision=1 (ACCEPT)' "$runtime_dir/server.log"

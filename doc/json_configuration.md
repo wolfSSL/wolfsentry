@@ -52,6 +52,25 @@ Note that certain element variants may be unavailable due to build settings:
 * `address_port_name`: available if `!defined(WOLFSENTRY_NO_GETPROTOBY)`
 * `json_value_clause`: available if `defined(WOLFSENTRY_HAVE_JSON_DOM)`
 
+Entire policy sections can also be omitted from the loader with
+`WOLFSENTRY_CONFIG_NO_ROUTES`, `WOLFSENTRY_CONFIG_NO_EVENTS`,
+`WOLFSENTRY_CONFIG_NO_USER_VALUES`, and
+`WOLFSENTRY_CONFIG_NO_EVENTCONFIG`. `WOLFSENTRY_CONFIG_MINIMAL` enables all
+four options. A disabled section is rejected as an invalid configuration key.
+The matching make options are documented in the top-level README.
+
+Route loading can be reduced separately with
+`WOLFSENTRY_CONFIG_NO_ADDR_FAMILY_NAMES` and
+`WOLFSENTRY_CONFIG_NO_ROUTE_ENDPOINTS`.
+
+`WOLFSENTRY_CONFIG_NO_TRANSACTIONS` omits dry-run and load-then-commit support.
+Loads then modify the active context directly, and a failed load can leave a
+partial update. The matching make option is `NO_CONFIG_TRANSACTIONS`.
+
+`WOLFSENTRY_CONFIG_NO_LEGACY_EVENT_SYNTAX` removes the pre-1.4 `actions` and
+`*-event` aliases while retaining the current `*-actions` event syntax. The
+matching make option is `NO_CONFIG_LEGACY_EVENT_SYNTAX`.
+
 Caller-supplied event and action labels shall not begin with
 `WOLFSENTRY_BUILTIN_LABEL_PREFIX` (by default `"%"`), as these are reserved for
 built-ins.

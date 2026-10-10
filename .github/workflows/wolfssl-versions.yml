@@ -61,7 +61,6 @@ jobs:
   integration:
     name: ${{ matrix.name }} (${{ matrix.ref }})
     needs: discover
-    continue-on-error: ${{ matrix.allow_failure }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
@@ -79,6 +78,8 @@ jobs:
         make -j2 test
         make INSTALL_DIR="$HOME/wolfsentry-install" install
     - name: Build wolfSSL with wolfSentry hooks
+      id: wolfssl_build
+      continue-on-error: ${{ matrix.allow_failure }}
       env:
         WOLFSSL_REF: ${{ matrix.ref }}
       run: |
@@ -91,6 +92,9 @@ jobs:
           --enable-opensslextra --disable-shared
         make -j2 examples/server/server examples/client/client
     - name: Run wolfSSL client/server with wolfSentry filtering
+      id: wolfssl_runtime
+      if: steps.wolfssl_build.outcome == 'success'
+      continue-on-error: ${{ matrix.allow_failure }}
       run: |
         cd "$HOME/wolfssl"
         runtime_dir=$(mktemp -d)
@@ -121,3 +125,11 @@ jobs:
         cat "$runtime_dir/server.log"
         grep -F 'decision=1 (ACCEPT)' "$runtime_dir/client.log"
         grep -F 'decision=1 (ACCEPT)' "$runtime_dir/server.log"
+    - name: Report historical incompatibility
+      if: >-
+        matrix.allow_failure &&
+        (steps.wolfssl_build.outcome == 'failure' ||
+        steps.wolfssl_runtime.outcome == 'failure')
+      run: >-
+        echo "::warning::${{ matrix.ref }} is an informational compatibility
+        probe and is not the minimum supported wolfSSL version"

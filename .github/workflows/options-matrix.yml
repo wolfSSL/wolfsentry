@@ -37,10 +37,8 @@ jobs:
         include:
           - name: Dynamic library
             target: dynamic-build-test
-          - name: C99
-            target: c99-test
-          - name: No alloca
-            target: no-alloca-test
+          - name: C89
+            target: c89-test
           - name: Single-threaded
             target: singlethreaded-test
           - name: No JSON

@@ -110,8 +110,7 @@ static void log_event(const struct wolfIP_filter_event *event, const char *tag)
 }
 
 static wolfsentry_errcode_t icmp_mod7_action(
-    struct wolfsentry_context *wolfsentry,
-    struct wolfsentry_thread_context *thread,
+    WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
     void *handler_arg,
     void *caller_arg,
@@ -125,7 +124,7 @@ static wolfsentry_errcode_t icmp_mod7_action(
     struct icmp_filter_state *state = (struct icmp_filter_state *)handler_arg;
     const struct wolfIP_filter_event *event = (const struct wolfIP_filter_event *)caller_arg;
     (void)wolfsentry;
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)action;
     (void)trigger_event;
     (void)action_type;

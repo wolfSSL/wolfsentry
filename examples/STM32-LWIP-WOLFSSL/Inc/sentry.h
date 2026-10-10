@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #ifndef __SENTRY_H__
 #define __SENTRY_H__

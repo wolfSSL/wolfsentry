@@ -3,12 +3,13 @@ AR ?= ar
 
 WOLFSENTRY_PATH ?= ../../../wolfsentry
 WOLFSENTRY_LIB ?= $(WOLFSENTRY_PATH)/libwolfsentry.a
+WOLFSENTRY_CFLAGS ?= -std=c89 -pedantic -DWOLFSENTRY_C89 -Wno-variadic-macros -Wno-overlength-strings
 WOLFIP_PATH ?= ../../../wolfip
 
 CFLAGS ?= -O2 -g
 CFLAGS += -D_GNU_SOURCE
 CFLAGS += -DCONFIG_IPFILTER=1
-CFLAGS += -Wall -Wextra -Wpedantic -std=c99
+CFLAGS += -Wall -Wextra -Wpedantic -std=c99 -DWOLFSENTRY_C89
 CFLAGS += -I.
 CFLAGS += -I./wolfip
 CFLAGS += -I$(WOLFSENTRY_PATH)/wolfsentry
@@ -57,7 +58,8 @@ $(WOLFSENTRY_LIB):
 	$(MAKE) -C $(WOLFSENTRY_PATH) libwolfsentry.a \
 		WOLFIP=1 \
 		WOLFIP_TOP=$(abspath $(WOLFIP_PATH)) \
-		WOLFIP_CONFIG_DIR=$(abspath $(CURDIR)/wolfip)
+		WOLFIP_CONFIG_DIR=$(abspath $(CURDIR)/wolfip) \
+		EXTRA_CFLAGS+='$(WOLFSENTRY_CFLAGS)'
 
 clean:
 	$(RM) $(APP_OBJS) $(TAP_OBJ) $(WOLFIP_OBJ) $(WOLFIP_LIB) $(TARGET)

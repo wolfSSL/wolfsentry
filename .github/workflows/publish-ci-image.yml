@@ -1,0 +1,83 @@
+name: Publish CI image
+
+on:
+  push:
+    branches: [ '**' ]
+    paths:
+      - '.github/docker/wolfsentry-ci/**'
+      - '.github/workflows/publish-ci-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-ci-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish CI image
+    if: github.repository == 'wolfSSL/wolfsentry'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: .github/docker/wolfsentry-ci/Dockerfile
+          platforms: linux/amd64
+          pull: true
+          push: true
+          tags: |
+            ghcr.io/wolfssl/wolfsentry-ci:sha-${{ github.sha }}
+            ghcr.io/wolfssl/wolfsentry-ci:${{ github.ref == 'refs/heads/master' && 'latest' || 'edge' }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/wolfssl/wolfsentry-ci:latest
+          cache-to: type=inline
+
+  smoke:
+    name: Test published CI image
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ghcr.io/wolfssl/wolfsentry-ci@${{ needs.publish.outputs.digest }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash -e {0}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Exercise image
+        run: |
+          gcc --version
+          clang --version
+          arm-none-eabi-gcc --version
+          scan-build --version
+          shellcheck --version
+          /usr/bin/python3 -c 'import dbus, gi'
+          make -j2 test

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "lwip/debug.h"
 
@@ -80,7 +80,7 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
     */
 
     /* Set an arbitrary pointer for callbacks. We don't use this right now */
-    //tcp_arg(pcb, esm);
+    /* tcp_arg(pcb, esm); */
 
     /* Set TCP receive packet callback. */
     tcp_recv(pcb, echo_msgrecv);
@@ -95,12 +95,13 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 int echo_init(void)
 {
     struct tcp_pcb *pcb;
+    int r;
 
     /* Create lwIP TCP instance */
     pcb = tcp_new();
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %p\n", (void *)pcb));
     /* Bind port 11111 */
-    int r = tcp_bind(pcb, IP_ADDR_ANY, 11111);
+    r = tcp_bind(pcb, IP_ADDR_ANY, 11111);
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: tcp_bind: %d\n", r));
     /* Enable listening */
     pcb = tcp_listen(pcb);

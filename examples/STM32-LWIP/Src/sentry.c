@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <wolfsentry/wolfsentry.h>
 #include <wolfsentry/wolfsentry_util.h>
@@ -136,8 +136,12 @@ int sentry_init(void)
 {
     wolfsentry_errcode_t ret;
     wolfsentry_ent_id_t id;
+    struct wolfsentry_eventconfig config = { 0 };
+    char err_buf[512];
+    struct wolfsentry_json_process_state *jps;
 
-    struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .route_private_data_alignment = 16 };
+    config.route_private_data_size = 32;
+    config.route_private_data_alignment = 16;
     ret =  wolfsentry_init(wolfsentry_build_settings,
                            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(NULL /* hpi */, NULL /* thread */), &config,
                            &wolfsentry);
@@ -202,9 +206,6 @@ int sentry_init(void)
         NULL,
         &id);
 
-
-    char err_buf[512];
-    struct wolfsentry_json_process_state *jps;
 
     /* Initalize the wolfSentry JSON parser */
     if ((ret = wolfsentry_config_json_init(
@@ -275,7 +276,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, uint16_t local_port
     remote.sa.sa_port = remote_port;
     /* Essentially a prefix size, wolfSentry uses the lesser of this and the
      * rule in JSON as to how much of the IP address to compare */
-    remote.sa.addr_len = 32; // prefix size
+    remote.sa.addr_len = 32; /* prefix size */
     remote.sa.interface = 0;
     memcpy(remote.sa.addr, &remoteip, 4);
 
@@ -336,7 +337,7 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
     ret = wolfsentry_route_event_dispatch(
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
-            &remote.sa, // Reuse for now
+            &remote.sa, /* Reuse for now */
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
             "call-in-from-echo",
             strlen("call-in-from-echo"),
@@ -371,13 +372,13 @@ int sentry_action_mac(struct eth_addr *addr)
     remote.sa.sa_family = WOLFSENTRY_AF_LINK;
     remote.sa.addr_len = 48;
     remote.sa.interface = 0;
-    // MAC addresses are 6 bytes (48 bits)
+    /* MAC addresses are 6 bytes (48 bits) */
     memcpy(remote.sa.addr, &addr->addr, 6);
 
     ret = wolfsentry_route_event_dispatch(
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
             &remote.sa,
-            &remote.sa, // Reuse for now
+            &remote.sa, /* Reuse for now */
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
             "call-in-from-echo",
             strlen("call-in-from-echo"),

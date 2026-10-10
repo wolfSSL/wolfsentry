@@ -214,7 +214,9 @@ jobs:
               /tmp/wolfsentry-host-build/wolfsentry/wolfsentry_options.h
 
             common_flags=(
-              -std=gnu99
+              -DWOLFSENTRY_C89
+              -Wno-variadic-macros
+              -Wno-overlength-strings
               -fsyntax-only
               -Wall
               -Wextra
@@ -231,13 +233,13 @@ jobs:
               -I.
             )
 
-            gcc "${common_flags[@]}" \
+            gcc -std=c89 -pedantic "${common_flags[@]}" \
               -Iexamples/STM32-LWIP/Inc \
               examples/STM32-LWIP/Src/sentry.c \
               examples/STM32-LWIP/Src/echo.c \
               examples/STM32-LWIP/Src/ping.c
 
-            gcc "${common_flags[@]}" \
+            gcc -std=c99 "${common_flags[@]}" \
               -DWOLFSSL_USER_SETTINGS \
               -Itests/stm32-compat \
               -Iexamples/STM32-LWIP-WOLFSSL/Inc \
@@ -248,5 +250,5 @@ jobs:
             make -j2 \
               FREERTOS_TOP=/workspace/freertos \
               LWIP_TOP=/workspace/lwip \
-              freertos-arm32-thumb-build-test
+              freertos-arm32-c89-build-test
           '

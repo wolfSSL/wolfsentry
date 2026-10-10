@@ -78,6 +78,5 @@ jobs:
           clang --version
           arm-none-eabi-gcc --version
           scan-build --help > /dev/null
-          shellcheck --version
           /usr/bin/python3 -c 'import dbus, gi'
           make -j2 test

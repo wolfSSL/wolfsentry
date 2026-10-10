@@ -45,7 +45,7 @@ jobs:
           '*/src/json/centijson_sax.c' --ignore-errors unused \
           --output-file coverage.info
         lcov --summary coverage.info
-        lcov --summary --fail-under-lines 65 coverage.info
+        lcov --fail-under-lines 65 --summary coverage.info
     - name: Upload coverage data
       uses: actions/upload-artifact@v4
       with:

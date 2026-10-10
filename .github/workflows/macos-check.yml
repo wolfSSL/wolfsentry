@@ -28,4 +28,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build, sanitize, and run primary configuration suite
-      run: make -j2 check-macosx
+      run: make -j2 CLANG_PATH=/usr/bin check-macosx

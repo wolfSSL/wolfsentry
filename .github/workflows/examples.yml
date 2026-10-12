@@ -165,18 +165,28 @@ jobs:
             dbus-run-session -- bash tests/run-notification-demo-ci.sh
           '
 
-  stm32-fragments:
-    name: STM32 fragments and Cortex-M build
+  stm32-m33mu:
+    name: M33MU ${{ matrix.example }} runtime
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+        - stm32-lwip
+        - stm32-lwip-wolfssl
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-m33mu@sha256:f6b66c9240ecd94f99400565196f956d1b067059b659a66dbbe83581cc7bf4c7
 
     steps:
     - uses: actions/checkout@v4
       with:
         path: wolfsentry
     - uses: actions/checkout@v4
+      if: matrix.example == 'stm32-lwip-wolfssl'
       with:
         repository: wolfSSL/wolfssl
+        ref: f99453320ff306fe5bfb10788117f18c9bfeaf6b
         path: wolfssl
     - uses: actions/checkout@v4
       with:
@@ -197,60 +207,18 @@ jobs:
         path: freertos/FreeRTOS/Source
     - name: Apply the wolfSentry lwIP packet filter API
       run: patch --directory lwip --strip 1 < wolfsentry/lwip/LWIP_PACKET_FILTER_API.patch
-    - name: Build the wolfSentry CI image
+    - name: Build ${{ matrix.example }} firmware
       run: |
-        docker build \
-          --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
-          --tag wolfsentry-ci:local wolfsentry
-    - name: Compile STM32 fragments and Cortex-M integration
-      run: |
-        docker run --rm \
-          --env TMPDIR=/tmp \
-          --volume "$GITHUB_WORKSPACE/wolfsentry:/workspace/wolfsentry:ro" \
-          --volume "$GITHUB_WORKSPACE/wolfssl:/workspace/wolfssl:ro" \
-          --volume "$GITHUB_WORKSPACE/lwip:/workspace/lwip:ro" \
-          --volume "$GITHUB_WORKSPACE/freertos:/workspace/freertos:ro" \
-          --workdir /workspace/wolfsentry \
-          wolfsentry-ci:local bash -euc '
-            make BUILD_TOP=/tmp/wolfsentry-host-build \
-              /tmp/wolfsentry-host-build/wolfsentry/wolfsentry_options.h
-
-            common_flags=(
-              -DWOLFSENTRY_C89
-              -Wno-variadic-macros
-              -Wno-overlength-strings
-              -fsyntax-only
-              -Wall
-              -Wextra
-              -Werror=format
-              -Werror=implicit-function-declaration
-              -Werror=incompatible-pointer-types
-              -Werror=strict-prototypes
-              -Wno-unused-parameter
-              -DLWIP_IPV6=0
-              -Iports/Linux-lwIP/include
-              -I/workspace/lwip/contrib/ports/unix/port/include
-              -I/workspace/lwip/src/include
-              -I/tmp/wolfsentry-host-build
-              -I.
-            )
-
-            gcc -std=c89 -pedantic "${common_flags[@]}" \
-              -Iexamples/STM32-LWIP/Inc \
-              examples/STM32-LWIP/Src/sentry.c \
-              examples/STM32-LWIP/Src/echo.c \
-              examples/STM32-LWIP/Src/ping.c
-
-            gcc -std=c99 "${common_flags[@]}" \
-              -DWOLFSSL_USER_SETTINGS \
-              -Itests/stm32-compat \
-              -Iexamples/STM32-LWIP-WOLFSSL/Inc \
-              -I/workspace/wolfssl \
-              examples/STM32-LWIP-WOLFSSL/Src/sentry.c \
-              examples/STM32-LWIP-WOLFSSL/Src/echo.c
-
-            make -j2 \
-              FREERTOS_TOP=/workspace/freertos \
-              LWIP_TOP=/workspace/lwip \
-              freertos-arm32-c89-build-test
-          '
+        make -C wolfsentry/tests/stm32h563-m33mu -j2 \
+          "build/${{ matrix.example }}.bin" \
+          FREERTOS_TOP="$GITHUB_WORKSPACE/freertos" \
+          LWIP_TOP="$GITHUB_WORKSPACE/lwip" \
+          WOLFSSL_TOP="$GITHUB_WORKSPACE/wolfssl"
+    - name: Boot ${{ matrix.example }} on STM32H563 M33MU
+      working-directory: wolfsentry/tests/stm32h563-m33mu
+      env:
+        EXPECTED_MARKER: >-
+          ${{ matrix.example == 'stm32-lwip-wolfssl'
+          && 'PASS: STM32-LWIP-WOLFSSL on FreeRTOS/lwIP under M33MU'
+          || 'PASS: STM32-LWIP on FreeRTOS/lwIP under M33MU' }}
+      run: ./run.sh "build/${{ matrix.example }}.bin" "$EXPECTED_MARKER"

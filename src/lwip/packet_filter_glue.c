@@ -23,6 +23,10 @@
 #include <wolfsentry/wolfsentry.h>
 #include <wolfsentry/wolfsentry_lwip.h>
 #include "lwip/sockets.h"
+#include "lwip/prot/ip.h"
+#if LWIP_IPV6
+#include "lwip/prot/ip6.h"
+#endif
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_LWIP_PACKET_FILTER_GLUE_C
 
@@ -625,10 +629,10 @@ static err_t tcp_filter_with_wolfsentry(
             memset(&local.local.addr, 0, sizeof *ip_2_ip4(laddr));
     }
 
-    remote.remote.sa_proto = IPPROTO_TCP;
+    remote.remote.sa_proto = IP_PROTO_TCP;
     remote.remote.sa_port = rport;
 
-    local.local.sa_proto = IPPROTO_TCP;
+    local.local.sa_proto = IP_PROTO_TCP;
     local.local.sa_port = lport;
 
     if (event->netif)
@@ -814,10 +818,10 @@ static err_t udp_filter_with_wolfsentry(
             memset(&local.local.addr, 0, sizeof *ip_2_ip4(laddr));
     }
 
-    remote.remote.sa_proto = IPPROTO_UDP;
+    remote.remote.sa_proto = IP_PROTO_UDP;
     remote.remote.sa_port = rport;
 
-    local.local.sa_proto = IPPROTO_UDP;
+    local.local.sa_proto = IP_PROTO_UDP;
     local.local.sa_port = lport;
 
     if (event->netif)
@@ -962,10 +966,10 @@ static err_t icmp4_filter_with_wolfsentry(
     else
         memset(&local.local.addr, 0, sizeof *laddr);
 
-    remote.remote.sa_proto = IPPROTO_ICMP;
+    remote.remote.sa_proto = IP_PROTO_ICMP;
     remote.remote.sa_port = 0;
 
-    local.local.sa_proto = IPPROTO_ICMP;
+    local.local.sa_proto = IP_PROTO_ICMP;
     local.local.sa_port = icmp4_type;
 
     if (event->netif)
@@ -1098,10 +1102,10 @@ static err_t icmp6_filter_with_wolfsentry(
     else
         memset(&local.local.addr, 0, sizeof *laddr);
 
-    remote.remote.sa_proto = IPPROTO_ICMPV6;
+    remote.remote.sa_proto = IP6_NEXTH_ICMP6;
     remote.remote.sa_port = 0;
 
-    local.local.sa_proto = IPPROTO_ICMPV6;
+    local.local.sa_proto = IP6_NEXTH_ICMP6;
     local.local.sa_port = icmp6_type;
 
     if (event->netif)

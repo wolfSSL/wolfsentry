@@ -571,7 +571,7 @@ static wolfsentry_errcode_t wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_IN)
 WOLFSENTRY_API_VOID wolfsentry_cleanup_wolfip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_IN, void *cleanup_arg)
 {
     (void)wolfsentry;
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)cleanup_arg;
     wolfip_mask_eth = wolfip_mask_ip = wolfip_mask_icmp = wolfip_mask_tcp = wolfip_mask_udp = 0;
     wolfip_cleanup_registered = 0;
@@ -591,7 +591,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_ethernet_ca
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     wolfip_mask_eth = ethernet_mask;
     ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
@@ -604,7 +604,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_ip4_callbac
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     wolfip_mask_ip = ip_mask;
     ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
@@ -617,7 +617,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_icmp_callba
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     wolfip_mask_icmp = icmp_mask;
     ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
@@ -630,7 +630,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_tcp_callbac
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (tcp_mask & (WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING) |
                     WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
                     WOLFIP_FILT_MASK(WOLFIP_FILT_REMOTE_RESET)))
@@ -649,7 +649,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_udp_callbac
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     wolfip_mask_udp = udp_mask;
     ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
@@ -666,7 +666,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_callbacks(
     wolfsentry_errcode_t ret;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     wolfip_mask_eth = ethernet_mask;
     wolfip_mask_ip = ip_mask;
     wolfip_mask_icmp = icmp_mask;
@@ -680,7 +680,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_callbacks(
 
 WOLFSENTRY_API_VOID wolfsentry_cleanup_wolfip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_IN, void *cleanup_arg)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)cleanup_arg;
     (void)wolfsentry;
 }
@@ -689,7 +689,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_ethernet_ca
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t ethernet_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (ethernet_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
@@ -700,7 +700,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_ip4_callbac
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t ip_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (ip_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
@@ -711,7 +711,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_icmp_callba
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t icmp_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (icmp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
@@ -722,7 +722,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_tcp_callbac
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t tcp_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (tcp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
@@ -733,7 +733,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_udp_callbac
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t udp_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (udp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
@@ -748,7 +748,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_callbacks(
     uint32_t tcp_mask,
     uint32_t udp_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (ethernet_mask || ip_mask || icmp_mask || tcp_mask || udp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
@@ -761,7 +761,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_ip6_callbac
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t ip_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (ip_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);
@@ -772,7 +772,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_icmp6_callb
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t icmp_mask)
 {
-    (void)thread;
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)wolfsentry;
     if (icmp_mask)
         WOLFSENTRY_ERROR_RETURN(IMPLEMENTATION_MISSING);

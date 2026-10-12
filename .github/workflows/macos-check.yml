@@ -1,17 +1,31 @@
 name: macOS Build Test
 
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
 on:
   push:
-    branches: [ '*' ]
+    branches: [ 'master', 'release/**' ]
   pull_request:
-    branches: [ '*' ]
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-
     runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: make test
-      run: make -j test
+    - uses: actions/checkout@v4
+    - name: Build, sanitize, and run primary configuration suite
+      run: make -j2 CLANG_PATH=/usr/bin check-macosx

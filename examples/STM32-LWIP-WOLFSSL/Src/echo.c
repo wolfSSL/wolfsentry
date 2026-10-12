@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "cmsis_os.h"
 #include "lwip/debug.h"
@@ -28,7 +28,7 @@ struct thread_data {
 	struct tcp_pcb *pcb;
 };
 
-const char cert[] = "-----BEGIN CERTIFICATE-----"
+const unsigned char cert[] = "-----BEGIN CERTIFICATE-----"
 "MIIB2TCCAX+gAwIBAgIUclisQ2ZFuLig1QRSSpfRgt7F3jswCgYIKoZIzj0EAwIw"
 "QjELMAkGA1UEBhMCWFgxFTATBgNVBAcMDERlZmF1bHQgQ2l0eTEcMBoGA1UECgwT"
 "RGVmYXVsdCBDb21wYW55IEx0ZDAeFw0yMjAzMjgxNjE5MjFaFw0yMzAzMjgxNjE5"
@@ -41,7 +41,7 @@ const char cert[] = "-----BEGIN CERTIFICATE-----"
 "lVmbi+AeY3ZjiYQCIAy/eYMMhFGMnIukdTMIP/Qf3KqfcBvlpLqiI3OaBZw4"
 "-----END CERTIFICATE-----";
 
-const char key[] = "-----BEGIN EC PARAMETERS-----"
+const unsigned char key[] = "-----BEGIN EC PARAMETERS-----"
 "BggqhkjOPQMBBw=="
 "-----END EC PARAMETERS-----"
 "-----BEGIN EC PRIVATE KEY-----"
@@ -56,7 +56,8 @@ void echo_msgclose(struct tcp_pcb *pcb)
     printf("Closing connection from: %s\n", ipaddr_ntoa(&(pcb->remote_ip)));
     /* Tell sentry_action() that this is a disconnect event which decrements
      * the connection count */
-    //sentry_action(&pcb->local_ip, &pcb->remote_ip, pcb->local_port, pcb->remote_port, SENTRY_ACTION_DISCONNECT);
+    /* sentry_action(&pcb->local_ip, &pcb->remote_ip, pcb->local_port,
+     * pcb->remote_port, SENTRY_ACTION_DISCONNECT); */
 
     /* Remove all the callbacks and shutdown the connection */
     tcp_arg(pcb, NULL);
@@ -76,6 +77,7 @@ static void echo_msgerr(void *arg, err_t err)
 static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 {
 	WOLFSSL *ssl;
+    struct thread_data tdata;
     /* Accepted new connection */
     LWIP_PLATFORM_DIAG(("echo_msgaccept called\n"));
 
@@ -94,9 +96,8 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
     */
 
     /* Set an arbitrary pointer for callbacks. We don't use this right now */
-    //tcp_arg(pcb, esm);
+    /* tcp_arg(pcb, esm); */
 
-    struct thread_data tdata;
     tdata.pcb = pcb;
     /* Create a WOLFSSL object */
     if ((ssl = wolfSSL_new(wolf_ctx)) == NULL) {
@@ -117,7 +118,7 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 }
 
 /* Init the TCP listener */
-int echo_ssl()
+int echo_ssl(void)
 {
 	int ret;
 
@@ -131,7 +132,7 @@ int echo_ssl()
 
     /* Load server certificates into WOLFSSL_CTX */
     if ((ret = wolfSSL_CTX_use_certificate_buffer(wolf_ctx, cert,
-    		strlen(cert), WOLFSSL_FILETYPE_PEM))
+		sizeof cert - 1, WOLFSSL_FILETYPE_PEM))
         != WOLFSSL_SUCCESS) {
         fprintf(stderr, "ERROR: failed to load certificate buffer.\n");
         return -1;
@@ -139,26 +140,27 @@ int echo_ssl()
 
     /* Load server key into WOLFSSL_CTX */
     if ((ret = wolfSSL_CTX_use_PrivateKey_buffer(wolf_ctx, key,
-    		strlen(key), WOLFSSL_FILETYPE_PEM))
+		sizeof key - 1, WOLFSSL_FILETYPE_PEM))
         != WOLFSSL_SUCCESS) {
         fprintf(stderr, "ERROR: failed to load key buffer.\n");
         return -1;
     }
     return 0;
 }
-void echo_init()
+void echo_init(void)
 {
 	struct tcp_pcb *pcb;
+    int r;
     /* Create lwIP TCP instance */
     pcb = tcp_new();
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %x\n", pcb));
+    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %p\n", (void *)pcb));
     /* Bind port 11111 */
-    int r = tcp_bind(pcb, IP_ADDR_ANY, 8080);
+    r = tcp_bind(pcb, IP_ADDR_ANY, 8080);
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: tcp_bind: %d\n", r));
     /* Enable listening */
     tcp_arg(pcb, NULL);
     pcb = tcp_listen(pcb);
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %x\n", pcb));
+    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %p\n", (void *)pcb));
     /* Set accept connection callback */
     tcp_accept(pcb, echo_msgaccept);
     fprintf(stderr, "Accept ready!\n");
@@ -177,8 +179,8 @@ int sentry_tcp_inpkt(struct tcp_pcb *pcb, struct tcp_hdr *hdr, uint16_t optlen,
          * yet, that happens immediately after this callback, so we get these
          * details from other sources. The same sources that are about to fill
          * in the details into the sruct */
-        //fprintf(stderr, "Incomming connection from: %s\n",
-        //        ipaddr_ntoa(ip_current_src_addr()));
+        /* fprintf(stderr, "Incomming connection from: %s\n",
+         *     ipaddr_ntoa(ip_current_src_addr())); */
 
         if (sentry_action(ip_current_dest_addr(), ip_current_src_addr(),
                     pcb->local_port, hdr->src , SENTRY_ACTION_CONNECT) != 0)

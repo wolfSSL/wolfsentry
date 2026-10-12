@@ -1,0 +1,224 @@
+name: Examples
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  linux-lwip:
+    name: Linux lwIP runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_FILE: examples/Linux-LWIP/docker-compose.yml
+      COMPOSE_PROJECT_NAME: wolfsentry-lwip-${{ github.run_id }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build and start the lwIP network
+      run: docker compose up --build --detach
+    - name: Exercise allowed and rejected traffic
+      run: |
+        for attempt in $(seq 1 30); do
+          if docker compose ps --status running --services | grep -qx echoserver; then
+            break
+          fi
+          if [ "$attempt" -eq 30 ]; then
+            docker compose logs echoserver
+            exit 1
+          fi
+          sleep 1
+        done
+
+        docker compose exec -T tester1 ping -c 2 -W 2 172.20.20.5
+        if docker compose exec -T tester2 ping -c 2 -W 2 172.20.20.5; then
+          echo 'tester2 ICMP traffic was expected to be rejected' >&2
+          exit 1
+        fi
+        if docker compose exec -T tester3 ping -c 2 -W 2 172.20.20.5; then
+          echo 'tester3 traffic was expected to be rejected by MAC address' >&2
+          exit 1
+        fi
+
+        printf 'nightly-wolfsentry\n' \
+          | docker compose exec -T tester2 nc -w 3 172.20.20.5 11111 || true
+        printf 'blocked-tcp\n' \
+          | docker compose exec -T tester1 nc -w 3 172.20.20.5 11111 || true
+        sleep 2
+
+        docker compose logs --no-color echoserver > lwip-example.log
+        grep -F 'Ping accepted from 172.20.20.10' lwip-example.log
+        grep -F 'Ping rejected from 172.20.20.20' lwip-example.log
+        grep -F 'Sentry rejected MAC address DE:C0:DE:03:03:01' lwip-example.log
+        grep -F 'Got: nightly-wolfsentry' lwip-example.log
+        grep -F 'Sentry rejected connection from: 172.20.20.10' lwip-example.log
+    - name: Show lwIP logs
+      if: always()
+      run: docker compose logs --no-color
+    - name: Stop the lwIP network
+      if: always()
+      run: docker compose down --volumes --remove-orphans
+
+  linux-wolfip:
+    name: Linux wolfIP TAP runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: wolfsentry
+    - uses: actions/checkout@v4
+      with:
+        repository: wolfSSL/wolfip
+        path: wolfip
+    - name: Build the wolfSentry CI image
+      run: |
+        docker build \
+          --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
+          --tag wolfsentry-ci:local wolfsentry
+    - name: Build and run the wolfIP example
+      run: |
+        docker run --rm \
+          --cap-drop=ALL \
+          --cap-add=NET_ADMIN \
+          --cap-add=NET_RAW \
+          --device=/dev/net/tun \
+          --security-opt=no-new-privileges \
+          --volume "$GITHUB_WORKSPACE/wolfsentry:/workspace/wolfsentry:ro" \
+          --volume "$GITHUB_WORKSPACE/wolfip:/workspace/wolfip:ro" \
+          --workdir /tmp \
+          wolfsentry-ci:local bash -euc '
+            cp -R /workspace/wolfsentry /tmp/wolfsentry-build
+            ln -s /workspace/wolfip /tmp/wolfip
+            cd /tmp/wolfsentry-build/examples/Linux-wolfIP
+            make clean
+            make -j2 \
+              WOLFSENTRY_PATH=/tmp/wolfsentry-build \
+              WOLFIP_PATH=/tmp/wolfip
+            set +e
+            timeout --signal=TERM --kill-after=5s 30s \
+              stdbuf -oL -eL ./wolfip-wolfsentry-demo \
+              > wolfip-example.log 2>&1
+            status=$?
+            set -e
+            cat wolfip-example.log
+            if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+              exit "$status"
+            fi
+            grep -F "wolfIP ready on wolfip0" wolfip-example.log
+            grep -F "drop-icmp-mod7" wolfip-example.log
+            grep -F "Exiting." wolfip-example.log
+          '
+
+  notification-demo:
+    name: Notification demo TLS runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: wolfsentry
+    - uses: actions/checkout@v4
+      with:
+        repository: wolfSSL/wolfssl
+        path: wolfssl
+    - name: Build the wolfSentry CI image
+      run: |
+        docker build \
+          --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
+          --tag wolfsentry-ci:local wolfsentry
+    - name: Build and exercise the notification demo
+      run: |
+        docker run --rm \
+          --cap-drop=ALL \
+          --security-opt=no-new-privileges \
+          --env TMPDIR=/tmp \
+          --volume "$GITHUB_WORKSPACE/wolfsentry:/workspace/wolfsentry:ro" \
+          --volume "$GITHUB_WORKSPACE/wolfssl:/workspace/wolfssl:ro" \
+          --workdir /workspace/wolfsentry \
+          wolfsentry-ci:local bash -euc '
+            git config --global --add safe.directory /workspace/wolfssl
+            git config --global --add safe.directory /workspace/wolfssl/.git
+            git config --global --add safe.directory /workspace/wolfsentry/../wolfssl/.git
+            dbus-run-session -- bash tests/run-notification-demo-ci.sh
+          '
+
+  stm32-m33mu:
+    name: M33MU ${{ matrix.example }} runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+        - stm32-lwip
+        - stm32-lwip-wolfssl
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-m33mu@sha256:f6b66c9240ecd94f99400565196f956d1b067059b659a66dbbe83581cc7bf4c7
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: wolfsentry
+    - uses: actions/checkout@v4
+      if: matrix.example == 'stm32-lwip-wolfssl'
+      with:
+        repository: wolfSSL/wolfssl
+        ref: f99453320ff306fe5bfb10788117f18c9bfeaf6b
+        path: wolfssl
+    - uses: actions/checkout@v4
+      with:
+        repository: lwip-tcpip/lwip
+        ref: STABLE-2_1_3_RELEASE
+        path: lwip
+    - name: Check out lwIP contrib
+      run: |
+        git clone --branch STABLE-2_1_0_RELEASE --depth 1 \
+          https://git.savannah.nongnu.org/git/lwip/lwip-contrib.git \
+          lwip/contrib
+        test "$(git -C lwip/contrib rev-parse HEAD)" = \
+          35b011d4cf4c4b480f8859c456587a884ec9d287
+    - uses: actions/checkout@v4
+      with:
+        repository: FreeRTOS/FreeRTOS-Kernel
+        ref: V10.5.1
+        path: freertos/FreeRTOS/Source
+    - name: Apply the wolfSentry lwIP packet filter API
+      run: patch --directory lwip --strip 1 < wolfsentry/lwip/LWIP_PACKET_FILTER_API.patch
+    - name: Build ${{ matrix.example }} firmware
+      run: |
+        make -C wolfsentry/tests/stm32h563-m33mu -j2 \
+          "build/${{ matrix.example }}.bin" \
+          FREERTOS_TOP="$GITHUB_WORKSPACE/freertos" \
+          LWIP_TOP="$GITHUB_WORKSPACE/lwip" \
+          WOLFSSL_TOP="$GITHUB_WORKSPACE/wolfssl"
+    - name: Boot ${{ matrix.example }} on STM32H563 M33MU
+      working-directory: wolfsentry/tests/stm32h563-m33mu
+      env:
+        EXPECTED_MARKER: >-
+          ${{ matrix.example == 'stm32-lwip-wolfssl'
+          && 'PASS: STM32-LWIP-WOLFSSL on FreeRTOS/lwIP under M33MU'
+          || 'PASS: STM32-LWIP on FreeRTOS/lwIP under M33MU' }}
+      run: ./run.sh "build/${{ matrix.example }}.bin" "$EXPECTED_MARKER"

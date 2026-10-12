@@ -143,25 +143,29 @@ $(BUILD_DIR)/lwip/%.o: $(LWIP_TOP)/%.c | check-paths
 	@mkdir -p $(@D)
 	$(CC) $(COMMON_FLAGS) $(THIRD_PARTY_FLAGS) -c $< -o $@
 
-$(BUILD_DIR)/basic/main.o: main.c | check-paths
+$(BUILD_DIR)/basic/main.o: main.c | check-paths \
+    $(WOLFSENTRY_BUILD)/libwolfsentry.a
 	@mkdir -p $(@D)
 	$(CC) $(COMMON_FLAGS) $(C89_FLAGS) -DECHO_DEBUG=LWIP_DBG_OFF \
 	    -I$(ROOT)/examples/STM32-LWIP/Inc \
 	    -c $< -o $@
 
-$(BUILD_DIR)/tls/main.o: main.c | check-paths
+$(BUILD_DIR)/tls/main.o: main.c | check-paths \
+    $(WOLFSENTRY_BUILD)/libwolfsentry.a
 	@mkdir -p $(@D)
 	$(CC) $(COMMON_FLAGS) $(TLS_C89_FLAGS) -DM33MU_EXAMPLE_TLS \
 	    -DWOLFSSL_USER_SETTINGS -I$(ROOT)/examples/STM32-LWIP-WOLFSSL/Inc \
 	    -I$(WOLFSSL_TOP) -c $< -o $@
 
-$(BUILD_DIR)/basic/%.o: $(ROOT)/examples/STM32-LWIP/Src/%.c | check-paths
+$(BUILD_DIR)/basic/%.o: $(ROOT)/examples/STM32-LWIP/Src/%.c | check-paths \
+    $(WOLFSENTRY_BUILD)/libwolfsentry.a
 	@mkdir -p $(@D)
 	$(CC) $(COMMON_FLAGS) $(C89_FLAGS) -DECHO_DEBUG=LWIP_DBG_OFF \
 	    -I$(ROOT)/examples/STM32-LWIP/Inc \
 	    -c $< -o $@
 
-$(BUILD_DIR)/tls/%.o: $(ROOT)/examples/STM32-LWIP-WOLFSSL/Src/%.c | check-paths
+$(BUILD_DIR)/tls/%.o: $(ROOT)/examples/STM32-LWIP-WOLFSSL/Src/%.c | check-paths \
+    $(WOLFSENTRY_BUILD)/libwolfsentry.a
 	@mkdir -p $(@D)
 	$(CC) $(COMMON_FLAGS) $(TLS_C89_FLAGS) -DM33MU_EXAMPLE_TLS \
 	    -DWOLFSSL_USER_SETTINGS -I$(ROOT)/examples/STM32-LWIP-WOLFSSL/Inc \

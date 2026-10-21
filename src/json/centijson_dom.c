@@ -61,7 +61,7 @@
 
 static void *json_malloc(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator), size_t size) {
     if (allocator)
-        return allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), size);
+        return allocator->malloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator->context), size);
     else
         return NULL;
 }

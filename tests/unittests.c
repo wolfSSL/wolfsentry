@@ -4238,6 +4238,38 @@ static int test_user_addr_families(void) {
 #include "wolfsentry/wolfsentry_json.h"
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
 #include <wolfsentry/centijson_dom.h>
+
+static int test_dom_allocator_marker;
+static int test_dom_allocator_context_ok;
+static int test_dom_allocator_malloc_calls;
+
+static void *test_dom_allocator_malloc(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t size)
+{
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    ++test_dom_allocator_malloc_calls;
+    if (context != (void *)&test_dom_allocator_marker)
+        test_dom_allocator_context_ok = 0;
+    return malloc(size);
+}
+
+static void test_dom_allocator_free(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr)
+{
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    if (context != (void *)&test_dom_allocator_marker)
+        test_dom_allocator_context_ok = 0;
+    free(ptr);
+}
+
+static void *test_dom_allocator_realloc(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr, size_t size)
+{
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    if (context != (void *)&test_dom_allocator_marker)
+        test_dom_allocator_context_ok = 0;
+    return realloc(ptr, size);
+}
 #endif
 
 static int test_json(const char *fname, const char *extra_fname) {
@@ -5186,6 +5218,42 @@ static int test_json(const char *fname, const char *extra_fname) {
 
         WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(
             json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &dupnest_root)));
+    }
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    /* A custom allocator must receive its own context pointer, not the
+     * allocator object, as the first argument to its callbacks. */
+    {
+        static const char ctx_doc[] = "{ \"a\" : [ 1, 2, 3 ] }";
+        static const JSON_CONFIG ctx_config = {
+            65536, 1000, 20, WOLFSENTRY_KV_MAX_VALUE_BYTES,
+            WOLFSENTRY_MAX_LABEL_BYTES, 10, JSON_NOSCALARROOT
+        };
+        struct wolfsentry_allocator ctx_allocator;
+        JSON_VALUE ctx_root;
+        JSON_INPUT_POS ctx_pos;
+
+        ctx_allocator.context = &test_dom_allocator_marker;
+        ctx_allocator.malloc = test_dom_allocator_malloc;
+        ctx_allocator.free = test_dom_allocator_free;
+        ctx_allocator.realloc = test_dom_allocator_realloc;
+        ctx_allocator.memalign = NULL;
+        ctx_allocator.free_aligned = NULL;
+
+        test_dom_allocator_context_ok = 1;
+        test_dom_allocator_malloc_calls = 0;
+
+        WOLFSENTRY_EXIT_ON_TRUE(
+            json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_allocator),
+                (const unsigned char *)ctx_doc, strlen(ctx_doc), &ctx_config,
+                0, &ctx_root, &ctx_pos) < 0);
+
+        WOLFSENTRY_EXIT_ON_FALSE(test_dom_allocator_malloc_calls > 0);
+        WOLFSENTRY_EXIT_ON_FALSE(test_dom_allocator_context_ok == 1);
+
+        WOLFSENTRY_EXIT_ON_TRUE(
+            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_allocator), &ctx_root) < 0);
     }
 #endif /* WOLFSENTRY_HAVE_JSON_DOM */
 

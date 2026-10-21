@@ -1170,6 +1170,7 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
 #ifndef NO_FILESYSTEM
 /* reads file size, allocates buffer, reads into buffer, returns buffer */
 #include <stdio.h>
+#define LOAD_FILE_MAX_SZ (64 * 1024 * 1024)
 static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
 {
     int ret;
@@ -1192,9 +1193,9 @@ static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
     }
 
     fseek(lFile, 0, SEEK_END);
-    fileSz = (int)ftell(lFile);
+    fileSz = ftell(lFile);
     rewind(lFile);
-    if (fileSz  > 0) {
+    if ((fileSz > 0) && (fileSz <= (long int)LOAD_FILE_MAX_SZ)) {
         *bufLen = (size_t)fileSz;
         *buf = (unsigned char*)malloc(*bufLen);
         if (*buf == NULL) {

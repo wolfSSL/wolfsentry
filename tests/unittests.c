@@ -5739,6 +5739,53 @@ static int test_cjvalue_clone_empty_array(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct w
     return 0;
 }
 
+static int test_cjvalue_compatible_lossy(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE v;
+
+    /* A finite double outside the float range is not float-compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_double(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, 1e308) < 0);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_FLOAT));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* A small double is float-compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_double(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, 2.0) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_is_compatible(&v, JSON_VALUE_FLOAT));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* 2^24 + 1 is not exactly representable in a float. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int64(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, (int64_t)16777217) < 0);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_FLOAT));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* 2^24 + 2 is exactly representable in a float and must stay compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int64(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, (int64_t)16777218) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_is_compatible(&v, JSON_VALUE_FLOAT));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* A small integer is float-compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, (int32_t)1000) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_is_compatible(&v, JSON_VALUE_FLOAT));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* 2^53 + 1 is not exactly representable in a double. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_uint64(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, (uint64_t)9007199254740993ULL) < 0);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_DOUBLE));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* 2^53 + 2 is exactly representable in a double and must stay compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_uint64(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, (uint64_t)9007199254740994ULL) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_is_compatible(&v, JSON_VALUE_DOUBLE));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* A small integer is double-compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, (int32_t)5) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_is_compatible(&v, JSON_VALUE_DOUBLE));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5759,6 +5806,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_clone_empty_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_compatible_lossy(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

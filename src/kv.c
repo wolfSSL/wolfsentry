@@ -27,6 +27,7 @@
 #endif
 
 #include <float.h>
+#include <limits.h>
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_KV_C
 
@@ -1072,8 +1073,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_string(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_kv_pair_internal *kv;
-    if (value_len < 0)
-        value_len = (int)strlen(value);
+    if (value_len < 0) {
+        size_t value_strlen = strlen(value);
+        if (value_strlen > (size_t)WOLFSENTRY_KV_MAX_VALUE_BYTES)
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        value_len = (int)value_strlen;
+    }
     if (value_len > WOLFSENTRY_KV_MAX_VALUE_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, value_len + 1, &kv)) < 0)
@@ -1146,8 +1151,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_bytes_base64(
     wolfsentry_errcode_t ret;
     int decoded_len;
     struct wolfsentry_kv_pair_internal *kv;
-    if (value_len < 0)
-        value_len = (int)strlen(value);
+    if (value_len < 0) {
+        size_t value_strlen = strlen(value);
+        if (value_strlen > (size_t)INT_MAX)
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        value_len = (int)value_strlen;
+    }
     decoded_len = WOLFSENTRY_BASE64_DECODED_BUFSPC(value, value_len);
     if (decoded_len > WOLFSENTRY_KV_MAX_VALUE_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);

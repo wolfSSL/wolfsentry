@@ -116,6 +116,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
         goto out;
     }
 
+    memset(bynumber, 0, sizeof *bynumber);
+
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     byname_size = sizeof *byname + (size_t)family_byname_len + 1;
     if ((byname = (struct wolfsentry_addr_family_byname *)WOLFSENTRY_MALLOC(byname_size)) == NULL) {
@@ -124,7 +126,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
     }
 #endif
 
-    memset(bynumber, 0, sizeof *bynumber);
     bynumber->number = family_bynumber;
     bynumber->parser = parser;
     bynumber->formatter = formatter;

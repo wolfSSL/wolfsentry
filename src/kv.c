@@ -443,7 +443,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
 #endif
         break;
     case WOLFSENTRY_KV_FLOAT:
-        *out_len = snprintf(out, out_space, "%.10f", WOLFSENTRY_KV_V_FLOAT(kv));
+        *out_len = snprintf(out, out_space, "%.17g", WOLFSENTRY_KV_V_FLOAT(kv));
         break;
     case WOLFSENTRY_KV_STRING: {
 #ifndef WOLFSENTRY_HAVE_JSON_DOM

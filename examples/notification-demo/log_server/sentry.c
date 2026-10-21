@@ -551,10 +551,10 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         if ((res_string = wolfsentry_action_res_assoc_by_flag(*action_results, res_bit)) != NULL) {
             ++n_res_bits;
             if (n_res_bits > 1) {
+                if (msgbuf_space_left <= 0)
+                    WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
                 *msgbuf_ptr++ = ',';
                 --msgbuf_space_left;
-                if (msgbuf_space_left < 0)
-                    WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
             }
             msgbuf_len = snprintf(msgbuf_ptr, (size_t)msgbuf_space_left, "\"%s\"", res_string);
             msgbuf_space_left -= msgbuf_len;

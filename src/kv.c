@@ -257,6 +257,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_1(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const struct wolfsentry_kv_pair_internal *kv_template,
+    int take_reference,
     struct wolfsentry_kv_pair_internal **kv)
 {
     wolfsentry_errcode_t ret;
@@ -272,6 +273,13 @@ static wolfsentry_errcode_t wolfsentry_kv_get_1(
     else if ((WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_NONE) &&
         (WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_TYPE(&ret_kv->kv)))
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(WRONG_TYPE);
+    /* take the reference while the shared lock is still held, so a concurrent
+     * delete cannot free the entry between lookup and increment.
+     */
+    if (take_reference) {
+        WOLFSENTRY_REFCOUNT_INCREMENT(ret_kv->header.refcount, ret);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+    }
     *kv = ret_kv;
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
@@ -289,7 +297,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_2(
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     kv_template->kv.v_type = type;
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 0 /* take_reference */, kv);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -300,11 +308,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_reference_1(
     const struct wolfsentry_kv_pair_internal *kv_template,
     struct wolfsentry_kv_pair_internal **kv)
 {
-    wolfsentry_errcode_t ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_REFCOUNT_INCREMENT((*kv)->header.refcount, ret);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 1 /* take_reference */, kv));
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_reference(
@@ -338,7 +342,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_type(
     struct wolfsentry_kv_pair_internal *kv = NULL;
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 0 /* take_reference */, &kv);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *type = WOLFSENTRY_KV_TYPE(&kv->kv);
@@ -545,7 +549,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_delete(
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &old);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 0 /* take_reference */, &old);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     if (old->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY)

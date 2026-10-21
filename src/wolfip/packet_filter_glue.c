@@ -582,6 +582,10 @@ static wolfsentry_errcode_t wolfip_apply_masks(
     } else {
         wolfIP_filter_set_callback(NULL, NULL);
         wolfip_filter_context = NULL;
+        /* release ownership of the cleanup registration so the next context to
+         * install receives its own cleanup hook rather than relying on a stale
+         * flag bound to a context that may since be torn down. */
+        wolfip_cleanup_registered = 0;
     }
 
     wolfIP_filter_set_eth_mask(wolfip_mask_eth);

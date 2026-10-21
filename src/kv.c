@@ -722,7 +722,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set_validator(
         ret = wolfsentry_table_map(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_table->header, (wolfsentry_map_function_t)apply_validator, (void *)&context, action_results);
         WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
-    WOLFSENTRY_ATOMIC_STORE(wolfsentry->user_values->validator, validator);
+    WOLFSENTRY_ATOMIC_STORE(kv_table->validator, validator);
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 

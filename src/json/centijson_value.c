@@ -320,30 +320,67 @@ json_value_path(JSON_VALUE* root, const char* path)
 {
     const unsigned char* token_beg = (const unsigned char *)path;
     const unsigned char* token_end;
+    const unsigned char* p;
     JSON_VALUE* v = root;
+    size_t path_index;
+    size_t arr_size;
+    int negative;
+    int have_digit;
 
     while(1) {
         token_end = token_beg;
         while(*token_end != '\0'  &&  *token_end != '/')
             token_end++;
 
-        if(token_end - token_beg > 2  &&  token_beg[0] == '['  &&  token_end[-1] == ']') {
-            size_t path_index = 0;
+        p = token_beg;
 
-            token_beg++;
-            while('0' <= *token_beg  &&  *token_beg <= '9') {
-                path_index = (path_index * 10U) + (*token_beg - (unsigned)'0');
-                token_beg++;
-            }
-            if(*token_beg != ']')
+        /* Optional leading dictionary key, up to the first '[' or token end. */
+        if(p < token_end  &&  *p != '[') {
+            const unsigned char* key_end = p;
+            while(key_end < token_end  &&  *key_end != '[')
+                key_end++;
+            v = json_value_dict_get_(v, p, (size_t)(key_end - p));
+            if(v == NULL)
                 return NULL;
-
-            v = json_value_array_get(v, path_index);
-        } else if(token_end - token_beg > 0) {
-            v = json_value_dict_get_(v, token_beg, (size_t)(token_end - token_beg));
+            p = key_end;
         }
 
-        if(v == NULL)
+        /* Zero or more attached array indexes "[n]", where n may be negative
+         * (relative to the array length). */
+        while(p < token_end  &&  *p == '[') {
+            p++;
+            negative = 0;
+            if(*p == '-') {
+                negative = 1;
+                p++;
+            }
+            path_index = 0;
+            have_digit = 0;
+            while('0' <= *p  &&  *p <= '9') {
+                size_t digit = (size_t)(*p - (unsigned char)'0');
+                if(path_index > (SIZE_MAX - digit) / 10U)
+                    return NULL;
+                path_index = (path_index * 10U) + digit;
+                have_digit = 1;
+                p++;
+            }
+            if((! have_digit)  ||  (*p != ']'))
+                return NULL;
+            p++;
+
+            if(negative) {
+                arr_size = json_value_array_size(v);
+                if((path_index == 0)  ||  (path_index > arr_size))
+                    return NULL;
+                path_index = arr_size - path_index;
+            }
+            v = json_value_array_get(v, path_index);
+            if(v == NULL)
+                return NULL;
+        }
+
+        /* The token must be fully consumed; reject trailing bytes. */
+        if(p != token_end)
             return NULL;
 
         if(*token_end == '\0')

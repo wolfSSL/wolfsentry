@@ -5651,6 +5651,69 @@ static int test_cjvalue_array_remove_range(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct 
     return 0;
 }
 
+static int test_cjvalue_clone_array_partial(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE src;
+    JSON_VALUE clone;
+    JSON_VALUE *elem;
+    JSON_VALUE *inner;
+    unsigned char small_str[50];
+    unsigned char big_str[256];
+    int i;
+    int ret;
+
+    memset(small_str, 'a', sizeof small_str);
+    memset(big_str, 'b', sizeof big_str);
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src) < 0);
+    elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src);
+    WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_string_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, small_str, sizeof small_str) < 0);
+    elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src);
+    WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_string_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, big_str, sizeof big_str) < 0);
+
+    json_value_init_null(&clone);
+
+    /* Force the clone of the second (large) element to fail partway. */
+    test_cjv_fail_big = 200;
+    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src, &clone);
+    test_cjv_fail_big = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+
+    /* The failed clone must finalize the already-cloned prefix, leaking nothing. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    /* Also exercise failure on a partially-built nested aggregate element: a
+     * nested array whose element buffer allocation fails after its payload was
+     * allocated must not leak that payload. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src) < 0);
+    inner = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src);
+    WOLFSENTRY_EXIT_ON_TRUE(inner == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), inner) < 0);
+    for (i = 0; i < 16; ++i) {
+        elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), inner);
+        WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, i) < 0);
+        inner = json_value_array_get(&src, 0);
+        WOLFSENTRY_EXIT_ON_TRUE(inner == NULL);
+    }
+
+    json_value_init_null(&clone);
+    /* The clone of the 16-slot inner array needs a 256-byte element buffer,
+     * which fails after the inner array payload has been allocated. */
+    test_cjv_fail_big = 200;
+    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src, &clone);
+    test_cjv_fail_big = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5665,6 +5728,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_array_remove_range(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_clone_array_partial(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

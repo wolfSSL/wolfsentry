@@ -1917,38 +1917,45 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
             const ARRAY* src_a = json_value_array_payload((JSON_VALUE *)node);
             size_t n = json_value_array_size(node);
             const JSON_VALUE* src_values = json_value_array_get_all(node);
-            ARRAY* dest_a;
-            JSON_VALUE* dest_values;
+            ARRAY* dest_a = NULL;
+            JSON_VALUE* dest_values = NULL;
             size_t i;
 
             ret = json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);
-            if (ret < 0)
-                break;
 
-            dest_a = json_value_array_payload(clone);
-            if (! dest_a) {
-                ret = JSON_ERR_INTERNAL;
-                break;
+            if (ret == 0) {
+                dest_a = json_value_array_payload(clone);
+                if (dest_a == NULL)
+                    ret = JSON_ERR_INTERNAL;
             }
 
-            ret = json_value_array_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
-                                           dest_a, src_a->alloc);
-            if (ret < 0)
-                break;
+            if (ret == 0)
+                ret = json_value_array_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
+                                               dest_a, src_a->alloc);
 
-            dest_values = json_value_array_get_all(clone);
-            if (! dest_values) {
-                ret = JSON_ERR_INTERNAL;
-                break;
+            if (ret == 0) {
+                dest_values = json_value_array_get_all(clone);
+                if (dest_values == NULL)
+                    ret = JSON_ERR_INTERNAL;
             }
 
-            for(i = 0; i < n; i++) {
-                ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_values[i], &dest_values[i]);
-                if (ret < 0)
-                    break;
+            if (ret == 0) {
+                for(i = 0; i < n; i++) {
+                    json_value_init_null(&dest_values[i]);
+                    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_values[i], &dest_values[i]);
+                    if (ret < 0)
+                        break;
+                    dest_a->size = i + 1;
+                }
             }
 
-            dest_a->size = src_a->size;
+            /* On any failure finalize the clone so the initialized prefix and
+             * the array allocation are released, not leaked. */
+            if (ret < 0) {
+                int ret2 = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);
+                if (ret2 < 0)
+                    WOLFSENTRY_WARN("json_value_fini: %s\n", json_error_str(ret2));
+            }
 
             break;
         }

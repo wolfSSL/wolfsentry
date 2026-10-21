@@ -215,7 +215,9 @@ static int wolfip_filter_ethernet(
         action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     default:
-        return 0;
+        WOLFSENTRY_WARN("wolfIP filter: denying unmapped event reason %d\n",
+                        (int)event->reason);
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_link_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -267,7 +269,9 @@ static int wolfip_filter_ipv4(
         action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
         break;
     default:
-        return 0;
+        WOLFSENTRY_WARN("wolfIP filter: denying unmapped event reason %d\n",
+                        (int)event->reason);
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -367,7 +371,9 @@ static int wolfip_filter_tcp(
         action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         break;
     default:
-        return 0;
+        WOLFSENTRY_WARN("wolfIP filter: denying unmapped event reason %d\n",
+                        (int)event->reason);
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -453,7 +459,9 @@ static int wolfip_filter_udp(
         action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         break;
     default:
-        return 0;
+        WOLFSENTRY_WARN("wolfIP filter: denying unmapped event reason %d\n",
+                        (int)event->reason);
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -530,7 +538,9 @@ static int wolfip_filter_icmp(
         action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         break;
     default:
-        return 0;
+        WOLFSENTRY_WARN("wolfIP filter: denying unmapped event reason %d\n",
+                        (int)event->reason);
+        return -WOLFIP_EACCES;
     }
 
     wolfip_set_ipv4_sockaddrs(&remote.remote, &local.local, event, outbound);
@@ -544,8 +554,10 @@ static int wolfip_filter_with_wolfsentry(void *arg, const struct wolfIP_filter_e
 {
     struct wolfsentry_context *wolfsentry = (struct wolfsentry_context *)arg;
 
-    if ((wolfsentry == NULL) || (event == NULL))
+    if (event == NULL)
         return 0;
+    if (wolfsentry == NULL)
+        return -WOLFIP_EACCES;
 
     switch (event->meta.ip_proto) {
     case WOLFIP_FILTER_PROTO_ETH:
@@ -559,7 +571,9 @@ static int wolfip_filter_with_wolfsentry(void *arg, const struct wolfIP_filter_e
     case WOLFIP_FILTER_PROTO_ICMP:
         return wolfip_filter_icmp(wolfsentry, event);
     default:
-        return 0;
+        WOLFSENTRY_WARN("wolfIP filter: denying unmapped protocol %d\n",
+                        (int)event->meta.ip_proto);
+        return -WOLFIP_EACCES;
     }
 }
 

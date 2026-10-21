@@ -473,6 +473,10 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     issuerHash = wolfSSL_X509_issuer_name_hash(store->current_cert);
     issuerName = wolfSSL_X509_NAME_oneline(
             wolfSSL_X509_get_issuer_name(store->current_cert), 0, 0);
+    if (issuerName == NULL) {
+        fprintf(stderr, "ERROR: %s L%d null issuer name.\n", __FILE__,__LINE__);
+        return WOLFSSL_FAILURE;
+    }
 
     #ifdef DEBUG_TLS
     subjectCN = wolfSSL_X509_get_subjectCN(store->current_cert);

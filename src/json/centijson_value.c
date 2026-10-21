@@ -1847,9 +1847,15 @@ json_value_dict_clean(
     if(d == NULL)
         return 0;
 
-    stack = (RBTREE **)malloc(rbtree_stack_size_needed(d));
-    if (stack == NULL)
-        return JSON_ERR_OUTOFMEMORY;
+    /* An empty tree needs no stack; a conforming allocator may return NULL for a
+     * zero-size request, so do not treat that as an error. */
+    if(d->root != NULL) {
+        stack = (RBTREE **)malloc(rbtree_stack_size_needed(d));
+        if (stack == NULL)
+            return JSON_ERR_OUTOFMEMORY;
+    } else {
+        stack = NULL;
+    }
 
     stack_size = json_value_dict_leftmost_path(stack, d->root);
 
@@ -2015,8 +2021,13 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                 }
             } else {
                 int stack_size;
-                RBTREE **stack = (RBTREE **)malloc(rbtree_stack_size_needed(src_dict)); /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
-                if (! stack) {
+                RBTREE **stack = NULL;
+                /* put the stack on the heap to avoid runaway growth of the C
+                 * stack on deep JSON trees; an empty tree needs none, and a
+                 * zero-size allocation may legitimately return NULL. */
+                if (src_dict->root != NULL)
+                    stack = (RBTREE **)malloc(rbtree_stack_size_needed(src_dict));
+                if ((src_dict->root != NULL) && (stack == NULL)) {
                     ret = JSON_ERR_OUTOFMEMORY;
                 } else {
                     stack_size = json_value_dict_leftmost_path(stack, src_dict->root);

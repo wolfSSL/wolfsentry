@@ -246,11 +246,22 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set(
             WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
             WOLFSENTRY_UNLOCK_AND_RETURN_OK;
         }
-        if (((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0) ||
-            ((ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL)) < 0))
-        {
+        if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0)
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+        /* insert the replacement before dropping the old entry, so a failure
+         * on either step never leaves the key absent; restore the old entry if
+         * the insert fails.
+         */
+        if ((ret = wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv)) < 0) {
+            /* re-insert with a fresh id, since the delete released the old one;
+             * drop it if even that fails, so the detached record is not leaked.
+             */
+            if (wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, old) < 0)
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL));
             WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
         }
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL));
+        WOLFSENTRY_UNLOCK_AND_RETURN_OK;
     }
 
     ret = wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv);

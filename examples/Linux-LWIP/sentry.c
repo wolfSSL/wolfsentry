@@ -45,113 +45,143 @@ static wolfsentry_errcode_t test_action(
 int sentry_init()
 {
     wolfsentry_errcode_t ret;
+    wolfsentry_errcode_t fini_ret;
     wolfsentry_ent_id_t id;
-
+    char buf[512], err_buf[512];
+    struct wolfsentry_json_process_state *jps = NULL;
+    FILE *f = NULL;
+    size_t n;
     struct wolfsentry_eventconfig config = { .route_private_data_size = 32, .route_private_data_alignment = 16 };
+
     ret =  wolfsentry_init(wolfsentry_build_settings, WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(NULL /* hpi */, NULL /* thread */), &config,
                            &wolfsentry);
     if (ret < 0) {
         fprintf(stderr, "wolfsentry_init() returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
         fprintf(stderr, "unable to initialize wolfSentry");
+        return ret;
     }
 
-    /* Insert the possible actions into wolfSentry */
-    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-                                   "handle-insert",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
-
-    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-                                   "handle-delete",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
-
-    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-                                   "handle-match",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
-
-    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-                                   "notify-on-match",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
-
-    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-                                   "handle-connect",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
-
-    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-                                   "handle-connect2",
-                                   WOLFSENTRY_LENGTH_NULL_TERMINATED,
-                                   WOLFSENTRY_ACTION_FLAG_NONE,
-                                   test_action,
-                                   NULL,
-                                   &id);
-
-
-    char buf[512], err_buf[512];
-    struct wolfsentry_json_process_state *jps;
+    /* Insert the possible actions into wolfSentry. On any failure fall through
+     * to the cleanup path at the bottom so the context is not leaked. */
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+                                       "handle-insert",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       WOLFSENTRY_ACTION_FLAG_NONE,
+                                       test_action,
+                                       NULL,
+                                       &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+                                       "handle-delete",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       WOLFSENTRY_ACTION_FLAG_NONE,
+                                       test_action,
+                                       NULL,
+                                       &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+                                       "handle-match",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       WOLFSENTRY_ACTION_FLAG_NONE,
+                                       test_action,
+                                       NULL,
+                                       &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+                                       "notify-on-match",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       WOLFSENTRY_ACTION_FLAG_NONE,
+                                       test_action,
+                                       NULL,
+                                       &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+                                       "handle-connect",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       WOLFSENTRY_ACTION_FLAG_NONE,
+                                       test_action,
+                                       NULL,
+                                       &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+                                       "handle-connect2",
+                                       WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                                       WOLFSENTRY_ACTION_FLAG_NONE,
+                                       test_action,
+                                       NULL,
+                                       &id);
 
     /* Open the config file */
-    FILE *f = fopen(wolfsentry_config_path, "r");
-
-    if (f == NULL) {
-        fprintf(stderr, "fopen(%s): %s\n",wolfsentry_config_path,strerror(errno));
-        fprintf(stderr, "unable to open wolfSentry config file");
+    if (ret >= 0) {
+        f = fopen(wolfsentry_config_path, "r");
+        if (f == NULL) {
+            fprintf(stderr, "fopen(%s): %s\n",wolfsentry_config_path,strerror(errno));
+            fprintf(stderr, "unable to open wolfSentry config file");
+            ret = -1;
+        }
     }
 
     /* Initalize the wolfSentry JSON parser */
-    if ((ret = wolfsentry_config_json_init(
-             WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-             WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
-             &jps)) < 0) {
-        fprintf(stderr, "wolfsentry_config_json_init() returned "
-                WOLFSENTRY_ERROR_FMT "\n",
-                WOLFSENTRY_ERROR_FMT_ARGS(ret));
-        fprintf(stderr, "error while initializing wolfSentry config parser");
+    if (ret >= 0) {
+        ret = wolfsentry_config_json_init(
+                 WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+                 WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+                 &jps);
+        if (ret < 0) {
+            fprintf(stderr, "wolfsentry_config_json_init() returned "
+                    WOLFSENTRY_ERROR_FMT "\n",
+                    WOLFSENTRY_ERROR_FMT_ARGS(ret));
+            fprintf(stderr, "error while initializing wolfSentry config parser");
+        }
     }
 
     /* wolfSentry uses a streaming reader/parser for the config file */
-    for (;;) {
-        /* Read some data from the config file */
-        size_t n = fread(buf, 1, sizeof buf, f);
-        if ((n < sizeof buf) && ferror(f)) {
-            fprintf(stderr, "fread(%s): %s\n",wolfsentry_config_path, strerror(errno));
-            fprintf(stderr, "error while reading wolfSentry config file");
-        }
+    if (ret >= 0) {
+        for (;;) {
+            /* Read some data from the config file */
+            n = fread(buf, 1, sizeof buf, f);
+            if ((n < sizeof buf) && ferror(f)) {
+                fprintf(stderr, "fread(%s): %s\n",wolfsentry_config_path, strerror(errno));
+                fprintf(stderr, "error while reading wolfSentry config file");
+                ret = -1;
+                break;
+            }
 
-        /* Send the read data into the JSON parser */
-        ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
-        if (ret < 0) {
+            /* Send the read data into the JSON parser */
+            ret = wolfsentry_config_json_feed(jps, buf, n, err_buf, sizeof err_buf);
+            if (ret < 0) {
+                fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
+                fprintf(stderr, "error while loading wolfSentry config file");
+                break;
+            }
+            if ((n < sizeof buf) && feof(f))
+                break;
+        }
+    }
+
+    /* Clean up the JSON parser. This also commits the parsed config, so its
+     * result matters on the success path. */
+    if (jps != NULL) {
+        fini_ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
+        if (fini_ret < 0) {
             fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
             fprintf(stderr, "error while loading wolfSentry config file");
+            if (ret >= 0)
+                ret = fini_ret;
         }
-        if ((n < sizeof buf) && feof(f))
-            break;
     }
-    fclose(f);
 
-    /* Clean up the JSON parser */
-    if ((ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf)) < 0) {
-        fprintf(stderr, "%.*s\n", (int)sizeof err_buf, err_buf);
-        fprintf(stderr, "error while loading wolfSentry config file");
+    if (f != NULL)
+        fclose(f);
+
+    /* Any failure after wolfsentry_init() must release the context. wolfSentry
+     * success codes are nonnegative but not necessarily zero, so normalize. */
+    if (ret < 0) {
+        if (wolfsentry != NULL)
+            (void)wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&wolfsentry, NULL));
+        return ret;
     }
 
     return 0;

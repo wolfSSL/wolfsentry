@@ -56,6 +56,7 @@
 #endif
 
 #include <stdlib.h>
+#include <float.h>
 #ifndef WOLFSENTRY_NO_ALLOCA
 #include <alloca.h>
 #endif
@@ -255,6 +256,27 @@ json_value_type(const JSON_VALUE* v)
     return (JSON_VALUE_TYPE)(v->data.data_bytes[0] & TYPE_MASK);
 }
 
+static uint64_t json_int_magnitude(int64_t x)
+{
+    return (x < 0) ? (~(uint64_t)x + 1U) : (uint64_t)x;
+}
+
+/* An integer is exactly representable in a binary floating type with
+ * mantissa_bits of precision when its significant bits (ignoring trailing
+ * zeros) fit in that precision. */
+static int json_int_fits_mantissa(uint64_t u, int mantissa_bits)
+{
+    int bits = 0;
+
+    while((u != 0)  &&  ((u & 1U) == 0))
+        u >>= 1;
+    while(u != 0) {
+        ++bits;
+        u >>= 1;
+    }
+    return bits <= mantissa_bits;
+}
+
 WOLFSENTRY_API int
 json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
 {
@@ -265,22 +287,26 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
      * long as the conversion does not loose much information. */
     switch(json_value_type(v)) {
         case JSON_VALUE_INT32:
-            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa(json_int_magnitude(json_value_int32(v)), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_UINT32 && json_value_int32(v) >= 0)  ||
                    (type == JSON_VALUE_UINT64 && json_value_int32(v) >= 0);
 
         case JSON_VALUE_UINT32:
-            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_UINT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_UINT64 || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa((uint64_t)json_value_uint32(v), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_INT32 && json_value_uint32(v) <= INT32_MAX);
 
         case JSON_VALUE_INT64:
-            return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_DOUBLE && json_int_fits_mantissa(json_int_magnitude(json_value_int64(v)), DBL_MANT_DIG))  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa(json_int_magnitude(json_value_int64(v)), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_INT32 && json_value_int64(v) >= INT32_MIN && json_value_int64(v) <= INT32_MAX)  ||
                    (type == JSON_VALUE_UINT32 && json_value_int64(v) >= 0 && json_value_int64(v) <= UINT32_MAX)  ||
                    (type == JSON_VALUE_UINT64 && json_value_int64(v) >= 0);
 
         case JSON_VALUE_UINT64:
-            return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_DOUBLE && json_int_fits_mantissa(json_value_uint64(v), DBL_MANT_DIG))  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa(json_value_uint64(v), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_INT32 && json_value_uint64(v) <= INT32_MAX)  ||
                    (type == JSON_VALUE_UINT32 && json_value_uint64(v) <= UINT32_MAX)  ||
                    (type == JSON_VALUE_INT64 && json_value_uint64(v) <= INT64_MAX);
@@ -293,7 +319,7 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
                    (type == JSON_VALUE_UINT64 && json_value_float(v) == (float)json_value_uint64(v));
 
         case JSON_VALUE_DOUBLE:
-            return (type == JSON_VALUE_FLOAT)  ||
+            return (type == JSON_VALUE_FLOAT && json_value_double(v) >= -(double)FLT_MAX && json_value_double(v) <= (double)FLT_MAX && (double)(float)json_value_double(v) == json_value_double(v))  ||
                    (type == JSON_VALUE_INT32 && json_value_double(v) == (double)json_value_int32(v))  ||
                    (type == JSON_VALUE_UINT32 && json_value_double(v) == (double)json_value_uint32(v))  ||
                    (type == JSON_VALUE_INT64 && json_value_double(v) == (double)json_value_int64(v))  ||

@@ -500,6 +500,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
      */
     if (WOLFSENTRY_ATOMIC_LOAD(wolfsentry->addr_families_byname->header.n_ents) > 0) {
         struct wolfsentry_addr_family_bynumber *addr_family;
+        wolfsentry_addr_family_t found_number = WOLFSENTRY_AF_UNSPEC;
         WOLFSENTRY_SHARED_OR_RETURN();
         ret = wolfsentry_addr_family_get_byname_1(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -507,9 +508,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
             family_name,
             family_name_len,
             &addr_family);
+        if (ret >= 0)
+            found_number = addr_family->number;
         WOLFSENTRY_UNLOCK_FOR_RETURN();
         if (ret >= 0) {
-            *family_number = addr_family->number;
+            *family_number = found_number;
             WOLFSENTRY_RETURN_OK;
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
             WOLFSENTRY_ERROR_RERETURN(ret);

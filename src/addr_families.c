@@ -105,24 +105,20 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
         family_byname_len = (int)strlen(family_byname);
     if (family_byname_len == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (family_byname_len > WOLFSENTRY_MAX_LABEL_BYTES) {
-        ret = WOLFSENTRY_ERROR_ENCODE(STRING_ARG_TOO_LONG);
-        goto out;
-    }
+    if (family_byname_len > WOLFSENTRY_MAX_LABEL_BYTES)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
 #endif
 
-    if ((bynumber = (struct wolfsentry_addr_family_bynumber *)WOLFSENTRY_MALLOC(sizeof *bynumber)) == NULL) {
-        ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
-        goto out;
-    }
+    if ((bynumber = (struct wolfsentry_addr_family_bynumber *)WOLFSENTRY_MALLOC(sizeof *bynumber)) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
 
     memset(bynumber, 0, sizeof *bynumber);
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     byname_size = sizeof *byname + (size_t)family_byname_len + 1;
     if ((byname = (struct wolfsentry_addr_family_byname *)WOLFSENTRY_MALLOC(byname_size)) == NULL) {
-        ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
-        goto out;
+        WOLFSENTRY_FREE(bynumber);
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     }
 #endif
 
@@ -143,8 +139,13 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
 #endif
 
     ret = WOLFSENTRY_MUTEX_EX(wolfsentry);
-    if (ret < 0)
-        goto out;
+    if (ret < 0) {
+        WOLFSENTRY_FREE(bynumber);
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+        WOLFSENTRY_FREE(byname);
+#endif
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
 
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header)) < 0)
         goto out;
@@ -166,6 +167,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
 
   out:
 
+    /* reached only after the context lock is held, so unlocking is correct. */
     if (ret < 0) {
         if (bynumber != NULL) {
             if (bynumber->header.id != WOLFSENTRY_ENT_ID_NONE)

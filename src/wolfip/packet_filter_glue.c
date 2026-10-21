@@ -448,6 +448,10 @@ static int wolfip_filter_udp(
         action_results = WOLFSENTRY_ACTION_RES_STOPPED_LISTENING |
             WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
         break;
+    case WOLFIP_FILT_DISSOCIATE:
+        route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
+        action_results = WOLFSENTRY_ACTION_RES_CLOSED;
+        break;
     default:
         return 0;
     }
@@ -509,6 +513,21 @@ static int wolfip_filter_icmp(
     case WOLFIP_FILT_OUTBOUND_ERR:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
         action_results = WOLFSENTRY_ACTION_RES_SOCK_ERROR;
+        break;
+    case WOLFIP_FILT_BINDING:
+        route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN |
+            WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD |
+            WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD;
+        action_results = WOLFSENTRY_ACTION_RES_BINDING |
+            WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES;
+        /* socket lifecycle events carry the local endpoint in src_ip; orient
+         * the sockaddrs as locally originated so the bound address lands in
+         * local, while route_flags keeps the inbound binding semantics. */
+        outbound = 1;
+        break;
+    case WOLFIP_FILT_DISSOCIATE:
+        route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
+        action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         break;
     default:
         return 0;

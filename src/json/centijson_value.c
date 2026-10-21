@@ -1623,6 +1623,7 @@ json_value_dict_remove_(
     int path_len = 0;
     int cmp;
     int ret;
+    int ret2;
 
     if (node == NULL)
         return -1;
@@ -1740,24 +1741,24 @@ json_value_dict_remove_(
         else
             d->order_tail = node->order_prev;
     }
+    /* The node is already unlinked, so finalize both members best-effort, then
+     * always free it and decrement the size to keep the dictionary consistent. */
     ret = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->key);
-    if (ret < 0)
-        return ret;
-    ret = json_value_fini(
+    ret2 = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->json_value);
-    if (ret < 0)
-        return ret;
+    if (ret == 0)
+        ret = ret2;
     free(node);
     d->size--;
 
-    return 0;
+    return ret;
 }
 
 WOLFSENTRY_API int

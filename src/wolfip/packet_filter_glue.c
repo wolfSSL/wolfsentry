@@ -599,9 +599,13 @@ static wolfsentry_errcode_t wolfip_apply_masks(
 
 WOLFSENTRY_API_VOID wolfsentry_cleanup_wolfip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_IN, void *cleanup_arg)
 {
-    (void)wolfsentry;
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     (void)cleanup_arg;
+    /* a cleanup hook fires when its registering context is destroyed; only tear
+     * down the shared filter state if that context still owns it, so destroying
+     * a non-owner cannot silently disable a surviving owner's filtering. */
+    if ((wolfip_filter_context != NULL) && (wolfip_filter_context != wolfsentry))
+        return;
     wolfip_mask_eth = wolfip_mask_ip = wolfip_mask_icmp = wolfip_mask_tcp = wolfip_mask_udp = 0;
     wolfip_cleanup_registered = 0;
     wolfIP_filter_set_callback(NULL, NULL);

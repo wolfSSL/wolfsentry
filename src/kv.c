@@ -408,6 +408,86 @@ static int _json_value_dump_writer(const unsigned char* str, size_t size, void *
 }
 #endif
 
+#ifndef WOLFSENTRY_HAVE_JSON_DOM
+
+#define WOLFSENTRY_KV_EMIT_CHAR(c) do { if (needed < out_space) out[needed] = (char)(c); ++needed; } while (0)
+
+/* escape a KV string into a JSON string literal, mirroring json_dump_string in
+ * the DOM path, and return the snprintf-style length (excluding the null).
+ */
+static int wolfsentry_kv_render_string_escaped(
+    const char *in,
+    size_t in_len,
+    char *out,
+    size_t out_space)
+{
+    static const char hexdigits[] = "0123456789abcdef";
+    size_t in_i;
+    size_t needed = 0;
+    unsigned char c;
+
+    WOLFSENTRY_KV_EMIT_CHAR('"');
+    for (in_i = 0; in_i < in_len; ++in_i) {
+        c = (unsigned char)in[in_i];
+        switch (c) {
+        case '"':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('"');
+            break;
+        case '\\':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            break;
+        case '\n':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('n');
+            break;
+        case '\r':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('r');
+            break;
+        case '\t':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('t');
+            break;
+        case '\b':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('b');
+            break;
+        case '\f':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('f');
+            break;
+        default:
+            if (c < 0x20) {
+                WOLFSENTRY_KV_EMIT_CHAR('\\');
+                WOLFSENTRY_KV_EMIT_CHAR('u');
+                WOLFSENTRY_KV_EMIT_CHAR('0');
+                WOLFSENTRY_KV_EMIT_CHAR('0');
+                WOLFSENTRY_KV_EMIT_CHAR(hexdigits[(c >> 4) & 0xf]);
+                WOLFSENTRY_KV_EMIT_CHAR(hexdigits[c & 0xf]);
+            } else {
+                WOLFSENTRY_KV_EMIT_CHAR(c);
+            }
+            break;
+        }
+    }
+    WOLFSENTRY_KV_EMIT_CHAR('"');
+
+    if (out_space > 0) {
+        if (needed < out_space)
+            out[needed] = 0;
+        else
+            out[out_space - 1] = 0;
+    }
+
+    return (int)needed;
+}
+
+#undef WOLFSENTRY_KV_EMIT_CHAR
+
+#endif /* !WOLFSENTRY_HAVE_JSON_DOM */
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_pair *kv,
@@ -463,7 +543,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     }
     case WOLFSENTRY_KV_STRING: {
 #ifndef WOLFSENTRY_HAVE_JSON_DOM
-        *out_len = snprintf(out, out_space, "\"%.*s\"", (int)WOLFSENTRY_KV_V_STRING_LEN(kv), WOLFSENTRY_KV_V_STRING(kv));
+        *out_len = wolfsentry_kv_render_string_escaped(WOLFSENTRY_KV_V_STRING(kv), WOLFSENTRY_KV_V_STRING_LEN(kv), out, out_space);
         break;
 #else
         struct dump_buf_state dbs;

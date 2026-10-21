@@ -4258,6 +4258,47 @@ static int test_kv_render_nonfinite_float(void) {
 }
 #endif /* !WOLFSENTRY_C89 */
 
+#ifndef WOLFSENTRY_HAVE_JSON_DOM
+static int test_kv_render_string_escape(void) {
+    struct wolfsentry_context *wolfsentry;
+    char buf[64];
+    static const char raw[] = "a\"b\\c\nd";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "esc", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            raw, (int)(sizeof raw - 1),
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+
+    /* the rendered JSON string must not contain a raw control byte, and the
+     * quote, backslash and newline must all appear escaped.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(strchr(buf + 1, '\n') == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(strstr(buf, "\\\"") != NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(strstr(buf, "\\\\") != NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(strstr(buf, "\\n") != NULL);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* !WOLFSENTRY_HAVE_JSON_DOM */
+
 #endif /* TEST_USER_VALUES */
 
 #ifdef TEST_USER_ADDR_FAMILIES
@@ -6099,6 +6140,13 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif /* !WOLFSENTRY_C89 */
+#ifndef WOLFSENTRY_HAVE_JSON_DOM
+    ret = test_kv_render_string_escape();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_render_string_escape failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_USER_ADDR_FAMILIES

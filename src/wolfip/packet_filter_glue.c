@@ -364,7 +364,7 @@ static int wolfip_filter_tcp(
         break;
     case WOLFIP_FILT_DISSOCIATE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
-        action_results = WOLFSENTRY_ACTION_RES_DEROGATORY;
+        action_results = WOLFSENTRY_ACTION_RES_CLOSED;
         break;
     default:
         return 0;

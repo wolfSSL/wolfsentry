@@ -5903,6 +5903,34 @@ static int test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wo
     return 0;
 }
 
+static int test_cjvalue_empty_dict(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE d;
+    JSON_VALUE clone;
+    int ret;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &d) < 0);
+    json_value_init_null(&clone);
+
+    /* Cloning an empty dictionary must not require a zero-size allocation. */
+    test_cjv_zero_null = 1;
+    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &d, &clone);
+    test_cjv_zero_null = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(ret >= 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_type(&clone) == JSON_VALUE_DICT);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &clone) < 0);
+
+    /* Cleaning up an empty dictionary must not require a zero-size allocation. */
+    test_cjv_zero_null = 1;
+    ret = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &d);
+    test_cjv_zero_null = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(ret >= 0);
+
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5935,6 +5963,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_empty_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

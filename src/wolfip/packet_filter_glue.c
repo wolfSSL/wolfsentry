@@ -53,7 +53,13 @@ static int wolfip_cleanup_registered;
 
 static int wolfip_filter_with_wolfsentry(void *arg, const struct wolfIP_filter_event *event);
 
-static wolfsentry_errcode_t wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_IN);
+static wolfsentry_errcode_t wolfip_apply_masks(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    uint32_t new_mask_eth,
+    uint32_t new_mask_ip,
+    uint32_t new_mask_icmp,
+    uint32_t new_mask_tcp,
+    uint32_t new_mask_udp);
 
 static byte wolfip_if_idx_to_byte(unsigned int if_idx)
 {
@@ -537,21 +543,40 @@ static int wolfip_filter_with_wolfsentry(void *arg, const struct wolfIP_filter_e
     }
 }
 
-static wolfsentry_errcode_t wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_IN)
+static wolfsentry_errcode_t wolfip_apply_masks(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    uint32_t new_mask_eth,
+    uint32_t new_mask_ip,
+    uint32_t new_mask_icmp,
+    uint32_t new_mask_tcp,
+    uint32_t new_mask_udp)
 {
-    uint32_t combined = wolfip_mask_eth | wolfip_mask_ip | wolfip_mask_icmp |
-        wolfip_mask_tcp | wolfip_mask_udp;
+    uint32_t combined = new_mask_eth | new_mask_ip | new_mask_icmp |
+        new_mask_tcp | new_mask_udp;
     wolfsentry_errcode_t ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
+    /* validate ownership before mutating any shared state, so a rejected call
+     * cannot perturb the owning context's masks or callback (fail-open). the
+     * check applies on the disable path too. */
+    if ((wolfip_filter_context != NULL) && (wolfip_filter_context != wolfsentry))
+        return WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
+
     if (combined) {
-        if (wolfip_filter_context && (wolfip_filter_context != wolfsentry))
-            return WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
-        if (!wolfip_cleanup_registered) {
+        if (! wolfip_cleanup_registered) {
             ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_wolfip_filter_callbacks, NULL);
             if (ret < 0)
                 return ret;
             wolfip_cleanup_registered = 1;
         }
+    }
+
+    wolfip_mask_eth = new_mask_eth;
+    wolfip_mask_ip = new_mask_ip;
+    wolfip_mask_icmp = new_mask_icmp;
+    wolfip_mask_tcp = new_mask_tcp;
+    wolfip_mask_udp = new_mask_udp;
+
+    if (combined) {
         wolfip_filter_context = wolfsentry;
         wolfIP_filter_set_callback(wolfip_filter_with_wolfsentry, wolfsentry);
     } else {
@@ -592,8 +617,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_ethernet_ca
 
     WOLFSENTRY_MUTEX_OR_RETURN();
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    wolfip_mask_eth = ethernet_mask;
-    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT,
+        ethernet_mask, wolfip_mask_ip, wolfip_mask_icmp, wolfip_mask_tcp,
+        wolfip_mask_udp);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
@@ -605,8 +631,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_ip4_callbac
 
     WOLFSENTRY_MUTEX_OR_RETURN();
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    wolfip_mask_ip = ip_mask;
-    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT,
+        wolfip_mask_eth, ip_mask, wolfip_mask_icmp, wolfip_mask_tcp,
+        wolfip_mask_udp);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
@@ -618,8 +645,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_icmp_callba
 
     WOLFSENTRY_MUTEX_OR_RETURN();
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    wolfip_mask_icmp = icmp_mask;
-    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT,
+        wolfip_mask_eth, wolfip_mask_ip, icmp_mask, wolfip_mask_tcp,
+        wolfip_mask_udp);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
@@ -644,8 +672,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_tcp_callbac
 
     WOLFSENTRY_MUTEX_OR_RETURN();
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    wolfip_mask_tcp = wolfip_normalize_tcp_mask(tcp_mask);
-    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT,
+        wolfip_mask_eth, wolfip_mask_ip, wolfip_mask_icmp,
+        wolfip_normalize_tcp_mask(tcp_mask), wolfip_mask_udp);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
@@ -657,8 +686,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_udp_callbac
 
     WOLFSENTRY_MUTEX_OR_RETURN();
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    wolfip_mask_udp = udp_mask;
-    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT,
+        wolfip_mask_eth, wolfip_mask_ip, wolfip_mask_icmp, wolfip_mask_tcp,
+        udp_mask);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
@@ -674,12 +704,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_callbacks(
 
     WOLFSENTRY_MUTEX_OR_RETURN();
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    wolfip_mask_eth = ethernet_mask;
-    wolfip_mask_ip = ip_mask;
-    wolfip_mask_icmp = icmp_mask;
-    wolfip_mask_tcp = wolfip_normalize_tcp_mask(tcp_mask);
-    wolfip_mask_udp = udp_mask;
-    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT,
+        ethernet_mask, ip_mask, icmp_mask, wolfip_normalize_tcp_mask(tcp_mask),
+        udp_mask);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 

@@ -1509,6 +1509,59 @@ out:
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
+static wolfsentry_errcode_t test_ll_insert_after_tail_links(void) {
+    struct wolfsentry_list_header list;
+    struct wolfsentry_list_ent_header a, b, c;
+    struct wolfsentry_list_ent_header sentinel;
+    struct wolfsentry_list_ent_header *cursor;
+    wolfsentry_hitcount_t n;
+
+    WOLFSENTRY_LIST_HEADER_RESET(list);
+    wolfsentry_list_ent_append(&list, &a);
+    wolfsentry_list_ent_append(&list, &b);
+
+    /* a freshly allocated entry carries an unrelated non-NULL next, which a
+     * correct tail insertion must overwrite with NULL.
+     */
+    sentinel.prev = NULL;
+    sentinel.next = NULL;
+    c.prev = &sentinel;
+    c.next = &sentinel;
+
+    wolfsentry_list_ent_insert_after(&list, list.tail, &c);
+
+    if (list.tail != &c)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    if (list.tail->next != NULL)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    if (list.head->prev != NULL)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    n = 0;
+    for (cursor = list.head; cursor != NULL; cursor = cursor->next) {
+        ++n;
+        if (n > list.len)
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        if ((cursor->next == NULL) && (cursor != list.tail))
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    }
+    if (n != list.len)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    n = 0;
+    for (cursor = list.tail; cursor != NULL; cursor = cursor->prev) {
+        ++n;
+        if (n > list.len)
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        if ((cursor->prev == NULL) && (cursor != list.head))
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    }
+    if (n != list.len)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_static_routes(void) {
 
     struct wolfsentry_context *wolfsentry;
@@ -1560,6 +1613,7 @@ static int test_static_routes(void) {
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
     WOLFSENTRY_EXIT_ON_FAILURE(test_ll_insert_before_head_links());
+    WOLFSENTRY_EXIT_ON_FAILURE(test_ll_insert_after_tail_links());
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(

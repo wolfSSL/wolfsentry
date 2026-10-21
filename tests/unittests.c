@@ -5817,6 +5817,58 @@ static int test_cjvalue_compatible_float_to_int(WOLFSENTRY_CONTEXT_ARGS_IN_EX(st
     return 0;
 }
 
+static int test_cjvalue_dict_remove_orphan(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE outer;
+    JSON_VALUE nested_copy;
+    JSON_VALUE *nested;
+    JSON_VALUE *slot;
+    char keybuf[8];
+    int i;
+    int ret;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+
+    nested = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"a", 1);
+    WOLFSENTRY_EXIT_ON_TRUE(nested == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested) < 0);
+    for (i = 0; i < 4; ++i) {
+        (void)snprintf(keybuf, sizeof keybuf, "k%03d", i);
+        slot = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested, (const unsigned char *)keybuf, strlen(keybuf));
+        WOLFSENTRY_EXIT_ON_TRUE(slot == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, (int32_t)i) < 0);
+    }
+
+    slot = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"b", 1);
+    WOLFSENTRY_EXIT_ON_TRUE(slot == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, (int32_t)1) < 0);
+
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_dict_size(&outer) == 2);
+
+    /* Keep an alias to the nested dictionary so the test can reclaim it after
+     * removal frees the owning node (see below). */
+    nested = json_value_dict_get(&outer, (const unsigned char *)"a");
+    WOLFSENTRY_EXIT_ON_TRUE(nested == NULL);
+    memcpy(&nested_copy, nested, sizeof nested_copy);
+
+    /* Force value finalization (nested dictionary cleanup) to fail during removal. */
+    test_cjv_budget = 0;
+    ret = json_value_dict_remove_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"a", 1);
+    test_cjv_budget = -1;
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+
+    /* The removed node must not remain counted in the dictionary. */
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_dict_size(&outer) == 1);
+
+    /* Reclaim the nested dictionary, whose finalization the fault interrupted. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &nested_copy) < 0);
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5843,6 +5895,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_compatible_float_to_int(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_remove_orphan(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

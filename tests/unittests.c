@@ -4099,6 +4099,73 @@ static int test_kv_get_bad_key_errcode(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int render_only_user_value(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    char *out,
+    int out_space)
+{
+    struct wolfsentry_cursor *cursor;
+    struct wolfsentry_kv_pair_internal *kv_ref;
+    const struct wolfsentry_kv_pair *kv_exports;
+    int render_space = out_space;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_current(WOLFSENTRY_CONTEXT_ARGS_OUT, cursor, &kv_ref));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_pair_export(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_ref, &kv_exports));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_render_value(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_exports, out, &render_space));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_kv_render_large_int(void) {
+    struct wolfsentry_context *wolfsentry;
+    char buf[64];
+    /* 0x1234567890ABCDEF and -(2^33), built without long-long literals so the
+     * test stays legal under WOLFSENTRY_C89; compared against the exact decimal
+     * rendering to avoid strtoull()/strtoll().
+     */
+    uint64_t stored_uint = ((uint64_t)0x12345678u << 32) | (uint64_t)0x90abcdefu;
+    int64_t stored_sint = -((int64_t)1 << 33);
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_uint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "big_uint", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            stored_uint, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(buf, "1311768467294899695") == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "big_uint", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_sint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "big_sint", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            stored_sint, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(buf, "-8589934592") == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_USER_VALUES */
 
 #ifdef TEST_USER_ADDR_FAMILIES
@@ -5921,6 +5988,11 @@ int main(int argc, char* argv[]) {
     ret = test_kv_get_bad_key_errcode();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_kv_get_bad_key_errcode failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_render_large_int();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_render_large_int failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

@@ -429,10 +429,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
         *out_len = snprintf(out, out_space, "false");
         break;
     case WOLFSENTRY_KV_UINT:
+#ifdef PRIu64
+        *out_len = snprintf(out, out_space, "%" PRIu64, WOLFSENTRY_KV_V_UINT(kv));
+#else
         *out_len = snprintf(out, out_space, "%lu", (long unsigned int)WOLFSENTRY_KV_V_UINT(kv));
+#endif
         break;
     case WOLFSENTRY_KV_SINT:
+#ifdef PRId64
+        *out_len = snprintf(out, out_space, "%" PRId64, WOLFSENTRY_KV_V_SINT(kv));
+#else
         *out_len = snprintf(out, out_space, "%ld", (long int)WOLFSENTRY_KV_V_SINT(kv));
+#endif
         break;
     case WOLFSENTRY_KV_FLOAT:
         *out_len = snprintf(out, out_space, "%.10f", WOLFSENTRY_KV_V_FLOAT(kv));

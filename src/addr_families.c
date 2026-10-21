@@ -518,6 +518,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
             WOLFSENTRY_ERROR_RERETURN(ret);
     }
 
+    if (strcaseeq(family_name, "UNSPEC", (size_t)family_name_len))
+        { *family_number = WOLFSENTRY_AF_UNSPEC; WOLFSENTRY_RETURN_OK; }
     if (strcaseeq(family_name, "UNIX", (size_t)family_name_len))
         { *family_number = WOLFSENTRY_AF_UNIX; WOLFSENTRY_RETURN_OK; }
     if (strcaseeq(family_name, "LOCAL", (size_t)family_name_len))

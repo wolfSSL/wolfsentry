@@ -3958,6 +3958,8 @@ static int test_user_addr_families(void) {
     wolfsentry_action_res_t action_results;
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     char overlong_family_name[WOLFSENTRY_MAX_LABEL_BYTES + 2];
+    wolfsentry_addr_family_t unspec_family_number;
+    const char *unspec_family_name;
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -4244,6 +4246,27 @@ static int test_user_addr_families(void) {
             my_addr_family_parser,
             my_addr_family_formatter,
             24 /* max_addr_bits */));
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
+
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    /* WOLFSENTRY_AF_UNSPEC formats to "UNSPEC" through ntop and must parse back
+     * to the same number through pton so the encode/decode roundtrip holds.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_ntop(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            WOLFSENTRY_AF_UNSPEC,
+            NULL,
+            &unspec_family_name));
+    WOLFSENTRY_EXIT_ON_FALSE((unspec_family_name != NULL) &&
+                             (! strcmp(unspec_family_name, "UNSPEC")));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_pton(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "UNSPEC",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &unspec_family_number));
+    WOLFSENTRY_EXIT_ON_FALSE(unspec_family_number == WOLFSENTRY_AF_UNSPEC);
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

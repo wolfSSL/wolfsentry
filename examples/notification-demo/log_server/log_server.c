@@ -1467,6 +1467,12 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    if (circlog_size_uint64 > (uint64_t)SIZE_MAX) {
+        fprintf(stderr, "ERROR: \"circlog-size\" value %llu exceeds SIZE_MAX on this ABI\n",
+                (unsigned long long)circlog_size_uint64);
+        exit(1);
+    }
+
     ret = circlog_init((size_t)circlog_size_uint64);
     if (ret < 0) {
         fprintf(stderr, "ERROR: circlog_init() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));

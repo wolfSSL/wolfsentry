@@ -944,6 +944,15 @@ json_value_array_realloc(
 {
     JSON_VALUE* json_value_buf;
 
+    /* Shrinking to zero: free the buffer directly rather than via realloc(p, 0),
+     * which is allowed to free and return NULL and would leave a dangling buffer. */
+    if(alloc == 0) {
+        free(a->json_value_buf);
+        a->json_value_buf = NULL;
+        a->alloc = 0;
+        return 0;
+    }
+
     json_value_buf = (JSON_VALUE*) realloc(a->json_value_buf, alloc * sizeof(JSON_VALUE));
     if(json_value_buf == NULL)
         return -1;

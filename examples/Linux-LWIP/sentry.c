@@ -248,6 +248,11 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, uint16_t local_port
     fprintf(stderr, "TCP Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
 
+    /* Fail closed: any dispatch error denies the connection */
+    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) < 0) {
+        return -1;
+    }
+
     /* Check the result, if it contains "reject" then notify the caller */
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {

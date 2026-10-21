@@ -5714,6 +5714,31 @@ static int test_cjvalue_clone_array_partial(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct
     return 0;
 }
 
+static int test_cjvalue_clone_empty_array(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE src;
+    JSON_VALUE clone;
+    int ret;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src) < 0);
+    json_value_init_null(&clone);
+
+    /* With an allocator that returns NULL for zero-size requests, cloning an
+     * empty array must still succeed (it needs no element storage). */
+    test_cjv_zero_null = 1;
+    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src, &clone);
+    test_cjv_zero_null = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(ret >= 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_type(&clone) == JSON_VALUE_ARRAY);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_array_size(&clone) == 0);
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &clone) < 0);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5731,6 +5756,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_clone_array_partial(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_clone_empty_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

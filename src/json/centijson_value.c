@@ -1929,13 +1929,15 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                     ret = JSON_ERR_INTERNAL;
             }
 
-            if (ret == 0)
+            /* Skip the element buffer entirely for an empty array; a zero-size
+             * allocation may legitimately return NULL. */
+            if ((ret == 0) && (src_a->alloc > 0))
                 ret = json_value_array_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
                                                dest_a, src_a->alloc);
 
             if (ret == 0) {
                 dest_values = json_value_array_get_all(clone);
-                if (dest_values == NULL)
+                if ((n > 0) && (dest_values == NULL))
                     ret = JSON_ERR_INTERNAL;
             }
 

@@ -1027,12 +1027,16 @@ json_value_array_remove_range(
 {
     ARRAY* a = json_value_array_payload(v);
     size_t i;
+    size_t end;
     int ret;
 
-    if(a == NULL  ||  index + count > a->size)
+    /* Validate without adding, so index + count cannot wrap. */
+    if(a == NULL  ||  index > a->size  ||  count > a->size - index)
         return -1;
 
-    for(i = index; i < index + count; i++) {
+    end = index + count;
+
+    for(i = index; i < end; i++) {
         ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
@@ -1042,9 +1046,9 @@ json_value_array_remove_range(
             return ret;
     }
 
-    if(index + count < a->size) {
-        memmove(a->json_value_buf + index, a->json_value_buf + index + count,
-                (a->size - (index + count)) * sizeof(JSON_VALUE));
+    if(end < a->size) {
+        memmove(a->json_value_buf + index, a->json_value_buf + end,
+                (a->size - end) * sizeof(JSON_VALUE));
     }
     a->size -= count;
 

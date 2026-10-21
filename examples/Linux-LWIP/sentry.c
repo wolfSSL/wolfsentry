@@ -296,6 +296,10 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
             &action_results);
     fprintf(stderr, "PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    /* Fail closed: any dispatch error denies the packet */
+    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) < 0) {
+        return -1;
+    }
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;

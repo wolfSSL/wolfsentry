@@ -5869,6 +5869,40 @@ static int test_cjvalue_dict_remove_orphan(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct 
     return 0;
 }
 
+static int test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE outer;
+    JSON_VALUE *nested;
+    JSON_VALUE *slot;
+    char keybuf[8];
+    int i;
+    int ret;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+    nested = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"a", 1);
+    WOLFSENTRY_EXIT_ON_TRUE(nested == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested) < 0);
+    for (i = 0; i < 4; ++i) {
+        (void)snprintf(keybuf, sizeof keybuf, "k%03d", i);
+        slot = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested, (const unsigned char *)keybuf, strlen(keybuf));
+        WOLFSENTRY_EXIT_ON_TRUE(slot == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, (int32_t)i) < 0);
+    }
+
+    /* First cleanup allocates the outer traversal stack, then fails on the
+     * nested dictionary's stack allocation. */
+    test_cjv_budget = 1;
+    ret = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer);
+    test_cjv_budget = -1;
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+
+    /* A retry must succeed: no node may have been freed while still linked. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5898,6 +5932,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_remove_orphan(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

@@ -1863,7 +1863,6 @@ json_value_dict_clean(
 #endif
             &node->key);
         if (ret < 0) {
-            free(node);
             free((void *)stack);
             return ret;
         }
@@ -1873,7 +1872,6 @@ json_value_dict_clean(
 #endif
             &node->json_value);
         if (ret < 0) {
-            free(node);
             free((void *)stack);
             return ret;
         }

@@ -4066,6 +4066,39 @@ static int test_kv_get2_reference_balance(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_kv_get_bad_key_errcode(void) {
+    struct wolfsentry_context *wolfsentry;
+    const char *value = NULL;
+    int value_len = -1;
+    struct wolfsentry_kv_pair_internal *kv_ref = NULL;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* a rejected key must surface the validation error itself, not an error
+     * from an unlock attempted without a held lock.
+     */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_user_value_get_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "unused_key", 0 /* key_len */,
+            &value, &value_len, &kv_ref));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_USER_VALUES */
 
 #ifdef TEST_USER_ADDR_FAMILIES
@@ -5883,6 +5916,11 @@ int main(int argc, char* argv[]) {
     ret = test_kv_get2_reference_balance();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_kv_get2_reference_balance failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_get_bad_key_errcode();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_get_bad_key_errcode failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

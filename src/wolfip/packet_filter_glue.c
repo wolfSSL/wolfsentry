@@ -623,6 +623,19 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_icmp_callba
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
+static uint32_t wolfip_normalize_tcp_mask(uint32_t tcp_mask)
+{
+    /* connection-count increments and decrements are balanced only when the
+     * accept, close, and reset lifecycle events are delivered together. */
+    if (tcp_mask & (WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING) |
+                    WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
+                    WOLFIP_FILT_MASK(WOLFIP_FILT_REMOTE_RESET)))
+        tcp_mask |= WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING) |
+            WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
+            WOLFIP_FILT_MASK(WOLFIP_FILT_REMOTE_RESET);
+    return tcp_mask;
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_tcp_callback(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t tcp_mask)
@@ -631,13 +644,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_tcp_callbac
 
     WOLFSENTRY_MUTEX_OR_RETURN();
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
-    if (tcp_mask & (WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING) |
-                    WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
-                    WOLFIP_FILT_MASK(WOLFIP_FILT_REMOTE_RESET)))
-        tcp_mask |= WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING) |
-            WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
-            WOLFIP_FILT_MASK(WOLFIP_FILT_REMOTE_RESET);
-    wolfip_mask_tcp = tcp_mask;
+    wolfip_mask_tcp = wolfip_normalize_tcp_mask(tcp_mask);
     ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
@@ -670,7 +677,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_callbacks(
     wolfip_mask_eth = ethernet_mask;
     wolfip_mask_ip = ip_mask;
     wolfip_mask_icmp = icmp_mask;
-    wolfip_mask_tcp = tcp_mask;
+    wolfip_mask_tcp = wolfip_normalize_tcp_mask(tcp_mask);
     wolfip_mask_udp = udp_mask;
     ret = wolfip_apply_masks(WOLFSENTRY_CONTEXT_ARGS_OUT);
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);

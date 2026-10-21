@@ -420,11 +420,11 @@ struct log_server_data {
 
 static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     struct log_server_data *app_data = NULL;
-    const char* issuerName = NULL;
+    char* issuerName = NULL;
     unsigned long issuerHash = 0;
 #if defined(DEBUG_TLS) && defined(OPENSSL_EXTRA)
     const char *subjectCN;
-    const char* subjectName;
+    char* subjectName = NULL;
     unsigned long subjectHash = 0;
 #endif
     struct ca_cert *ca_certs_i;
@@ -501,11 +501,23 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     }
     if (app_data->issuer_cert == NULL) {
         fprintf(stderr, "ERROR: %s L%d app_data->issuer_cert NULL.\n",__FILE__,__LINE__);
+#ifdef OPENSSL_EXTRA
+        XFREE(issuerName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #ifdef DEBUG_TLS
+        XFREE(subjectName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #endif
+#endif
         return WOLFSSL_FAILURE;
     }
 
     app_data->error_code = 0;
 
+#ifdef OPENSSL_EXTRA
+    XFREE(issuerName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #ifdef DEBUG_TLS
+    XFREE(subjectName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #endif
+#endif
     return WOLFSSL_SUCCESS;
 }
 

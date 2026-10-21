@@ -4258,6 +4258,65 @@ static int test_kv_render_nonfinite_float(void) {
 }
 #endif /* !WOLFSENTRY_C89 */
 
+static int test_kv_readonly_overwrite_rejected(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_kv_pair_internal *kv_ref = NULL;
+    const char *value = NULL;
+    int value_len = -1;
+    wolfsentry_errcode_t ret;
+    static const char key[] = "ro_key";
+    static const char orig[] = "orig";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            orig, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_set_mutability(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* not mutable */));
+
+    /* overwriting a read-only value must be rejected. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        ret = wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "different", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            1 /* overwrite_p */));
+
+    /* and the value must be unchanged. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &value, &value_len, &kv_ref));
+    WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)strlen(orig));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(value, orig) == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_release_record(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_ref));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #ifndef WOLFSENTRY_HAVE_JSON_DOM
 static int test_kv_render_string_escape(void) {
     struct wolfsentry_context *wolfsentry;
@@ -6140,6 +6199,11 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif /* !WOLFSENTRY_C89 */
+    ret = test_kv_readonly_overwrite_rejected();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_readonly_overwrite_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
 #ifndef WOLFSENTRY_HAVE_JSON_DOM
     ret = test_kv_render_string_escape();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {

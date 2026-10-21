@@ -297,7 +297,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_2(
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     kv_template->kv.v_type = type;
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 0 /* take_reference */, kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 1 /* take_reference */, kv);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -342,11 +342,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_type(
     struct wolfsentry_kv_pair_internal *kv = NULL;
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 0 /* take_reference */, &kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 1 /* take_reference */, &kv);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *type = WOLFSENTRY_KV_TYPE(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_type_to_string(
@@ -717,7 +717,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_set_mutability(
     struct wolfsentry_kv_pair_internal *kv = NULL;
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_NONE, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_set_mutability(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, kv, mutable));
+    ret = wolfsentry_kv_set_mutability(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, kv, mutable);
+    if (ret < 0)
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
+    else
+        ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL);
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_mutability(
@@ -731,7 +736,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_mutability(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_NONE, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *mutable = wolfsentry_kv_get_mutability(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_type(
@@ -809,10 +814,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_bool(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_NONE, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     if ((WOLFSENTRY_KV_TYPE(&kv->kv) != WOLFSENTRY_KV_TRUE) &&
-        (WOLFSENTRY_KV_TYPE(&kv->kv) != WOLFSENTRY_KV_FALSE))
+        (WOLFSENTRY_KV_TYPE(&kv->kv) != WOLFSENTRY_KV_FALSE)) {
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
         WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
+    }
     *value = WOLFSENTRY_KV_TYPE(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_uint(
@@ -849,7 +856,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_uint(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_UINT, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *value = WOLFSENTRY_KV_V_UINT(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_sint(
@@ -887,7 +894,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_sint(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_SINT, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *value = WOLFSENTRY_KV_V_SINT(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_double(
@@ -925,7 +932,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_float(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_FLOAT, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *value = WOLFSENTRY_KV_V_FLOAT(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_string(

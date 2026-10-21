@@ -315,6 +315,10 @@ wolfsentry_errcode_t circlog_enqueue_one(size_t msg_len, char **msg_buf) {
     if (new_ent_size > circlog_size)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    /* reset a fully drained queue so a wrap cannot strand a stale head. */
+    if (circlog_head == circlog_tail)
+        circlog_head = circlog_tail = 0;
+
     if (circlog_tail + new_ent_size > circlog_size) {
         /* if the new ent will wrap, old ents need to be cleared out to the end, and a skip ent inserted. */
         if (circlog_tail + circlog_ent_size_from_msg_len(0) < circlog_size) {
@@ -342,13 +346,18 @@ wolfsentry_errcode_t circlog_enqueue_one(size_t msg_len, char **msg_buf) {
      * the =, circlog_tail could be incremented below to equal circlog_head,
      * which is defined to be an empty queue.
      */
-    while ((circlog_head > new_msg_start) &&
+    while ((circlog_nents > 0) &&
+           (circlog_head >= new_msg_start) &&
            (circlog_head <= new_msg_start + new_ent_size))
     {
         ret = circlog_dequeue_one(NULL);
         if (ret < 0)
             return ret;
     }
+
+    /* if eviction drained the queue, the new entry alone defines the head. */
+    if (circlog_nents == 0)
+        circlog_head = new_msg_start;
 
     new_ent = (struct circlog_message *)(void *)(circlog + new_msg_start);
     ret = wolfsentry_time_now_plus_delta(global_wolfsentry, 0 /* td */, &new_ent->when);
@@ -1518,6 +1527,47 @@ int main(int argc, char **argv) {
 
     fprintf(stderr,"circlog_head=%zu circlog_tail=%zu\n",circlog_head,circlog_tail);
 }
+
+    if (circlog != NULL) {
+        char *wrap_buf;
+        struct circlog_message *wrap_msg;
+        size_t wrap_filled, wrap_reachable;
+        static const char wrap_s[] = "wrap eviction regression probe entry.";
+        size_t wrap_ent = circlog_ent_size_from_msg_len(strlen(wrap_s));
+
+        if ((circlog_reset() >= 0) && ((wrap_ent * 2) <= circlog_size)) {
+            wrap_filled = 0;
+            while ((circlog_tail + wrap_ent) <= circlog_size) {
+                ret = circlog_enqueue_one(strlen(wrap_s), &wrap_buf);
+                if (ret < 0) {
+                    fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                    exit(1);
+                }
+                memcpy(wrap_buf, wrap_s, strlen(wrap_s));
+                ++wrap_filled;
+            }
+
+            ret = circlog_enqueue_one(strlen(wrap_s), &wrap_buf);
+            if (ret < 0) {
+                fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                exit(1);
+            }
+            memcpy(wrap_buf, wrap_s, strlen(wrap_s));
+
+            wrap_reachable = 0;
+            wrap_msg = NULL;
+            while (circlog_iterate(&wrap_msg) >= 0)
+                ++wrap_reachable;
+
+            if (circlog_nents != wrap_reachable) {
+                fprintf(stderr, "ERROR: %s L%d circlog nents=%zu disagrees with reachable=%zu after wrap (filled=%zu).\n",
+                        __FILE__, __LINE__, circlog_nents, wrap_reachable, wrap_filled);
+                exit(1);
+            }
+
+            fprintf(stderr, "circlog wrap-eviction check OK: nents=%zu reachable=%zu\n", circlog_nents, wrap_reachable);
+        }
+    }
 #endif /* CIRCLOG_UNIT_TEST */
 
     log_server_init();

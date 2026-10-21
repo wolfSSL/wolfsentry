@@ -4199,6 +4199,65 @@ static int test_kv_render_float_roundtrip(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifndef WOLFSENTRY_C89
+static int test_kv_render_nonfinite_float(void) {
+    struct wolfsentry_context *wolfsentry;
+    char buf[64];
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            (double)NAN, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    /* a bare nan/inf is not valid JSON; the rendered value must be quoted and
+     * must reparse to the same non-finite value.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
+    WOLFSENTRY_EXIT_ON_FALSE(isnan(strtod(buf + 1, NULL)));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            (double)INFINITY, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
+    WOLFSENTRY_EXIT_ON_FALSE(isinf(strtod(buf + 1, NULL)) && (strtod(buf + 1, NULL) > 0.0));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "ninf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            -(double)INFINITY, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
+    WOLFSENTRY_EXIT_ON_FALSE(isinf(strtod(buf + 1, NULL)) && (strtod(buf + 1, NULL) < 0.0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* !WOLFSENTRY_C89 */
+
 #endif /* TEST_USER_VALUES */
 
 #ifdef TEST_USER_ADDR_FAMILIES
@@ -6033,6 +6092,13 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_kv_render_float_roundtrip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+#ifndef WOLFSENTRY_C89
+    ret = test_kv_render_nonfinite_float();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_render_nonfinite_float failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif /* !WOLFSENTRY_C89 */
 #endif
 
 #ifdef TEST_USER_ADDR_FAMILIES

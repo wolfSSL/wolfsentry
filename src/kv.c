@@ -26,6 +26,8 @@
 #include <wolfsentry/centijson_dom.h>
 #endif
 
+#include <float.h>
+
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_KV_C
 
 static inline int wolfsentry_kv_key_cmp_1(const char *left_label, const unsigned int left_label_len, const char *right_label, const unsigned int right_label_len) {
@@ -442,9 +444,23 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
         *out_len = snprintf(out, out_space, "%ld", (long int)WOLFSENTRY_KV_V_SINT(kv));
 #endif
         break;
-    case WOLFSENTRY_KV_FLOAT:
-        *out_len = snprintf(out, out_space, "%.17g", WOLFSENTRY_KV_V_FLOAT(kv));
+    case WOLFSENTRY_KV_FLOAT: {
+        double v_float = WOLFSENTRY_KV_V_FLOAT(kv);
+        /* non-finite values have no bare JSON token, so emit a quoted string
+         * that the loader's strtod path re-reads to the same value.  finiteness
+         * is tested with DBL_MAX comparisons to stay legal under C89 (no C99
+         * isnan()/isinf()).
+         */
+        if (!(v_float <= DBL_MAX) && !(v_float >= -DBL_MAX)) /* NaN */
+            *out_len = snprintf(out, out_space, "\"nan\"");
+        else if (!(v_float <= DBL_MAX)) /* +Inf */
+            *out_len = snprintf(out, out_space, "\"inf\"");
+        else if (!(v_float >= -DBL_MAX)) /* -Inf */
+            *out_len = snprintf(out, out_space, "\"-inf\"");
+        else
+            *out_len = snprintf(out, out_space, "%.17g", v_float);
         break;
+    }
     case WOLFSENTRY_KV_STRING: {
 #ifndef WOLFSENTRY_HAVE_JSON_DOM
         *out_len = snprintf(out, out_space, "\"%.*s\"", (int)WOLFSENTRY_KV_V_STRING_LEN(kv), WOLFSENTRY_KV_V_STRING(kv));

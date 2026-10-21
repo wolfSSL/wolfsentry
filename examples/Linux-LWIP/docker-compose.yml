@@ -1,7 +1,9 @@
 version: "3.9"
 services:
   echoserver:
-    build: .
+    build:
+      context: ../..
+      dockerfile: examples/Linux-LWIP/Dockerfile
     ports:
       - "11111:11111"
     mac_address: de:c0:de:01:02:03
@@ -9,7 +11,7 @@ services:
       echo:
         ipv4_address: 172.20.20.3
   tester1:
-    image: alpine
+    image: alpine:3.21
     stdin_open: true
     tty: true
     mac_address: de:c0:de:03:02:01
@@ -17,7 +19,7 @@ services:
       echo:
         ipv4_address: 172.20.20.10
   tester2:
-    image: alpine
+    image: alpine:3.21
     stdin_open: true
     tty: true
     mac_address: de:c0:de:03:02:02
@@ -25,7 +27,7 @@ services:
       echo:
         ipv4_address: 172.20.20.20
   tester3:
-    image: alpine
+    image: alpine:3.21
     stdin_open: true
     tty: true
     mac_address: de:c0:de:03:03:01

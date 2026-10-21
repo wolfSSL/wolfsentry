@@ -1,0 +1,6 @@
+{
+    "wolfsentry-config-version": 1,
+    "default-policies": {
+        "default-policy": "accept"
+    }
+}

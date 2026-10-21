@@ -1,0 +1,58 @@
+name: Sanitizers
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+    branches: [ 'master', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  sanitizer:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+      options: ${{ matrix.container_options }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Address and undefined behavior
+            target: sanitize
+            cc: gcc
+            extra_cflags: -fno-sanitize-recover=all
+            container_options: ''
+          - name: Thread
+            target: sanitize-thread
+            cc: clang
+            extra_cflags: -fno-sanitize-recover=all -D__SANITIZE_THREAD__
+            container_options: --security-opt seccomp=unconfined
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Run sanitizer
+      run: |
+        make -j2 BUILD_TOP=/tmp/wolfsentry-sanitizer \
+          CC=${{ matrix.cc }} \
+          EXTRA_CFLAGS="${{ matrix.extra_cflags }}" ${{ matrix.target }}

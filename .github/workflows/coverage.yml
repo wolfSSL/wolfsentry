@@ -1,0 +1,53 @@
+name: Code Coverage
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+    branches: [ 'master', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  coverage:
+    name: Line coverage
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - name: Run instrumented unit tests
+      run: make coverage
+    - name: Capture coverage
+      run: |
+        lcov --capture --directory coverage-build --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' '*/tests/*' \
+          '*/src/json/centijson_sax.c' --ignore-errors unused \
+          --output-file coverage.info
+        lcov --summary coverage.info
+        lcov --fail-under-lines 65 --summary coverage.info
+    - name: Upload coverage data
+      uses: actions/upload-artifact@v4
+      with:
+        name: wolfsentry-coverage
+        path: coverage.info

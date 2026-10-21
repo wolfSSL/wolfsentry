@@ -93,10 +93,11 @@ ifdef RUNTIME
         ifndef FREERTOS_TOP
             $(error FREERTOS_TOP not supplied with RUNTIME=$(RUNTIME))
         endif
+        FREERTOS_PORT ?= ARM_CM3
         ifndef LWIP
             LWIP := 1
         endif
-        RUNTIME_CFLAGS += -DFREERTOS -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_POSIX_MEMALIGN -ffreestanding -I$(FREERTOS_TOP)/FreeRTOS/Source/include -I$(FREERTOS_TOP)/FreeRTOS/Source/portable/GCC/ARM_CM3
+        RUNTIME_CFLAGS += -DFREERTOS -DWOLFSENTRY_NO_GETPROTOBY -DWOLFSENTRY_NO_POSIX_MEMALIGN -ffreestanding -I$(FREERTOS_TOP)/FreeRTOS/Source/include -I$(FREERTOS_TOP)/FreeRTOS/Source/portable/GCC/$(FREERTOS_PORT)
     else ifeq "$(RUNTIME)" "Linux-lwIP"
         ifndef LWIP
             LWIP := 1
@@ -119,7 +120,8 @@ else
     RUNTIME := $(shell uname -s)
 endif
 
-RUNTIME_CFLAGS += $(shell [ -d "$(SRC_TOP)/ports/$(RUNTIME)/include/" ] && echo -I$(SRC_TOP)/ports/$(RUNTIME)/include)
+RUNTIME_INCLUDE_DIR ?= $(SRC_TOP)/ports/$(RUNTIME)/include
+RUNTIME_CFLAGS += $(shell [ -d "$(RUNTIME_INCLUDE_DIR)/" ] && echo -I$(RUNTIME_INCLUDE_DIR))
 
 ifdef LWIP
         ifndef LWIP_TOP
@@ -204,12 +206,8 @@ endif
 
 # JSON settings need to be extracted from $(USER_SETTINGS_FILE) to determine if JSON sources should be built.
 ifdef USER_SETTINGS_FILE
-    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
-        USER_SETTINGS_NO_JSON := 1
-    endif
-    ifeq "$(shell grep -q -E -e '^#define WOLFSENTRY_NO_JSON_DOM$$' '$(USER_SETTINGS_FILE)' && echo 1 || echo 0)" "1"
-        USER_SETTINGS_NO_JSON_DOM := 1
-    endif
+    USER_SETTINGS_NO_JSON := $(shell grep -q -x '\#define WOLFSENTRY_NO_JSON' '$(USER_SETTINGS_FILE)' && echo 1)
+    USER_SETTINGS_NO_JSON_DOM := $(shell grep -q -x '\#define WOLFSENTRY_NO_JSON_DOM' '$(USER_SETTINGS_FILE)' && echo 1)
 endif
 
 ifdef NO_JSON

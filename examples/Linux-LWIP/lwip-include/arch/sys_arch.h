@@ -69,6 +69,7 @@ int lwip_unix_keypressed(void);
 */
 
 void sys_mark_tcpip_thread(void);
+#undef LWIP_MARK_TCPIP_THREAD
 #define LWIP_MARK_TCPIP_THREAD()   sys_mark_tcpip_thread()
 
 #if LWIP_TCPIP_CORE_LOCKING

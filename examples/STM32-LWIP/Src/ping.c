@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "lwip/debug.h"
 
@@ -18,7 +18,8 @@ static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_a
   /* If the message is long enough, get the header */
   if (p->tot_len >= (PBUF_IP_HLEN + sizeof(struct icmp_echo_hdr))) {
 
-      iecho = (struct icmp_echo_hdr *)(p->payload + PBUF_IP_HLEN);
+      iecho = (struct icmp_echo_hdr *)((unsigned char *)p->payload +
+          PBUF_IP_HLEN);
       /* Extract the ICMP message type (8 is a PING received), wolfSentry
        * will accept or reject the ICMP message */
       if (sentry_action_ping(addr, iecho->type) != 0)

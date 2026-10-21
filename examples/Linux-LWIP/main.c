@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <errno.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/random.h>
 
 #include <pcap/pcap.h>
 
@@ -18,6 +21,31 @@
 #include "echo.h"
 #include "ping.h"
 #include "sentry.h"
+
+unsigned int lwip_port_rand(void)
+{
+    unsigned int value;
+    unsigned char *output = (unsigned char *)&value;
+    size_t remaining = sizeof value;
+
+    while (remaining > 0) {
+        ssize_t bytes_read = getrandom(output, remaining, 0);
+
+        if (bytes_read > 0) {
+            output += (size_t)bytes_read;
+            remaining -= (size_t)bytes_read;
+        }
+        else if ((bytes_read < 0) && (errno == EINTR)) {
+            continue;
+        }
+        else {
+            perror("getrandom");
+            abort();
+        }
+    }
+
+    return value;
+}
 
 /* Callback to send a raw lwIP packet via PCAP */
 static err_t pcap_output(struct netif *netif, struct pbuf *p)

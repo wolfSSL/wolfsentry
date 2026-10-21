@@ -44,7 +44,7 @@ index f35ff4b5..ae368bee 100644
 +   * we're turning around.
 +   */
 +  if (netif != NULL) {
-+    if (icmp_filter_dispatch_outgoing(FILT_SENDING, netif, &iphdr->dest, &iphdr->src, type, icmphdr) != ERR_OK) {
++    if (icmp_filter_dispatch_outgoing(FILT_SENDING, netif, &iphdr->dest, &iphdr->src, type, (const struct icmp_hdr *)icmphdr) != ERR_OK) {
 +      LWIP_DEBUGF(IP_DEBUG, ("icmp_send_response: icmp_filter_dispatch_outgoing rejected packet.\n"));
 +      netif = NULL;
 +    }
@@ -54,7 +54,7 @@ index f35ff4b5..ae368bee 100644
    if (netif != NULL) {
      /* calculate checksum */
      icmphdr->chksum = 0;
-@@ -405,4 +436,84 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
+@@ -405,4 +436,85 @@ icmp_send_response(struct pbuf *p, u8_t type, u8_t code)
    pbuf_free(q);
  }
  
@@ -101,7 +101,8 @@ index f35ff4b5..ae368bee 100644
 +  event.netif = netif;
 +  event.packet_hdr.icmp_hdr = hdr;
 +  ret = filter_cb(filter_arg, &event,
-+                   ip4_current_dest_addr(), ip4_current_src_addr(), hdr->type);
++                   ip4_current_dest_addr(), ip4_current_src_addr(),
++                   ((const struct icmp_echo_hdr *)hdr)->type);
 +
 +  packet_filter_lock = 0;
 +
@@ -801,7 +802,7 @@ index 1b17e40f..bd243a70 100644
      tcp_pcb_remove(&tcp_active_pcbs, pcb);
      tcp_free(pcb);
      return 1;
-@@ -640,6 +665,21 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
+@@ -640,6 +665,22 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
  
    LWIP_ASSERT("tcp_listen_input: invalid pcb", pcb != NULL);
  
@@ -811,8 +812,9 @@ index 1b17e40f..bd243a70 100644
 +    if (err != ERR_OK) {
 +      if (err == ERR_RST) {
 +        LWIP_DEBUGF(IP_DEBUG, ("tcp_listen_input: tcp_filter_dispatch_incoming rejected connect, sending reset.\n"));
-+        tcp_rst_netif(ip_data.current_input_netif, ackno, seqno + tcplen, ip_current_dest_addr(),
-+                      ip_current_src_addr(), tcphdr->dest, tcphdr->src);
++        tcp_rst((const struct tcp_pcb *)pcb, ackno, seqno + tcplen,
++                ip_current_dest_addr(), ip_current_src_addr(),
++                tcphdr->dest, tcphdr->src);
 +      } else
 +        LWIP_DEBUGF(IP_DEBUG, ("tcp_listen_input: tcp_filter_dispatch_incoming rejected connect.\n"));
 +      return;

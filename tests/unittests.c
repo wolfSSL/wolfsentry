@@ -460,7 +460,8 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t load_test_action_handlers
 static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY_CONTEXT_ARGS_IN, const char *fname, wolfsentry_config_load_flags_t flags, int verbose) {
     wolfsentry_errcode_t ret;
     struct wolfsentry_json_process_state *jps;
-    FILE *f = NULL;
+    FILE *f = stdin;
+    int close_f = 0;
     unsigned char buf[512];
     char err_buf[512];
     int fini_ret;
@@ -471,6 +472,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
             (void)fprintf(stderr, "fopen(%s): %s\n",fname,strerror(errno));
             WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
         }
+        close_f = 1;
     }
 
     ret = wolfsentry_config_json_init(WOLFSENTRY_CONTEXT_ARGS_OUT, flags, &jps);
@@ -478,7 +480,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
         goto out;
 
     for (;;) {
-        size_t n = fread(buf, 1, sizeof buf, f ? f : stdin);
+        size_t n = fread(buf, 1, sizeof buf, f);
         if ((n < sizeof buf) && ferror(f)) {
             (void)fprintf(stderr,"fread(%s): %s\n",fname, strerror(errno));
             ret = WOLFSENTRY_ERROR_ENCODE(UNIT_TEST_FAILURE);
@@ -507,7 +509,7 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
     if (WOLFSENTRY_ERROR_CODE_IS(ret, OK))
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
-    if (f)
+    if (close_f)
         fclose(f);
 
     if ((ret < 0) && verbose)

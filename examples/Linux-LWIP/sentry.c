@@ -341,6 +341,10 @@ int sentry_action_mac(struct eth_addr *addr)
 
     fprintf(stderr, "MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    /* Fail closed: any dispatch error denies the frame */
+    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) < 0) {
+        return -1;
+    }
     if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
         if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
             return -1;

@@ -5466,6 +5466,180 @@ static int test_json(const char *fname, const char *extra_fname) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+
+/* Regression coverage for the centijson JSON_VALUE (DOM) public API.  Uses a
+ * controllable test allocator so the error paths can be exercised through the
+ * public interface. */
+
+static size_t test_cjv_live = 0;         /* count of live allocations */
+static size_t test_cjv_fail_big = 0;     /* if nonzero, fail allocations >= this size */
+static int test_cjv_zero_null = 0;       /* if set, zero-size requests return NULL */
+static long test_cjv_budget = -1;        /* if >= 0, allow this many mallocs then fail */
+
+static void test_cjv_reset(void) {
+    test_cjv_live = 0;
+    test_cjv_fail_big = 0;
+    test_cjv_zero_null = 0;
+    test_cjv_budget = -1;
+}
+
+#ifdef WOLFSENTRY_THREADSAFE
+static void *test_cjv_malloc(void *context, struct wolfsentry_thread_context *thread, size_t size)
+#else
+static void *test_cjv_malloc(void *context, size_t size)
+#endif
+{
+    void *p;
+    (void)context;
+#ifdef WOLFSENTRY_THREADSAFE
+    (void)thread;
+#endif
+    if (test_cjv_zero_null && (size == 0))
+        return NULL;
+    if ((test_cjv_fail_big != 0) && (size >= test_cjv_fail_big))
+        return NULL;
+    if (test_cjv_budget >= 0) {
+        if (test_cjv_budget == 0)
+            return NULL;
+        --test_cjv_budget;
+    }
+    p = malloc(size);
+    if (p != NULL)
+        ++test_cjv_live;
+    return p;
+}
+
+#ifdef WOLFSENTRY_THREADSAFE
+static void test_cjv_free(void *context, struct wolfsentry_thread_context *thread, void *ptr)
+#else
+static void test_cjv_free(void *context, void *ptr)
+#endif
+{
+    (void)context;
+#ifdef WOLFSENTRY_THREADSAFE
+    (void)thread;
+#endif
+    if (ptr != NULL)
+        --test_cjv_live;
+    free(ptr);
+}
+
+#ifdef WOLFSENTRY_THREADSAFE
+static void *test_cjv_realloc(void *context, struct wolfsentry_thread_context *thread, void *ptr, size_t size)
+#else
+static void *test_cjv_realloc(void *context, void *ptr, size_t size)
+#endif
+{
+    void *p;
+    int was_null;
+    (void)context;
+#ifdef WOLFSENTRY_THREADSAFE
+    (void)thread;
+#endif
+    if (test_cjv_zero_null && (size == 0)) {
+        if (ptr != NULL)
+            --test_cjv_live;
+        free(ptr);
+        return NULL;
+    }
+    if ((test_cjv_fail_big != 0) && (size >= test_cjv_fail_big))
+        return NULL;
+    was_null = (ptr == NULL);
+    p = realloc(ptr, size);
+    if (p != NULL) {
+        if (was_null)
+            ++test_cjv_live;
+    } else if ((size == 0) && (! was_null)) {
+        --test_cjv_live;
+    }
+    return p;
+}
+
+static int test_cjvalue_path(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE root;
+    JSON_VALUE *list;
+    JSON_VALUE *elem;
+    JSON_VALUE *found;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &root) < 0);
+
+    list = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &root, (const unsigned char *)"list", 4);
+    WOLFSENTRY_EXIT_ON_TRUE(list == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), list) < 0);
+
+    elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), list);
+    WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, 10) < 0);
+    elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), list);
+    WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, 20) < 0);
+    elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), list);
+    WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, 30) < 0);
+
+    /* Attached array index (key followed immediately by a bracket). */
+    found = json_value_path(&root, "list[0]");
+    WOLFSENTRY_EXIT_ON_TRUE(found == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(found) == 10);
+
+    found = json_value_path(&root, "list[2]");
+    WOLFSENTRY_EXIT_ON_TRUE(found == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(found) == 30);
+
+    /* Slash-separated index is a documented equivalent of the attached form. */
+    found = json_value_path(&root, "list/[1]");
+    WOLFSENTRY_EXIT_ON_TRUE(found == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(found) == 20);
+
+    /* Negative indexes are relative to the array length. */
+    found = json_value_path(&root, "list[-1]");
+    WOLFSENTRY_EXIT_ON_TRUE(found == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(found) == 30);
+
+    found = json_value_path(&root, "list[-3]");
+    WOLFSENTRY_EXIT_ON_TRUE(found == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(found) == 10);
+
+    /* Out-of-range indexes resolve to NULL. */
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&root, "list[3]") == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&root, "list[-4]") == NULL);
+
+    /* Trailing bytes after a bracket index must be rejected. */
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&root, "list/[0]garbage]") == NULL);
+
+    /* An index that overflows size_t must be rejected, not wrapped. */
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&root, "list/[18446744073709551616]") == NULL);
+
+    /* An empty path returns the root. */
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&root, "") == &root);
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &root) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
+static wolfsentry_errcode_t test_cjvalue_fixes(void) {
+    struct wolfsentry_allocator test_allocator;
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    memset(&test_allocator, 0, sizeof test_allocator);
+    test_allocator.malloc = test_cjv_malloc;
+    test_allocator.free = test_cjv_free;
+    test_allocator.realloc = test_cjv_realloc;
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_path(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
 #endif /* TEST_JSON */
 
 #ifdef TEST_JSON_CORPUS
@@ -5784,6 +5958,13 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    ret = test_cjvalue_fixes();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_cjvalue_fixes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_JSON_CORPUS

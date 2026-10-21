@@ -4258,6 +4258,45 @@ static int test_kv_render_nonfinite_float(void) {
 }
 #endif /* !WOLFSENTRY_C89 */
 
+static int test_kv_empty_key_rejected(void) {
+    struct wolfsentry_context *wolfsentry;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* an empty key must be rejected consistently, whether supplied as an
+     * explicit zero length or as a null-terminated empty string.
+     */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "", 0 /* key_len */,
+            "v", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "v", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_kv_readonly_overwrite_rejected(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_kv_pair_internal *kv_ref = NULL;
@@ -6202,6 +6241,11 @@ int main(int argc, char* argv[]) {
     ret = test_kv_readonly_overwrite_rejected();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_kv_readonly_overwrite_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_empty_key_rejected();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_empty_key_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #ifndef WOLFSENTRY_HAVE_JSON_DOM

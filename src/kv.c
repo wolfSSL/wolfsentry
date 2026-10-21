@@ -62,7 +62,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_new(
     struct wolfsentry_kv_pair_internal **kv)
 {
     size_t kv_size;
-    if (key_len == 0)
+    if (key == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (data_len < 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -70,6 +70,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_new(
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     if (key_len < 0)
         key_len = (int)strlen(key);
+    if (key_len <= 0)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (key_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     kv_size = sizeof **kv + (size_t)key_len + 1 + (size_t)data_len;

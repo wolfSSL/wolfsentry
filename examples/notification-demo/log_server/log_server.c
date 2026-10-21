@@ -1962,7 +1962,8 @@ int main(int argc, char **argv) {
             }
 #endif
 
-            if (! (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)) {
+            if ((! (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)) &&
+                (wolfsentry_data->rule_route != NULL)) {
                 wolfsentry_action_res_t action_results;
                 if (transaction_successful) {
                     ret = wolfsentry_route_event_dispatch_by_route(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),

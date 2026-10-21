@@ -95,16 +95,32 @@ static err_t echo_msgaccept(void *arg, struct tcp_pcb *pcb, err_t err)
 int echo_init(void)
 {
     struct tcp_pcb *pcb;
+    struct tcp_pcb *listen_pcb;
+    int r;
 
     /* Create lwIP TCP instance */
     pcb = tcp_new();
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: pcb: %x\n", pcb));
+    if (pcb == NULL)
+        return -1;
     /* Bind port 11111 */
-    int r = tcp_bind(pcb, IP_ADDR_ANY, 11111);
+    r = tcp_bind(pcb, IP_ADDR_ANY, 11111);
     LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: tcp_bind: %d\n", r));
-    /* Enable listening */
-    pcb = tcp_listen(pcb);
-    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %x\n", pcb));
+    if (r != ERR_OK) {
+        if (tcp_close(pcb) != ERR_OK)
+            tcp_abort(pcb);
+        return -1;
+    }
+    /* Enable listening. tcp_listen() frees the original pcb only on success;
+     * on failure it returns NULL and leaves the original allocated. */
+    listen_pcb = tcp_listen(pcb);
+    LWIP_DEBUGF(ECHO_DEBUG, ("echo_init: listen-pcb: %x\n", listen_pcb));
+    if (listen_pcb == NULL) {
+        if (tcp_close(pcb) != ERR_OK)
+            tcp_abort(pcb);
+        return -1;
+    }
+    pcb = listen_pcb;
     /* Set accept connection callback */
     tcp_accept(pcb, echo_msgaccept);
 

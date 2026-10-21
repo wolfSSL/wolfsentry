@@ -141,6 +141,34 @@ init_number(
     }
 }
 
+static int
+json_dom_path_push(JSON_DOM_PARSER* dom_parser, JSON_VALUE* value)
+{
+    if(dom_parser->path_size >= dom_parser->path_alloc) {
+        JSON_VALUE** new_path;
+        size_t new_path_alloc;
+
+        if(dom_parser->path_alloc == 0) {
+            new_path_alloc = 32;
+        }
+        else if(dom_parser->path_alloc > SIZE_MAX / 2 / sizeof(JSON_VALUE*)) {
+            return JSON_ERR_OUTOFMEMORY;
+        }
+        else {
+            new_path_alloc = dom_parser->path_alloc * 2;
+        }
+        new_path = (JSON_VALUE**) realloc((void *)dom_parser->path, new_path_alloc * sizeof(JSON_VALUE*));
+        if(new_path == NULL)
+            return JSON_ERR_OUTOFMEMORY;
+
+        dom_parser->path = new_path;
+        dom_parser->path_alloc = new_path_alloc;
+    }
+
+    dom_parser->path[dom_parser->path_size++] = value;
+    return 0;
+}
+
 int
 json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, void* user_data)
 {
@@ -151,6 +179,16 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
     if(type == JSON_ARRAY_END || type == JSON_OBJECT_END) {
         /* Reached end of current array or object? Just pop-up in the path. */
         dom_parser->path_size--;
+        return 0;
+    }
+
+    if(dom_parser->path_size > 0 &&
+       dom_parser->path[dom_parser->path_size - 1] == NULL)
+    {
+        /* A NULL path entry marks a duplicate container dropped by USEFIRST;
+         * swallow its contents so the enclosing nesting state stays correct. */
+        if(type == JSON_ARRAY_BEG || type == JSON_OBJECT_BEG)
+            return json_dom_path_push(dom_parser, NULL);
         return 0;
     }
 
@@ -201,7 +239,10 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
             if(!json_value_is_new(new_json_value)) {
                 /* We have already set json_value for this key. */
                 switch(dom_parser->flags & JSON_DOM_DUPKEY_MASK) {
-                    case JSON_DOM_DUPKEY_USEFIRST:  return 0;
+                    case JSON_DOM_DUPKEY_USEFIRST:
+                        if(type == JSON_ARRAY_BEG || type == JSON_OBJECT_BEG)
+                            return json_dom_path_push(dom_parser, NULL);
+                        return 0;
                     case JSON_DOM_DUPKEY_USELAST:
                         ret = json_value_fini(
 #ifdef WOLFSENTRY
@@ -264,28 +305,9 @@ json_dom_process(JSON_TYPE type, const unsigned char* data, size_t data_size, vo
     if(type == JSON_ARRAY_BEG || type == JSON_OBJECT_BEG) {
         /* Push the array or object to the path, so we know where to
          * append their json_values. */
-        if(dom_parser->path_size >= dom_parser->path_alloc) {
-            JSON_VALUE** new_path;
-            size_t new_path_alloc;
-
-            if(dom_parser->path_alloc == 0) {
-                new_path_alloc = 32;
-            }
-            else if(dom_parser->path_alloc > SIZE_MAX / 2 / sizeof(JSON_VALUE*)) {
-                return JSON_ERR_OUTOFMEMORY;
-            }
-            else {
-                new_path_alloc = dom_parser->path_alloc * 2;
-            }
-            new_path = (JSON_VALUE**) realloc((void *)dom_parser->path, new_path_alloc * sizeof(JSON_VALUE*));
-            if(new_path == NULL)
-                return JSON_ERR_OUTOFMEMORY;
-
-            dom_parser->path = new_path;
-            dom_parser->path_alloc = new_path_alloc;
-        }
-
-        dom_parser->path[dom_parser->path_size++] = new_json_value;
+        ret = json_dom_path_push(dom_parser, new_json_value);
+        if(ret < 0)
+            return ret;
     }
 
     return 0;

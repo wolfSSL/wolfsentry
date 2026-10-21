@@ -4007,6 +4007,65 @@ static int test_kv_reference_lifetime(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_kv_get2_reference_balance(void) {
+    struct wolfsentry_context *wolfsentry;
+    static const char key[] = "balance_key";
+    uint64_t uint_value = 0;
+    int mutable = -1;
+    int i;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_uint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            42, 0));
+
+    /* the non-reference getters take and release an internal reference each
+     * call; repeated calls must leave the refcount balanced so the entry can
+     * still be deleted afterwards.
+     */
+    for (i = 0; i < 100; ++i) {
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_uint(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &uint_value));
+        WOLFSENTRY_EXIT_ON_FALSE(uint_value == 42);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_mutability(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &mutable));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        wolfsentry_user_value_get_uint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &uint_value));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_USER_VALUES */
 
 #ifdef TEST_USER_ADDR_FAMILIES
@@ -5819,6 +5878,11 @@ int main(int argc, char* argv[]) {
     ret = test_kv_reference_lifetime();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_kv_reference_lifetime failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_get2_reference_balance();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_get2_reference_balance failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

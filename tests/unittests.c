@@ -5786,6 +5786,37 @@ static int test_cjvalue_compatible_lossy(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wo
     return 0;
 }
 
+static int test_cjvalue_compatible_float_to_int(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE v;
+
+    /* Out-of-range float/double values must not be treated as integer-compatible,
+     * and the predicate must not perform an out-of-range floating-to-integer cast. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_float(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, 1e30F) < 0);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_INT32));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_INT64));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_UINT64));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_double(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, 1e300) < 0);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_INT32));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_INT64));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_UINT64));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* An in-range integral float is integer-compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_float(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, 42.0F) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_is_compatible(&v, JSON_VALUE_INT32));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    /* A non-integral double is not integer-compatible. */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_double(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v, 1.5) < 0);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_is_compatible(&v, JSON_VALUE_INT32));
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &v) < 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5809,6 +5840,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_compatible_lossy(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_compatible_float_to_int(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

@@ -313,17 +313,17 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
 
         case JSON_VALUE_FLOAT:
             return (type == JSON_VALUE_DOUBLE)  ||
-                   (type == JSON_VALUE_INT32 && json_value_float(v) == (float)json_value_int32(v))  ||
-                   (type == JSON_VALUE_UINT32 && json_value_float(v) == (float)json_value_uint32(v))  ||
-                   (type == JSON_VALUE_INT64 && json_value_float(v) == (float)json_value_int64(v))  ||
-                   (type == JSON_VALUE_UINT64 && json_value_float(v) == (float)json_value_uint64(v));
+                   (type == JSON_VALUE_INT32 && (double)json_value_float(v) >= -2147483648.0 && (double)json_value_float(v) <= 2147483647.0 && json_value_float(v) == (float)json_value_int32(v))  ||
+                   (type == JSON_VALUE_UINT32 && (double)json_value_float(v) >= 0.0 && (double)json_value_float(v) <= 4294967295.0 && json_value_float(v) == (float)json_value_uint32(v))  ||
+                   (type == JSON_VALUE_INT64 && (double)json_value_float(v) >= -9223372036854775808.0 && (double)json_value_float(v) < 9223372036854775808.0 && json_value_float(v) == (float)json_value_int64(v))  ||
+                   (type == JSON_VALUE_UINT64 && (double)json_value_float(v) >= 0.0 && (double)json_value_float(v) < 18446744073709551616.0 && json_value_float(v) == (float)json_value_uint64(v));
 
         case JSON_VALUE_DOUBLE:
             return (type == JSON_VALUE_FLOAT && json_value_double(v) >= -(double)FLT_MAX && json_value_double(v) <= (double)FLT_MAX && (double)(float)json_value_double(v) == json_value_double(v))  ||
-                   (type == JSON_VALUE_INT32 && json_value_double(v) == (double)json_value_int32(v))  ||
-                   (type == JSON_VALUE_UINT32 && json_value_double(v) == (double)json_value_uint32(v))  ||
-                   (type == JSON_VALUE_INT64 && json_value_double(v) == (double)json_value_int64(v))  ||
-                   (type == JSON_VALUE_UINT64 && json_value_double(v) == (double)json_value_uint64(v));
+                   (type == JSON_VALUE_INT32 && json_value_double(v) >= -2147483648.0 && json_value_double(v) <= 2147483647.0 && json_value_double(v) == (double)json_value_int32(v))  ||
+                   (type == JSON_VALUE_UINT32 && json_value_double(v) >= 0.0 && json_value_double(v) <= 4294967295.0 && json_value_double(v) == (double)json_value_uint32(v))  ||
+                   (type == JSON_VALUE_INT64 && json_value_double(v) >= -9223372036854775808.0 && json_value_double(v) < 9223372036854775808.0 && json_value_double(v) == (double)json_value_int64(v))  ||
+                   (type == JSON_VALUE_UINT64 && json_value_double(v) >= 0.0 && json_value_double(v) < 18446744073709551616.0 && json_value_double(v) == (double)json_value_uint64(v));
 
         default:
             break;

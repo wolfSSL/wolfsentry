@@ -88,6 +88,7 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
     GError *error = NULL;
     gboolean retval;
     int ret;
+    gchar *body_esc = NULL;
 
     struct wolfsentry_allocator *allocator = wolfsentry_get_allocator(wolfsentry);
 
@@ -182,12 +183,14 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
 
         SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "]");
 
-        /* xxx note that dbus notification daemons expect fragments of basic
-         * HTML as input, so msgbuf needs rewriting to escape HTML entities.
-         */
+        /* escape the completed body once, so no entity can be split by the
+         * fixed-size buffer; the summary is plain text, not markup. */
+        body_esc = g_markup_escape_text((const gchar *)msgbuf, -1);
+        if (body_esc == NULL)
+            break;
 
         summary = action;
-        body = msgbuf;
+        body = (const unsigned char *)body_esc;
         type = "type";
         app_name = "wolfsentry_udp_to_dbus";
         icon_str = "icon_str";
@@ -212,6 +215,8 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
     WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), decision_array_v));
 
     WARN_ON_JSON_FAILURE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &p_root));
+
+    g_free(body_esc);
 
     if (notify == NULL)
         return -1;

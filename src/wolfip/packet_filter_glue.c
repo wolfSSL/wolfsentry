@@ -318,6 +318,7 @@ static int wolfip_filter_tcp(
     case WOLFIP_FILT_CLOSE_WAIT:
         route_flags |= outbound ? WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT :
                                   WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+        action_results = WOLFSENTRY_ACTION_RES_CLOSE_WAIT;
         break;
     case WOLFIP_FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;

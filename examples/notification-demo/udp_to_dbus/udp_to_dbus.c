@@ -144,6 +144,13 @@ static int notify(WOLFSENTRY_CONTEXT_ARGS_IN, JSON_CONFIG *centijson_config, con
         local_port = json_value_int32(local_port_v);
         n_decisions = json_value_array_size(decision_array_v);
 
+        if ((action == NULL) || (af == NULL) || (remote_addr == NULL) ||
+            (local_addr == NULL)) {
+            fprintf(stderr, "ERROR: ignoring malformed notification datagram "
+                    "with missing string field(s)\n");
+            break;
+        }
+
         SNPRINTF_MSGPTR(msgbuf_ptr, msgbuf_len_left, "%s/%d from %s:%d to %s:%d\n",
                         af,
                         proto,

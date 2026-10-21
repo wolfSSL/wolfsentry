@@ -5931,6 +5931,36 @@ static int test_cjvalue_empty_dict(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsent
     return 0;
 }
 
+static int test_cjvalue_array_shrink_to_zero(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE arr;
+    JSON_VALUE *elem;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &arr) < 0);
+    elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &arr);
+    WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, (int32_t)7) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_array_size(&arr) == 1);
+
+    /* Model an allocator for which realloc(ptr, 0) frees and returns NULL.
+     * Removing the last element shrinks the backing store to zero capacity; the
+     * array must stay usable (no dangling buffer) and finalize cleanly. */
+    test_cjv_zero_null = 1;
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_array_remove(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &arr, 0) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_array_size(&arr) == 0);
+
+    elem = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &arr);
+    WOLFSENTRY_EXIT_ON_TRUE(elem == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), elem, (int32_t)9) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(json_value_array_get(&arr, 0)) == 9);
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &arr) < 0);
+    test_cjv_zero_null = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
 static wolfsentry_errcode_t test_cjvalue_fixes(void) {
     struct wolfsentry_allocator test_allocator;
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -5966,6 +5996,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_empty_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_array_shrink_to_zero(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 

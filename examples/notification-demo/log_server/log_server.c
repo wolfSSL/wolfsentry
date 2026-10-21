@@ -417,6 +417,27 @@ struct log_server_data {
     int error_code;
 };
 
+#if defined(DEBUG_TLS) && defined(OPENSSL_EXTRA)
+/* certificate DN strings are peer-controlled; drop control bytes before logging. */
+static const char *sanitize_log_str(const char *in, char *out, size_t outsz) {
+    size_t i;
+    unsigned char c;
+
+    if (in == NULL)
+        return "(null)";
+    if (outsz == 0)
+        return out;
+    for (i = 0; (i + 1 < outsz) && (in[i] != '\0'); ++i) {
+        c = (unsigned char)in[i];
+        if ((c < 0x20) || (c == 0x7f))
+            out[i] = '?';
+        else
+            out[i] = (char)c;
+    }
+    out[i] = '\0';
+    return out;
+}
+#endif
 
 static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     struct log_server_data *app_data = NULL;
@@ -426,6 +447,7 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     const char *subjectCN;
     char* subjectName = NULL;
     unsigned long subjectHash = 0;
+    char subjectCN_buf[256], subjectName_buf[256], issuerName_buf[256];
 #endif
     struct ca_cert *ca_certs_i;
 
@@ -484,8 +506,11 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     subjectName = wolfSSL_X509_NAME_oneline(
             wolfSSL_X509_get_subject_name(store->current_cert), 0, 0);
     fprintf(stderr, "CN=%s subjectName->name=\"%s\" subject_hash=%lu\n",
-        subjectCN, subjectName, subjectHash);
-    fprintf(stderr, "issuerName->name=\"%s\" issuer_hash=%lu\n", issuerName, issuerHash);
+        sanitize_log_str(subjectCN, subjectCN_buf, sizeof subjectCN_buf),
+        sanitize_log_str(subjectName, subjectName_buf, sizeof subjectName_buf),
+        subjectHash);
+    fprintf(stderr, "issuerName->name=\"%s\" issuer_hash=%lu\n",
+        sanitize_log_str(issuerName, issuerName_buf, sizeof issuerName_buf), issuerHash);
     #endif
 #endif
 

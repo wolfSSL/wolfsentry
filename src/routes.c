@@ -1330,12 +1330,17 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
              */
             WOLFSENTRY_ERROR_RERETURN(ret);
         }
-    } else {
-        if (route_to_insert->parent_event) {
-            if (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT))
-                WOLFSENTRY_SET_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);
-        }
+    } else
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+    /* an aux event parents the ephemeral routes it generates, so it keeps its
+     * subevent role rather than taking on the mutually exclusive parent role.
+     */
+    if ((route_to_insert->parent_event != NULL) &&
+        (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT)) &&
+        (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT)))
+    {
+        WOLFSENTRY_SET_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);
     }
 
     if (route_to_insert->meta.purge_after)

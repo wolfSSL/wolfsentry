@@ -3589,6 +3589,257 @@ static int test_route_insert_rejects_expired_purge_after(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#if !defined(WOLFSENTRY_NO_JSON) || defined(WOLFSENTRY_JSON_DUMP_UTILS)
+
+/* renders a route to JSON through every output budget from empty up to the
+ * full length, checking that a short budget is reported rather than
+ * overrun.
+ */
+static int regression_route_format_json_sweep(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_route *route,
+    unsigned char *full_buf,
+    size_t full_buf_size,
+    size_t *full_len)
+{
+    static const unsigned char guard_byte = 0xA5;
+    unsigned char guard_buf[2048];
+    unsigned char *json_out;
+    size_t json_out_len, n, i;
+    wolfsentry_errcode_t ret;
+
+    json_out = full_buf;
+    json_out_len = full_buf_size;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_format_json(WOLFSENTRY_CONTEXT_ARGS_OUT, route, &json_out, &json_out_len, WOLFSENTRY_FORMAT_FLAG_NONE));
+    *full_len = full_buf_size - json_out_len;
+    WOLFSENTRY_EXIT_ON_FALSE(*full_len > 0);
+    WOLFSENTRY_EXIT_ON_FALSE(*full_len + 512 < sizeof guard_buf);
+
+    for (n = 0; n < *full_len; ++n) {
+        memset(guard_buf, guard_byte, sizeof guard_buf);
+        json_out = guard_buf;
+        json_out_len = n;
+        ret = wolfsentry_route_format_json(WOLFSENTRY_CONTEXT_ARGS_OUT, route, &json_out, &json_out_len, WOLFSENTRY_FORMAT_FLAG_NONE);
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(ret, BUFFER_TOO_SMALL));
+        WOLFSENTRY_EXIT_ON_FALSE((size_t)(json_out - guard_buf) <= n);
+        WOLFSENTRY_EXIT_ON_FALSE(json_out_len <= n);
+        for (i = n; i < sizeof guard_buf; ++i)
+            WOLFSENTRY_EXIT_ON_FALSE(guard_buf[i] == guard_byte);
+    }
+
+    memset(guard_buf, guard_byte, sizeof guard_buf);
+    json_out = guard_buf;
+    json_out_len = *full_len;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_format_json(WOLFSENTRY_CONTEXT_ARGS_OUT, route, &json_out, &json_out_len, WOLFSENTRY_FORMAT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FALSE(json_out_len == 0);
+    WOLFSENTRY_EXIT_ON_FALSE(memcmp(guard_buf, full_buf, *full_len) == 0);
+    WOLFSENTRY_EXIT_ON_FALSE(guard_buf[*full_len] == guard_byte);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_route_format_json_truncation_is_bounded(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_route *route;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_route_flags_t flags;
+    wolfsentry_ent_id_t id;
+    unsigned char full_buf[1024];
+    size_t full_len;
+    struct regression_sockaddr_v4 remote, local;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    regression_sockaddr_v4_init(&remote, (const byte *)"\xC0\xA8\x01\x01", 12345, IPPROTO_TCP, 1);
+    regression_sockaddr_v4_init(&local, (const byte *)"\12\0\0\1", 443, IPPROTO_TCP, 2);
+    flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            main_routes,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            1 /* exact_p */,
+            &inexact_matches,
+            &route));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_route_format_json_sweep(WOLFSENTRY_CONTEXT_ARGS_OUT, route, full_buf, sizeof full_buf, &full_len));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, route, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, id, NULL /* event_label */, 0 /* event_label_len */, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_route_format_json_escapes_parent_event_label(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_route *route;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_route_flags_t flags;
+    wolfsentry_ent_id_t id;
+    unsigned char full_buf[1024];
+    size_t full_len;
+    struct regression_sockaddr_v4 remote, local;
+    static const char event_label[] = "q\"b\\s\001c";
+    static const char expected[] = "\"parent-event\":\"q\\\"b\\\\s\\u0001c\",";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* priority */,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    regression_sockaddr_v4_init(&remote, (const byte *)"\xC0\xA8\x01\x01", 12345, IPPROTO_TCP, 1);
+    regression_sockaddr_v4_init(&local, (const byte *)"\12\0\0\1", 443, IPPROTO_TCP, 2);
+    flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            main_routes,
+            &remote.sa, &local.sa, flags,
+            event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            1 /* exact_p */,
+            &inexact_matches,
+            &route));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_route_format_json_sweep(WOLFSENTRY_CONTEXT_ARGS_OUT, route, full_buf, sizeof full_buf - 1, &full_len));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    full_buf[full_len] = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(strstr((const char *)full_buf, expected) != NULL);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, route, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, id, NULL /* event_label */, 0 /* event_label_len */, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_route_format_json_unknown_protocol_numeric(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_route *route;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_route_flags_t flags;
+    wolfsentry_ent_id_t id;
+    unsigned char full_buf[1024];
+    size_t full_len;
+    struct regression_sockaddr_v4 remote, local;
+    /* IANA reserves 253 for experimentation, so no protocols database
+     * resolves it to a name.
+     */
+    static const wolfsentry_proto_t unknown_proto = 253;
+    static const char expected[] = "\"protocol\":253,";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    regression_sockaddr_v4_init(&remote, (const byte *)"\xC0\xA8\x01\x01", 0, unknown_proto, 1);
+    regression_sockaddr_v4_init(&local, (const byte *)"\12\0\0\1", 0, unknown_proto, 2);
+    flags = WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+          | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+          | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            main_routes,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            1 /* exact_p */,
+            &inexact_matches,
+            &route));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_route_format_json_sweep(WOLFSENTRY_CONTEXT_ARGS_OUT, route, full_buf, sizeof full_buf - 1, &full_len));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    full_buf[full_len] = 0;
+    WOLFSENTRY_EXIT_ON_FALSE(strstr((const char *)full_buf, expected) != NULL);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, route, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, id, NULL /* event_label */, 0 /* event_label_len */, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#endif /* !WOLFSENTRY_NO_JSON || WOLFSENTRY_JSON_DUMP_UTILS */
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -6540,6 +6791,13 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_route_insert_rejects_expired_purge_after failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+#if !defined(WOLFSENTRY_NO_JSON) || defined(WOLFSENTRY_JSON_DUMP_UTILS)
+    ret = test_route_format_json_truncation_is_bounded();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_format_json_truncation_is_bounded failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_DYNAMIC_RULES

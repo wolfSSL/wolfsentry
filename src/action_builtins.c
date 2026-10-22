@@ -24,6 +24,43 @@
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_ACTION_BUILTINS_C
 
+/* the public insert wrappers zero action_results before the route table sees
+ * them, so the CONNECT that spawns a tracking route is counted here instead,
+ * on exactly the route that was just inserted.  caller must hold the lock.
+ */
+static wolfsentry_errcode_t wolfsentry_builtin_track_peer_count_connect(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_ent_id_t route_id,
+    const struct wolfsentry_eventconfig_internal *config)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_route *route = NULL;
+    uint16_t new_count;
+
+    ret = wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, route_id, (struct wolfsentry_table_ent_header **)&route);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    if (route->header.parent_table == NULL)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+    if (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE)
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
+
+    if (WOLFSENTRY_CHECK_BITS(WOLFSENTRY_ATOMIC_LOAD(route->flags), WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS))
+        WOLFSENTRY_RETURN_OK;
+
+    /* dispatch counts connections only under a limit, so match it: an unlimited route must stay at zero. */
+    if (config->config.max_connection_count == 0)
+        WOLFSENTRY_RETURN_OK;
+
+    if (WOLFSENTRY_ATOMIC_LOAD(route->meta.connection_count) >= config->config.max_connection_count)
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+
+    WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(route->meta.connection_count, new_count);
+    if (new_count == 0)
+        WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 /* this simple action creates a new tracking rule, either as a fallthrough or as
  * a side effect.  it can be used to open a pinhole route for bidirectional
  * traffic, or to track derogatory events on a locally bound port (e.g. crypto
@@ -50,6 +87,7 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     struct wolfsentry_route_exports target_exports;
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t insert_action_results = WOLFSENTRY_ACTION_RES_NONE;
+    wolfsentry_ent_id_t new_route_id = WOLFSENTRY_ENT_ID_NONE;
 
     (void)action;
     (void)handler_arg;
@@ -138,13 +176,18 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
         route_table,
         NULL /* void *caller_arg*/,
         &target_exports,
-        NULL /* id */,
+        &new_route_id,
         &insert_action_results);
     WOLFSENTRY_WARN_ON_FAILURE(ret);
     /* no route survives a failed insert, so drop INSERTED (it would suppress generator
      * accounting); other bits are the chain's decisions and are NONE on early failure. */
-    if (ret < 0)
+    if (ret < 0) {
         WOLFSENTRY_CLEAR_BITS(insert_action_results, WOLFSENTRY_ACTION_RES_INSERTED);
+    } else if (WOLFSENTRY_CHECK_BITS(insert_action_results, WOLFSENTRY_ACTION_RES_INSERTED) &&
+               WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_CONNECT))
+    {
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_builtin_track_peer_count_connect(WOLFSENTRY_CONTEXT_ARGS_OUT, new_route_id, ephemeral_config));
+    }
     *action_results |= insert_action_results; /* copying over the bits is crucial to inhibit double-accounting for
                                                * connection_count, derogatory_count, and commendable_count.
                                                */

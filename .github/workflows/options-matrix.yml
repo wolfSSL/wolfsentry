@@ -108,7 +108,7 @@ jobs:
       run: make -j2 ${{ matrix.target }}
 
   wolfcose-deps:
-    name: Build wolfCOSE dependencies
+    name: Build COSE dependencies
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
@@ -149,7 +149,7 @@ jobs:
         retention-days: 1
 
   wolfcose:
-    name: wolfCOSE ${{ matrix.config }}
+    name: COSE ${{ matrix.config }}
     needs: wolfcose-deps
     runs-on: ubuntu-latest
     container:

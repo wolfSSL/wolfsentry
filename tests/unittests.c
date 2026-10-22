@@ -5466,6 +5466,56 @@ static int test_json(const char *fname, const char *extra_fname) {
     WOLFSENTRY_RETURN_OK;
 }
 
+struct sax_dump_capture {
+    char text[128];
+    size_t len;
+};
+
+static int sax_dump_capture_cb(const unsigned char *str, size_t size, void *user_data) {
+    struct sax_dump_capture *cap = (struct sax_dump_capture *)user_data;
+    if (size >= sizeof cap->text - cap->len)
+        return -1;
+    memcpy(cap->text + cap->len, str, size);
+    cap->len += size;
+    cap->text[cap->len] = '\0';
+    return 0;
+}
+
+static int sax_dump_double_text(double dbl, struct sax_dump_capture *cap) {
+    cap->len = 0;
+    cap->text[0] = '\0';
+    return json_dump_double(dbl, sax_dump_capture_cb, cap);
+}
+
+static wolfsentry_errcode_t test_json_sax_double_roundtrip(void) {
+    static const double corpus[] = {
+        1.0 + 2.220446049250313e-16,
+        0.1 + 0.2,
+        0.1,
+        1.0 / 3.0,
+        -2.0 / 3.0,
+        1.7976931348623157e308,
+        2.2250738585072014e-308,
+        4.9406564584124654e-324,
+        1e-300,
+        123456789.12345679
+    };
+    struct sax_dump_capture cap;
+    size_t i;
+    double reparsed;
+
+    for (i = 0; i < sizeof corpus / sizeof corpus[0]; ++i) {
+        WOLFSENTRY_EXIT_ON_FAILURE(sax_dump_double_text(corpus[i], &cap));
+        WOLFSENTRY_EXIT_ON_FAILURE(json_number_to_double((const unsigned char *)cap.text, cap.len, &reparsed));
+        if (memcmp(&reparsed, &corpus[i], sizeof reparsed) != 0) {
+            (void)fprintf(stderr, "double did not survive dump and reparse: %s\n", cap.text);
+            return 1;
+        }
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_JSON */
 
 #ifdef TEST_JSON_CORPUS
@@ -5782,6 +5832,12 @@ int main(int argc, char* argv[]) {
     ret = test_json(TEST_NUMERIC_JSON_CONFIG_PATH, NULL);
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json failed for " TEST_NUMERIC_JSON_CONFIG_PATH ", " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_json_sax_double_roundtrip();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_sax_double_roundtrip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

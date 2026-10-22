@@ -3951,6 +3951,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
     struct wolfsentry_host_platform_interface hpi;
 #ifdef WOLFSENTRY_THREADSAFE
     wolfsentry_lock_flags_t lock_flags = WOLFSENTRY_LOCK_FLAG_NONE;
+    wolfsentry_errcode_t cleanup_ret;
 #endif
     wolfsentry_errcode_t ret;
 
@@ -4046,7 +4047,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
   out:
 
     if (ret < 0) {
-        (void)wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT);
+#ifdef WOLFSENTRY_THREADSAFE
+        /* the new context is still private, so tear it down with no thread context, which a read-only thread or an expired deadline cannot block. */
+        cleanup_ret = wolfsentry_lock_mutex_abstimed(&(*wolfsentry)->lock, NULL /* thread */, &timespec_deadline_now, WOLFSENTRY_LOCK_FLAG_NONE);
+        if (cleanup_ret >= 0)
+            cleanup_ret = wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL /* thread */));
+        WOLFSENTRY_WARN_ON_FAILURE(cleanup_ret);
+#else
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT));
+#endif
     }
     WOLFSENTRY_ERROR_RERETURN(ret);
 }

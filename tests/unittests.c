@@ -3200,6 +3200,73 @@ static int test_route_update_flags_protects_internal_flags(WOLFSENTRY_CONTEXT_AR
     return 0;
 }
 
+static int test_route_table_max_purgeable_routes_shrink(WOLFSENTRY_CONTEXT_ARGS_IN) {
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_route *route;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_hitcount_t max_purgeable_routes;
+    wolfsentry_ent_id_t ids[3];
+    unsigned int i;
+
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 4005;
+    local.sa.sa_port = 4006;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    memcpy(local.sa.addr, "\x0a\x0b\x0c\x14", sizeof local.addr_buf);
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* three routes with no connections, all already due for purging. */
+    for (i = 0; i < sizeof ids / sizeof ids[0]; ++i) {
+        memcpy(remote.sa.addr, "\x0a\x0b\x0c\x00", sizeof remote.addr_buf);
+        remote.sa.addr[3] = (byte)(0x20 + i);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &remote.sa, &local.sa,
+                WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                NULL /* event_label */, 0 /* event_label_len */,
+                &ids[i], &action_results));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[i], (struct wolfsentry_table_ent_header **)&route));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_purge_time_set(WOLFSENTRY_CONTEXT_ARGS_OUT, route, 1));
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    }
+    WOLFSENTRY_EXIT_ON_FALSE(main_routes->purge_list.len == 3);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* raising the limit, or lowering it to exactly the current count, purges nothing. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_max_purgeable_routes_set(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, 5));
+    WOLFSENTRY_EXIT_ON_FALSE(main_routes->purge_list.len == 3);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_max_purgeable_routes_set(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, 3));
+    WOLFSENTRY_EXIT_ON_FALSE(main_routes->purge_list.len == 3);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_max_purgeable_routes_set(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, 10));
+    WOLFSENTRY_EXIT_ON_FALSE(main_routes->purge_list.len == 3);
+
+    /* lowering the limit below the current count purges immediately. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_max_purgeable_routes_set(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, 2));
+    WOLFSENTRY_EXIT_ON_FALSE(main_routes->purge_list.len <= 2);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_max_purgeable_routes_get(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &max_purgeable_routes));
+    WOLFSENTRY_EXIT_ON_FALSE(max_purgeable_routes == 2);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_max_purgeable_routes_set(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    return 0;
+}
+
 static int test_static_routes_guards(void) {
     struct wolfsentry_context *wolfsentry;
     static const struct wolfsentry_eventconfig config = { 0 };
@@ -3225,6 +3292,8 @@ static int test_static_routes_guards(void) {
     WOLFSENTRY_EXIT_ON_FALSE(test_route_update_flags_protects_immutable_flags(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
 
     WOLFSENTRY_EXIT_ON_FALSE(test_route_update_flags_protects_internal_flags(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+
+    WOLFSENTRY_EXIT_ON_FALSE(test_route_table_max_purgeable_routes_shrink(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

@@ -920,20 +920,17 @@ static wolfsentry_errcode_t usecs_to_wolfsentry_time(struct wolfsentry_context *
     WOLFSENTRY_RETURN_OK;
 }
 
-static long wolfsentry_time_to_usecs(struct wolfsentry_context *wolfsentry, wolfsentry_time_t ts) {
+static wolfsentry_errcode_t wolfsentry_time_to_usecs(struct wolfsentry_context *wolfsentry, wolfsentry_time_t ts, long *usecs) {
     time_t howlong_secs;
     long howlong_nsecs;
-    wolfsentry_errcode_t ret = WOLFSENTRY_INTERVAL_TO_SECONDS(ts, &howlong_secs, &howlong_nsecs);
-    if (ret < 0) {
-        WOLFSENTRY_WARN_ON_FAILURE(ret);
-        return 0;
-    }
-    else if (howlong_secs * (time_t)1000000 >= (time_t)MAX_SINT_OF(long) - (time_t)1000000L)
-        return (long)MAX_SINT_OF(long);
+    WOLFSENTRY_RERETURN_IF_ERROR(WOLFSENTRY_INTERVAL_TO_SECONDS(ts, &howlong_secs, &howlong_nsecs));
+    if (howlong_secs * (time_t)1000000 >= (time_t)MAX_SINT_OF(long) - (time_t)1000000L)
+        *usecs = (long)MAX_SINT_OF(long);
     else if (howlong_secs * (time_t)1000000 <= (time_t)MIN_SINT_OF(long))
-        return (long)MIN_SINT_OF(long);
+        *usecs = (long)MIN_SINT_OF(long);
     else
-        return ((long)howlong_secs * 1000000L) + (howlong_nsecs / 1000L);
+        *usecs = ((long)howlong_secs * 1000000L) + (howlong_nsecs / 1000L);
+    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t rel_when) {
@@ -1004,8 +1001,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel_usecs(WOLFSENTRY
     {
         return ret;
     }
-    if (usecs)
-        *usecs = wolfsentry_time_to_usecs(wolfsentry, rel_when);
+    if (usecs) {
+        wolfsentry_errcode_t conv_ret = wolfsentry_time_to_usecs(wolfsentry, rel_when, usecs);
+        WOLFSENTRY_RERETURN_IF_ERROR(conv_ret);
+    }
     return ret;
 }
 

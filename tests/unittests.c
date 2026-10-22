@@ -3143,6 +3143,63 @@ static int test_route_update_flags_protects_immutable_flags(WOLFSENTRY_CONTEXT_A
     return 0;
 }
 
+static int test_route_update_flags_protects_internal_flags(WOLFSENTRY_CONTEXT_ARGS_IN) {
+    struct wolfsentry_route *route;
+    wolfsentry_ent_id_t id;
+    wolfsentry_route_flags_t flags_before, flags_after, flags_at_entry;
+    wolfsentry_action_res_t action_results;
+
+    WOLFSENTRY_EXIT_ON_FALSE(insert_route_for_update_flags(WOLFSENTRY_CONTEXT_ARGS_OUT, &route, &id) == 0);
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    flags_at_entry = WOLFSENTRY_ATOMIC_LOAD(route->flags);
+    WOLFSENTRY_EXIT_ON_FALSE(flags_at_entry & WOLFSENTRY_ROUTE_FLAG_IN_TABLE);
+    WOLFSENTRY_EXIT_ON_TRUE(flags_at_entry & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE);
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        wolfsentry_route_update_flags(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE,
+            WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before, &flags_after, &action_results));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        wolfsentry_route_update_flags(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            WOLFSENTRY_ROUTE_FLAG_IN_TABLE,
+            WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before, &flags_after, &action_results));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        wolfsentry_route_update_flags(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            WOLFSENTRY_ROUTE_FLAG_NONE,
+            WOLFSENTRY_ROUTE_FLAG_IN_TABLE,
+            &flags_before, &flags_after, &action_results));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        wolfsentry_route_update_flags(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            WOLFSENTRY_ROUTE_FLAG_NONE,
+            WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE,
+            &flags_before, &flags_after, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ATOMIC_LOAD(route->flags) == flags_at_entry);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_delete_by_id(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            id,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &action_results));
+
+    return 0;
+}
+
 static int test_static_routes_guards(void) {
     struct wolfsentry_context *wolfsentry;
     static const struct wolfsentry_eventconfig config = { 0 };
@@ -3166,6 +3223,8 @@ static int test_static_routes_guards(void) {
     WOLFSENTRY_EXIT_ON_FALSE(test_route_update_flags_rejects_penaltybox_and_greenlist(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
 
     WOLFSENTRY_EXIT_ON_FALSE(test_route_update_flags_protects_immutable_flags(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+
+    WOLFSENTRY_EXIT_ON_FALSE(test_route_update_flags_protects_internal_flags(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

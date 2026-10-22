@@ -2881,6 +2881,54 @@ static int test_route_insert_requires_direction(WOLFSENTRY_CONTEXT_ARGS_IN) {
     return 0;
 }
 
+static int test_route_insert_by_exports_requires_direction(WOLFSENTRY_CONTEXT_ARGS_IN) {
+    struct wolfsentry_route_exports exp_route;
+    byte exp_remote_addr[4];
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id;
+
+    memset(&exp_route, 0, sizeof exp_route);
+    exp_route.sa_family = AF_INET;
+    exp_route.sa_proto = IPPROTO_TCP;
+    exp_route.flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+                    | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
+    memcpy(exp_remote_addr, "\x0a\x0b\x0c\x0d", sizeof exp_remote_addr);
+    exp_route.remote_address = exp_remote_addr;
+    exp_route.remote.addr_len = sizeof exp_remote_addr * BITS_PER_BYTE;
+    exp_route.local.addr_len = 0;
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &exp_route,
+            &id, &action_results));
+
+    /* the same route is accepted once it has a direction. */
+    WOLFSENTRY_SET_BITS(exp_route.flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &exp_route,
+            &id, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_delete_by_id(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            id,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &action_results));
+
+    return 0;
+}
+
 static int test_static_routes_guards(void) {
     struct wolfsentry_context *wolfsentry;
     static const struct wolfsentry_eventconfig config = { 0 };
@@ -2896,6 +2944,8 @@ static int test_static_routes_guards(void) {
             WOLFSENTRY_INIT_FLAG_NONE));
 
     WOLFSENTRY_EXIT_ON_FALSE(test_route_insert_requires_direction(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+
+    WOLFSENTRY_EXIT_ON_FALSE(test_route_insert_by_exports_requires_direction(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

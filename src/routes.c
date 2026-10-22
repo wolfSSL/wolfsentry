@@ -4212,8 +4212,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
         if (have_r_attr(SA_REMOTE_ADDR)) {
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
             if (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,
@@ -4240,8 +4241,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
             } else
 #endif
             {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,
@@ -4280,8 +4282,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
         if (have_r_attr(SA_LOCAL_ADDR)) {
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
             if (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,
@@ -4308,8 +4311,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
             } else
 #endif
             {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,

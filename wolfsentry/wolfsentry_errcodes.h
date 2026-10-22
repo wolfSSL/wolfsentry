@@ -260,7 +260,7 @@ static inline int WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(wolfsentry_errcode_t x) {
     /*!< \brief Get a shared lock on the current context, and on failure, return the `wolfsentry_errcode_t`. @hideinitializer */
 
     #define WOLFSENTRY_PROMOTABLE_EX(ctx) wolfsentry_context_lock_shared_with_reservation_abstimed(ctx, thread, NULL)
-    /*!< \brief Get a mutex on a `wolfsentry_context`, evaluating to the resulting `wolfsentry_errcode_t`. @hideinitializer */
+    /*!< \brief Get a shared lock with mutex promotion reservation on a `wolfsentry_context`, evaluating to the resulting `wolfsentry_errcode_t`. @hideinitializer */
 
     #define WOLFSENTRY_PROMOTABLE_OR_RETURN() do {              \
         wolfsentry_errcode_t _lock_ret;                         \

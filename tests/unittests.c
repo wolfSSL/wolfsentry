@@ -335,6 +335,40 @@ static wolfsentry_errcode_t test_eventconfig_overlap_bits(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_eventconfig_alignment(void) {
+    struct wolfsentry_eventconfig config;
+
+    /* Non-zero alignment with zero private-data size is contradictory. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_alignment = sizeof(void *);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* Alignment smaller than a pointer is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = 32;
+    config.route_private_data_alignment = 1;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* Non-power-of-two alignment is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = 64;
+    config.route_private_data_alignment = (3 * sizeof(void *));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* Alignment larger than the private-data size is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = sizeof(void *);
+    config.route_private_data_alignment = (2 * sizeof(void *));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* A private-data size beyond the data_addr_offset field is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = (size_t)0x10000;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NUMERIC_ARG_TOO_BIG, wolfsentry_eventconfig_check(&config));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_INIT */
 
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
@@ -5789,6 +5823,11 @@ int main(int argc, char* argv[]) {
     ret = test_eventconfig_overlap_bits();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_eventconfig_overlap_bits failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_eventconfig_alignment();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_eventconfig_alignment failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

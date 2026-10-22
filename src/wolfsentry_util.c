@@ -3018,9 +3018,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
 
     WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
 
-    /* unlocking a recursive mutex, like recursively locking one, can be done lock-free. */
+    /* unlocking a recursive mutex, like recursively locking one, can be done
+     * lock-free, except when unwinding to the promotion depth, which must
+     * evaluate the downgrade logic below.
+     */
     if ((WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID) &&
-        (lock->holder_count.write > 1))
+        (lock->holder_count.write > 1) &&
+        (lock->holder_count.write - 1 != lock->promoted_at_count))
     {
         --lock->holder_count.write;
         if (thread)
@@ -3127,16 +3131,25 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
             if (lock->promoted_at_count == lock->holder_count.write) {
                 lock->promoted_at_count = 0;
                 if ((flags & WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE) && (! thread->tracked_shared_lock)) {
-                    WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_SHARED);
+                    /* same bookkeeping as wolfsentry_lock_mutex2shared(): writer count becomes reader count. */
                     if (flags & (WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO)) {
+                        if (lock->read2write_reservation_holder != WOLFSENTRY_THREAD_NO_ID) /* can't happen, but be sure. */ {
+                            ret = WOLFSENTRY_ERROR_ENCODE(INTERNAL_CHECK_FATAL);
+                            goto out;
+                        }
+                        ++thread->mutex_and_reservation_count;
                         WOLFSENTRY_ATOMIC_STORE(lock->read2write_reservation_holder, WOLFSENTRY_THREAD_GET_ID);
+                        lock->read2write_waiter_read_count = lock->holder_count.write;
                         /* note, not incrementing write_waiter_count, to allow shared lockers to get locks until the redemption phase. */
-                        lock->read2write_waiter_read_count = lock->holder_count.read;
+                    }
+                    WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_SHARED);
+                    WOLFSENTRY_ATOMIC_STORE(lock->write_lock_holder, WOLFSENTRY_THREAD_NO_ID);
+                    thread->mutex_and_reservation_count -= lock->holder_count.write;
+                    thread->shared_count += lock->holder_count.read;
+                    thread->recursion_of_tracked_lock = lock->holder_count.read;
+                    thread->tracked_shared_lock = lock;
+                    if (flags & (WOLFSENTRY_LOCK_FLAG_TRY_RESERVATION_TOO | WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO)) {
                         ++lock->holder_count.read; /* suppress posts to sem_read2write_waiters until wolfsentry_lock_shared2mutex_redeem() is entered. */
-                        thread->mutex_and_reservation_count -= lock->holder_count.write - 1; /* -1 for the reservation */
-                        thread->shared_count += lock->holder_count.read;
-                        thread->tracked_shared_lock = lock;
-                        thread->recursion_of_tracked_lock = lock->holder_count.read;
                         ret = WOLFSENTRY_SUCCESS_ENCODE(LOCK_OK_AND_GOT_RESV);
                     } else
                         ret = WOLFSENTRY_ERROR_ENCODE(OK);

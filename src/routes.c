@@ -2016,6 +2016,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_default_policy_set(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (WOLFSENTRY_CHECK_BITS(default_policy, WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    /* a port reset only qualifies a reject verdict. */
+    if (WOLFSENTRY_MASKIN_BITS(default_policy, WOLFSENTRY_ACTION_RES_PORT_RESET) &&
+        (! WOLFSENTRY_MASKIN_BITS(default_policy, WOLFSENTRY_ACTION_RES_REJECT)))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     WOLFSENTRY_MUTEX_OR_RETURN();
     table->default_policy = default_policy;
     if (table == wolfsentry->routes)

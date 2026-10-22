@@ -197,6 +197,13 @@ static wolfsentry_errcode_t convert_check_magnitude(const char *buf, uint64_t li
     WOLFSENTRY_RETURN_OK;
 }
 
+/* local equivalent of strspn(p, " \t"), which freestanding targets may lack. */
+static const char *convert_skip_blanks(const char *p) {
+    while ((*p == ' ') || (*p == '\t'))
+        ++p;
+    return p;
+}
+
 static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *data, size_t data_size, uint64_t *out) {
     wolfsentry_errcode_t ret;
     char buf[24];
@@ -215,6 +222,12 @@ static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     memcpy(buf, data, data_size);
     buf[data_size] = 0;
+
+    /* strtoull()/strtoul() silently negate a leading minus; reject it so a
+     * negative literal does not wrap to a large unsigned value.
+     */
+    if (*convert_skip_blanks(buf) == '-')
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
 #ifndef WOLFSENTRY_NO_ERRNO_H
     errno = 0;

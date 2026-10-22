@@ -3075,7 +3075,7 @@ struct wolfsentry_kv_pair {
 #define WOLFSENTRY_KV_V_UINT(kv) ((kv)->a.v_uint)
     /*!< \brief Evaluates to the `uint64_t` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_UINT`. @hideinitializer */
 #define WOLFSENTRY_KV_V_SINT(kv) ((kv)->a.v_sint)
-    /*!< \brief Evaluates to the `int64_t` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_INT`. @hideinitializer */
+    /*!< \brief Evaluates to the `int64_t` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_SINT`. @hideinitializer */
 #define WOLFSENTRY_KV_V_FLOAT(kv) ((kv)->a.v_float)
     /*!< \brief Evaluates to the `double` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_FLOAT`. @hideinitializer */
 #define WOLFSENTRY_KV_V_STRING_LEN(kv) ((kv)->a.string_len)

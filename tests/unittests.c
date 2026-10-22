@@ -5711,6 +5711,77 @@ static int test_json_uint16_bounds(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_json_load_one_route_flags(
+    const char *json,
+    wolfsentry_route_flags_t *route_flags)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_cursor *cursor;
+    struct wolfsentry_route *route;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            (const unsigned char *)json, strlen(json),
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_current(main_routes, cursor, &route));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_flags(route, route_flags));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    ret = WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_json_tcplike_explicit_flag(void) {
+    /* family 2 == INET, protocol 6 == TCP; the flag key precedes "protocol",
+     * as in the route dump, so an explicit setting must survive the protocol
+     * clause's implicit default.
+     */
+    static const char explicit_false[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"tcplike-port-numbers\" : false, \"protocol\" : 6 } ] }";
+    static const char explicit_true[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"tcplike-port-numbers\" : true, \"protocol\" : 6 } ] }";
+    static const char omitted[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"protocol\" : 6 } ] }";
+    wolfsentry_route_flags_t route_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_load_one_route_flags(explicit_false, &route_flags), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(! WOLFSENTRY_CHECK_BITS(route_flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS));
+
+    route_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_load_one_route_flags(explicit_true, &route_flags), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(route_flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS));
+
+    route_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_load_one_route_flags(omitted, &route_flags), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(route_flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_JSON */
 
 #ifdef TEST_JSON_CORPUS
@@ -6093,6 +6164,11 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif
+    ret = test_json_tcplike_explicit_flag();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_tcplike_explicit_flag failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
 #endif
 
 #ifdef TEST_JSON_CORPUS

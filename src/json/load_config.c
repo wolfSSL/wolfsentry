@@ -111,6 +111,7 @@ struct wolfsentry_json_process_state {
             WOLFSENTRY_SOCKADDR(WOLFSENTRY_MAX_ADDR_BITS) remote;
             WOLFSENTRY_SOCKADDR(WOLFSENTRY_MAX_ADDR_BITS) local;
             wolfsentry_route_flags_t flags;
+            int tcplike_port_numbers_explicit;
         } route;
         struct {
             char label[WOLFSENTRY_MAX_LABEL_BYTES];
@@ -1169,7 +1170,9 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-    if (((jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET) || (jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET6)) &&
+    /* implicit default only; an explicit tcplike-port-numbers setting wins. */
+    if ((! jps->o_u_c.route.tcplike_port_numbers_explicit) &&
+        ((jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET) || (jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET6)) &&
         ((jps->o_u_c.route.remote.sa_proto == IPPROTO_TCP) || (jps->o_u_c.route.remote.sa_proto == IPPROTO_UDP)))
         WOLFSENTRY_SET_BITS(jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS);
 
@@ -1252,8 +1255,12 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
     else {
         wolfsentry_route_flags_t flag;
         ret = wolfsentry_route_flag_assoc_by_name(jps->cur_keyname, WOLFSENTRY_LENGTH_NULL_TERMINATED, &flag);
-        if (ret >= 0)
-            WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, flag));
+        if (ret >= 0) {
+            ret = handle_route_boolean_clause(type, &jps->o_u_c.route.flags, flag);
+            if ((ret >= 0) && (flag == WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS))
+                jps->o_u_c.route.tcplike_port_numbers_explicit = 1;
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        }
         else {
             if (WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
                 WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);

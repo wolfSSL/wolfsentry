@@ -318,6 +318,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(
     )
 {
     wolfsentry_errcode_t ret;
+    wolfsentry_ent_id_t first_candidate = WOLFSENTRY_ENT_ID_NONE;
 
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
 
@@ -327,7 +328,20 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(
             if (ret < 0)
                 break;
         } else {
-            ent->id = ++wolfsentry->mk_id_cb_state.id_counter;
+            ++wolfsentry->mk_id_cb_state.id_counter;
+            /* the counter wraps past the reserved null ID; collisions with
+             * live IDs are handled by the ITEM_ALREADY_PRESENT retry.
+             */
+            if (wolfsentry->mk_id_cb_state.id_counter == WOLFSENTRY_ENT_ID_NONE)
+                ++wolfsentry->mk_id_cb_state.id_counter;
+            if (first_candidate == WOLFSENTRY_ENT_ID_NONE)
+                first_candidate = wolfsentry->mk_id_cb_state.id_counter;
+            else if (wolfsentry->mk_id_cb_state.id_counter == first_candidate) {
+                ent->id = WOLFSENTRY_ENT_ID_NONE;
+                ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
+                break;
+            }
+            ent->id = wolfsentry->mk_id_cb_state.id_counter;
         }
 
         ret = wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, ent);

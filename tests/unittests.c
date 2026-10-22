@@ -4256,6 +4256,20 @@ static wolfsentry_errcode_t test_regression_route_timing(void) {
         WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
     }
 
+    /* a zero box duration is permanent, and a route boxed at insert (no box
+     * time recorded) is never released by the timeout. */
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert_pbox_event(WOLFSENTRY_CONTEXT_ARGS_OUT, "pboxperm", 2, 0, WOLFSENTRY_EVENTCONFIG_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x05", 32, "pboxperm", WOLFSENTRY_ROUTE_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x06", 32, "pbox", WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED, &id));
+    for (i = 0; i < 2; ++i)
+        WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x05", WOLFSENTRY_ACTION_RES_DEROGATORY, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    regression_fake_now += 1000000;
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x05", WOLFSENTRY_ACTION_RES_NONE, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x06", WOLFSENTRY_ACTION_RES_NONE, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     WOLFSENTRY_RETURN_OK;

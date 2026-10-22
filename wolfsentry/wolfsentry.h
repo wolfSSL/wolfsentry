@@ -61,15 +61,15 @@
 #define WOLFSENTRY_VERSION WOLFSENTRY_VERSION_ENCODE(WOLFSENTRY_VERSION_MAJOR, WOLFSENTRY_VERSION_MINOR, WOLFSENTRY_VERSION_TINY)
     /*!< \brief The version recorded in wolfsentry.h, encoded as an integer @hideinitializer */
 #define WOLFSENTRY_VERSION_GT(major, minor, tiny) (WOLFSENTRY_VERSION > WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is greater than that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is greater than the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_GE(major, minor, tiny) (WOLFSENTRY_VERSION >= WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is greater than or equal to that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is greater than or equal to the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_EQ(major, minor, tiny) (WOLFSENTRY_VERSION == WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version equals that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h equals the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_LT(major, minor, tiny) (WOLFSENTRY_VERSION < WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is less than that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is less than the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_LE(major, minor, tiny) (WOLFSENTRY_VERSION <= WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is less than or equal to that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is less than or equal to the given version. @hideinitializer */
 
 /*! \brief flags to pass to wolfsentry_init_ex(), to be `OR`d together. */
 typedef enum {

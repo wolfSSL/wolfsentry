@@ -47,7 +47,7 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     wolfsentry_addr_bits_t rule_local_addr_len, rule_remote_addr_len;
     struct wolfsentry_route_exports target_exports;
     wolfsentry_errcode_t ret;
-    wolfsentry_action_res_t insert_action_results;
+    wolfsentry_action_res_t insert_action_results = WOLFSENTRY_ACTION_RES_NONE;
 
     (void)action;
     (void)handler_arg;
@@ -117,14 +117,18 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
     /* can't pass action_results directly to _route_insert -- it would get zeroed. */
-    WOLFSENTRY_WARN_ON_FAILURE(
-        wolfsentry_route_insert_by_exports_into_table(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
-            route_table,
-            NULL /* void *caller_arg*/,
-            &target_exports,
-            NULL /* id */,
-            &insert_action_results));
+    ret = wolfsentry_route_insert_by_exports_into_table(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        route_table,
+        NULL /* void *caller_arg*/,
+        &target_exports,
+        NULL /* id */,
+        &insert_action_results);
+    WOLFSENTRY_WARN_ON_FAILURE(ret);
+    /* no route survives a failed insert, so drop INSERTED (it would suppress generator
+     * accounting); other bits are the chain's decisions and are NONE on early failure. */
+    if (ret < 0)
+        WOLFSENTRY_CLEAR_BITS(insert_action_results, WOLFSENTRY_ACTION_RES_INSERTED);
     *action_results |= insert_action_results; /* copying over the bits is crucial to inhibit double-accounting for
                                                * connection_count, derogatory_count, and commendable_count.
                                                */

@@ -4123,8 +4123,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_flag_assoc_by_name(const ch
     if (len < 0)
         len = (int)strlen(name);
     for (i = wolfsentry_route_flag_names; i < end_ptr_of_array(wolfsentry_route_flag_names); ++i) {
-        if ((strncmp(i->name, name, (size_t)len) == 0) &&
-            (i->name[len] == 0))
+        /* compare lengths first so a shared NUL does not lead to reading
+         * i->name[len] past the end of the name literal. */
+        if ((strlen(i->name) == (size_t)len) &&
+            (strncmp(i->name, name, (size_t)len) == 0))
         {
             *flag = i->flag;
             WOLFSENTRY_RETURN_OK;

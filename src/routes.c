@@ -2907,6 +2907,8 @@ static wolfsentry_errcode_t check_user_inited_result(wolfsentry_action_res_t act
     if (WOLFSENTRY_MASKIN_BITS(action_results,
                                WOLFSENTRY_ACTION_RES_ACCEPT |
                                WOLFSENTRY_ACTION_RES_REJECT |
+                               WOLFSENTRY_ACTION_RES_FALLTHROUGH |
+                               WOLFSENTRY_ACTION_RES_INSERTED |
                                WOLFSENTRY_ACTION_RES_STOP |
                                WOLFSENTRY_ACTION_RES_DEALLOCATED |
                                WOLFSENTRY_ACTION_RES_ERROR))

@@ -2275,7 +2275,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route(
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     wolfsentry_action_res_t *action_results
     );
-    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route by ID, mainly for use by application code that tracks route/session relationships. */
+    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route with the supplied route pointer, mainly for use by application code that tracks route/session relationships. */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_with_inited_result(
     WOLFSENTRY_CONTEXT_ARGS_IN,

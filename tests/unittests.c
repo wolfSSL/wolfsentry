@@ -3469,6 +3469,115 @@ static int test_dynamic_rules(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+static wolfsentry_errcode_t test_regression_bitmask_match_specificity(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_ent_id_t route_id, broad_id, narrow_id;
+    struct wolfsentry_route_exports broad_route, narrow_route;
+    byte broad_addr[8], narrow_addr[8];
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    static const wolfsentry_route_flags_t common_flags =
+        WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+        | WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK
+        | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+        | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+        | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+        | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+        | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(&broad_route, 0, sizeof broad_route);
+    memset(&narrow_route, 0, sizeof narrow_route);
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+
+    /* broad bitmask route 10.0.0.0/255.0.0.0, greenlisted (accept). */
+    memcpy(broad_addr, "\x0A\x00\x00\x00\xFF\x00\x00\x00", 8); /* NOLINT(bugprone-not-null-terminated-result) */
+    broad_route.sa_family = AF_INET;
+    broad_route.sa_proto = IPPROTO_TCP;
+    broad_route.remote_address = broad_addr;
+    broad_route.remote.addr_len = 64;
+    broad_route.flags = common_flags | WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &broad_route,
+            &broad_id, &action_results));
+
+    /* narrow bitmask route 10.1.2.0/255.255.255.0, penaltyboxed (reject). */
+    memcpy(narrow_addr, "\x0A\x01\x02\x00\xFF\xFF\xFF\x00", 8); /* NOLINT(bugprone-not-null-terminated-result) */
+    narrow_route.sa_family = AF_INET;
+    narrow_route.sa_proto = IPPROTO_TCP;
+    narrow_route.remote_address = narrow_addr;
+    narrow_route.remote.addr_len = 64;
+    narrow_route.flags = common_flags | WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &narrow_route,
+            &narrow_id, &action_results));
+
+    (void)broad_id;
+
+    /* 10.1.2.3 matches both; the more specific /24 route must win, so the
+     * verdict is reject, not accept.
+     */
+    remote.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.addr_len = 32;
+    memcpy(remote.sa.addr, "\x0A\x01\x02\x03", 4); /* NOLINT(bugprone-not-null-terminated-result) */
+    local.sa.sa_family = AF_INET;
+    local.sa.sa_proto = IPPROTO_TCP;
+    local.sa.addr_len = 0;
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa, &local.sa,
+            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            NULL /* event_label */, 0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &route_id, &inexact_matches, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FALSE(route_id == narrow_id);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
+
+static int test_dynamic_rules_regressions(void) {
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_bitmask_match_specificity(), OK));
+#endif
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -5747,6 +5856,11 @@ int main(int argc, char* argv[]) {
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_dynamic_rules_regressions();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_dynamic_rules_regressions failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

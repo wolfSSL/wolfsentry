@@ -3479,7 +3479,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_now_plus_delta(struct wolfse
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_to_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t t, struct timespec *ts) {
     time_t epoch_secs;
     long int epoch_nsecs;
-    WOLFSENTRY_TO_EPOCH_TIME(t, &epoch_secs, &epoch_nsecs);
+    wolfsentry_errcode_t ret = WOLFSENTRY_TO_EPOCH_TIME(t, &epoch_secs, &epoch_nsecs);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     ts->tv_sec = epoch_secs;
     ts->tv_nsec = epoch_nsecs;
     WOLFSENTRY_RETURN_OK;
@@ -3491,7 +3492,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_now_plus_delta_timespec(stru
     long int epoch_nsecs;
     wolfsentry_errcode_t ret = WOLFSENTRY_GET_TIME(&now);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, td), &epoch_secs, &epoch_nsecs);
+    ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, td), &epoch_secs, &epoch_nsecs);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     ts->tv_sec = epoch_secs;
     ts->tv_nsec = epoch_nsecs;
     WOLFSENTRY_RETURN_OK;

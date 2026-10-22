@@ -65,9 +65,43 @@ jobs:
             target: no-addr-bitmask-matching-test
           - name: No IPv6
             target: no-ipv6-test
+          - name: C99
+            target: c99-test
+          - name: No alloca
+            target: no-alloca-test
+          - name: Static
+            target: static-build-test
+          - name: No inline
+            target: no-inline-test
+          - name: Fortify source
+            target: fortify-source-test
+          - name: Call trace
+            target: CALL_TRACE-test
+          - name: Small private data alignment
+            target: small-PRIVATE_DATA_ALIGNMENT-test
+          - name: Big private data alignment
+            target: big-PRIVATE_DATA_ALIGNMENT-test
+          - name: POSIX vanilla HPI
+            target: HPI_POSIX_VANILLA-test
+          - name: No malloc builtins
+            target: no-malloc-builtins-test
+          - name: Stripped function sections
+            target: stripped-function-sections-test
+          - name: Unoptimized
+            target: optim-O0-test
+          - name: Library dependencies single-threaded
+            target: library-dependency-singlethreaded-build-test
+          - name: Library dependencies multithreaded
+            target: library-dependency-multithreaded-build-test
+          - name: Distribution
+            target: dist-check
+          - name: Release archive
+            target: release-check
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Trust workspace
       run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
     - name: Test configuration
@@ -163,3 +197,73 @@ jobs:
         make -j2 WOLFCOSE_REQUIRED=1 \
           WOLFCOSE_TEST_TOP=/opt/wolfsentry-deps/wolfCOSE \
           wolfcose-${{ matrix.config }}-test
+
+  toolchain:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: m32
+            target: m32-test
+          - name: m32 C89
+            target: m32-c89-test
+          - name: Route holes
+            target: route-holes-test
+          - name: Struct layout
+            target: pahole-test
+          - name: FreeRTOS arm32
+            target: freertos-arm32-build-test
+          - name: FreeRTOS arm32 thumb
+            target: freertos-arm32-thumb-build-test
+          - name: FreeRTOS arm32 single-threaded
+            target: freertos-arm32-singlethreaded-build-test
+          - name: FreeRTOS arm32 C89
+            target: freertos-arm32-c89-build-test
+          - name: Linux lwIP
+            target: linux-lwip-test
+          - name: Linux lwIP no IPv6
+            target: linux-lwip-test-no-ipv6
+          - name: Linux lwIP C89 m32
+            target: linux-lwip-c89-m32-test
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: wolfsentry
+    - uses: actions/checkout@v4
+      with:
+        repository: FreeRTOS/FreeRTOS-Kernel
+        ref: dbf70559b27d39c1fdb68dfb9a32140b6a6777a0
+        path: third/FreeRTOS/FreeRTOS/Source
+    - uses: actions/checkout@v4
+      with:
+        repository: lwip-tcpip/lwip
+        ref: 3fe8d2fc43a9b69f7ed28c63d44a7744f9c0def9
+        path: third/lwip
+    - name: Apply the lwIP packet filter patch
+      run: patch --directory third/lwip --strip 1 < wolfsentry/lwip/LWIP_PACKET_FILTER_API.patch
+    - name: Build the wolfSentry CI image
+      run: |
+        docker build \
+          --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
+          --tag wolfsentry-ci:local wolfsentry
+    - name: Test configuration
+      env:
+        TARGET: ${{ matrix.target }}
+      run: |
+        # Ubuntu's arm-none-eabi-gcc links test_lwip slightly above the default limit.
+        docker run --rm \
+          --env TMPDIR=/tmp \
+          --env TARGET \
+          --volume "$GITHUB_WORKSPACE/wolfsentry:/workspace/wolfsentry:ro" \
+          --volume "$GITHUB_WORKSPACE/third:/workspace/third:ro" \
+          wolfsentry-ci:local bash -euc '
+            cp -R /workspace/wolfsentry /tmp/wolfsentry
+            cd /tmp/wolfsentry
+            make -j2 FREERTOS_TOP=/workspace/third/FreeRTOS \
+              LWIP_TOP=/workspace/third/lwip \
+              FREERTOS_ARM32_MAX_SECTIONS_SIZE=110000 "$TARGET"
+          '

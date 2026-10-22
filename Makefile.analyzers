@@ -585,6 +585,27 @@ big-PRIVATE_DATA_ALIGNMENT-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/big-PRIVATE_DATA_ALIGNMENT-test" clean
 	@echo "passed: big-PRIVATE_DATA_ALIGNMENT test."
 
+.PHONY: no-malloc-builtins-test
+no-malloc-builtins-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/no-malloc-builtins-test" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/no-malloc-builtins-test" EXTRA_CFLAGS='-DWOLFSENTRY_TEST_HPI_POSIX_VANILLA -DWOLFSENTRY_NO_MALLOC_BUILTINS' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/no-malloc-builtins-test" clean
+	@echo "passed: no-malloc-builtins test."
+
+.PHONY: stripped-function-sections-test
+stripped-function-sections-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/stripped-function-sections-test" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/stripped-function-sections-test" STRIPPED=1 FUNCTION_SECTIONS=1 test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/stripped-function-sections-test" clean
+	@echo "passed: stripped-function-sections test."
+
+.PHONY: optim-O0-test
+optim-O0-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/optim-O0-test" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/optim-O0-test" OPTIM=-O0 test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/optim-O0-test" clean
+	@echo "passed: optim-O0 test."
+
 .PHONY: HPI_POSIX_VANILLA-test
 HPI_POSIX_VANILLA-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/HPI_POSIX_VANILLA-test" clean
@@ -653,6 +674,8 @@ freertos-arm32-thumb-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-thumb-build test."
 
+FREERTOS_ARM32_MAX_SECTIONS_SIZE ?= 100000
+
 .PHONY: freertos-arm32-build-test
 freertos-arm32-build-test:
 	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
@@ -666,7 +689,7 @@ freertos-arm32-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3' UNITTEST_LIST=test_lwip clean
 #	now rebuild with FUNCTION_SECTIONS=1, to test expected text size on a parsimonious link.
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1 FUNCTION_SECTIONS=1
-	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 100000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt $(FREERTOS_ARM32_MAX_SECTIONS_SIZE) ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-test-builds/tests/{freertos,lwip}
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-build test."
@@ -900,7 +923,7 @@ doc-check:
 check: dynamic-build-test c99-test wolfcose-test no-alloca-test singlethreaded-test no-json-test no-json-dom-test no-error-strings-test no-protocol-names-test no-getprotoby-test no-stdio-streams-build-test minimal-build-test minimal-threaded-build-test user-settings-build-test short-enums-test no-addr-bitmask-matching-test no-ipv6-test
 
 .PHONY: check-extra
-check-extra: library-dependency-singlethreaded-build-test library-dependency-multithreaded-build-test pahole-test route-holes-test static-build-test c89-test c23-test no-inline-test m32-test m32-c89-test m32-c23-test fortify-source-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test freertos-arm32-thumb-build-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-test-no-ipv6 linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test
+check-extra: library-dependency-singlethreaded-build-test library-dependency-multithreaded-build-test pahole-test route-holes-test static-build-test c89-test c23-test no-inline-test m32-test m32-c89-test m32-c23-test fortify-source-test CALL_TRACE-test small-PRIVATE_DATA_ALIGNMENT-test big-PRIVATE_DATA_ALIGNMENT-test HPI_POSIX_VANILLA-test no-malloc-builtins-test stripped-function-sections-test optim-O0-test freertos-arm32-thumb-build-test freertos-arm32-build-test freertos-arm32-singlethreaded-build-test freertos-arm32-c89-build-test linux-lwip-test linux-lwip-test-no-ipv6 linux-lwip-c89-m32-test dist-check release-check doc-check notification-demo-build-test .WAIT benchmark-test benchmark-singlethreaded-test
 
 ifdef JSON_TEST_CORPUS_DIR
 export JSON_TEST_CORPUS_DIR

@@ -2722,6 +2722,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     struct wolfsentry_event *trigger_event = NULL;
     wolfsentry_errcode_t ret;
     int apply_default_policy = 0;
+    static int warned_unset_default_policy = 0;
 
     if ((remote == NULL) ||
         (local == NULL) ||
@@ -2845,6 +2846,18 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         }
         if (inexact_matches)
             *inexact_matches = WOLFSENTRY_ROUTE_WILDCARD_FLAGS | WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
+        if (route_table->default_policy == WOLFSENTRY_ACTION_RES_NONE) {
+            /* claim the one-shot atomically so only a single caller warns. */
+            int warn_expected = 0;
+#ifdef WOLFSENTRY_THREADSAFE
+            if (WOLFSENTRY_ATOMIC_CMPXCHG(&warned_unset_default_policy, &warn_expected, 1, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
+#else
+            warn_expected = warned_unset_default_policy;
+            warned_unset_default_policy = 1;
+            if (! warn_expected)
+#endif
+                WOLFSENTRY_WARN("%s", "default route policy is unset (NONE); unmatched traffic falls through with no accept or reject verdict.\n");
+        }
         *action_results |= route_table->default_policy | WOLFSENTRY_ACTION_RES_FALLTHROUGH;
         WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN(USED_FALLBACK);
     }

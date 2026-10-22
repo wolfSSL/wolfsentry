@@ -5550,6 +5550,25 @@ static wolfsentry_errcode_t test_json_sax_nonfinite_dump(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_json_sax_number_text_boundary(void) {
+    unsigned char num[65];
+    double result;
+    size_t len;
+
+    memset(num, '0', sizeof num);
+    num[0] = '1';
+
+    for (len = 62; len <= 63; ++len) {
+        result = 0.0;
+        WOLFSENTRY_EXIT_ON_FAILURE(json_number_to_double(num, len, &result));
+        WOLFSENTRY_EXIT_ON_FALSE(result == ((len == 62) ? 1e61 : 1e62));
+    }
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_number_to_double(num, 64, &result) >= 0);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t test_json_sax_truncated_input(void) {
     static const JSON_CALLBACKS callbacks = { sax_noop_process_cb };
     static const JSON_CONFIG sax_config = {
@@ -5942,6 +5961,12 @@ int main(int argc, char* argv[]) {
     ret = test_json_sax_nonfinite_dump();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_sax_nonfinite_dump failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_json_sax_number_text_boundary();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_sax_number_text_boundary failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 

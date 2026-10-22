@@ -1229,7 +1229,7 @@ json_number_to_double(const unsigned char* num, size_t num_size, double* p_resul
      * requirements.
      */
 
-    if(num_size + 1 < sizeof(local_buffer)) {
+    if(num_size < sizeof(local_buffer)) {
         /* The number is short enough so we can avoid heap allocation. */
         buffer = local_buffer;
     } else {

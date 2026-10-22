@@ -3074,6 +3074,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
     wolfsentry_errcode_t ret;
     int n = 0;
     wolfsentry_action_res_t fallback_action_results = 0;
+    struct wolfsentry_list_ent_header *cursor;
 #ifdef WOLFSENTRY_THREADSAFE
     int have_mutex = 0;
     int got_lock = 0;
@@ -3120,17 +3121,29 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
         table = wolfsentry->routes;
 
     while (table->purge_list.tail) {
-        struct wolfsentry_route *route = WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(table->purge_list.tail);
-        if (mode != 3) {
-            if (route->meta.purge_after > now)
-                break;
-            if ((route->meta.connection_count > 0) &&
-                (! (route->flags & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
-                ((table->max_purgeable_idle_time == 0) || (now - route->meta.last_hit_time > table->max_purgeable_idle_time)))
-            {
-                break;
+        struct wolfsentry_route *route = NULL;
+        int found = 0;
+        /* re-scan from the most stale entry each pass, because a delete runs
+         * application callbacks that can mutate the purge list; skip routes
+         * that still have a live connection within the idle limit so one
+         * protected route does not strand the expired routes behind it. */
+        for (cursor = table->purge_list.tail; cursor != NULL; cursor = cursor->prev) {
+            route = WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(cursor);
+            if (mode != 3) {
+                if (route->meta.purge_after > now)
+                    break;
+                if ((route->meta.connection_count > 0) &&
+                    (! (route->flags & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
+                    ((table->max_purgeable_idle_time == 0) || (now - route->meta.last_hit_time <= table->max_purgeable_idle_time)))
+                {
+                    continue;
+                }
             }
+            found = 1;
+            break;
         }
+        if (! found)
+            break;
 #ifdef WOLFSENTRY_THREADSAFE
         if (! have_mutex) {
             if (mode == 2)

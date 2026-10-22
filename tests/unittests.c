@@ -4014,6 +4014,70 @@ static int test_event_update_config_layout_with_routes(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_event_aux_event_self_reference(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    struct wolfsentry_event *event;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* default_config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "self_aux_event",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "self_aux_event",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "self_aux_event",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "self_aux_event",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &event));
+
+    WOLFSENTRY_EXIT_ON_TRUE(wolfsentry_event_get_aux_event(event) != NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(wolfsentry_event_get_flags(event), WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_drop_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event,
+            NULL /* action_results */));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "self_aux_event",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL /* action_results */));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -6322,6 +6386,12 @@ int main(int argc, char* argv[]) {
     ret = test_event_update_config_layout_with_routes();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_event_update_config_layout_with_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_aux_event_self_reference();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_aux_event_self_reference failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

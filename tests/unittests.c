@@ -3403,6 +3403,123 @@ static int test_route_insert_action_failure_releases_bitmask_af(void) {
 }
 #endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
 
+static wolfsentry_errcode_t regression_noop_insert_action(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_context,
+    void *caller_arg,
+    const struct wolfsentry_event *event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    (void)action;
+    (void)handler_context;
+    (void)caller_arg;
+    (void)event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_route_insert_with_actions_marks_parent_event(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t flags;
+    wolfsentry_ent_id_t id, id_route;
+    struct regression_sockaddr_v4 remote, local;
+    static const char parent_label[] = "parent-with-insert-actions";
+    static const char other_label[] = "would-be-aux-user";
+    static const char action_label[] = "noop-on-insert";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            action_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            regression_noop_insert_action,
+            NULL /* handler_context */,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            parent_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* priority */,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            other_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* priority */,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            parent_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_INSERT,
+            action_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    regression_sockaddr_v4_init(&remote, (const byte *)"\0\1\2\3", 12345, IPPROTO_TCP, 1);
+    regression_sockaddr_v4_init(&local, (const byte *)"\377\376\375\374", 443, IPPROTO_TCP, 1);
+    flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            parent_label, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id_route, &action_results));
+
+    /* an event that already parents a route can't become an aux event. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            other_label, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            parent_label, WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, id_route, NULL /* event_label */, 0 /* event_label_len */, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, other_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, parent_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, action_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -6344,6 +6461,11 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif
+    ret = test_route_insert_with_actions_marks_parent_event();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_insert_with_actions_marks_parent_event failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
 #endif
 
 #ifdef TEST_DYNAMIC_RULES

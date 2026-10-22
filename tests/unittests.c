@@ -3770,6 +3770,250 @@ static int test_event_update_config_null(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_event_update_config_layout_with_routes(void) {
+    struct wolfsentry_context *wolfsentry, *ctx_clone;
+    wolfsentry_ent_id_t id;
+    wolfsentry_action_res_t action_results;
+    struct wolfsentry_eventconfig eventconfig;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+    static const struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
+    static const struct wolfsentry_eventconfig config2_more_connections = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 20 };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const struct wolfsentry_eventconfig config2_more_connections = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 12345;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memcpy(remote.sa.addr, "\0\1\2\3", sizeof remote.addr_buf);
+    memcpy(local.sa.addr, "\377\376\375\374", sizeof local.addr_buf);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            &config2,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes_inherited",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_no_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            &config2,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa,
+            &local.sa,
+            flags,
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id,
+            &action_results));
+
+    memcpy(remote.sa.addr, "\4\5\6\7", sizeof remote.addr_buf);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa,
+            &local.sa,
+            flags,
+            "owns_routes_inherited",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id,
+            &action_results));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &eventconfig));
+
+    WOLFSENTRY_EXIT_ON_FALSE((eventconfig.route_private_data_size == config2.route_private_data_size) &&
+                             (eventconfig.route_private_data_alignment == config2.route_private_data_alignment) &&
+                             (eventconfig.max_connection_count == config2.max_connection_count));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config2_more_connections));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &eventconfig));
+
+    WOLFSENTRY_EXIT_ON_FALSE(eventconfig.max_connection_count == config2_more_connections.max_connection_count);
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes_inherited",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config2));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes_inherited",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout-insert-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            wolfsentry_action_dummy_callback,
+            NULL /* handler_context */,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes_with_insert_action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            &config2,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes_with_insert_action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_INSERT,
+            "layout-insert-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    memcpy(remote.sa.addr, "\10\11\12\13", sizeof remote.addr_buf);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa,
+            &local.sa,
+            flags,
+            "owns_routes_with_insert_action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id,
+            &action_results));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_routes_with_insert_action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_no_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owns_no_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &eventconfig));
+
+    WOLFSENTRY_EXIT_ON_FALSE((eventconfig.route_private_data_size == config.route_private_data_size) &&
+                             (eventconfig.route_private_data_alignment == config.route_private_data_alignment));
+
+    /* a clone without routes has no route using the old layout */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &ctx_clone, WOLFSENTRY_CLONE_FLAG_NO_ROUTES));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(ctx_clone),
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_clone)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &ctx_clone, WOLFSENTRY_CLONE_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(ctx_clone),
+            "owns_routes",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_clone)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -6072,6 +6316,12 @@ int main(int argc, char* argv[]) {
     ret = test_event_update_config_null();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_event_update_config_null failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_update_config_layout_with_routes();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_update_config_layout_with_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

@@ -149,6 +149,10 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_clone_bare(
     memcpy(*new_event, src_event, new_size);
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);
 
+    /* no route in a route-free clone can depend on the copied layout */
+    if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_NO_ROUTES))
+        WOLFSENTRY_CLEAR_BITS((*new_event)->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);
+
     WOLFSENTRY_LIST_HEADER_RESET((*new_event)->post_action_list.header);
     WOLFSENTRY_LIST_HEADER_RESET((*new_event)->insert_action_list.header);
     WOLFSENTRY_LIST_HEADER_RESET((*new_event)->match_action_list.header);
@@ -356,8 +360,22 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_config(WOLFSENTRY_CONTE
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
+static int wolfsentry_event_has_routes(const struct wolfsentry_context *wolfsentry, const struct wolfsentry_event *event) {
+    const struct wolfsentry_table_ent_header *ent;
+
+    if (WOLFSENTRY_CHECK_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT))
+        return 1;
+    for (ent = wolfsentry_table_first(&wolfsentry->routes->header); ent != NULL; ent = ent->next) {
+        if (((const struct wolfsentry_route *)ent)->parent_event == event)
+            return 1;
+    }
+    return 0;
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, const struct wolfsentry_eventconfig *config) {
     struct wolfsentry_event *event;
+    const struct wolfsentry_eventconfig_internal *current_config;
+    struct wolfsentry_eventconfig_internal new_config;
     wolfsentry_errcode_t ret;
 
     if (config == NULL)
@@ -368,18 +386,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(WOLFSENTRY_CO
     ret = wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, &event);
     WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
 
+    ret = wolfsentry_eventconfig_load(config, &new_config);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+
+    current_config = (event->config != NULL) ? event->config : &wolfsentry->config;
+
+    /* existing routes were allocated, and are accessed and freed, using the event's current layout */
+    if (wolfsentry_event_has_routes(wolfsentry, event) &&
+        ((new_config.config.route_private_data_size != current_config->config.route_private_data_size) ||
+         (new_config.config.route_private_data_alignment != current_config->config.route_private_data_alignment)))
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(INCOMPATIBLE_STATE);
+
     if (event->config == NULL) {
         if ((event->config = (struct wolfsentry_eventconfig_internal *)WOLFSENTRY_MALLOC(sizeof *event->config)) == NULL)
             WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(SYS_RESOURCE_FAILED);
-        if ((ret = wolfsentry_eventconfig_load(config, event->config)) < 0) {
-            WOLFSENTRY_FREE(event->config);
-            event->config = NULL;
-        }
-        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
-    } else {
-        ret = wolfsentry_eventconfig_load(config, event->config);
-        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
+    memcpy(event->config, &new_config, sizeof *event->config);
+
+    WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_IN, const char *label, int label_len, struct wolfsentry_event **event) {

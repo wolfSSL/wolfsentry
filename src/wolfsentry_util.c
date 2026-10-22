@@ -85,7 +85,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t
 }
 
 static const char *user_defined_errors[WOLFSENTRY_ERROR_ID_MAX - WOLFSENTRY_ERROR_ID_USER_BASE + 1] = {0};
-static const char *user_defined_successes[WOLFSENTRY_ERROR_ID_MAX + WOLFSENTRY_SUCCESS_ID_USER_BASE + 1] = {0};
+static const char *user_defined_successes[WOLFSENTRY_ERROR_ID_MAX - WOLFSENTRY_SUCCESS_ID_USER_BASE + 1] = {0};
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *message_string) {
     if (wolfsentry_error_id < 0) {

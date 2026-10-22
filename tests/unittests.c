@@ -390,6 +390,21 @@ static wolfsentry_errcode_t test_eventconfig_derogatory_threshold(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifdef WOLFSENTRY_ERROR_STRINGS
+static wolfsentry_errcode_t test_user_string_table_bounds(void) {
+    /* Guard that the user-defined success/error string tables are sized to
+     * hold their highest valid index.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_error_string_set((enum wolfsentry_error_id)WOLFSENTRY_ERROR_ID_MAX, "boundary success string"));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_ALREADY_PRESENT, wolfsentry_user_error_string_set((enum wolfsentry_error_id)WOLFSENTRY_ERROR_ID_MAX, "boundary success string"));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_error_string_set((enum wolfsentry_error_id)(-WOLFSENTRY_ERROR_ID_MAX), "boundary error string"));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_ALREADY_PRESENT, wolfsentry_user_error_string_set((enum wolfsentry_error_id)(-WOLFSENTRY_ERROR_ID_MAX), "boundary error string"));
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* WOLFSENTRY_ERROR_STRINGS */
+
 #endif /* TEST_INIT */
 
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
@@ -5856,6 +5871,13 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_eventconfig_derogatory_threshold failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+#ifdef WOLFSENTRY_ERROR_STRINGS
+    ret = test_user_string_table_bounds();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_user_string_table_bounds failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_LWIP

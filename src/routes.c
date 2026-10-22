@@ -4975,14 +4975,17 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
     }
 
     if (((struct wolfsentry_route_table *)src_table)->fallthrough_route != NULL) {
+        /* take the source reference before releasing the destination's own
+         * route, so a failed increment leaves the destination route intact
+         * rather than a freed, still-published pointer. */
+        WOLFSENTRY_REFCOUNT_INCREMENT(((struct wolfsentry_route_table *)src_table)->fallthrough_route->header.refcount, ret);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         if (((struct wolfsentry_route_table *)dest_table)->fallthrough_route != NULL) {
             WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_drop_reference_1(
                                            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(dest_context),
                                            ((struct wolfsentry_route_table *)dest_table)->fallthrough_route, NULL /* action_results */));
         }
         ((struct wolfsentry_route_table *)dest_table)->fallthrough_route = ((struct wolfsentry_route_table *)src_table)->fallthrough_route;
-        WOLFSENTRY_REFCOUNT_INCREMENT(((struct wolfsentry_route_table *)dest_table)->fallthrough_route->header.refcount, ret);
-        WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_NO_ROUTES))

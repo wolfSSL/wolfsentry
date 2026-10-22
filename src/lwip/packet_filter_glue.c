@@ -1262,8 +1262,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_icmp_callback
         icmp_filter(icmp4_filter_with_wolfsentry);
         icmp_filter_mask(icmp_mask);
         icmp_filter_arg((void *)wolfsentry);
-    } else
+    } else {
         icmp_filter(NULL);
+        icmp_filter_mask(0);
+        icmp_filter_arg(NULL);
+    }
 #endif /* LWIP_ICMP */
 
 #if LWIP_ICMP6

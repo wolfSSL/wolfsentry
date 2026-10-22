@@ -5516,6 +5516,32 @@ static wolfsentry_errcode_t test_json_sax_double_roundtrip(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_json_sax_nonfinite_dump(void) {
+    double inf;
+    double reparsed;
+    struct sax_dump_capture cap;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(json_number_to_double((const unsigned char *)"1e999", 5, &inf));
+    WOLFSENTRY_EXIT_ON_FALSE(inf > 1.7976931348623157e308);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(sax_dump_double_text(inf, &cap));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(cap.text, "null") == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(sax_dump_double_text(-inf, &cap));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(cap.text, "null") == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(json_number_to_double((const unsigned char *)"nan", 3, &reparsed));
+    WOLFSENTRY_EXIT_ON_FAILURE(sax_dump_double_text(reparsed, &cap));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(cap.text, "null") == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(sax_dump_double_text(1.0, &cap));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(cap.text, "1.0") == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(json_number_to_double((const unsigned char *)cap.text, cap.len, &reparsed));
+    WOLFSENTRY_EXIT_ON_FALSE(reparsed == 1.0);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_JSON */
 
 #ifdef TEST_JSON_CORPUS
@@ -5838,6 +5864,12 @@ int main(int argc, char* argv[]) {
     ret = test_json_sax_double_roundtrip();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_sax_double_roundtrip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_json_sax_nonfinite_dump();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_sax_nonfinite_dump failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

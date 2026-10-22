@@ -1538,16 +1538,47 @@ static int freertos_sem_destroy( sem_t * sem )
         }
         WOLFSENTRY_RETURN_VALUE(0);
     }
+    #ifndef EAGAIN
+        #define EAGAIN          11 /* Try again */
+    #endif
+    #ifndef EINTR
+        #define EINTR           4 /* Interrupted system call */
+    #endif
+
     #define sem_timedwait threadx_sem_timedwait
     static int threadx_sem_timedwait( sem_t * sem,
                     const struct timespec * abstime )
     {
-        if (tx_semaphore_get(sem, (uint32_t)(TX_TICK_TIME_MS *
-            (abstime->tv_sec * 1000) + (abstime->tv_nsec / 1000000))) != TX_SUCCESS) {
-            errno = EINVAL;
-            WOLFSENTRY_RETURN_VALUE(-1);
+        ULONG wait_ticks = TX_WAIT_FOREVER;
+        UINT tx_ret;
+
+        if (abstime != NULL) {
+            uint64_t deadline_ticks, now_ticks;
+            if ((abstime->tv_sec < 0) || (abstime->tv_nsec < 0) || (abstime->tv_nsec >= 1000000000L)) {
+                errno = EINVAL;
+                WOLFSENTRY_RETURN_VALUE(-1);
+            }
+            /* abstime is on the builtin get_time clock, so invert that tick mapping, rounding up so a sub-tick future deadline still waits a tick. */
+            deadline_ticks = ((uint64_t)abstime->tv_sec * (uint64_t)TX_TICK_TIME_MS) + (((uint64_t)abstime->tv_nsec + (uint64_t)999999) / (uint64_t)1000000);
+            now_ticks = (uint64_t)tx_time_get();
+            if (deadline_ticks <= now_ticks)
+                wait_ticks = TX_NO_WAIT;
+            else if (deadline_ticks - now_ticks >= (uint64_t)TX_WAIT_FOREVER)
+                wait_ticks = (ULONG)(TX_WAIT_FOREVER - 1);
+            else
+                wait_ticks = (ULONG)(deadline_ticks - now_ticks);
         }
-        WOLFSENTRY_RETURN_VALUE(0);
+
+        tx_ret = tx_semaphore_get(sem, wait_ticks);
+        if (tx_ret == TX_SUCCESS)
+            WOLFSENTRY_RETURN_VALUE(0);
+        if (tx_ret == TX_NO_INSTANCE)
+            errno = ETIMEDOUT;
+        else if (tx_ret == TX_WAIT_ABORTED)
+            errno = EINTR;
+        else
+            errno = EINVAL;
+        WOLFSENTRY_RETURN_VALUE(-1);
     }
     #define sem_wait threadx_sem_wait
     static int threadx_sem_wait( sem_t * sem )
@@ -1561,11 +1592,16 @@ static int freertos_sem_destroy( sem_t * sem )
     #define sem_trywait threadx_sem_trywait
     static int threadx_sem_trywait( sem_t * sem )
     {
-        if (tx_semaphore_get(sem, TX_NO_WAIT) != TX_SUCCESS) {
+        UINT tx_ret = tx_semaphore_get(sem, TX_NO_WAIT);
+        if (tx_ret == TX_SUCCESS)
+            WOLFSENTRY_RETURN_VALUE(0);
+        if (tx_ret == TX_NO_INSTANCE)
+            errno = EAGAIN;
+        else if (tx_ret == TX_WAIT_ABORTED)
+            errno = EINTR;
+        else
             errno = EINVAL;
-            WOLFSENTRY_RETURN_VALUE(-1);
-        }
-        WOLFSENTRY_RETURN_VALUE(0);
+        WOLFSENTRY_RETURN_VALUE(-1);
     }
     static int threadx_sem_destroy( sem_t * sem )
     {

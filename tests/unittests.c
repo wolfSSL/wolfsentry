@@ -3683,11 +3683,73 @@ static wolfsentry_errcode_t test_regression_stale_purge_connected_idle(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_regression_dispatch_error_not_masked(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches, flags;
+    wolfsentry_ent_id_t id;
+    wolfsentry_errcode_t ret;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+    remote.sa.sa_family = AF_INET;
+    remote.sa.addr_len = 0;
+    local.sa.sa_family = AF_INET;
+    local.sa.addr_len = 0;
+
+    /* a family wildcard without the remote/local/proto wildcards it requires is
+     * rejected while the ephemeral target route is built, before any rule is
+     * found; the dispatcher must surface that error, not report a successful
+     * default-policy fallthrough.
+     */
+    WOLFSENTRY_CLEAR_ALL_BITS(flags);
+    WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+                             | WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD);
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    ret = wolfsentry_route_event_dispatch(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        &remote.sa, &local.sa, flags,
+        NULL /* event_label */, 0 /* event_label_len */,
+        NULL /* caller_arg */,
+        &id, &inexact_matches, &action_results);
+
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_IS_FAILURE(ret));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ERROR));
+    /* the default policy is unset (NONE) here, so the failure must fail closed
+     * with an explicit reject rather than leaving the packet to be allowed. */
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_dynamic_rules_regressions(void) {
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_bitmask_match_specificity(), OK));
 #endif
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_stale_purge_connected_idle(), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_dispatch_error_not_masked(), OK));
     WOLFSENTRY_RETURN_OK;
 }
 

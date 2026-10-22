@@ -1178,6 +1178,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
                                     thread,
 #endif
                                     config->config.route_private_data_alignment, *new_route);
+            *new_route = NULL;
             WOLFSENTRY_ERROR_RERETURN(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT((*new_route)->parent_event->header.refcount, ret);
@@ -2694,6 +2695,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     struct wolfsentry_route *rule_route = NULL;
     struct wolfsentry_event *trigger_event = NULL;
     wolfsentry_errcode_t ret;
+    int apply_default_policy = 0;
 
     if ((remote == NULL) ||
         (local == NULL) ||
@@ -2766,6 +2768,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
     else {
         /* nothing to do. */
         /* carry through ret from final wolfsentry_route_lookup_0(), and impose the default policy. */
+        apply_default_policy = 1;
         goto just_free_resources;
     }
 
@@ -2805,6 +2808,15 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, trigger_event, NULL /* action_results */));
 
     if (rule_route == NULL) {
+        if (! apply_default_policy) {
+            /* a resource failure (not a clean no-match) prevented rule
+             * evaluation; fail closed with an explicit reject rather than
+             * silently applying the default policy as a successful fallthrough,
+             * so an integrator that gates on _RES_REJECT drops the packet.
+             */
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR | WOLFSENTRY_ACTION_RES_REJECT;
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+        }
         if (inexact_matches)
             *inexact_matches = WOLFSENTRY_ROUTE_WILDCARD_FLAGS | WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
         *action_results |= route_table->default_policy | WOLFSENTRY_ACTION_RES_FALLTHROUGH;

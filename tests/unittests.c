@@ -4400,6 +4400,107 @@ static int test_dispatch_action_stop(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_dispatch_disabled_action(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_ent_id_t route_id;
+    struct wolfsentry_action *disabled_action = NULL;
+    wolfsentry_action_flags_t flags_before, flags_after;
+    int disabled_calls = 0;
+    int enabled_calls = 0;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "disabled-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_dispatch_counter_handler, &disabled_calls, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "enabled-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_dispatch_counter_handler, &enabled_calls, &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-dis", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10, NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-dis", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "disabled-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-dis", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "enabled-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "disabled-action", WOLFSENTRY_LENGTH_NULL_TERMINATED, &disabled_action));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_update_flags(
+            disabled_action, WOLFSENTRY_ACTION_FLAG_DISABLED, WOLFSENTRY_ACTION_FLAG_NONE, &flags_before, &flags_after));
+
+    dynamic_rules_fill_sockaddrs(&remote.sa, &local.sa, sizeof remote.addr_buf);
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa,
+            flags, "ev-dis", WOLFSENTRY_LENGTH_NULL_TERMINATED, &id, &action_results));
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags,
+            NULL, 0, NULL, &route_id, &inexact_matches, &action_results));
+
+    /* the disabled action must be skipped while the enabled one fires. */
+    WOLFSENTRY_EXIT_ON_FALSE(disabled_calls == 0);
+    WOLFSENTRY_EXIT_ON_FALSE(enabled_calls == 1);
+
+    /* clearing the disabled flag must let the action run again. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_update_flags(
+            disabled_action, WOLFSENTRY_ACTION_FLAG_NONE, WOLFSENTRY_ACTION_FLAG_DISABLED, &flags_before, &flags_after));
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags,
+            NULL, 0, NULL, &route_id, &inexact_matches, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FALSE(disabled_calls == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(enabled_calls == 2);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, disabled_action, NULL /* action_results */));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -6718,6 +6819,11 @@ int main(int argc, char* argv[]) {
     ret = test_dispatch_action_stop();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_dispatch_action_stop failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_dispatch_disabled_action();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_dispatch_disabled_action failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

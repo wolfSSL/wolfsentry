@@ -302,7 +302,14 @@ static wolfsentry_errcode_t convert_sint64(JSON_TYPE type, const unsigned char *
 static wolfsentry_errcode_t convert_uint32(JSON_TYPE type, const unsigned char *data, size_t data_size, uint32_t *out) {
     char buf[16];
     char *endptr;
+    /* use the widest available unsigned type so the range check below is live
+     * even on ILP32 ABIs, where unsigned long is the same width as *out.
+     */
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+    unsigned long long conv;
+#else
     unsigned long conv;
+#endif
 
     /* allow JSON_STRING to accommodate hex and octal values. */
     if ((type != JSON_NUMBER) && (type != JSON_STRING))
@@ -316,7 +323,11 @@ static wolfsentry_errcode_t convert_uint32(JSON_TYPE type, const unsigned char *
 #ifndef WOLFSENTRY_NO_ERRNO_H
     errno = 0;
 #endif
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+    conv = strtoull(buf, &endptr, 0);
+#else
     conv = strtoul(buf, &endptr, 0);
+#endif
 #ifndef WOLFSENTRY_NO_ERRNO_H
     if (errno != 0)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);

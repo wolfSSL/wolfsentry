@@ -1172,8 +1172,9 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
         /* now zero the private data section. */
         memset((*new_route)->data, 0, config->config.route_private_data_size);
 
-        /* finally, copy the address section, carefully. */
-        memcpy((byte *)(*new_route)->data + (*new_route)->data_addr_offset, src_route->data, src_route->data_addr_size);
+        /* finally, copy the address section, carefully, reading it from the
+         * source's own address offset rather than the start of its data. */
+        memcpy((byte *)(*new_route)->data + (*new_route)->data_addr_offset, (const byte *)src_route->data + src_route->data_addr_offset, src_route->data_addr_size);
     }
 
     WOLFSENTRY_TABLE_ENT_HEADER_RESET(**new_ent);

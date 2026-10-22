@@ -1684,6 +1684,48 @@ static int test_context_clone_fallthrough(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t failing_interval_from_seconds(time_t howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
+    (void)howlong_secs;
+    (void)howlong_nsecs;
+    (void)howlong;
+    WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+}
+
+static int test_init_interval_conversion_failure(void) {
+    struct wolfsentry_context *wolfsentry, *wolfsentry2 = NULL;
+    struct wolfsentry_host_platform_interface hpi;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10, .penaltybox_duration = 1 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 1, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* borrow the working platform interface, then make the seconds conversion fail. */
+    hpi = *wolfsentry_get_hpi(wolfsentry);
+    hpi.timecbs.interval_from_seconds = failing_interval_from_seconds;
+
+    /* a rejected duration must fail initialization and leave no context behind. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NUMERIC_ARG_TOO_BIG, wolfsentry_init_ex(wolfsentry_build_settings,
+                                                                                   WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&hpi),
+                                                                                   &config,
+                                                                                   &wolfsentry2,
+                                                                                   WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry2 == NULL);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_RWLOCKS */
 
 #ifdef TEST_STATIC_ROUTES
@@ -6053,6 +6095,11 @@ int main(int argc, char* argv[]) {
     ret = test_context_clone_fallthrough();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_context_clone_fallthrough failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_init_interval_conversion_failure();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_init_interval_conversion_failure failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

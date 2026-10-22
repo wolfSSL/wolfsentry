@@ -4031,8 +4031,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
      * because wolfsentry_interval_from_seconds() needs a valid
      * wolfsentry_context (circular dependency).  fix it now that we can.
      */
-    hpi.timecbs.interval_from_seconds((long int)(*wolfsentry)->config.config.penaltybox_duration, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.penaltybox_duration));
-    hpi.timecbs.interval_from_seconds((long int)(*wolfsentry)->config.config.route_idle_time_for_purge, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.route_idle_time_for_purge));
+    if ((ret = hpi.timecbs.interval_from_seconds((time_t)(*wolfsentry)->config.config.penaltybox_duration, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.penaltybox_duration))) < 0)
+        goto out;
+    if ((ret = hpi.timecbs.interval_from_seconds((time_t)(*wolfsentry)->config.config.route_idle_time_for_purge, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.route_idle_time_for_purge))) < 0)
+        goto out;
 
     (*wolfsentry)->config_at_creation = (*wolfsentry)->config;
 

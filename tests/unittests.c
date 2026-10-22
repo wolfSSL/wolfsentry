@@ -1726,6 +1726,45 @@ static int test_init_interval_conversion_failure(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_context_exchange_default_policy(void) {
+    struct wolfsentry_context *wolfsentry, *clone = NULL;
+    wolfsentry_action_res_t policy;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_REJECT));
+
+    /* stage a new policy in a clone, then swap it in, as a config reload does. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &clone, WOLFSENTRY_CLONE_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone), WOLFSENTRY_ACTION_RES_ACCEPT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_OUT, clone));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &policy));
+    WOLFSENTRY_EXIT_ON_FALSE(policy == WOLFSENTRY_ACTION_RES_ACCEPT);
+    /* the lock-free dispatch fallback reads the context-level copy, which must follow the swap. */
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->default_policy == WOLFSENTRY_ACTION_RES_ACCEPT);
+    WOLFSENTRY_EXIT_ON_FALSE(clone->default_policy == WOLFSENTRY_ACTION_RES_REJECT);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&clone)));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_RWLOCKS */
 
 #ifdef TEST_STATIC_ROUTES
@@ -6100,6 +6139,11 @@ int main(int argc, char* argv[]) {
     ret = test_init_interval_conversion_failure();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_init_interval_conversion_failure failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_context_exchange_default_policy();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_context_exchange_default_policy failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

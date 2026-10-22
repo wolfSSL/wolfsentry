@@ -4388,6 +4388,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTE
 
     wolfsentry2->ents_by_id = scratch.ents_by_id;
 
+    /* keep the lock-free copy of the default policy in step with the swapped route tables. */
+    WOLFSENTRY_ATOMIC_STORE(wolfsentry->default_policy, wolfsentry->routes->default_policy);
+    WOLFSENTRY_ATOMIC_STORE(wolfsentry2->default_policy, wolfsentry2->routes->default_policy);
+
     /* note that wolfsentry->lock and wolfsentry->cleanup_hooks are not copied.
      * both of these follow the context pointer itself, which is necessarily
      * invariant once allocated by wolfsentry_init(), until final deallocation

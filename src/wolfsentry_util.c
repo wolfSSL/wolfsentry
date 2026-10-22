@@ -4249,6 +4249,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_exchange(WOLFSENTRY_CONTE
     }
 #endif
 
+    /* refuse to swap tables out from under an action dispatch in progress on
+     * either context, which would strand the live list's reentrancy guard.
+     */
+    if ((wolfsentry->action_dispatch_depth != 0) || (wolfsentry2->action_dispatch_depth != 0)) {
+        ret = WOLFSENTRY_ERROR_ENCODE(BUSY);
+        goto out;
+    }
+
     /* now that we have a mutex on both contexts, coherently copy the route
      * metadata from the current context to the new one to be swapped in.
      */

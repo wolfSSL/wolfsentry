@@ -360,6 +360,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_update_config(WOLFSENTRY_CO
     struct wolfsentry_event *event;
     wolfsentry_errcode_t ret;
 
+    if (config == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
     WOLFSENTRY_MUTEX_OR_RETURN();
 
     ret = wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, label, label_len, &event);

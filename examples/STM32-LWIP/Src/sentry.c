@@ -135,25 +135,28 @@ static wolfsentry_errcode_t test_action(
 int sentry_init(void)
 {
     wolfsentry_errcode_t ret;
+    wolfsentry_errcode_t fini_ret;
     wolfsentry_ent_id_t id;
+    struct wolfsentry_context *ctx = NULL;
     struct wolfsentry_eventconfig config = { 0 };
     char err_buf[512];
-    struct wolfsentry_json_process_state *jps;
+    struct wolfsentry_json_process_state *jps = NULL;
 
     config.route_private_data_size = 32;
     config.route_private_data_alignment = 16;
     ret =  wolfsentry_init(wolfsentry_build_settings,
                            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(NULL /* hpi */, NULL /* thread */), &config,
-                           &wolfsentry);
+                           &ctx);
 
     if (ret < 0)
     {
         printf("unable to initialize wolfSentry, " WOLFSENTRY_ERROR_FMT "\n",
             WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        return ret;
     }
 
     /* Insert the possible actions into wolfSentry */
-    wolfsentry_action_insert(      WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+    ret = wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
                                    "handle-insert",
                                    WOLFSENTRY_LENGTH_NULL_TERMINATED,
                                    WOLFSENTRY_ACTION_FLAG_NONE,
@@ -161,82 +164,114 @@ int sentry_init(void)
                                    NULL,
                                    &id);
 
-    wolfsentry_action_insert(
-        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-        "handle-delete",
-        WOLFSENTRY_LENGTH_NULL_TERMINATED,
-        WOLFSENTRY_ACTION_FLAG_NONE,
-        test_action,
-        NULL,
-        &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
+            "handle-delete",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            test_action,
+            NULL,
+            &id);
 
-    wolfsentry_action_insert(
-        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-        "handle-match",
-        WOLFSENTRY_LENGTH_NULL_TERMINATED,
-        WOLFSENTRY_ACTION_FLAG_NONE,
-        test_action,
-        NULL,
-        &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
+            "handle-match",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            test_action,
+            NULL,
+            &id);
 
-    wolfsentry_action_insert(
-        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-        "notify-on-match",
-        WOLFSENTRY_LENGTH_NULL_TERMINATED,
-        WOLFSENTRY_ACTION_FLAG_NONE,
-        test_action,
-        NULL,
-        &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
+            "notify-on-match",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            test_action,
+            NULL,
+            &id);
 
-    wolfsentry_action_insert(
-        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-        "handle-connect",
-        WOLFSENTRY_LENGTH_NULL_TERMINATED,
-        WOLFSENTRY_ACTION_FLAG_NONE,
-        test_action,
-        NULL,
-        &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
+            "handle-connect",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            test_action,
+            NULL,
+            &id);
 
-    wolfsentry_action_insert(
-        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-        "handle-connect2",
-        WOLFSENTRY_LENGTH_NULL_TERMINATED,
-        WOLFSENTRY_ACTION_FLAG_NONE,
-        test_action,
-        NULL,
-        &id);
+    if (ret >= 0)
+        ret = wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
+            "handle-connect2",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            test_action,
+            NULL,
+            &id);
 
+    if (ret < 0)
+    {
+        printf("unable to insert wolfSentry actions, " WOLFSENTRY_ERROR_FMT "\n",
+            WOLFSENTRY_ERROR_FMT_ARGS(ret));
+    }
 
     /* Initalize the wolfSentry JSON parser */
-    if ((ret = wolfsentry_config_json_init(
-                   WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
-                   WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
-                   &jps)) < 0)
+    if (ret >= 0)
     {
-        printf("error while initializing wolfSentry config parser, "
-            WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        ret = wolfsentry_config_json_init(
+                   WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
+                   WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+                   &jps);
+        if (ret < 0)
+        {
+            printf("error while initializing wolfSentry config parser, "
+                WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        }
     }
 
     /* wolfSentry uses a streaming reader/parser for the config file */
     /* Send the read data into the JSON parser */
-	ret = wolfsentry_config_json_feed(jps,
-        (const unsigned char *)wolfsentry_config_data,
-        strlen(wolfsentry_config_data), err_buf, sizeof err_buf);
-
-	if (ret < 0)
-	{
-		printf("error while loading wolfSentry config data, "
-            WOLFSENTRY_ERROR_FMT ", msg: %s\n",
-            WOLFSENTRY_ERROR_FMT_ARGS(ret), err_buf);
-	}
-
-    /* Clean up the JSON parser */
-    if ((ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf)) < 0)
+    if (ret >= 0)
     {
-        printf("error while loading wolfSentry config data, "
-            WOLFSENTRY_ERROR_FMT ", msg: %s\n",
-            WOLFSENTRY_ERROR_FMT_ARGS(ret), err_buf);
+        ret = wolfsentry_config_json_feed(jps,
+            (const unsigned char *)wolfsentry_config_data,
+            strlen(wolfsentry_config_data), err_buf, sizeof err_buf);
+        if (ret < 0)
+        {
+            printf("error while loading wolfSentry config data, "
+                WOLFSENTRY_ERROR_FMT ", msg: %s\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(ret), err_buf);
+        }
     }
+
+    /* Clean up the JSON parser. This commits the parsed config. */
+    if (jps != NULL)
+    {
+        fini_ret = wolfsentry_config_json_fini(&jps, err_buf, sizeof err_buf);
+        if (fini_ret < 0)
+        {
+            printf("error while loading wolfSentry config data, "
+                WOLFSENTRY_ERROR_FMT ", msg: %s\n",
+                WOLFSENTRY_ERROR_FMT_ARGS(fini_ret), err_buf);
+            if (ret >= 0)
+                ret = fini_ret;
+        }
+    }
+
+    if (ret < 0)
+    {
+        (void)wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(&ctx, NULL));
+        return ret;
+    }
+
+    /* Publish the context only once the policy is committed, so a concurrent
+     * packet filter never dispatches against an empty route table. */
+    WOLFSENTRY_ATOMIC_STORE(wolfsentry, ctx);
 
     return 0;
 }
@@ -247,7 +282,7 @@ int sentry_init(void)
 int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, uint16_t local_port, uint16_t remote_port, sentry_action_type action)
 {
     wolfsentry_errcode_t ret;
-    wolfsentry_action_res_t action_results;
+    wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
     /* Note that sa.addr is 0 bytes, addr_buf essentially enlarges this to the correct size */
     struct {
         struct wolfsentry_sockaddr sa;
@@ -255,6 +290,11 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, uint16_t local_port
     } remote, local;
     u32_t remoteip = remote_ip->addr;
     u32_t localip = local_ip->addr;
+    struct wolfsentry_context *ctx = WOLFSENTRY_ATOMIC_LOAD(wolfsentry);
+
+    /* Fail closed until initialization has published a configured context */
+    if (ctx == NULL)
+        return -1;
 
     /* Connect will increment the connection count in wolfSentry, disconnect
      * will decrement it */
@@ -289,7 +329,7 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, uint16_t local_port
 
     /* Send the details of this to wolfSentry and get the result */
     ret = wolfsentry_route_event_dispatch_with_inited_result(
-            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
             &remote.sa,
             &local.sa,
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -304,11 +344,14 @@ int sentry_action(ip_addr_t *local_ip, ip_addr_t *remote_ip, uint16_t local_port
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
 
+    /* Fail closed: a dispatch error denies the connection */
+    if (ret < 0) {
+        return -1;
+    }
+
     /* Check the result, if it contains "reject" then notify the caller */
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
-            return -1;
-        }
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
+        return -1;
     }
 
     return 0;
@@ -324,6 +367,11 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
     } remote;
+    struct wolfsentry_context *ctx = WOLFSENTRY_ATOMIC_LOAD(wolfsentry);
+
+    /* Fail closed until initialization has published a configured context */
+    if (ctx == NULL)
+        return -1;
 
     /* ICMP protocol check. The ICMP packet type is the port number for this
      * check */
@@ -335,7 +383,7 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
     memcpy(remote.sa.addr, &addr->addr, 4);
 
     ret = wolfsentry_route_event_dispatch(
-            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
             &remote.sa,
             &remote.sa, /* Reuse for now */
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -348,10 +396,14 @@ int sentry_action_ping(const ip_addr_t *addr, u8_t type)
     printf("PING Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
-            return -1;
-        }
+
+    /* Fail closed: a dispatch error denies the packet */
+    if (ret < 0) {
+        return -1;
+    }
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
+        return -1;
     }
 
     return 0;
@@ -367,6 +419,11 @@ int sentry_action_mac(struct eth_addr *addr)
         struct wolfsentry_sockaddr sa;
         byte addr_buf[6];
     } remote;
+    struct wolfsentry_context *ctx = WOLFSENTRY_ATOMIC_LOAD(wolfsentry);
+
+    /* Fail closed until initialization has published a configured context */
+    if (ctx == NULL)
+        return -1;
 
     /* We only really care about the data and length, the family is AF_LINK */
     remote.sa.sa_family = WOLFSENTRY_AF_LINK;
@@ -376,7 +433,7 @@ int sentry_action_mac(struct eth_addr *addr)
     memcpy(remote.sa.addr, &addr->addr, 6);
 
     ret = wolfsentry_route_event_dispatch(
-            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL),
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(ctx, NULL),
             &remote.sa,
             &remote.sa, /* Reuse for now */
             WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
@@ -390,10 +447,14 @@ int sentry_action_mac(struct eth_addr *addr)
     printf("MAC Sentry action returned " WOLFSENTRY_ERROR_FMT "\n",
                 WOLFSENTRY_ERROR_FMT_ARGS(ret));
     fflush(stdout);
-    if (WOLFSENTRY_ERROR_DECODE_ERROR_CODE(ret) >= 0) {
-        if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
-            return -1;
-        }
+
+    /* Fail closed: a dispatch error denies the frame */
+    if (ret < 0) {
+        return -1;
+    }
+
+    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)) {
+        return -1;
     }
 
     return 0;

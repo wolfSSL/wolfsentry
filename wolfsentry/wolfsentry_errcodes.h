@@ -304,7 +304,7 @@ static inline int WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(wolfsentry_errcode_t x) {
     /*!< \brief Calculate the `wolfsentry_errcode_t` return value for an expression `y`, then unlock the current context, and finally, return the encoded `wolfsentry_errcode_t`. @hideinitializer */
 
 #define WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN(name) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_SUCCESS_RETURN(name); } while (0)
-    /*!< \brief Unlock the current context, and return a `wolfsentry_errcode_t` encoding the current source ID and line number, and the designated short-form success `name` (e.g. `INVALID_ARG`). @hideinitializer */
+    /*!< \brief Unlock the current context, and return a `wolfsentry_errcode_t` encoding the current source ID and line number, and the designated short-form success `name` (e.g. `OK`). @hideinitializer */
 #define WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN_RECODED(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_SUCCESS_RETURN_RECODED(x); } while (0)
     /*!< \brief Unlock the current context, then take an encoded `wolfsentry_errcode_t` `x`, recode it with the current source ID and line number, and return it. @hideinitializer */
 #define WOLFSENTRY_SUCCESS_UNLOCK_AND_RERETURN(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_SUCCESS_RERETURN(x); } while (0)

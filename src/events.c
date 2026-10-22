@@ -77,6 +77,37 @@ static wolfsentry_errcode_t wolfsentry_event_init_1(const char *label, int label
     WOLFSENTRY_RETURN_OK;
 }
 
+/* callers hold the context lock, which is what the plain flag write relies on */
+static wolfsentry_errcode_t wolfsentry_event_aux_owner_add(struct wolfsentry_event *aux_event) {
+    wolfsentry_refcount_t owners;
+
+    WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(aux_event->aux_owner_count, owners);
+    if (owners == 0)
+        WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    if (! WOLFSENTRY_CHECK_BITS(aux_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT))
+        WOLFSENTRY_SET_BITS(aux_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT);
+    WOLFSENTRY_RETURN_OK;
+}
+
+/* may run without the context lock when a deleted owner is finally freed, so only the atomic count changes here; the mark is resynced under the lock */
+static wolfsentry_errcode_t wolfsentry_event_aux_owner_remove(struct wolfsentry_event *aux_event) {
+    wolfsentry_refcount_t owners;
+
+    WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY_BY_ONE(aux_event->aux_owner_count, owners);
+    if (owners == MAX_UINT_OF(aux_event->aux_owner_count))
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+    WOLFSENTRY_RETURN_OK;
+}
+
+static void wolfsentry_event_aux_owner_resync_mark(struct wolfsentry_event *event) {
+    if ((WOLFSENTRY_ATOMIC_LOAD(event->aux_owner_count) == 0) &&
+        WOLFSENTRY_CHECK_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT))
+    {
+        WOLFSENTRY_CLEAR_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT);
+    }
+    WOLFSENTRY_RETURN_VOID;
+}
+
 static void wolfsentry_event_free(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_event *event) {
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_delete_all(WOLFSENTRY_CONTEXT_ARGS_OUT, &event->post_action_list));
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_delete_all(WOLFSENTRY_CONTEXT_ARGS_OUT, &event->insert_action_list));
@@ -161,6 +192,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_clone_bare(
     WOLFSENTRY_LIST_HEADER_RESET((*new_event)->decision_action_list.header);
 
     (*new_event)->aux_event = NULL;
+    (*new_event)->aux_owner_count = 0;
+    WOLFSENTRY_CLEAR_BITS((*new_event)->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT);
 
     if (src_event->config) {
         if (((*new_event)->config = WOLFSENTRY_MALLOC_1(dest_context->hpi.allocator, sizeof *(*new_event)->config)) == NULL) {
@@ -260,6 +293,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_event_clone_resolve(
             WOLFSENTRY_ERROR_RETURN_RECODED(ret);
         }
         WOLFSENTRY_REFCOUNT_INCREMENT(new_event->aux_event->header.refcount, ret);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        ret = wolfsentry_event_aux_owner_add(new_event->aux_event);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
@@ -445,6 +480,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_drop_reference(WOLFSENTRY_C
     if (refs_left > 0)
         WOLFSENTRY_RETURN_OK;
     if (event->aux_event) {
+        ret = wolfsentry_event_aux_owner_remove(event->aux_event);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
         ret = wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event->aux_event, NULL);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
         event->aux_event = NULL;
@@ -640,16 +677,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_set_aux_event(
     int aux_event_label_len)
 {
     wolfsentry_errcode_t ret;
-    struct wolfsentry_event *event, *aux_event = NULL;
+    struct wolfsentry_event *event, *aux_event = NULL, *old_aux_event;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
     ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, event_label_len, &event);
     WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
-    if (WOLFSENTRY_CHECK_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT)) {
+    /* the owner count is authoritative; a mark left by an owner freed without the lock is cleared here */
+    if (WOLFSENTRY_ATOMIC_LOAD(event->aux_owner_count) != 0) {
         ret = WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
         goto out;
     }
+    wolfsentry_event_aux_owner_resync_mark(event);
     if (aux_event_label) {
         ret = wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, aux_event_label, aux_event_label_len, &aux_event);
         if (ret < 0) {
@@ -664,22 +703,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_set_aux_event(
     } else
         aux_event = NULL;
 
-    if (event->aux_event)
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event->aux_event, NULL /* action_results */));
+    if (aux_event != NULL) {
+        ret = wolfsentry_event_aux_owner_add(aux_event);
+        if (ret < 0)
+            goto out;
+    }
+
+    old_aux_event = event->aux_event;
     event->aux_event = aux_event;
+    if (old_aux_event != NULL) {
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_aux_owner_remove(old_aux_event));
+        wolfsentry_event_aux_owner_resync_mark(old_aux_event);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old_aux_event, NULL /* action_results */));
+    }
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
   out:
 
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
-    if (aux_event) {
-        if (ret < 0)
-            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, aux_event, NULL /* action_results */));
-        else {
-            if (! WOLFSENTRY_CHECK_BITS(aux_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT))
-                WOLFSENTRY_SET_BITS(aux_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT);
-        }
-    }
+    if ((aux_event != NULL) && (ret < 0))
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, aux_event, NULL /* action_results */));
 
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }

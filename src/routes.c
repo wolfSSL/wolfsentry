@@ -5039,6 +5039,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_copy_metadata(
                 wolfsentry_list_ent_delete(&to_table->purge_list, &to_i->purge_links);
             to_i->flags = from_i->flags;
             to_i->meta = from_i->meta;
+            to_i->header.hitcount = from_i->header.hitcount;
             if (to_i->meta.purge_after)
                 wolfsentry_route_purge_list_insert(to_table, to_i);
         } else {

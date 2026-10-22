@@ -198,7 +198,7 @@ struct wolfsentry_timecbs {
  */
 
 typedef int (*sem_init_cb_t)(sem_t *sem, int pshared, unsigned int value);
-   /*!< Pointer to function with arguments and semantics of POSIX `sem_init()`.  Currently, `pshared` and `value` are always zero as called by wolfSentry, so implementations can ignore them. */
+   /*!< Pointer to function with arguments and semantics of POSIX `sem_init()`.  Currently, `value` is always zero as called by wolfSentry. `pshared` is zero unless the lock is initialized with `WOLFSENTRY_LOCK_FLAG_PSHARED`, in which case it is nonzero. */
 typedef int (*sem_post_cb_t)(sem_t *sem);
    /*!< Pointer to function with arguments and semantics of POSIX `sem_post()` */
 typedef int (*sem_wait_cb_t)(sem_t *sem);

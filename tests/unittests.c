@@ -4184,6 +4184,7 @@ static wolfsentry_errcode_t test_regression_route_timing(void) {
     struct wolfsentry_route_metadata_exports meta;
     wolfsentry_action_res_t action_results;
     wolfsentry_ent_id_t id, matched_id;
+    unsigned int i;
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
@@ -4245,6 +4246,15 @@ static wolfsentry_errcode_t test_regression_route_timing(void) {
     ++regression_fake_now;
     WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x03", WOLFSENTRY_ACTION_RES_NONE, &matched_id, &action_results));
     WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    /* a zero derogatory threshold disables penalty boxing entirely. */
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert_pbox_event(WOLFSENTRY_CONTEXT_ARGS_OUT, "nothresh", 0, 50, WOLFSENTRY_EVENTCONFIG_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x04", 32, "nothresh", WOLFSENTRY_ROUTE_FLAG_GREENLISTED, &id));
+    for (i = 0; i < 3; ++i) {
+        WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x04", WOLFSENTRY_ACTION_RES_DEROGATORY, &matched_id, &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    }
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));

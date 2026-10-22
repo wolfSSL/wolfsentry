@@ -656,7 +656,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_set_aux_event(
             aux_event = NULL;
             goto out;
         }
-        if (WOLFSENTRY_CHECK_BITS(aux_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT)) {
+        if ((aux_event == event) ||
+            WOLFSENTRY_CHECK_BITS(aux_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT)) {
             ret = WOLFSENTRY_ERROR_ENCODE(INCOMPATIBLE_STATE);
             goto out;
         }

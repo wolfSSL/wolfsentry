@@ -1613,6 +1613,43 @@ static int test_object_release_tableless(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#if defined(WOLFSENTRY_THREADSAFE)
+
+static int test_context_clone_readonly_thread(void) {
+    struct wolfsentry_context *wolfsentry, *clone = NULL;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_TEST_HPI,
+                                                  thread,
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* a read-only thread can clone, but cannot take the clone's mutex, so the clone must be torn down. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_thread_readonly(thread));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NOT_PERMITTED, wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &clone, WOLFSENTRY_CLONE_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FALSE(clone == NULL);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_thread_readwrite(thread));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry, thread));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#else
+
+TEST_SKIP(test_context_clone_readonly_thread)
+
+#endif /* WOLFSENTRY_THREADSAFE */
+
 #endif /* TEST_RWLOCKS */
 
 #ifdef TEST_STATIC_ROUTES
@@ -5972,6 +6009,11 @@ int main(int argc, char* argv[]) {
     ret = test_object_release_tableless();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_object_release_tableless failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_context_clone_readonly_thread();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_context_clone_readonly_thread failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

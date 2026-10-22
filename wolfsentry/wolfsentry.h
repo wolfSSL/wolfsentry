@@ -3194,7 +3194,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_float(
     const char *key,
     int key_len,
     double *value);
-    /*!< \brief Gets a `WOLFSENTRY_KV_UINT` value with the designated `key`. */
+    /*!< \brief Gets a `WOLFSENTRY_KV_FLOAT` value with the designated `key`. */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_string(
     WOLFSENTRY_CONTEXT_ARGS_IN,

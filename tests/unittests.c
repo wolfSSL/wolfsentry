@@ -1451,9 +1451,105 @@ static int test_rw_locks_auto_downgrade(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static void *wr_timeout_routine(struct rwlock_args *args) {
+    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(TIMED_OUT, wolfsentry_lock_mutex_timed(args->lock, thread, args->max_wait, WOLFSENTRY_LOCK_FLAG_NONE));
+    INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    return 0;
+}
+
+static int test_rw_locks_reader_wakeup(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_rwlock *lock;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+#endif
+    volatile int measured_sequence[8], measured_sequence_i = 0;
+    pthread_t reader_thread, writer_thread;
+    struct rwlock_args reader_args, writer_args;
+    int reader_phase;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    (void)alarm(2);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_TEST_HPI,
+                                                  thread,
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_alloc(wolfsentry_get_hpi(wolfsentry), thread, &lock, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    memset(&reader_args, 0, sizeof reader_args);
+    reader_args.wolfsentry = wolfsentry;
+    reader_args.measured_sequence = measured_sequence;
+    reader_args.measured_sequence_i = &measured_sequence_i;
+    reader_args.lock = lock;
+    writer_args = reader_args;
+    reader_args.thread_id = 1;
+    reader_args.max_wait = -1;
+    writer_args.thread_id = 2;
+    writer_args.max_wait = MAX_WAIT;
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&reader_args.thread_phase_lock, NULL));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&writer_args.thread_phase_lock, NULL));
+
+    /* hold the lock shared twice, so the first unlock leaves a shared holder in place. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* a timed writer queues, which forces the subsequent reader to queue behind it. */
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&writer_thread, 0 /* attr */, (void *(*)(void *))wr_timeout_routine, (void *)&writer_args));
+    WAIT_FOR_PHASE(writer_args, 1);
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_kill(writer_thread, 0));
+    usleep(10000);
+
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&reader_thread, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&reader_args));
+    WAIT_FOR_PHASE(reader_args, 1);
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_kill(reader_thread, 0));
+    usleep(10000);
+
+    /* the writer times out and dequeues itself, leaving the reader queued. */
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(writer_thread, 0 /* retval */));
+
+    /* the reader must still be parked, not already holding the lock, else the scenario was not reached. */
+    usleep(10000);
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_lock(&reader_args.thread_phase_lock));
+    reader_phase = reader_args.thread_phase;
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_unlock(&reader_args.thread_phase_lock));
+    WOLFSENTRY_EXIT_ON_FALSE(reader_phase == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ATOMIC_LOAD(measured_sequence_i) == 0);
+
+    /* this unlock releases the queued reader, and must post exactly one wakeup. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(reader_thread, 0 /* retval */));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ATOMIC_LOAD(measured_sequence_i) == 2);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* a surplus wakeup token is detected as an inconsistency at destroy time. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(&lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_destroy(&reader_args.thread_phase_lock));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_destroy(&writer_args.thread_phase_lock));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry, thread));
+
+    (void)alarm(0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #else
 
 TEST_SKIP(test_rw_locks_auto_downgrade)
+TEST_SKIP(test_rw_locks_reader_wakeup)
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
@@ -5806,6 +5902,11 @@ int main(int argc, char* argv[]) {
     ret = test_rw_locks_auto_downgrade();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_rw_locks_auto_downgrade failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_rw_locks_reader_wakeup();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_rw_locks_reader_wakeup failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

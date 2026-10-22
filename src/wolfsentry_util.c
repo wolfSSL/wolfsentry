@@ -586,15 +586,23 @@ static void *wolfsentry_builtin_memalign(
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
 
     if (alignment && size) {
-        uint32_t hdr_size = sizeof(uint16_t) + (alignment - 1);
-        void *p = pvPortMalloc(size + hdr_size);
-        if (p) {
+        size_t hdr_size = sizeof(uint16_t) + (alignment - 1);
+        /* require power-of-two alignment, a base offset that fits the stored
+         * uint16_t, and no overflow when reserving the header.
+         */
+        if (((alignment & (alignment - 1)) == 0) &&
+            (hdr_size <= (size_t)MAX_UINT_OF(uint16_t)) &&
+            (size <= (size_t)MAX_UINT_OF(size_t) - hdr_size))
+        {
+            void *p = pvPortMalloc(size + hdr_size);
+            if (p) {
 #ifdef WOLFSENTRY_MALLOC_DEBUG
-            WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+                WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
 #endif
-            /* Align to powers of two */
-            ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
-            *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+                /* Align to powers of two */
+                ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
+                *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+            }
         }
     }
     WOLFSENTRY_RETURN_VALUE(ptr);
@@ -690,14 +698,22 @@ static void *wolfsentry_builtin_memalign(
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (alignment && size) {
         size_t hdr_size = sizeof(uint16_t) + (alignment - 1);
-        void *p = malloc(size + hdr_size);
-        if (p) {
-            /* Align to powers of two */
-            ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
-            *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
-        }
-        /* cppcheck-suppress memleak
+        /* require power-of-two alignment, a base offset that fits the stored
+         * uint16_t, and no overflow when reserving the header.
          */
+        if (((alignment & (alignment - 1)) == 0) &&
+            (hdr_size <= (size_t)MAX_UINT_OF(uint16_t)) &&
+            (size <= (size_t)MAX_UINT_OF(size_t) - hdr_size))
+        {
+            void *p = malloc(size + hdr_size);
+            if (p) {
+                /* Align to powers of two */
+                ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
+                *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+            }
+            /* cppcheck-suppress memleak
+             */
+        }
     }
 #ifdef WOLFSENTRY_MALLOC_DEBUG
     if (ptr != NULL)

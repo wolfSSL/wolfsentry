@@ -514,8 +514,9 @@ WOLFSENTRY_API int json_value_dict_remove(
 
 /* Walking over all items in the dictionary. The callback function is called
  * for every item in the dictionary, providing key and value and propagating
- * the user data into it. If the callback returns non-zero, the function
- * aborts immediately.
+ * the user data into it. If the callback returns a negative value, the
+ * function aborts immediately and returns that value; otherwise the walk
+ * continues.
  *
  * Note dict_walk_ordered() is supported only if DICT_MAINTAINORDER
  * flag was used in init_dict().

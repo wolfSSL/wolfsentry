@@ -152,7 +152,7 @@ WOLFSENTRY_API int json_dom_parse(
  * callback.
  *
  * The provided writing function must write all the data provided to it
- * and return zero to indicate success, or non-zero to indicate an error
+ * and return zero to indicate success, or a negative value to indicate an error
  * and abort the operation.
  *
  * Returns zero on success, JSON_ERR_OUTOFMEMORY, or an error the code returned

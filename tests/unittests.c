@@ -272,6 +272,26 @@ static wolfsentry_errcode_t test_init(void) {
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
+static wolfsentry_errcode_t test_base64_decode_lenient_padding(void) {
+    /* A correctly padded value followed by ignorable whitespace must be
+     * accepted when lenient parsing is requested.
+     */
+    static const char input[] = "QQ==\n";
+    byte outbuf[8];
+    size_t outbuf_spc = sizeof outbuf;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_base64_decode(input, strlen(input), outbuf, &outbuf_spc, 1 /* ignore_junk_p */));
+    WOLFSENTRY_EXIT_ON_FALSE((outbuf_spc == 1) && (outbuf[0] == 'A'));
+
+    /* lenient parsing still rejects data appearing after padding */
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("Q=Q=", 4, outbuf, &outbuf_spc, 1 /* ignore_junk_p */));
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("QQ==QUJD", 8, outbuf, &outbuf_spc, 1 /* ignore_junk_p */));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_INIT */
 
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
@@ -5711,6 +5731,11 @@ int main(int argc, char* argv[]) {
     ret = test_init();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_base64_decode_lenient_padding();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_base64_decode_lenient_padding failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

@@ -4358,12 +4358,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, si
             else
                 WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         } else if (this_char == (uint32_t)'@') {
-            if ((src + 1 < src_end) && (base64_inv_lut[*((unsigned char *)src + 1)] != '@'))
-                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
             ++pad_chars;
             decoded <<= 6U;
             continue;
         }
+
+        /* data must not appear after padding, in strict or lenient mode */
+        if (pad_chars != 0)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
         decoded <<= 6U;
         decoded |= this_char;

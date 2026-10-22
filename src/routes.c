@@ -304,12 +304,12 @@ static inline int addr_bitmask_match_size(
         longer_addr = b;
         mask_len = WOLFSENTRY_BITS_TO_BYTES(b_len >> 1);
         shorter_addr = a;
-        padding_offset = mask_len - a_len;
+        padding_offset = mask_len - WOLFSENTRY_BITS_TO_BYTES(a_len);
     } else {
         longer_addr = a;
         mask_len = WOLFSENTRY_BITS_TO_BYTES(a_len >> 1);
         shorter_addr = b;
-        padding_offset = mask_len - b_len;
+        padding_offset = mask_len - WOLFSENTRY_BITS_TO_BYTES(b_len);
     }
 
     for (ret = 0, i = 0; i < mask_len; ++i) {

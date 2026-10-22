@@ -1852,7 +1852,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_from_table(
    \param flags flags for the route
    \param trigger_label a label for the trigger event (or null)
    \param trigger_label_len the length of the trigger_label parameter
-   \param action_results a pointer to results of the insert action -- all bits are cleared on entry.
+   \param action_results a pointer to results of the delete action -- all bits are cleared on entry.
    \param n_deleted a counter for the number of entries deleted
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
@@ -1877,7 +1877,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete(
    \param id the object ID, as returned by wolfsentry_route_insert() or wolfsentry_get_object_id()
    \param trigger_label a label for a trigger event (or null)
    \param trigger_label_len the length of the trigger_label parameter
-   \param action_results a pointer to results of the insert action -- all bits are cleared on entry.
+   \param action_results a pointer to results of the delete action -- all bits are cleared on entry.
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 

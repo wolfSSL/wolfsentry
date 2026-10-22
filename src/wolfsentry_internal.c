@@ -570,7 +570,10 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONT
          * e.g., a coupled wolfsentry_addr_family_byname is freed when the
          * corresponding wolfsentry_addr_family_bynumber is freed.
          */
-        table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, NULL /* action_results */);
+        ret = table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, NULL /* action_results */);
+        /* teardown must run to completion and release its lock, so report a
+         * failed destructor and keep freeing instead of abandoning the table. */
+        WOLFSENTRY_WARN_ON_FAILURE(ret);
         i = next;
     }
     WOLFSENTRY_RETURN_OK;

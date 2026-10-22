@@ -3585,9 +3585,22 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_checkout(WOLFSENTRY_CONTEX
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_IN, void *object, wolfsentry_action_res_t *action_results) {
-    if (object == NULL)
+    struct wolfsentry_table_ent_header *ent = (struct wolfsentry_table_ent_header *)object;
+    if (ent == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    WOLFSENTRY_ERROR_RERETURN(((struct wolfsentry_table_ent_header *)object)->parent_table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_table_ent_header *)object, action_results));
+    if (ent->parent_table == NULL) {
+        /* the fallthrough route is never linked into a table, but is documented as releasable here. */
+        if ((wolfsentry->routes != NULL) &&
+            (wolfsentry->routes->fallthrough_route != NULL) &&
+            (object == (void *)wolfsentry->routes->fallthrough_route))
+        {
+            WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->routes->fallthrough_route, action_results));
+        }
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    }
+    if (ent->parent_table->free_fn == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    WOLFSENTRY_ERROR_RERETURN(ent->parent_table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, ent, action_results));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_init(

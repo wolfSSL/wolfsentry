@@ -1553,6 +1553,66 @@ TEST_SKIP(test_rw_locks_reader_wakeup)
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
+static int test_object_release_tableless(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *main_routes;
+    const struct wolfsentry_route *fallthrough_route;
+    struct wolfsentry_route *route_ref;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* the fallthrough route is never linked into a table, but is documented as releasable. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_fallthrough_route_get(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &fallthrough_route));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry_get_object_type(fallthrough_route) == WOLFSENTRY_OBJECT_TYPE_UNINITED);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT, (void *)fallthrough_route, NULL /* action_results */));
+
+    /* a checked-out route that has since been deleted is table-less too, and must be rejected, not dereferenced. */
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 12345;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memcpy(remote.sa.addr,"\0\1\2\3",sizeof remote.addr_buf);
+    memcpy(local.sa.addr,"\377\376\375\374",sizeof local.addr_buf);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert_and_check_out(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label */, 0 /* event_label_len */, &route_ref, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry_get_object_type(route_ref) == WOLFSENTRY_OBJECT_TYPE_ROUTE);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, wolfsentry_get_object_id(route_ref), 0 /* trigger_label */, 0 /* trigger_label_len */, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry_get_object_type(route_ref) == WOLFSENTRY_OBJECT_TYPE_UNINITED);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_RWLOCKS */
 
 #ifdef TEST_STATIC_ROUTES
@@ -5907,6 +5967,11 @@ int main(int argc, char* argv[]) {
     ret = test_rw_locks_reader_wakeup();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_rw_locks_reader_wakeup failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_object_release_tableless();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_object_release_tableless failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

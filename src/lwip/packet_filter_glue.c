@@ -549,6 +549,7 @@ static err_t tcp_filter_with_wolfsentry(
             route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
         else
             route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_OUT;
+        action_results = WOLFSENTRY_ACTION_RES_CLOSE_WAIT;
         break;
     case FILT_PORT_UNREACHABLE:
         route_flags |= WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;

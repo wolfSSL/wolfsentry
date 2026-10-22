@@ -4278,6 +4278,42 @@ static wolfsentry_errcode_t test_regression_connection_limits(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_regression_prefix_specificity(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t broad_id, narrow_id, matched_id;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* equal-priority overlapping prefixes: the longer match must win inside
+     * the /25, and the /24 must still match outside it. */
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\xC0\xA8\x01\x00", 24, NULL, WOLFSENTRY_ROUTE_FLAG_GREENLISTED, &broad_id));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\xC0\xA8\x01\x80", 25, NULL, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED, &narrow_id));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\xC0\xA8\x01\xC8", WOLFSENTRY_ACTION_RES_NONE, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(matched_id == narrow_id);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\xC0\xA8\x01\x0A", WOLFSENTRY_ACTION_RES_NONE, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(matched_id == broad_id);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_dynamic_rules_regressions(void) {
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_bitmask_match_specificity(), OK));
@@ -4288,6 +4324,7 @@ static int test_dynamic_rules_regressions(void) {
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_route_api_invariants(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_route_timing(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_connection_limits(), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_prefix_specificity(), OK));
     WOLFSENTRY_RETURN_OK;
 }
 

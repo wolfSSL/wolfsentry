@@ -1320,6 +1320,10 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
             wolfsentry_route_flags_t flags_before, flags_after;
             WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_to_insert->header));
             wolfsentry_route_update_flags_1(route_to_insert, WOLFSENTRY_ROUTE_FLAG_NONE, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, &flags_before, &flags_after);
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+            if (route_to_insert->flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_bitmask_matching_downref(route_to_insert->sa_family, route_table));
+#endif
             WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED);
             /* the caller drops the last reference on failure, so the route
              * must not be linked into the purge list or wildcard bookkeeping.

@@ -912,15 +912,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfse
     WOLFSENTRY_RETURN_OK;
 }
 
-static wolfsentry_time_t usecs_to_wolfsentry_time(struct wolfsentry_context *wolfsentry, long usecs) {
-    wolfsentry_time_t wolfsentry_time;
-    wolfsentry_errcode_t ret = WOLFSENTRY_INTERVAL_FROM_SECONDS(0, usecs * 1000L, &wolfsentry_time);
-    if (ret < 0) {
-        WOLFSENTRY_WARN_ON_FAILURE(ret);
-        return 0;
-    }
-    else
-        return wolfsentry_time;
+static wolfsentry_errcode_t usecs_to_wolfsentry_time(struct wolfsentry_context *wolfsentry, long usecs, wolfsentry_time_t *wolfsentry_time) {
+    /* split into seconds and nanoseconds so the full long range of usecs is
+     * preserved without overflowing the intermediate multiplication.
+     */
+    WOLFSENTRY_RERETURN_IF_ERROR(WOLFSENTRY_INTERVAL_FROM_SECONDS(usecs / 1000000L, (usecs % 1000000L) * 1000L, wolfsentry_time));
+    WOLFSENTRY_RETURN_OK;
 }
 
 static long wolfsentry_time_to_usecs(struct wolfsentry_context *wolfsentry, wolfsentry_time_t ts) {
@@ -963,7 +960,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel(WOLFSENTRY_CONTE
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long usecs) {
-    return wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_OUT, usecs_to_wolfsentry_time(wolfsentry, usecs));
+    wolfsentry_time_t rel_when;
+    wolfsentry_errcode_t ret = usecs_to_wolfsentry_time(wolfsentry, usecs, &rel_when);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    return wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_OUT, rel_when);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t *rel_when) {

@@ -4203,16 +4203,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
              (r->sa_family == WOLFSENTRY_AF_INET6)))
         {
             char get_buf[256];
-            struct protoent protoent, *p;
+            struct protoent protoent, *p = NULL;
             /* note this is glibc-specific and non-standard; other libc
              * implementations have same name but different args.
+             * an unknown number returns 0 with a null result pointer.
              */
-            if (getprotobynumber_r(r->sa_proto,
-                                   &protoent,
-                                   get_buf, sizeof get_buf,
-                                   &p) == 0)
+            if ((getprotobynumber_r(r->sa_proto,
+                                    &protoent,
+                                    get_buf, sizeof get_buf,
+                                    &p) == 0) &&
+                (p != NULL))
             {
-                WOLFSENTRY_RERETURN_IF_ERROR(write_json_string(json_out, json_out_len, protoent.p_name, strlen(protoent.p_name)));
+                WOLFSENTRY_RERETURN_IF_ERROR(write_json_string(json_out, json_out_len, p->p_name, strlen(p->p_name)));
                 rendered_proto = 1;
             }
         }

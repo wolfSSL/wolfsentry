@@ -3770,6 +3770,10 @@ static int test_route_format_json_escapes_parent_event_label(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifndef WOLFSENTRY_NO_GETPROTOBY
+#include <netdb.h>
+#endif
+
 static int test_route_format_json_unknown_protocol_numeric(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_route_table *main_routes;
@@ -3779,15 +3783,35 @@ static int test_route_format_json_unknown_protocol_numeric(void) {
     wolfsentry_route_flags_t flags;
     wolfsentry_ent_id_t id;
     unsigned char full_buf[1024];
-    size_t full_len;
+    size_t full_len, i;
     struct regression_sockaddr_v4 remote, local;
-    /* IANA reserves 253 for experimentation, so no protocols database
-     * resolves it to a name.
+    wolfsentry_proto_t unknown_proto = 0;
+    char expected[32];
+    /* IANA experimental and unassigned numbers, checked against the host
+     * database at runtime because a local protocols file can name any of
+     * them.
      */
-    static const wolfsentry_proto_t unknown_proto = 253;
-    static const char expected[] = "\"protocol\":253,";
+    static const wolfsentry_proto_t candidates[] = { 253, 254, 143, 144, 145 };
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+#ifndef WOLFSENTRY_NO_GETPROTOBY
+    for (i = 0; i < sizeof candidates / sizeof candidates[0]; ++i) {
+        if (getprotobynumber((int)candidates[i]) == NULL) {
+            unknown_proto = candidates[i];
+            break;
+        }
+    }
+    if (unknown_proto == 0) {
+        printf("skipping unknown-protocol JSON check: host protocol database names every candidate.\n");
+        WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+        WOLFSENTRY_RETURN_OK;
+    }
+#else
+    (void)i;
+    unknown_proto = candidates[0];
+#endif
+    WOLFSENTRY_EXIT_ON_FALSE(snprintf(expected, sizeof expected, "\"protocol\":%u,", (unsigned int)unknown_proto) > 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(
@@ -6800,6 +6824,11 @@ int main(int argc, char* argv[]) {
     ret = test_route_format_json_escapes_parent_event_label();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_route_format_json_escapes_parent_event_label failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_route_format_json_unknown_protocol_numeric();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_format_json_unknown_protocol_numeric failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

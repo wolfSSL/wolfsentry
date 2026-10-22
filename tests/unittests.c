@@ -3543,6 +3543,123 @@ static int test_event_max_length_label(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_event_max_length_label_lookups(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    struct wolfsentry_action_list_ent *cursor;
+    const char *action_label;
+    int action_label_len;
+    struct wolfsentry_eventconfig eventconfig;
+    int n_actions = 0;
+    char label[WOLFSENTRY_MAX_LABEL_BYTES + 1];
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* default_config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(label, 'n', WOLFSENTRY_MAX_LABEL_BYTES);
+    label[WOLFSENTRY_MAX_LABEL_BYTES] = 0;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "max-label-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            wolfsentry_action_dummy_callback,
+            NULL /* handler_context */,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &eventconfig));
+
+    WOLFSENTRY_EXIT_ON_FALSE(eventconfig.route_private_data_size == config.route_private_data_size);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            "max-label-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_list_start(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            &cursor));
+
+    while (wolfsentry_event_action_list_next(
+               WOLFSENTRY_CONTEXT_ARGS_OUT,
+               &cursor,
+               &action_label,
+               &action_label_len) >= 0) {
+        WOLFSENTRY_EXIT_ON_FALSE(strcmp(action_label, "max-label-action") == 0);
+        ++n_actions;
+    }
+
+    WOLFSENTRY_EXIT_ON_FALSE(n_actions == 1);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_list_done(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &cursor));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            "max-label-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -5827,6 +5944,12 @@ int main(int argc, char* argv[]) {
     ret = test_event_max_length_label();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_event_max_length_label failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_max_length_label_lookups();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_max_length_label_lookups failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

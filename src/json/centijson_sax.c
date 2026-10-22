@@ -405,8 +405,12 @@ json_literal_automaton(JSON_PARSER* parser, const unsigned char* input, size_t s
     if(off < size  &&  !IS_TOKEN_BOUNDARY(input[off])) {
         memcpy(&parser->pos, &parser->value_pos, sizeof(JSON_INPUT_POS));
         json_raise(parser, JSON_ERR_SYNTAX);
-    } else if(input == NULL  /* EOF */  ||
-       (off < size  &&  IS_TOKEN_BOUNDARY(input[off]))) {
+    } else if(input == NULL  /* EOF */) {
+        if(parser->substate < literal_size)
+            json_raise_for_value(parser, JSON_ERR_SYNTAX);
+        else
+            json_process(parser, type, NULL, 0);
+    } else if(off < size  &&  IS_TOKEN_BOUNDARY(input[off])) {
         json_process(parser, type, NULL, 0);
     }
     return off;
@@ -981,7 +985,10 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
             if(parser->automaton != AUTOMATON_MAIN) {
                 json_raise(parser, JSON_ERR_SYNTAX);
             }
-        } else if(parser->nesting_level != 0  ||  !(parser->state & CAN_SEE_EOF)) {
+        }
+
+        if(parser->errcode >= 0  &&
+           (parser->nesting_level != 0  ||  !(parser->state & CAN_SEE_EOF))) {
             json_raise_unexpected(parser);
         }
     }

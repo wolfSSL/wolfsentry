@@ -3842,6 +3842,14 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
     char addr_fmt_buf[32];
     int addr_fmt_len;
     byte link_addr[2];
+    size_t i;
+    static const wolfsentry_action_res_t forbidden_inited[] = {
+        WOLFSENTRY_ACTION_RES_ACCEPT,
+        WOLFSENTRY_ACTION_RES_REJECT,
+        WOLFSENTRY_ACTION_RES_STOP,
+        WOLFSENTRY_ACTION_RES_DEALLOCATED,
+        WOLFSENTRY_ACTION_RES_ERROR
+    };
     struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
@@ -4012,6 +4020,20 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
                 &id, &inexact_matches, &action_results),
             USED_FALLBACK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_PORT_RESET));
+
+    /* a caller may not pre-decide the verdict or pre-set internal status bits. */
+    for (i = 0; i < sizeof forbidden_inited / sizeof forbidden_inited[0]; ++i) {
+        action_results = forbidden_inited[i];
+        WOLFSENTRY_EXIT_ON_FALSE(
+            WOLFSENTRY_ERROR_CODE_IS(
+                wolfsentry_route_event_dispatch_with_inited_result(
+                    WOLFSENTRY_CONTEXT_ARGS_OUT,
+                    &remote.sa, &local.sa, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                    NULL /* event_label */, 0 /* event_label_len */,
+                    NULL /* caller_arg */,
+                    &id, &inexact_matches, &action_results),
+                INVALID_ARG));
+    }
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));

@@ -2172,6 +2172,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
     if ((*jps)->wolfsentry && ((*jps)->wolfsentry != (*jps)->wolfsentry_actual))
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT));
 
+    /* In the default (non-transactional) load mode the live context was flushed
+     * before parsing; a failure leaves it partially populated while its default
+     * policy is unchanged. Fail closed so a half-loaded policy cannot admit
+     * traffic: clear the routes and set a REJECT default policy.
+     */
+    if ((ret < 0) &&
+        (! WOLFSENTRY_MASKIN_BITS((*jps)->load_flags,
+             WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN |
+             WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT |
+             WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH)))
+    {
+        struct wolfsentry_route_table *main_table;
+        wolfsentry_action_res_t action_results;
+        WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+        if (wolfsentry_route_get_main_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &main_table) >= 0) {
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_flush_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, main_table, &action_results));
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_table_default_policy_set(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, main_table, WOLFSENTRY_ACTION_RES_REJECT));
+        }
+    }
+
 #ifdef WOLFSENTRY_THREADSAFE
     {
         wolfsentry_errcode_t _lock_ret;

@@ -5541,6 +5541,53 @@ static int test_json_bitmask_short_address(void) {
 }
 #endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
 
+static int test_json_failed_load_fails_closed(void) {
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t default_policy = WOLFSENTRY_ACTION_RES_NONE;
+    static const char good[] =
+        "{ \"wolfsentry-config-version\" : 1, \"default-policies\" : { \"default-policy\" : \"accept\" } }";
+    static const char bad[] =
+        "{ \"wolfsentry-config-version\" : 1, \"user-values\" : { \"x\" : { \"uint\" : -1 } } }";
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            (const unsigned char *)good, strlen(good),
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
+
+    /* a failing default-mode load must leave the context fail-closed. */
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            (const unsigned char *)bad, strlen(bad),
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &default_policy));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(default_policy == WOLFSENTRY_ACTION_RES_REJECT);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    ret = WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_json_actions_update_rejected(void) {
     static const char json[] =
         "{ \"wolfsentry-config-version\" : 1, \"actions-update\" : [ ] }";
@@ -5944,6 +5991,11 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif
+    ret = test_json_failed_load_fails_closed();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_failed_load_fails_closed failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
     ret = test_json_actions_update_rejected();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_actions_update_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));

@@ -255,7 +255,7 @@
 #undef WOLFSENTRY_NO_ERROR_STRINGS
 
 #define WOLFSENTRY_NO_PROTOCOL_NAMES
-    /*!< \brief If defined, omit APIs for rendering error codes and source code files in human readable form.  They will be rendered numerically. */
+    /*!< \brief If defined, omit APIs for converting between address family names and numbers.  Address families will be rendered numerically.  Protocol and service name lookup is controlled separately by `WOLFSENTRY_NO_GETPROTOBY`. */
 #undef WOLFSENTRY_NO_PROTOCOL_NAMES
 
 #define WOLFSENTRY_NO_ADDR_BITMASK_MATCHING

@@ -2557,6 +2557,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_feed(
     (void)err_buf_size;
 #endif
 
+    if (jps == NULL)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (WOLFSENTRY_CHECK_BITS(jps->load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     ret = json_feed(&jps->parser, json_in, json_in_len);

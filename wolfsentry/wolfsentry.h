@@ -1003,7 +1003,7 @@ typedef wolfsentry_errcode_t (*wolfsentry_action_callback_t)(
  * @{
  */
 
-#define WOLFSENTRY_ROUTE_DEFAULT_POLICY_MASK (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_STOP | WOLFSENTRY_ACTION_RES_ERROR)
+#define WOLFSENTRY_ROUTE_DEFAULT_POLICY_MASK (WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT | WOLFSENTRY_ACTION_RES_STOP | WOLFSENTRY_ACTION_RES_ERROR | WOLFSENTRY_ACTION_RES_PORT_RESET)
     /*!< \brief Bit mask spanning the bits allowed by wolfsentry_route_table_default_policy_set() */
 
 /*! \brief bit field specifying attributes of a route/rule */

@@ -239,7 +239,7 @@ Each event is composed of the following elements, all of which are optional exce
 
 * <b>`label`</b> -- The name by which the event is identified.  See the definition of `label` in the ABNF grammar below for permissible values.
 
-* <b>`priority`</b> -- The priority of routes that have this event as their <b>`parent-event`</b> (see <b>`routes`</b> below).  Lower number means higher priority.
+* <b>`priority`</b> -- The priority of routes that have this event as their <b>`parent-event`</b> (see <b>`routes`</b> below).  Lower number means higher priority.  If omitted, the priority is 0, the highest priority.
 
 * <b>`config`</b> -- The configuration to associate with routes with this <b>`parent-event`</b>, as above for <b>`config-update`</b>.
 

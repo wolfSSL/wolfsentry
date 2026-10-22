@@ -3111,6 +3111,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_purge_time_set(
     wolfsentry_time_t purge_after)
 {
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
+    if (route->header.parent_table == NULL)
+        WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
     if (route->meta.purge_after)
         wolfsentry_list_ent_delete(&((struct wolfsentry_route_table *)route->header.parent_table)->purge_list, &route->purge_links);
     route->meta.purge_after = purge_after;

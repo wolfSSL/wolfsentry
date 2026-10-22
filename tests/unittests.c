@@ -3832,6 +3832,7 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_route_table *table;
     struct wolfsentry_route *route;
+    const struct wolfsentry_route *fallthrough_route;
     wolfsentry_action_res_t action_results;
     wolfsentry_route_flags_t inexact_matches, route_flags;
     wolfsentry_ent_id_t id;
@@ -3947,6 +3948,17 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
     new_count = -1;
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_increment_derogatory_count(WOLFSENTRY_CONTEXT_ARGS_OUT, route, 0, &new_count));
     WOLFSENTRY_EXIT_ON_FALSE(new_count == 65535);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* the fallthrough route belongs to no table, so setting a purge time on it
+     * must be refused rather than dereferencing a null parent table. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_fallthrough_route_get(WOLFSENTRY_CONTEXT_ARGS_OUT, table, &fallthrough_route));
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_route_purge_time_set(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_route *)fallthrough_route, 1),
+            NOT_PERMITTED));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_route *)fallthrough_route, NULL /* action_results */));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

@@ -784,7 +784,14 @@ static wolfsentry_errcode_t convert_sockaddr_address(
     else if (sa->sa_family == WOLFSENTRY_AF_CAN) {
         /* accept CAN addrs as either strings consisting of hex or octal numbers, or as a JSON-native decimal integer. */
         char d_buf[13], *endptr;
+        /* use the widest available unsigned type so the range check below is
+         * live even on ILP32 ABIs, where unsigned long equals uint32_t.
+         */
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+        unsigned long long addr;
+#else
         unsigned long addr;
+#endif
         if ((type != JSON_STRING) && (type != JSON_NUMBER))
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         if (data_size >= sizeof d_buf)
@@ -805,7 +812,18 @@ static wolfsentry_errcode_t convert_sockaddr_address(
         }
         memcpy(d_buf, data, data_size);
         d_buf[data_size] = 0;
+#ifndef WOLFSENTRY_NO_ERRNO_H
+        errno = 0;
+#endif
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+        addr = strtoull(d_buf, &endptr, 0);
+#else
         addr = strtoul(d_buf, &endptr, 0);
+#endif
+#ifndef WOLFSENTRY_NO_ERRNO_H
+        if (errno != 0)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+#endif
         if ((size_t)(endptr - d_buf) != data_size)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         if (addr > MAX_UINT_OF(uint32_t))

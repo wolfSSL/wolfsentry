@@ -5517,6 +5517,14 @@ static int test_json_unknown_service_name(void) {
         test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
     WOLFSENTRY_RETURN_OK;
 }
+
+static int test_json_unknown_protocol_name(void) {
+    static const char json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"protocol\" : \"no-such-protocol-zzz\" } ] }";
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
 #endif /* !WOLFSENTRY_NO_GETPROTOBY */
 
 static int test_json_link64_short_address(void) {
@@ -5905,6 +5913,11 @@ int main(int argc, char* argv[]) {
     ret = test_json_unknown_service_name();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_unknown_service_name failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_json_unknown_protocol_name();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_unknown_protocol_name failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

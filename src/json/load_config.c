@@ -1096,6 +1096,10 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
                 WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
         }
 
+        /* glibc reports an unknown protocol with a zero return and a NULL result. */
+        if (p == NULL)
+            WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+
         jps->o_u_c.route.remote.sa_proto = (wolfsentry_proto_t)p->p_proto;
         jps->o_u_c.route.local.sa_proto = (wolfsentry_proto_t)p->p_proto;
     }

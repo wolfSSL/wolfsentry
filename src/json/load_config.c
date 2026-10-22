@@ -718,6 +718,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(
     byte *sa_addr)
 {
     if ((sa->sa_family == WOLFSENTRY_AF_LINK48) || (sa->sa_family == WOLFSENTRY_AF_LINK64)) {
+        wolfsentry_addr_family_t requested_family = sa->sa_family;
         int n;
         if (type != JSON_STRING)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -728,6 +729,12 @@ static wolfsentry_errcode_t convert_sockaddr_address(
                 WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
             ++n;
             if (data_size == 0) {
+                /* an explicit EUI-64 family must not be silently reclassified
+                 * as EUI-48 by the parsed byte count (LINK48 and the generic
+                 * LINK alias share a value, so only LINK64 can be enforced).
+                 */
+                if ((requested_family == WOLFSENTRY_AF_LINK64) && (n != 8))
+                    WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
                 if (n == 6)
                     sa->sa_family = WOLFSENTRY_AF_LINK48;
                 else if (n == 8)

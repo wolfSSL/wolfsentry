@@ -4103,6 +4103,30 @@ static wolfsentry_errcode_t ws_itoa(int i, unsigned char **out, size_t *spc) {
 #define unwrite_byte() do { --(*json_out); ++(*json_out_len); } while (0)
 #define unwrite_bytes(l) do { size_t _l = (size_t)(l); (*json_out) -= _l; (*json_out_len) += _l; } while (0)
 
+/* labels and names are arbitrary bytes, so they must be escaped to keep the
+ * output parseable and to keep them from injecting JSON structure.
+ */
+static wolfsentry_errcode_t write_json_string(unsigned char **json_out, size_t *json_out_len, const char *s, size_t s_len) {
+    static const char hexdigits[] = "0123456789abcdef";
+    size_t i;
+
+    write_byte('"');
+    for (i = 0; i < s_len; ++i) {
+        unsigned char c = (unsigned char)s[i];
+        if ((c == '"') || (c == '\\')) {
+            write_byte('\\');
+            write_byte(c);
+        } else if (c < 0x20U) {
+            write_string("\\u00");
+            write_byte((unsigned char)hexdigits[c >> 4U]);
+            write_byte((unsigned char)hexdigits[c & 0xfU]);
+        } else
+            write_byte(c);
+    }
+    write_byte('"');
+    WOLFSENTRY_RETURN_OK;
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_route *r,
@@ -4114,9 +4138,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
 
     write_byte('{');
     if (r->parent_event) {
-        write_string("\"parent-event\":\"");
-        write_bytes(r->parent_event->label, r->parent_event->label_len);
-        write_string("\",");
+        write_string("\"parent-event\":");
+        WOLFSENTRY_RERETURN_IF_ERROR(write_json_string(json_out, json_out_len, r->parent_event->label, (size_t)r->parent_event->label_len));
+        write_byte(',');
     }
     {
         const struct wolfsentry_route_flag_name_map_ent *i;
@@ -4148,10 +4172,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
                 if (family_name_len + 2 > *json_out_len)
                     ret = WOLFSENTRY_ERROR_ENCODE(BUFFER_TOO_SMALL);
                 else {
-                    write_byte('"');
-                    write_bytes(family_name, family_name_len);
-                    write_byte('"');
-                    rendered_family = 1;
+                    ret = write_json_string(json_out, json_out_len, family_name, family_name_len);
+                    if (WOLFSENTRY_IS_SUCCESS(ret))
+                        rendered_family = 1;
                 }
                 if (addr_family) {
                     wolfsentry_errcode_t drop_ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ );
@@ -4189,9 +4212,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
                                    get_buf, sizeof get_buf,
                                    &p) == 0)
             {
-                write_byte('"');
-                write_string(protoent.p_name);
-                write_byte('"');
+                WOLFSENTRY_RERETURN_IF_ERROR(write_json_string(json_out, json_out_len, protoent.p_name, strlen(protoent.p_name)));
                 rendered_proto = 1;
             }
         }

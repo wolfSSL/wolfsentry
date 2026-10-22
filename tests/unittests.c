@@ -6797,6 +6797,11 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_route_format_json_truncation_is_bounded failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+    ret = test_route_format_json_escapes_parent_event_label();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_format_json_escapes_parent_event_label failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
 #endif
 #endif
 

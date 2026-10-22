@@ -248,17 +248,16 @@ static inline int cmp_addrs_bitmaskful(
 
             if (left_addr_len < right_addr_len) {
                 maskful_addr = right_addr;
-                mask_len = right_addr_len >> 1;
+                mask_len = WOLFSENTRY_BITS_TO_BYTES(right_addr_len >> 1);
                 target_addr = left_addr;
-                padding_offset = mask_len - left_addr_len;
+                padding_offset = mask_len - WOLFSENTRY_BITS_TO_BYTES(left_addr_len);
             } else {
                 maskful_addr = left_addr;
-                mask_len = left_addr_len >> 1;
+                mask_len = WOLFSENTRY_BITS_TO_BYTES(left_addr_len >> 1);
                 target_addr = right_addr;
-                padding_offset = mask_len - right_addr_len;
+                padding_offset = mask_len - WOLFSENTRY_BITS_TO_BYTES(right_addr_len);
             }
 
-            mask_len = WOLFSENTRY_BITS_TO_BYTES(mask_len);
             mask = maskful_addr + mask_len;
 
             for (i = 0; i < mask_len; ++i) {

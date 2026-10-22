@@ -3976,6 +3976,18 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
     WOLFSENTRY_EXIT_ON_FALSE(addr_fmt_len == 5);
     WOLFSENTRY_EXIT_ON_FALSE(addr_fmt_buf[2] == ':');
 
+    /* a null action_results must be rejected up front, not dereferenced while
+     * clearing it. */
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa, &local.sa, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+                NULL /* event_label */, 0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &id, &inexact_matches, NULL /* action_results */),
+            INVALID_ARG));
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     WOLFSENTRY_RETURN_OK;

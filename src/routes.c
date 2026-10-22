@@ -2380,6 +2380,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     struct wolfsentry_eventconfig_internal *config;
     wolfsentry_route_flags_t current_rule_route_flags;
     wolfsentry_errcode_t ret;
+    wolfsentry_errcode_t action_ret;
     wolfsentry_time_t now;
     int penalty_triggered = 0;
     wolfsentry_hitcount_t derog_snap;
@@ -2448,7 +2449,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
          * trigger_event->action_list must call wolfsentry_route_set_wildcard(),
          * in addition to setting _ACTION_RES_INSERT.
          */
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
+        action_ret = wolfsentry_action_list_dispatch(
                                        WOLFSENTRY_CONTEXT_ARGS_OUT,
                                        caller_arg,
                                        trigger_event,
@@ -2457,7 +2458,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        target_route,
                                        route_table,
                                        rule_route,
-                                       action_results));
+                                       action_results);
+        WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+        if (action_ret < 0)
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
         current_rule_route_flags = WOLFSENTRY_ATOMIC_LOAD(rule_route->flags);
     }
@@ -2483,7 +2487,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     }
 
     if (parent_event && (wolfsentry_list_ent_get_len(&parent_event->match_action_list.header) > 0)) {
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
+        action_ret = wolfsentry_action_list_dispatch(
                                        WOLFSENTRY_CONTEXT_ARGS_OUT,
                                        caller_arg,
                                        parent_event,
@@ -2492,7 +2496,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        target_route,
                                        route_table,
                                        rule_route,
-                                       action_results));
+                                       action_results);
+        WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+        if (action_ret < 0)
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
         current_rule_route_flags = WOLFSENTRY_ATOMIC_LOAD(rule_route->flags);
     }
@@ -2651,7 +2658,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         parent_event && (wolfsentry_list_ent_get_len(&parent_event->update_action_list.header) > 0))
     {
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
+        action_ret = wolfsentry_action_list_dispatch(
                                        WOLFSENTRY_CONTEXT_ARGS_OUT,
                                        caller_arg,
                                        parent_event,
@@ -2660,13 +2667,16 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        target_route,
                                        route_table,
                                        rule_route,
-                                       action_results));
+                                       action_results);
+        WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+        if (action_ret < 0)
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         /* no need to refresh current_rule_route_flags */
     }
 
     if (parent_event && (wolfsentry_list_ent_get_len(&parent_event->decision_action_list.header) > 0)) {
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
-        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_action_list_dispatch(
+        action_ret = wolfsentry_action_list_dispatch(
                                        WOLFSENTRY_CONTEXT_ARGS_OUT,
                                        caller_arg,
                                        parent_event,
@@ -2675,7 +2685,10 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        target_route,
                                        route_table,
                                        rule_route,
-                                       action_results));
+                                       action_results);
+        WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+        if (action_ret < 0)
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         /* no need to refresh current_rule_route_flags */
     }
 

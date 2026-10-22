@@ -3009,6 +3009,82 @@ static int test_route_flags_sensical_validation(WOLFSENTRY_CONTEXT_ARGS_IN) {
     return 0;
 }
 
+static int insert_route_for_update_flags(WOLFSENTRY_CONTEXT_ARGS_IN, struct wolfsentry_route **route_out, wolfsentry_ent_id_t *id_out) {
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id;
+
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 4003;
+    local.sa.sa_port = 4004;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    memcpy(remote.sa.addr, "\x0a\x0b\x0c\x11", sizeof remote.addr_buf);
+    memcpy(local.sa.addr, "\x0a\x0b\x0c\x12", sizeof local.addr_buf);
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa,
+            WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)route_out));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    *id_out = id;
+
+    return 0;
+}
+
+static int test_route_update_flags_rejects_penaltybox_and_greenlist(WOLFSENTRY_CONTEXT_ARGS_IN) {
+    struct wolfsentry_route *route;
+    wolfsentry_ent_id_t id;
+    wolfsentry_route_flags_t flags_before, flags_after;
+    wolfsentry_action_res_t action_results;
+
+    WOLFSENTRY_EXIT_ON_FALSE(insert_route_for_update_flags(WOLFSENTRY_CONTEXT_ARGS_OUT, &route, &id) == 0);
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_route_update_flags(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED | WOLFSENTRY_ROUTE_FLAG_GREENLISTED,
+            WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before, &flags_after, &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_ATOMIC_LOAD(route->flags) & (WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED | WOLFSENTRY_ROUTE_FLAG_GREENLISTED));
+
+    /* either flag alone is accepted. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_update_flags(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            WOLFSENTRY_ROUTE_FLAG_GREENLISTED,
+            WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before, &flags_after, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ATOMIC_LOAD(route->flags) & WOLFSENTRY_ROUTE_FLAG_GREENLISTED);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_delete_by_id(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            id,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &action_results));
+
+    return 0;
+}
+
 static int test_static_routes_guards(void) {
     struct wolfsentry_context *wolfsentry;
     static const struct wolfsentry_eventconfig config = { 0 };
@@ -3028,6 +3104,8 @@ static int test_static_routes_guards(void) {
     WOLFSENTRY_EXIT_ON_FALSE(test_route_insert_by_exports_requires_direction(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
 
     WOLFSENTRY_EXIT_ON_FALSE(test_route_flags_sensical_validation(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
+
+    WOLFSENTRY_EXIT_ON_FALSE(test_route_update_flags_rejects_penaltybox_and_greenlist(WOLFSENTRY_CONTEXT_ARGS_OUT) == 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

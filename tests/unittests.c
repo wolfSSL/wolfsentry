@@ -5509,6 +5509,16 @@ static int test_json_uint64_negative(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifndef WOLFSENTRY_NO_GETPROTOBY
+static int test_json_unknown_service_name(void) {
+    static const char json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"protocol\" : 6, \"remote\" : { \"port\" : \"no-such-service-zzz\" } } ] }";
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* !WOLFSENTRY_NO_GETPROTOBY */
+
 static int test_json_link64_short_address(void) {
     /* family 119 == WOLFSENTRY_AF_LINK64; a six-byte EUI-48 address must not be
      * silently accepted as LINK64.
@@ -5891,6 +5901,13 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_json_link64_short_address failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+#ifndef WOLFSENTRY_NO_GETPROTOBY
+    ret = test_json_unknown_service_name();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_unknown_service_name failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_JSON_CORPUS

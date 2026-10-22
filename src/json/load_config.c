@@ -924,6 +924,10 @@ static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_pr
             WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
     }
 
+    /* glibc reports an unknown service with a zero return and a NULL result. */
+    if (s == NULL)
+        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+
     sa->sa_port = (wolfsentry_port_t)ntohs((uint16_t)s->s_port);
     WOLFSENTRY_RETURN_OK;
 }

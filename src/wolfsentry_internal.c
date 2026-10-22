@@ -275,6 +275,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_coupled_table_clone(
             goto out;
         new1->parent_table = dest_table1;
         new2->parent_table = dest_table2;
+        new1->prev = prev;
         if (prev)
             prev->next = new1;
         else

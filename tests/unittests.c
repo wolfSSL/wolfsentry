@@ -4160,6 +4160,24 @@ static wolfsentry_errcode_t regression_set_purge_time(
     return ret;
 }
 
+static wolfsentry_errcode_t regression_insert_pbox_event(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const char *label,
+    wolfsentry_hitcount_t derog_threshold,
+    wolfsentry_time_t penaltybox_duration,
+    wolfsentry_eventconfig_flags_t flags)
+{
+    struct wolfsentry_eventconfig event_config;
+
+    memset(&event_config, 0, sizeof event_config);
+    event_config.route_private_data_size = PRIVATE_DATA_SIZE;
+    event_config.route_private_data_alignment = PRIVATE_DATA_ALIGNMENT;
+    event_config.derogatory_threshold_for_penaltybox = derog_threshold;
+    event_config.penaltybox_duration = penaltybox_duration;
+    event_config.flags = flags;
+    return wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, label, -1, 10, &event_config, WOLFSENTRY_EVENT_FLAG_NONE, NULL /* id */);
+}
+
 static wolfsentry_errcode_t test_regression_route_timing(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_route_table *table;
@@ -4212,6 +4230,21 @@ static wolfsentry_errcode_t test_regression_route_timing(void) {
     ++regression_fake_now;
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL));
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_NOT_FOUND, regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, id, &meta));
+
+    /* a route penalty-boxed by its second derogatory event stays boxed at
+     * exactly the box duration, and is released one tick later. */
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert_pbox_event(WOLFSENTRY_CONTEXT_ARGS_OUT, "pbox", 2, 50, WOLFSENTRY_EVENTCONFIG_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x03", 32, "pbox", WOLFSENTRY_ROUTE_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x03", WOLFSENTRY_ACTION_RES_DEROGATORY, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x03", WOLFSENTRY_ACTION_RES_DEROGATORY, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    regression_fake_now += 50;
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x03", WOLFSENTRY_ACTION_RES_NONE, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    ++regression_fake_now;
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x05\x05\x03", WOLFSENTRY_ACTION_RES_NONE, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));

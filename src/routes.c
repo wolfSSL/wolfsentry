@@ -2474,6 +2474,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
             wolfsentry_route_increment_hitcount(WOLFSENTRY_CONTEXT_ARGS_OUT, rule_route, action_results);
         }
         parent_event = route_table->default_event;
+        /* the rule route and its event changed, so refresh the cached config
+         * and flags to match the fallthrough route rather than reusing the
+         * superseded route's state. */
+        config = (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
+        current_rule_route_flags = WOLFSENTRY_ATOMIC_LOAD(rule_route->flags);
     }
 
     if (parent_event && (wolfsentry_list_ent_get_len(&parent_event->match_action_list.header) > 0)) {

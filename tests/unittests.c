@@ -3636,6 +3636,526 @@ static int test_dispatch_inhibited_insert_actions(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+struct reentrant_delete_ctx {
+    const char *event_label;
+    const char *action_label;
+    wolfsentry_action_type_t which_action_list;
+    int call_count;
+    wolfsentry_errcode_t delete_ret;
+};
+
+static wolfsentry_errcode_t action_reentrant_delete_handler(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_arg,
+    void *caller_arg,
+    const struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    struct reentrant_delete_ctx *c = (struct reentrant_delete_ctx *)handler_arg;
+
+    (void)action;
+    (void)caller_arg;
+    (void)trigger_event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+
+    if (c != NULL) {
+        ++c->call_count;
+        c->delete_ret = wolfsentry_event_action_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            c->event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            c->which_action_list,
+            c->action_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED);
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_dispatch_reentrant_action_delete(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_ent_id_t route_id;
+    struct reentrant_delete_ctx sdctx;
+    int after_calls = 0;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    memset(&sdctx, 0, sizeof sdctx);
+    sdctx.event_label = "ev-match";
+    sdctx.action_label = "self-del-action";
+    sdctx.which_action_list = WOLFSENTRY_ACTION_TYPE_MATCH;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "self-del-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            action_reentrant_delete_handler,
+            &sdctx,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "after-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            action_dispatch_counter_handler,
+            &after_calls,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "ev-match",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    /* a self-deleting action followed by another action in the same list: the
+     * dispatch loop must survive the first handler deleting its own entry and
+     * still reach the second action.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "ev-match",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            "self-del-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "ev-match",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            "after-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    dynamic_rules_fill_sockaddrs(&remote.sa, &local.sa, sizeof remote.addr_buf);
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa,
+            &local.sa,
+            flags,
+            "ev-match",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id,
+            &action_results));
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &route_id,
+            &inexact_matches,
+            &action_results));
+
+    /* a handler's attempt to delete its own live entry is refused, and
+     * iteration still reaches the following action.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(sdctx.call_count == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(sdctx.delete_ret, BUSY));
+    WOLFSENTRY_EXIT_ON_FALSE(after_calls == 1);
+
+    /* now the first handler targets the SUCCESSOR entry: that delete must also
+     * be refused, and the successor must still run.
+     */
+    sdctx.call_count = 0;
+    sdctx.action_label = "after-action";
+    after_calls = 0;
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags,
+            NULL, 0, NULL, &route_id, &inexact_matches, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(sdctx.call_count == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(sdctx.delete_ret, BUSY));
+    WOLFSENTRY_EXIT_ON_FALSE(after_calls == 1);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+struct event_del_ctx {
+    const char *event_label;
+    int call_count;
+    wolfsentry_errcode_t del_ret;
+};
+
+static wolfsentry_errcode_t action_delete_own_event_handler(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_arg,
+    void *caller_arg,
+    const struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    struct event_del_ctx *c = (struct event_del_ctx *)handler_arg;
+
+    (void)action;
+    (void)caller_arg;
+    (void)trigger_event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+
+    if (c != NULL) {
+        ++c->call_count;
+        c->del_ret = wolfsentry_event_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            c->event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL /* action_results */);
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t action_error_handler(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_arg,
+    void *caller_arg,
+    const struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    (void)action;
+    (void)caller_arg;
+    (void)trigger_event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+    if (handler_arg != NULL)
+        ++*(int *)handler_arg;
+    WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+}
+
+static int test_dispatch_handler_deletes_own_event(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_ent_id_t route_id;
+    struct event_del_ctx edctx;
+    struct wolfsentry_event *gone_ref = NULL;
+    int after_calls = 0;
+    int probe_calls = 0;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    memset(&edctx, 0, sizeof edctx);
+    edctx.event_label = "ev-selfev";
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings, WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */, &wolfsentry, WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "evdel-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_delete_own_event_handler, &edctx, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "after-ev-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_dispatch_counter_handler, &after_calls, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "probe-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_dispatch_counter_handler, &probe_calls, &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-selfev", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10, NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-selfev", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "evdel-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-selfev", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "after-ev-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    /* a separate event used only to prove the dispatch guard is released. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-probe", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10, NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-probe", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "probe-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    dynamic_rules_fill_sockaddrs(&remote.sa, &local.sa, sizeof remote.addr_buf);
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa,
+            flags, "ev-selfev", WOLFSENTRY_LENGTH_NULL_TERMINATED, &id, &action_results));
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags,
+            NULL, 0, NULL, &route_id, &inexact_matches, &action_results));
+
+    /* the handler deleted its own event mid-dispatch; the delete succeeded and
+     * the event is gone from the table, yet the held event reference kept the
+     * list valid so iteration reached the following action.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(edctx.call_count == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_IS_SUCCESS(edctx.del_ret));
+    WOLFSENTRY_EXIT_ON_FALSE(after_calls == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-selfev",
+                WOLFSENTRY_LENGTH_NULL_TERMINATED, &gone_ref),
+            ITEM_NOT_FOUND));
+
+    /* the dispatch released its guard, so an unrelated list is now mutable. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-probe", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "probe-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_dispatch_handler_error(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_ent_id_t route_id;
+    int err_calls = 0;
+    int after_calls = 0;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings, WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */, &wolfsentry, WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "err-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_error_handler, &err_calls, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "after-err-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_dispatch_counter_handler, &after_calls, &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-err", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10, NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-err", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "err-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-err", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "after-err-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    dynamic_rules_fill_sockaddrs(&remote.sa, &local.sa, sizeof remote.addr_buf);
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa,
+            flags, "ev-err", WOLFSENTRY_LENGTH_NULL_TERMINATED, &id, &action_results));
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags,
+            NULL, 0, NULL, &route_id, &inexact_matches, &action_results));
+
+    /* the first handler returned an error, taking the loop's error-cleanup
+     * exit, so the following action did not run.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(err_calls == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(after_calls == 0);
+
+    /* the error exit still released the dispatch guard, so the list is mutable. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-err", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "err-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
+struct ctx_exchange_ctx {
+    struct wolfsentry_context *peer;
+    int call_count;
+    wolfsentry_errcode_t exchange_ret;
+};
+
+static wolfsentry_errcode_t action_context_exchange_handler(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_arg,
+    void *caller_arg,
+    const struct wolfsentry_event *trigger_event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    struct ctx_exchange_ctx *c = (struct ctx_exchange_ctx *)handler_arg;
+
+    (void)action;
+    (void)caller_arg;
+    (void)trigger_event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+
+    if (c != NULL) {
+        ++c->call_count;
+        c->exchange_ret = wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_OUT, c->peer);
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_dispatch_context_exchange_during_dispatch(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_context *peer = NULL;
+    wolfsentry_ent_id_t id;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_ent_id_t route_id;
+    struct ctx_exchange_ctx cectx;
+    int after_calls = 0;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    memset(&cectx, 0, sizeof cectx);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings, WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */, &wolfsentry, WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "exch-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_context_exchange_handler, &cectx, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "after-exch-action", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE, action_dispatch_counter_handler, &after_calls, &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-exch", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10, NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-exch", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "exch-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(WOLFSENTRY_CONTEXT_ARGS_OUT, "ev-exch", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_MATCH, "after-exch-action", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    dynamic_rules_fill_sockaddrs(&remote.sa, &local.sa, sizeof remote.addr_buf);
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa,
+            flags, "ev-exch", WOLFSENTRY_LENGTH_NULL_TERMINATED, &id, &action_results));
+
+    /* a peer context to attempt to swap in from the handler. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &peer, WOLFSENTRY_CLONE_FLAG_NONE));
+    cectx.peer = peer;
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, &remote.sa, &local.sa, flags,
+            NULL, 0, NULL, &route_id, &inexact_matches, &action_results));
+
+    /* a context exchange attempted mid-dispatch must be refused, and the
+     * following action must still run.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(cectx.call_count == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(cectx.exchange_ret, BUSY));
+    WOLFSENTRY_EXIT_ON_FALSE(after_calls == 1);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&peer)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -5919,6 +6439,26 @@ int main(int argc, char* argv[]) {
     ret = test_dispatch_inhibited_insert_actions();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_dispatch_inhibited_insert_actions failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_dispatch_handler_deletes_own_event();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_dispatch_handler_deletes_own_event failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_dispatch_handler_error();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_dispatch_handler_error failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_dispatch_context_exchange_during_dispatch();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_dispatch_context_exchange_during_dispatch failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_dispatch_reentrant_action_delete();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_dispatch_reentrant_action_delete failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

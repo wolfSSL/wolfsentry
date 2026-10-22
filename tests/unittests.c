@@ -5541,6 +5541,14 @@ static int test_json_bitmask_short_address(void) {
 }
 #endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
 
+static int test_json_actions_update_rejected(void) {
+    static const char json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"actions-update\" : [ ] }";
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_json_prefix_bits_overbound(void) {
     /* prefix-bits beyond the family width must be rejected before the value can
      * drive an out-of-bounds copy from the fixed staging buffer.
@@ -5936,6 +5944,11 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif
+    ret = test_json_actions_update_rejected();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_actions_update_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
     ret = test_json_prefix_bits_overbound();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_prefix_bits_overbound failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));

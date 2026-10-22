@@ -1768,7 +1768,7 @@ static wolfsentry_errcode_t json_process(
                     WOLFSENTRY_RETURN_OK;
                 }
                 if (! strcmp(jps->cur_keyname, "actions-update")) {
-                    WOLFSENTRY_ERROR_RETURN(CONFIG_MISSING_HANDLER);
+                    WOLFSENTRY_ERROR_OUT(CONFIG_MISSING_HANDLER);
                     /*
                     jps->table_under_construction = T_U_C_ACTIONS;
                     WOLFSENTRY_RETURN_OK;

@@ -154,7 +154,51 @@ static wolfsentry_errcode_t reset_o_u_c(struct wolfsentry_json_process_state *jp
     WOLFSENTRY_RETURN_OK;
 }
 
+/* Range check that does not depend on errno: re-scan the already
+ * syntactically-validated numeric string in buf (strtol-style base-0 rules) and
+ * reject it when its magnitude exceeds limit. A leading sign is skipped so the
+ * caller decides sign handling.
+ */
+static wolfsentry_errcode_t convert_check_magnitude(const char *buf, uint64_t limit) {
+    uint64_t acc = 0;
+    uint64_t base = 10;
+    const char *p = buf;
+
+    while ((*p == ' ') || (*p == '\t'))
+        ++p;
+    if ((*p == '-') || (*p == '+'))
+        ++p;
+    if ((p[0] == '0') && ((p[1] == 'x') || (p[1] == 'X'))) {
+        base = 16;
+        p += 2;
+    } else if (p[0] == '0') {
+        base = 8;
+        ++p;
+    }
+
+    while (*p != 0) {
+        uint64_t digit;
+        if ((*p >= '0') && (*p <= '9'))
+            digit = (uint64_t)(*p - '0');
+        else if ((*p >= 'a') && (*p <= 'f'))
+            digit = (uint64_t)(*p - 'a' + 10);
+        else if ((*p >= 'A') && (*p <= 'F'))
+            digit = (uint64_t)(*p - 'A' + 10);
+        else
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        if (digit >= base)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        if (acc > (limit - digit) / base)
+            WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+        acc = (acc * base) + digit;
+        ++p;
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *data, size_t data_size, uint64_t *out) {
+    wolfsentry_errcode_t ret;
     char buf[24];
     char *endptr;
 #ifdef WOLFSENTRY_HAVE_LONG_LONG
@@ -187,6 +231,8 @@ static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *
 
     if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    ret = convert_check_magnitude(buf, (uint64_t)MAX_UINT_OF(*out));
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *out = (uint64_t)conv;
 
     WOLFSENTRY_RETURN_OK;

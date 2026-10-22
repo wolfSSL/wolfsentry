@@ -313,6 +313,28 @@ static wolfsentry_errcode_t test_base64_decode_quantum(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_eventconfig_overlap_bits(void) {
+    /* A bit cannot be simultaneously requested for addition and clearing. */
+    struct wolfsentry_eventconfig config;
+
+    memset(&config, 0, sizeof config);
+    config.route_flags_to_add_on_insert = WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+    config.route_flags_to_clear_on_insert = WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    memset(&config, 0, sizeof config);
+    config.action_res_filter_bits_set = WOLFSENTRY_ACTION_RES_CONNECT;
+    config.action_res_filter_bits_unset = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    memset(&config, 0, sizeof config);
+    config.action_res_bits_to_add = WOLFSENTRY_ACTION_RES_CONNECT;
+    config.action_res_bits_to_clear = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_INIT */
 
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
@@ -5762,6 +5784,11 @@ int main(int argc, char* argv[]) {
     ret = test_base64_decode_quantum();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_base64_decode_quantum failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_eventconfig_overlap_bits();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_eventconfig_overlap_bits failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

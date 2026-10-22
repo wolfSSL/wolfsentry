@@ -2192,7 +2192,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_with_table(
     /*!< \brief Variant of wolfsentry_route_event_dispatch() that accepts an explicit \p route_table. */
 
 /*!
-   \brief Submit an event into wolfsentry and pass it through the filters. The action_results are cleared on entry, and can be checked to see what actions wolfsentry took, and what actions the caller should take (most saliently, #WOLFSENTRY_ACTION_RES_ACCEPT or #WOLFSENTRY_ACTION_RES_REJECT).  \p action_results can be filtered with constructs like `WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)`
+   \brief Submit an event into wolfsentry and pass it through the filters. The action_results are cleared on entry, and can be checked to see what actions wolfsentry took, and what actions the caller should take (most saliently, #WOLFSENTRY_ACTION_RES_ACCEPT or #WOLFSENTRY_ACTION_RES_REJECT).  \p action_results can be filtered with constructs like `WOLFSENTRY_MASKIN_BITS(*action_results, WOLFSENTRY_ACTION_RES_REJECT)`
 
    \param remote the remote sockaddr details
    \param local the local sockaddr details

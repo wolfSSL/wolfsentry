@@ -923,13 +923,22 @@ static wolfsentry_errcode_t usecs_to_wolfsentry_time(struct wolfsentry_context *
 static wolfsentry_errcode_t wolfsentry_time_to_usecs(struct wolfsentry_context *wolfsentry, wolfsentry_time_t ts, long *usecs) {
     time_t howlong_secs;
     long howlong_nsecs;
+    long howlong_usecs;
     WOLFSENTRY_RERETURN_IF_ERROR(WOLFSENTRY_INTERVAL_TO_SECONDS(ts, &howlong_secs, &howlong_nsecs));
-    if (howlong_secs * (time_t)1000000 >= (time_t)MAX_SINT_OF(long) - (time_t)1000000L)
+    howlong_usecs = howlong_nsecs / 1000L;
+    /* compare the seconds quotient and then the remainder so a representable
+     * value is never saturated, and the multiply never overflows long.
+     */
+    if ((howlong_secs > (time_t)(MAX_SINT_OF(long) / (int64_t)1000000)) ||
+        ((howlong_secs == (time_t)(MAX_SINT_OF(long) / (int64_t)1000000)) &&
+         (howlong_usecs > (long)(MAX_SINT_OF(long) % (int64_t)1000000))))
         *usecs = (long)MAX_SINT_OF(long);
-    else if (howlong_secs * (time_t)1000000 <= (time_t)MIN_SINT_OF(long))
+    else if ((howlong_secs < (time_t)(MIN_SINT_OF(long) / (int64_t)1000000)) ||
+             ((howlong_secs == (time_t)(MIN_SINT_OF(long) / (int64_t)1000000)) &&
+              (howlong_usecs < (long)(MIN_SINT_OF(long) % (int64_t)1000000))))
         *usecs = (long)MIN_SINT_OF(long);
     else
-        *usecs = ((long)howlong_secs * 1000000L) + (howlong_nsecs / 1000L);
+        *usecs = ((long)howlong_secs * 1000000L) + howlong_usecs;
     WOLFSENTRY_RETURN_OK;
 }
 

@@ -169,8 +169,8 @@ typedef struct JSON_CALLBACKS {
      * corresponding values in the alternating fashion (i.e. in the order
      * as they are in the JSON input.).
      *
-     * Application can abort the parsing operation by returning a non-zero.
-     * Note the non-zero return value of the callback is propagated to
+     * Application can abort the parsing operation by returning a negative
+     * value. Note the negative return value of the callback is propagated to
      * json_feed() and json_fini().
      */
     int (*process)(JSON_TYPE /*type*/, const unsigned char* /*data*/,

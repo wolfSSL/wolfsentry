@@ -2285,7 +2285,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_wit
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     wolfsentry_action_res_t *action_results
     );
-    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route by ID, and doesn't clear \p action_results on entry, mainly for use by application code that tracks route/session relationships. */
+    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route with the supplied route pointer, and doesn't clear \p action_results on entry, mainly for use by application code that tracks route/session relationships. */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_get(
     WOLFSENTRY_CONTEXT_ARGS_IN,

@@ -5481,6 +5481,14 @@ static int sax_dump_capture_cb(const unsigned char *str, size_t size, void *user
     return 0;
 }
 
+static int sax_noop_process_cb(JSON_TYPE type, const unsigned char *data, size_t data_size, void *user_data) {
+    (void)type;
+    (void)data;
+    (void)data_size;
+    (void)user_data;
+    return 0;
+}
+
 static int sax_dump_double_text(double dbl, struct sax_dump_capture *cap) {
     cap->len = 0;
     cap->text[0] = '\0';
@@ -5538,6 +5546,70 @@ static wolfsentry_errcode_t test_json_sax_nonfinite_dump(void) {
     WOLFSENTRY_EXIT_ON_FALSE(strcmp(cap.text, "1.0") == 0);
     WOLFSENTRY_EXIT_ON_FAILURE(json_number_to_double((const unsigned char *)cap.text, cap.len, &reparsed));
     WOLFSENTRY_EXIT_ON_FALSE(reparsed == 1.0);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t test_json_sax_truncated_input(void) {
+    static const JSON_CALLBACKS callbacks = { sax_noop_process_cb };
+    static const JSON_CONFIG sax_config = {
+        4096,  /* max_total_len */
+        1000,  /* max_total_values */
+        20,  /* max_number_len */
+        256,  /* max_string_len */
+        64,  /* max_key_len */
+        10,  /* max_nesting_level */
+        0  /* flags */
+    };
+    static const char * const truncated[] = {
+        "t", "tr", "tru",
+        "f", "fa", "fal", "fals",
+        "n", "nu", "nul",
+        "[t", "[fals", "[nul",
+        "{\"a\":t", "{\"a\":tru", "{\"a\":nu",
+        "[true", "[false", "[null", "[1", "{\"a\":true", "{\"a\":1", "{\"a\":[null"
+    };
+    static const char * const complete[] = {
+        "true", "false", "null", "[true]", "[null, false]", "{\"a\":true}"
+    };
+    struct wolfsentry_context *wolfsentry;
+    size_t i;
+    JSON_INPUT_POS pos;
+    int ret;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    for (i = 0; i < sizeof truncated / sizeof truncated[0]; ++i) {
+        ret = json_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)),
+                         (const unsigned char *)truncated[i], strlen(truncated[i]),
+                         &callbacks, &sax_config, NULL, &pos);
+        if (ret >= 0) {
+            (void)fprintf(stderr, "truncated JSON accepted: %s\n", truncated[i]);
+            return 1;
+        }
+    }
+
+    for (i = 0; i < sizeof complete / sizeof complete[0]; ++i) {
+        ret = json_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)),
+                         (const unsigned char *)complete[i], strlen(complete[i]),
+                         &callbacks, &sax_config, NULL, &pos);
+        if (ret < 0) {
+            (void)fprintf(stderr, "complete JSON rejected: %s\n", complete[i]);
+            return 1;
+        }
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
 
     WOLFSENTRY_RETURN_OK;
 }
@@ -5870,6 +5942,12 @@ int main(int argc, char* argv[]) {
     ret = test_json_sax_nonfinite_dump();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_sax_nonfinite_dump failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_json_sax_truncated_input();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_sax_truncated_input failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

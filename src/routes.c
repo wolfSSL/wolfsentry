@@ -1003,6 +1003,10 @@ static wolfsentry_errcode_t wolfsentry_route_new(
     } else {
         if (parent_event != NULL) {
             WOLFSENTRY_REFCOUNT_INCREMENT(parent_event->header.refcount, ret);
+            if (ret < 0) {
+                wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config->config.route_private_data_alignment, *new);
+                *new = NULL;
+            }
         }
     }
 
@@ -1062,6 +1066,10 @@ static wolfsentry_errcode_t wolfsentry_route_new_by_exports(
     } else {
         if (parent_event != NULL) {
             WOLFSENTRY_REFCOUNT_INCREMENT(parent_event->header.refcount, ret);
+            if (ret < 0) {
+                wolfsentry_route_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT, config->config.route_private_data_alignment, *new);
+                *new = NULL;
+            }
         }
     }
 

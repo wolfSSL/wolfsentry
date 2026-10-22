@@ -54,6 +54,7 @@
 #ifdef CENTIJSON_USE_LOCALE
 #include <locale.h>     /* localeconv() */
 #endif
+#include <float.h>      /* DBL_MAX */
 #include <stdio.h>      /* snprintf() */
 #include <stdlib.h>
 #include <string.h>
@@ -1329,6 +1330,10 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 #endif
     char* fp;
     int ret;
+
+    /* JSON has no representation for infinity or NaN. */
+    if(dbl != dbl  ||  dbl > DBL_MAX  ||  dbl < -DBL_MAX)
+        return write_func((const unsigned char *)"null", 4, user_data);
 
     while(1) {
         n = snprintf(buffer, capacity, fmt, dbl);

@@ -5541,6 +5541,71 @@ static int test_json_bitmask_short_address(void) {
 }
 #endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
 
+static int test_json_af_local_address(void) {
+    /* family 1 == WOLFSENTRY_AF_LOCAL; the loader must parse the path address
+     * that the formatter emits, keeping dump/reload symmetric.
+     */
+    static const char json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"/tmp/sock\" } } ] }";
+    /* the formatter dumps AF_LOCAL routes with an explicit prefix-bits; that
+     * dumped form must reload, which requires the loader to accept prefix-bits
+     * for AF_LOCAL ("/tmp/sock" is 9 bytes == 72 bits).
+     */
+    static const char json_dump_form[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"/tmp/sock\", \"prefix-bits\" : 72 } } ] }";
+    /* a path containing a JSON-special byte would dump unescaped and corrupt
+     * the output, so it must be rejected at load.
+     */
+    static const char json_unsafe[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"/tmp/a\\\"b\" } } ] }";
+    /* a prefix-bits inconsistent with the pathname length (here 2 bytes == 16
+     * bits) would leave implicit trailing bytes, so it must be rejected in
+     * either key order; a non-byte-aligned prefix must also be rejected.
+     */
+    static const char json_overlong_prefix[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"/x\", \"prefix-bits\" : 128 } } ] }";
+    static const char json_prefix_first[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"prefix-bits\" : 128, \"address\" : \"/x\" } } ] }";
+    static const char json_unaligned_prefix[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"/x\", \"prefix-bits\" : 12 } } ] }";
+    /* an empty path or a zero prefix would make a zero-length, match-all
+     * address with the wildcard flag cleared; reject both in either order.
+     */
+    static const char json_empty_path[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"\" } } ] }";
+    static const char json_empty_path_then_prefix[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"\", \"prefix-bits\" : 128 } } ] }";
+    static const char json_prefix_then_empty_path[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"prefix-bits\" : 128, \"address\" : \"\" } } ] }";
+    static const char json_zero_prefix_first[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"prefix-bits\" : 0, \"address\" : \"/x\" } } ] }";
+    static const char json_zero_prefix_last[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 1, \"remote\" : { \"address\" : \"/x\", \"prefix-bits\" : 0 } } ] }";
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_empty_path, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_empty_path_then_prefix, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_prefix_then_empty_path, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_zero_prefix_first, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_zero_prefix_last, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        test_json_oneshot_string(json_dump_form, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_unsafe, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_overlong_prefix, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_prefix_first, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json_unaligned_prefix, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_json_failed_load_fails_closed(void) {
     wolfsentry_errcode_t ret;
     struct wolfsentry_context *wolfsentry;
@@ -5991,6 +6056,11 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif
+    ret = test_json_af_local_address();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_af_local_address failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
     ret = test_json_failed_load_fails_closed();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_failed_load_fails_closed failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));

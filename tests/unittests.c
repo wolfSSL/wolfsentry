@@ -3016,6 +3016,124 @@ static int test_static_routes_id_wrap(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_static_routes_id_reclaim(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id1, id2, id3, counter_after_insert;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS;
+    unsigned int n;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 12345;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memcpy(remote.sa.addr, "\0\1\2\3", sizeof remote.addr_buf);
+    memcpy(local.sa.addr, "\377\376\375\374", sizeof local.addr_buf);
+
+    WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id1, &action_results));
+    counter_after_insert = wolfsentry->mk_id_cb_state.id_counter;
+    WOLFSENTRY_EXIT_ON_FALSE(id1 == counter_after_insert);
+
+    /* deleting and re-inserting the newest entry repeatedly must reuse its
+     * ID rather than grow the counter.
+     */
+    for (n = 0; n < 8; ++n) {
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_delete_by_id(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                id1,
+                NULL /* event_label */, 0 /* event_label_len */,
+                &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->mk_id_cb_state.id_counter == counter_after_insert - 1U);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_insert(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                NULL /* caller_arg */,
+                &remote.sa, &local.sa, flags,
+                NULL /* event_label */, 0 /* event_label_len */,
+                &id2, &action_results));
+        WOLFSENTRY_EXIT_ON_FALSE(id2 == id1);
+        WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->mk_id_cb_state.id_counter == counter_after_insert);
+    }
+
+    /* deleting an older entry must not disturb the counter, and the next
+     * allocation must not collide with the surviving newest entry.
+     */
+    local.sa.sa_port = 444;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id2, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(id2 == counter_after_insert + 1U);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_delete_by_id(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            id1,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->mk_id_cb_state.id_counter == id2);
+    local.sa.sa_port = 445;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id3, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(id3 == id2 + 1U);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_delete_by_id(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            id3,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_delete_by_id(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            id2,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->mk_id_cb_state.id_counter == id2 - 1U);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -5936,6 +6054,11 @@ int main(int argc, char* argv[]) {
     ret = test_static_routes_id_wrap();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_static_routes_id_wrap failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_static_routes_id_reclaim();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_static_routes_id_reclaim failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

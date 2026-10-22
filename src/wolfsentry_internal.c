@@ -444,8 +444,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSE
     --wolfsentry->ents_by_id.n_ents;
     ++wolfsentry->ents_by_id.n_deletes;
 
-    /* if possible, reclaim the ID */
-    if ((! wolfsentry->mk_id_cb) && (ent->id == (wolfsentry->mk_id_cb_state.id_counter - 1)))
+    /* if possible, reclaim the ID (the counter equals the newest issued ID). */
+    if ((! wolfsentry->mk_id_cb) && (ent->id == wolfsentry->mk_id_cb_state.id_counter))
         --wolfsentry->mk_id_cb_state.id_counter;
 
     ent->id = WOLFSENTRY_ENT_ID_NONE;

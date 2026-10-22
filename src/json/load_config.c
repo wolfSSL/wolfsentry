@@ -375,7 +375,7 @@ static wolfsentry_errcode_t convert_uint16(JSON_TYPE type, const unsigned char *
 }
 
 static wolfsentry_errcode_t convert_uint8(JSON_TYPE type, const unsigned char *data, size_t data_size, uint8_t *out) {
-    char buf[4];
+    char buf[8];
     char *endptr;
     unsigned long conv;
 

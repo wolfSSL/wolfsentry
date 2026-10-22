@@ -1170,8 +1170,118 @@ static err_t icmp6_filter_with_wolfsentry(
 
 #endif /* LWIP_ICMP6 */
 
+#define LWIP_FILTER_SLOT_ETHERNET (1U << 0)
+#define LWIP_FILTER_SLOT_IP (1U << 1)
+#define LWIP_FILTER_SLOT_ICMP (1U << 2)
+#define LWIP_FILTER_SLOT_TCP (1U << 3)
+#define LWIP_FILTER_SLOT_UDP (1U << 4)
+
+/* lwIP has no getters for its filter slots, so the owning context is tracked
+ * here.  Contexts hold only their own mutex, so ownership changes atomically
+ * and only the owner touches the slots and the lwIP setters. */
+static struct wolfsentry_context *lwip_filter_owner = NULL;
+static unsigned int lwip_filter_slots = 0;
+
+static wolfsentry_errcode_t lwip_filter_claim_slot(WOLFSENTRY_CONTEXT_ARGS_IN, unsigned int slot)
+{
+    wolfsentry_errcode_t ret;
+#ifdef WOLFSENTRY_THREADSAFE
+    struct wolfsentry_context *expected = NULL;
+
+    if ((! WOLFSENTRY_ATOMIC_CMPXCHG(&lwip_filter_owner, &expected, wolfsentry, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) &&
+        (expected != wolfsentry))
+    {
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    }
+#else
+    if ((lwip_filter_owner != NULL) && (lwip_filter_owner != wolfsentry))
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    lwip_filter_owner = wolfsentry;
+#endif
+    ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+    if (ret < 0) {
+        if (lwip_filter_slots == 0)
+            WOLFSENTRY_ATOMIC_STORE(lwip_filter_owner, NULL);
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
+    lwip_filter_slots |= slot;
+    WOLFSENTRY_RETURN_OK;
+}
+
+static void lwip_filter_clear_slot(unsigned int slot)
+{
+    switch (slot) {
+    case LWIP_FILTER_SLOT_ETHERNET:
+#if LWIP_ARP || LWIP_ETHERNET
+        ethernet_filter(NULL);
+        ethernet_filter_mask(0);
+        ethernet_filter_arg(NULL);
+#endif
+        break;
+    case LWIP_FILTER_SLOT_IP:
+#if LWIP_IPV4
+        ip4_filter(NULL);
+        ip4_filter_mask(0);
+        ip4_filter_arg(NULL);
+#endif
+#if LWIP_IPV6
+        ip6_filter(NULL);
+        ip6_filter_mask(0);
+        ip6_filter_arg(NULL);
+#endif
+        break;
+    case LWIP_FILTER_SLOT_ICMP:
+#if LWIP_ICMP
+        icmp_filter(NULL);
+        icmp_filter_mask(0);
+        icmp_filter_arg(NULL);
+#endif
+#if LWIP_ICMP6
+        icmp6_filter(NULL);
+        icmp6_filter_mask(0);
+        icmp6_filter_arg(NULL);
+#endif
+        break;
+    case LWIP_FILTER_SLOT_TCP:
+#if LWIP_TCP
+        tcp_filter(NULL);
+        tcp_filter_mask(0);
+        tcp_filter_arg(NULL);
+#endif
+        break;
+    case LWIP_FILTER_SLOT_UDP:
+#if LWIP_UDP
+        udp_filter(NULL);
+        udp_filter_mask(0);
+        udp_filter_arg(NULL);
+#endif
+        break;
+    }
+}
+
+static wolfsentry_errcode_t lwip_filter_release_slot(WOLFSENTRY_CONTEXT_ARGS_IN, unsigned int slot)
+{
+    struct wolfsentry_context *owner = WOLFSENTRY_ATOMIC_LOAD(lwip_filter_owner);
+
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    /* with no owner, no wolfSentry callbacks are installed, so there is nothing to clear. */
+    if (owner == NULL)
+        WOLFSENTRY_RETURN_OK;
+    if (owner != wolfsentry)
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+    lwip_filter_clear_slot(slot);
+    lwip_filter_slots &= ~slot;
+    /* ownership is released only after the last slot is fully cleared. */
+    if (lwip_filter_slots == 0)
+        WOLFSENTRY_ATOMIC_STORE(lwip_filter_owner, NULL);
+    WOLFSENTRY_RETURN_OK;
+}
+
 WOLFSENTRY_API_VOID wolfsentry_cleanup_lwip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_IN, void *cleanup_arg) {
     (void)cleanup_arg;
+    /* a destroyed non-owner must not disable the surviving owner's filters. */
+    if (WOLFSENTRY_ATOMIC_LOAD(lwip_filter_owner) != wolfsentry)
+        return;
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_install_lwip_filter_callbacks(WOLFSENTRY_CONTEXT_ARGS_OUT, 0, 0, 0, 0, 0));
 }
 
@@ -1180,17 +1290,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ethernet_call
     packet_filter_event_mask_t ethernet_mask)
 {
 #if LWIP_ARP || LWIP_ETHERNET
+    wolfsentry_errcode_t ret;
+
     WOLFSENTRY_MUTEX_OR_RETURN();
     if (ethernet_mask) {
-        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        ret = lwip_filter_claim_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_ETHERNET);
         WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
         ethernet_filter_arg((void *)wolfsentry);
         ethernet_filter_mask(ethernet_mask);
         ethernet_filter(ethernet_filter_with_wolfsentry);
     } else {
-        ethernet_filter(NULL);
-        ethernet_filter_mask(0);
-        ethernet_filter_arg(NULL);
+        ret = lwip_filter_release_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_ETHERNET);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 #else
@@ -1206,21 +1317,20 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ip_callbacks(
     packet_filter_event_mask_t ip_mask)
 {
 #if LWIP_IPV4 || LWIP_IPV6
+    wolfsentry_errcode_t ret;
+
     WOLFSENTRY_MUTEX_OR_RETURN();
-    if (ip_mask) {
-        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
-        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
-    }
+    if (ip_mask)
+        ret = lwip_filter_claim_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_IP);
+    else
+        ret = lwip_filter_release_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_IP);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
 #endif
 #if LWIP_IPV4
     if (ip_mask) {
         ip4_filter_arg((void *)wolfsentry);
         ip4_filter_mask(ip_mask);
         ip4_filter(ip4_filter_with_wolfsentry);
-    } else {
-        ip4_filter(NULL);
-        ip4_filter_mask(0);
-        ip4_filter_arg(NULL);
     }
 #endif /* LWIP_IPV4 */
 
@@ -1229,10 +1339,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_ip_callbacks(
         ip6_filter_arg((void *)wolfsentry);
         ip6_filter_mask(ip_mask);
         ip6_filter(ip6_filter_with_wolfsentry);
-    } else {
-        ip6_filter(NULL);
-        ip6_filter_mask(0);
-        ip6_filter_arg(NULL);
     }
 #endif /* LWIP_IPV6 */
 
@@ -1251,21 +1357,20 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_icmp_callback
     packet_filter_event_mask_t icmp_mask)
 {
 #if LWIP_ICMP || LWIP_ICMP6
+    wolfsentry_errcode_t ret;
+
     WOLFSENTRY_MUTEX_OR_RETURN();
-    if (icmp_mask) {
-        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
-        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
-    }
+    if (icmp_mask)
+        ret = lwip_filter_claim_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_ICMP);
+    else
+        ret = lwip_filter_release_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_ICMP);
+    WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
 #endif
 #if LWIP_ICMP
     if (icmp_mask) {
         icmp_filter_arg((void *)wolfsentry);
         icmp_filter_mask(icmp_mask);
         icmp_filter(icmp4_filter_with_wolfsentry);
-    } else {
-        icmp_filter(NULL);
-        icmp_filter_mask(0);
-        icmp_filter_arg(NULL);
     }
 #endif /* LWIP_ICMP */
 
@@ -1274,10 +1379,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_icmp_callback
         icmp6_filter_arg((void *)wolfsentry);
         icmp6_filter_mask(icmp_mask);
         icmp6_filter(icmp6_filter_with_wolfsentry);
-    } else {
-        icmp6_filter(NULL);
-        icmp6_filter_mask(0);
-        icmp6_filter_arg(NULL);
     }
 #endif /* LWIP_ICMP6 */
 
@@ -1296,9 +1397,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_tcp_callback(
     packet_filter_event_mask_t tcp_mask)
 {
 #if LWIP_TCP
+    wolfsentry_errcode_t ret;
+
     WOLFSENTRY_MUTEX_OR_RETURN();
     if (tcp_mask) {
-        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        ret = lwip_filter_claim_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_TCP);
         WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
         /* make sure wolfSentry sees the close/reset events that balance earlier
          * accepts, for concurrent-connection accounting purposes.
@@ -1309,9 +1412,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_tcp_callback(
         tcp_filter_mask(tcp_mask);
         tcp_filter(tcp_filter_with_wolfsentry);
     } else {
-        tcp_filter(NULL);
-        tcp_filter_mask(0);
-        tcp_filter_arg(NULL);
+        ret = lwip_filter_release_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_TCP);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 #else
@@ -1327,17 +1429,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_lwip_filter_udp_callback(
     packet_filter_event_mask_t udp_mask)
 {
 #if LWIP_UDP
+    wolfsentry_errcode_t ret;
+
     WOLFSENTRY_MUTEX_OR_RETURN();
     if (udp_mask) {
-        wolfsentry_errcode_t ret = wolfsentry_cleanup_push(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry_cleanup_lwip_filter_callbacks, NULL);
+        ret = lwip_filter_claim_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_UDP);
         WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
         udp_filter_arg((void *)wolfsentry);
         udp_filter_mask(udp_mask);
         udp_filter(udp_filter_with_wolfsentry);
     } else {
-        udp_filter(NULL);
-        udp_filter_mask(0);
-        udp_filter_arg(NULL);
+        ret = lwip_filter_release_slot(WOLFSENTRY_CONTEXT_ARGS_OUT, LWIP_FILTER_SLOT_UDP);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 #else

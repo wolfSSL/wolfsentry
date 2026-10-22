@@ -2431,10 +2431,11 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
 #endif
             {
                 rule_route->meta.purge_after = new_purge_after; /* coherent assignment */
-                if (route_table->purge_list.tail != &rule_route->purge_links) {
-                    wolfsentry_list_ent_delete(&route_table->purge_list, &rule_route->purge_links);
-                    wolfsentry_route_purge_list_insert(route_table, rule_route);
-                }
+                /* the refreshed route may now be the newest rather than the
+                 * stalest, so always reposition it instead of leaving a
+                 * just-refreshed tail stranded at the stale end. */
+                wolfsentry_list_ent_delete(&route_table->purge_list, &rule_route->purge_links);
+                wolfsentry_route_purge_list_insert(route_table, rule_route);
             }
         }
     }

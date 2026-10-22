@@ -292,6 +292,27 @@ static wolfsentry_errcode_t test_base64_decode_lenient_padding(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_base64_decode_quantum(void) {
+    /* A padded quantum must carry enough data sextets for its pad count; a
+     * single data sextet followed by padding is structurally invalid.
+     */
+    byte outbuf[8];
+    size_t outbuf_spc;
+
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("A=", 2, outbuf, &outbuf_spc, 0 /* ignore_junk_p */));
+
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("A==", 3, outbuf, &outbuf_spc, 0 /* ignore_junk_p */));
+
+    /* A well-formed padded quantum is still accepted. */
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_base64_decode("QQ==", 4, outbuf, &outbuf_spc, 0 /* ignore_junk_p */));
+    WOLFSENTRY_EXIT_ON_FALSE((outbuf_spc == 1) && (outbuf[0] == 'A'));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_INIT */
 
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
@@ -5736,6 +5757,11 @@ int main(int argc, char* argv[]) {
     ret = test_base64_decode_lenient_padding();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_base64_decode_lenient_padding failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_base64_decode_quantum();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_base64_decode_quantum failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

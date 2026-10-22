@@ -4393,12 +4393,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, si
     case 0:
         break;
     case 1:
+        if (decoded_bits != 18U)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         *dest++ = (byte)(decoded >> 16U);
         *dest++ = (byte)(decoded >> 8U);
         dest_len += 2;
         break;
-        /* fall through */
     case 2:
+        if (decoded_bits != 12U)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         *dest++ = (byte)(decoded >> 16U);
         ++dest_len;
         break;

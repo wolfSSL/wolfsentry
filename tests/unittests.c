@@ -4078,6 +4078,364 @@ static int test_event_aux_event_self_reference(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_event_aux_event_reuse_after_clear(void) {
+    struct wolfsentry_context *wolfsentry, *ctx_clone;
+    struct wolfsentry_event *deleted_owner;
+    struct wolfsentry_event *held_aux;
+    wolfsentry_ent_id_t id;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* default_config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_a",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_d",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    /* a -> b, then clear: b is free to own an aux event of its own */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_a",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_a",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    /* c is now an aux event, so it cannot own one */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_d",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    /* replacing a's aux event releases the old one */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_a",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL,
+            0));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_d",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_a",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_d",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_one",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "shared_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "other_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_one",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "shared_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "shared_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    /* owner_one is deleted from the table but stays alive, and still owns shared_aux */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_one",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &deleted_owner));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_one",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL /* action_results */));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL,
+            0));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "shared_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "other_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_drop_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            deleted_owner,
+            NULL /* action_results */));
+
+    /* freeing the deleted owner released shared_aux, which can now own an aux event */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "shared_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "other_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "held_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "held_target",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    /* an ordinary reference on the aux event is not ownership */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "held_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &held_aux));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "held_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "held_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "held_target",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "held_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "held_target",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_drop_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            held_aux,
+            NULL /* action_results */));
+
+    /* a clone rebuilds the aux ownership graph, independently of the source */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &ctx_clone, WOLFSENTRY_CLONE_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(ctx_clone),
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(ctx_clone),
+            "aux_c",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(ctx_clone),
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "aux_b",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "owner_two",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_clone)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -6392,6 +6750,12 @@ int main(int argc, char* argv[]) {
     ret = test_event_aux_event_self_reference();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_event_aux_event_self_reference failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_aux_event_reuse_after_clear();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_aux_event_reuse_after_clear failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

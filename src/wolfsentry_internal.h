@@ -340,6 +340,7 @@ struct wolfsentry_event {
                                          * policy for the ephemeral route.
                                          */
 
+    wolfsentry_refcount_t aux_owner_count; /* events whose aux_event is this one */
 
     byte label_len;
     char label[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE];

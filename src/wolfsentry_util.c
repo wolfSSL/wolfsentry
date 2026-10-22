@@ -4225,6 +4225,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
     wolfsentry_clone_flags_t flags)
 {
     wolfsentry_errcode_t ret;
+#ifdef WOLFSENTRY_THREADSAFE
+    wolfsentry_errcode_t cleanup_ret;
+#endif
 
 #ifdef WOLFSENTRY_THREADSAFE
     WOLFSENTRY_SHARED_OR_RETURN();
@@ -4232,8 +4235,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
     if ((ret = wolfsentry_context_alloc_1(&wolfsentry->hpi, thread, clone, wolfsentry->lock.flags)) < 0)
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
-    if ((ret = wolfsentry_context_lock_mutex_abstimed(*clone, thread, NULL)) < 0)
-        goto out;
+    if ((ret = wolfsentry_context_lock_mutex_abstimed(*clone, thread, NULL)) < 0) {
+        /* the clone is still private, so tear it down with no thread context, which a read-only thread or an expired deadline cannot block. */
+        cleanup_ret = wolfsentry_lock_mutex_abstimed(&(*clone)->lock, NULL /* thread */, &timespec_deadline_now, WOLFSENTRY_LOCK_FLAG_NONE);
+        if (cleanup_ret >= 0)
+            cleanup_ret = wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(clone, NULL /* thread */));
+        WOLFSENTRY_WARN_ON_FAILURE(cleanup_ret);
+        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+    }
 #else
     if ((ret = wolfsentry_context_alloc_1(&wolfsentry->hpi, clone)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);

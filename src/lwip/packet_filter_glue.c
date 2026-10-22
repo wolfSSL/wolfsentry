@@ -105,7 +105,7 @@ static err_t ethernet_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -245,7 +245,7 @@ static err_t ip4_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -383,7 +383,7 @@ static err_t ip6_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -524,7 +524,7 @@ static err_t tcp_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_ACCEPTING:
@@ -739,7 +739,7 @@ static err_t udp_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_BINDING:
@@ -929,7 +929,7 @@ static err_t icmp4_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -1068,7 +1068,7 @@ static err_t icmp6_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:

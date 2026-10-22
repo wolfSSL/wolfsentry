@@ -256,6 +256,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_drop_reference(WOLFSENTRY_
     if ((action->header.parent_table != NULL) &&
         (action->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ACTION))
         WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
+    if (action_results)
+        WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     WOLFSENTRY_REFCOUNT_DECREMENT(action->header.refcount, refs_left, ret);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (refs_left > 0)

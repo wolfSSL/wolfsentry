@@ -4156,6 +4156,54 @@ static int test_dispatch_context_exchange_during_dispatch(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_action_drop_reference_clears_results(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    struct wolfsentry_action *action = NULL;
+    wolfsentry_action_res_t action_results;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "drop-ref-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            action_dispatch_counter_handler,
+            NULL,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "drop-ref-action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &action));
+
+    /* with a reference still held, a non-final drop must clear stale caller
+     * bits rather than leaving them, matching the event and route drop APIs.
+     */
+    action_results = WOLFSENTRY_ACTION_RES_DEALLOCATED | WOLFSENTRY_ACTION_RES_REJECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, action, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(action_results == WOLFSENTRY_ACTION_RES_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -6459,6 +6507,11 @@ int main(int argc, char* argv[]) {
     ret = test_dispatch_reentrant_action_delete();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_dispatch_reentrant_action_delete failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_action_drop_reference_clears_results();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_action_drop_reference_clears_results failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

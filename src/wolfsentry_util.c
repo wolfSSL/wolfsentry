@@ -3180,11 +3180,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
             }
         }
     } else if (lock->read_waiter_count > 0) {
-        int i;
-        lock->holder_count.read += lock->read_waiter_count;
+        /* post once per queued reader, not per holder, as existing shared holders need no wakeup. */
+        int read_waiter_count = lock->read_waiter_count;
+        lock->holder_count.read += read_waiter_count;
         lock->read_waiter_count = 0;
         WOLFSENTRY_ATOMIC_STORE(lock->state, WOLFSENTRY_LOCK_SHARED);
-        for (i = 0; i < lock->holder_count.read; ++i) {
+        for (; read_waiter_count > 0; --read_waiter_count) {
             if (sem_post(&lock->sem_read_waiters) < 0) {
                 ret = WOLFSENTRY_ERROR_ENCODE(SYS_OP_FATAL);
                 goto out;

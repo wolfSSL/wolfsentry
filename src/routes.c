@@ -4914,8 +4914,16 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_copy_metadata(
          /* pointers are advanced inside the loop. */)
     {
         if (from_i->header.id == to_i->header.id) {
+            /* meta carries purge_after, which determines purge_list membership
+             * and ordering; refresh the list around the copy so it stays
+             * consistent with the new value.
+             */
+            if (to_i->meta.purge_after)
+                wolfsentry_list_ent_delete(&to_table->purge_list, &to_i->purge_links);
             to_i->flags = from_i->flags;
             to_i->meta = from_i->meta;
+            if (to_i->meta.purge_after)
+                wolfsentry_route_purge_list_insert(to_table, to_i);
         } else {
             int cmpret = wolfsentry_route_key_cmp_1(from_i, to_i, 0 /* match_wildcards_p */, NULL /* inexact_matches */);
             if (cmpret < 0) {

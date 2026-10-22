@@ -3744,12 +3744,97 @@ static wolfsentry_errcode_t test_regression_dispatch_error_not_masked(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_regression_copy_metadata_purge_list(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_context *ctx_clone = NULL;
+    struct wolfsentry_route *route;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t route_flags;
+    wolfsentry_ent_id_t id;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+    remote.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.addr_len = 32;
+    memcpy(remote.sa.addr, "\x0A\x05\x06\x07", 4); /* NOLINT(bugprone-not-null-terminated-result) */
+    local.sa.sa_family = AF_INET;
+    local.sa.sa_proto = IPPROTO_TCP;
+    local.sa.addr_len = 0;
+
+    WOLFSENTRY_CLEAR_ALL_BITS(route_flags);
+    WOLFSENTRY_SET_BITS(route_flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+                                   | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+                                   | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, route_flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id, &action_results));
+
+    /* clone before the route has a purge time, so the clone's copy of the route
+     * is not in the clone's purge list. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &ctx_clone, WOLFSENTRY_CLONE_FLAG_NONE));
+
+    /* give the live route a (stale) purge time, so copy_metadata will propagate
+     * a nonzero purge_after into the clone's not-yet-listed route. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&route));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_purge_time_set(WOLFSENTRY_CONTEXT_ARGS_OUT, route, 1));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* swap the clone in, copying the live metadata across. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_OUT, ctx_clone));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_clone)));
+
+    /* the swapped-in route now has a stale purge_after, so it must be reachable
+     * from the purge list and get purged. */
+    (void)wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        ITEM_NOT_FOUND,
+        wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&route));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_dynamic_rules_regressions(void) {
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_bitmask_match_specificity(), OK));
 #endif
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_stale_purge_connected_idle(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_dispatch_error_not_masked(), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_copy_metadata_purge_list(), OK));
     WOLFSENTRY_RETURN_OK;
 }
 

@@ -3887,6 +3887,14 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
                 &id, &inexact_matches, &action_results),
             INVALID_ARG));
 
+    /* a default policy may be accept or reject, never both at once. */
+    WOLFSENTRY_EXIT_ON_FALSE(
+        WOLFSENTRY_ERROR_CODE_IS(
+            wolfsentry_route_default_policy_set(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT),
+            INVALID_ARG));
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     WOLFSENTRY_RETURN_OK;

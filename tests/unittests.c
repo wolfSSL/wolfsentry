@@ -2832,6 +2832,107 @@ static int test_static_routes(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_static_routes_clone_addr_family_links(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_context *clone = NULL;
+    wolfsentry_action_res_t action_results;
+    struct wolfsentry_table_ent_header *i, *prev;
+    wolfsentry_addr_bits_t bits;
+    unsigned int n;
+    static const char * const names[3] = { "clone_AF_0", "clone_AF_1", "clone_AF_2" };
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    for (n = 0; n < 3; ++n) {
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_addr_family_handler_install(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                (wolfsentry_addr_family_t)(WOLFSENTRY_AF_USER_OFFSET + n),
+                names[n],
+                WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                my_addr_family_parser,
+                my_addr_family_formatter,
+                (int)(8 * (n + 1)) /* max_addr_bits */));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_context_clone(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &clone,
+            WOLFSENTRY_CLONE_FLAG_NONE));
+
+    prev = NULL;
+    n = 0;
+    for (i = clone->addr_families_bynumber->header.head; i != NULL; i = i->next) {
+        WOLFSENTRY_EXIT_ON_FALSE(i->prev == prev);
+        WOLFSENTRY_EXIT_ON_FALSE(i->parent_table == &clone->addr_families_bynumber->header);
+        prev = i;
+        ++n;
+    }
+    WOLFSENTRY_EXIT_ON_FALSE(n == 3);
+    WOLFSENTRY_EXIT_ON_FALSE(n == clone->addr_families_bynumber->header.n_ents);
+    WOLFSENTRY_EXIT_ON_FALSE(prev == clone->addr_families_bynumber->header.tail);
+
+    /* removing the middle family from the clone must leave its neighbors
+     * reachable.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_remove_bynumber(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone),
+            (wolfsentry_addr_family_t)(WOLFSENTRY_AF_USER_OFFSET + 1),
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_max_addr_bits(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone),
+            (wolfsentry_addr_family_t)WOLFSENTRY_AF_USER_OFFSET,
+            &bits));
+    WOLFSENTRY_EXIT_ON_FALSE(bits == 8);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        ITEM_NOT_FOUND,
+        wolfsentry_addr_family_max_addr_bits(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone),
+            (wolfsentry_addr_family_t)(WOLFSENTRY_AF_USER_OFFSET + 1),
+            &bits));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_max_addr_bits(
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone),
+            (wolfsentry_addr_family_t)(WOLFSENTRY_AF_USER_OFFSET + 2),
+            &bits));
+    WOLFSENTRY_EXIT_ON_FALSE(bits == 24);
+
+    WOLFSENTRY_EXIT_ON_FALSE(clone->addr_families_bynumber->header.n_ents == 2);
+    WOLFSENTRY_EXIT_ON_FALSE(clone->addr_families_bynumber->header.head != NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(clone->addr_families_bynumber->header.head->prev == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(clone->addr_families_bynumber->header.head->next == clone->addr_families_bynumber->header.tail);
+    WOLFSENTRY_EXIT_ON_FALSE(clone->addr_families_bynumber->header.tail->prev == clone->addr_families_bynumber->header.head);
+
+    /* the source context must be untouched by edits to the clone. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_max_addr_bits(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            (wolfsentry_addr_family_t)(WOLFSENTRY_AF_USER_OFFSET + 1),
+            &bits));
+    WOLFSENTRY_EXIT_ON_FALSE(bits == 16);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&clone)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -5739,6 +5840,14 @@ int main(int argc, char* argv[]) {
     ret = test_static_routes();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_static_routes failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
+
+#ifdef TEST_STATIC_ROUTES
+    ret = test_static_routes_clone_addr_family_links();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_static_routes_clone_addr_family_links failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

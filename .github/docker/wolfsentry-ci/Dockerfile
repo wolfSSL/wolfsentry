@@ -4,7 +4,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         bubblewrap \
         dbus \
+        dwarves \
         gcc-arm-none-eabi \
+        gcc-multilib \
         iproute2 \
         iputils-ping \
         libnewlib-arm-none-eabi \

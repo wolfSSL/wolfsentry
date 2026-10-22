@@ -195,7 +195,8 @@ jobs:
         path: lwip
     - name: Check out lwIP contrib
       run: |
-        git clone --branch STABLE-2_1_0_RELEASE --depth 1 \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry git clone --branch STABLE-2_1_0_RELEASE --depth 1 \
           https://git.savannah.nongnu.org/git/lwip/lwip-contrib.git \
           lwip/contrib
         test "$(git -C lwip/contrib rev-parse HEAD)" = \

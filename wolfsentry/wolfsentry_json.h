@@ -30,6 +30,7 @@
 #define WOLFSENTRY_JSON_H
 
 #include "wolfsentry.h"
+#include "wolfsentry_config.h"
 
 #ifndef WOLFSENTRY
 #define WOLFSENTRY
@@ -56,35 +57,6 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_centijson_errcode_translate(wolfs
      *          `JSON_CONFIG` parameter of wolfsentry_config_json_init_ex().
      */
 #endif
-
-typedef uint32_t wolfsentry_config_load_flags_t;
-    /*!< \brief Type for holding flag bits from #wolfsentry_config_load_flags */
-
-/*! \brief Flags to be `OR`d together to communicate options to wolfsentry_config_json_init() */
-enum wolfsentry_config_load_flags {
-    WOLFSENTRY_CONFIG_LOAD_FLAG_NONE             = 0U,
-        /*!< \brief Default behavior @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH         = 1U << 0U,
-        /*!< \brief Add to current configuration, rather than replacing it. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN          = 1U << 1U,
-        /*!< \brief Test the load operation, as modified by other flags, without updating current configuration. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT = 1U << 2U,
-        /*!< \brief Test the load operation before replacing the current configuration. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS = 1U << 3U,
-        /*!< \brief Skip routes and events in the supplied configuration. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_ABORT = 1U << 4U,
-        /*!< \brief When loading JSON user values, treat as an error when duplicate keys are found. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USEFIRST = 1U << 5U,
-        /*!< \brief When loading JSON user values, when duplicate keys are found, keep the first one. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USELAST = 1U << 6U,
-        /*!< \brief When loading JSON user values, when duplicate keys are found, keep the last one. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_MAINTAINDICTORDER = 1U << 7U,
-        /*!< \brief When loading JSON user values, store extra sequence information so that dictionaries are rendered in same sequence by `json_dom_dump()` and `wolfsentry_kv_render_value()`. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES = 1U << 8U,
-        /*!< \brief Don't flush the events or user values, just flush the routes, before loading incremental configuration JSON. @hideinitializer */
-    WOLFSENTRY_CONFIG_LOAD_FLAG_FINI             = 1U << 30U
-        /*!< \brief Internal use. @hideinitializer */
-};
 
 struct wolfsentry_json_process_state;
 

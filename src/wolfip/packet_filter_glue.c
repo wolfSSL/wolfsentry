@@ -169,6 +169,10 @@ static int wolfip_dispatch_event(
     if (WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE) < 0)
         return -WOLFIP_EACCES;
 
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        return -WOLFIP_EACCES;
+
     if (wolfip_action_rejects(*action_results))
         return -WOLFIP_EACCES;
 

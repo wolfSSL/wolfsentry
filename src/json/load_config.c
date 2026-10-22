@@ -2144,13 +2144,21 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
 
         if (full_cycle_of_insert_actions_p) {
             wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-            if ((ret = wolfsentry_route_bulk_clear_insert_action_status(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &action_results)) < 0)
+            ret = wolfsentry_route_bulk_clear_insert_action_status(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &action_results);
+            if (ret >= 0)
+                ret = wolfsentry_context_flush(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT);
+            /* the candidate is already live after the exchange; re-enable its
+             * actions even if the preceding steps failed, so a post-exchange
+             * failure cannot leave the running configuration action-inhibited.
+             * keep the first error.
+             */
+            if (ret >= 0)
+                ret = wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT);
+            else
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT));
+            if (ret < 0)
                 goto out;
-            if ((ret = wolfsentry_context_flush(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT)) < 0)
-                goto out;
-        }
-
-        if ((ret = wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT)) < 0)
+        } else if ((ret = wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT)) < 0)
             goto out;
 
         {

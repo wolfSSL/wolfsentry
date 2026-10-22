@@ -37,9 +37,10 @@ jobs:
     - name: Build matrix
       id: versions
       run: |
-        LATEST=$(git ls-remote --tags --refs \
-          https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
-          | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        TAGS=$(retry git ls-remote --tags --refs \
+          https://github.com/wolfSSL/wolfssl.git 'v*-stable')
+        LATEST=$(awk -F/ '{print $NF}' <<<"$TAGS" | sort -V | tail -n 1)
         test -n "$LATEST"
         if [[ ! "$LATEST" =~ ^v[0-9]+(\.[0-9]+)+-stable$ ]]; then
           echo "Unexpected wolfSSL stable tag: $LATEST" >&2
@@ -83,7 +84,8 @@ jobs:
       env:
         WOLFSSL_REF: ${{ matrix.ref }}
       run: |
-        git clone --depth 1 --branch "$WOLFSSL_REF" \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry git clone --depth 1 --branch "$WOLFSSL_REF" \
           https://github.com/wolfSSL/wolfssl.git "$HOME/wolfssl"
         cd "$HOME/wolfssl"
         ./autogen.sh

@@ -115,15 +115,16 @@ jobs:
     steps:
     - name: Build wolfSSL and wolfCOSE
       run: |
-        WOLFSSL_REF=$(git ls-remote --tags --refs \
-          https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
-          | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        WOLFSSL_TAGS=$(retry git ls-remote --tags --refs \
+          https://github.com/wolfSSL/wolfssl.git 'v*-stable')
+        WOLFSSL_REF=$(awk -F/ '{print $NF}' <<<"$WOLFSSL_TAGS" | sort -V | tail -n 1)
         test -n "$WOLFSSL_REF"
         mkdir -p /opt/wolfsentry-deps
         cd /opt/wolfsentry-deps
-        git clone --depth 1 --branch "$WOLFSSL_REF" \
+        retry git clone --depth 1 --branch "$WOLFSSL_REF" \
           https://github.com/wolfSSL/wolfssl.git wolfssl
-        git clone --depth 1 https://github.com/wolfSSL/wolfCOSE.git wolfCOSE
+        retry git clone --depth 1 https://github.com/wolfSSL/wolfCOSE.git wolfCOSE
         cd wolfssl
         ./autogen.sh
         ./configure --enable-ecc --enable-ed25519 --enable-ed448 \

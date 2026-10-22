@@ -3310,6 +3310,99 @@ static int test_route_insert_action_failure_detaches_route(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+static int test_route_insert_action_failure_releases_bitmask_af(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id;
+    wolfsentry_addr_family_t n_bitmask_afs_before;
+    struct wolfsentry_route_exports exp_route;
+    static const byte exp_remote_addr_and_mask[8] = { 0xC0, 0xA8, 0x01, 0x00, 0xFF, 0xFF, 0xFF, 0x00 };
+    static const char event_label[] = "failing-insert-bitmask-parent";
+    static const char action_label[] = "fail-on-bitmask-insert";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            action_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            regression_failing_insert_action,
+            NULL /* handler_context */,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* priority */,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_INSERT,
+            action_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    n_bitmask_afs_before = wolfsentry->routes->n_bitmask_matching_afs;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    memset(&exp_route, 0, sizeof exp_route);
+    exp_route.parent_event_label = event_label;
+    exp_route.parent_event_label_len = WOLFSENTRY_LENGTH_NULL_TERMINATED;
+    exp_route.sa_family = AF_INET;
+    exp_route.sa_proto = IPPROTO_TCP;
+    exp_route.flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+                    | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+                    | WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK
+                    | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+                    | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD;
+    exp_route.remote_address = exp_remote_addr_and_mask;
+    exp_route.remote.addr_len = sizeof exp_remote_addr_and_mask * BITS_PER_BYTE;
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &exp_route,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes->n_bitmask_matching_afs == n_bitmask_afs_before);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, action_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -6244,6 +6337,13 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_route_insert_action_failure_detaches_route failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    ret = test_route_insert_action_failure_releases_bitmask_af();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_insert_action_failure_releases_bitmask_af failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_DYNAMIC_RULES

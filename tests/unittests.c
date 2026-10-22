@@ -3469,6 +3469,80 @@ static int test_dynamic_rules(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_event_max_length_label(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    struct wolfsentry_event *event;
+    struct wolfsentry_eventconfig eventconfig;
+    char label[WOLFSENTRY_MAX_LABEL_BYTES + 1];
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* default_config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(label, 'm', WOLFSENTRY_MAX_LABEL_BYTES);
+    label[WOLFSENTRY_MAX_LABEL_BYTES] = 0;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &event));
+
+    WOLFSENTRY_EXIT_ON_FALSE(id == wolfsentry_get_object_id(event));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_drop_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event,
+            NULL /* action_results */));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_MAX_LABEL_BYTES,
+            &eventconfig));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL /* action_results */));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        ITEM_NOT_FOUND,
+        wolfsentry_event_get_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &event));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -5747,6 +5821,12 @@ int main(int argc, char* argv[]) {
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_max_length_label();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_max_length_label failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

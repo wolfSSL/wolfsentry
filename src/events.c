@@ -319,7 +319,7 @@ static wolfsentry_errcode_t wolfsentry_event_get_1(WOLFSENTRY_CONTEXT_ARGS_IN, c
     WOLFSENTRY_STACKBUF(
         struct wolfsentry_event,
         label,
-        WOLFSENTRY_MAX_LABEL_BYTES,
+        WOLFSENTRY_MAX_LABEL_BYTES + 1,
         target);
     struct wolfsentry_event *event_1 = &target.target;
 

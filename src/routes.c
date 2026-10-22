@@ -4949,6 +4949,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
 
     ((struct wolfsentry_route_table *)dest_table)->max_purgeable_routes =
         ((struct wolfsentry_route_table *)src_table)->max_purgeable_routes;
+    ((struct wolfsentry_route_table *)dest_table)->max_purgeable_idle_time =
+        ((struct wolfsentry_route_table *)src_table)->max_purgeable_idle_time;
     ((struct wolfsentry_route_table *)dest_table)->default_policy =
         ((struct wolfsentry_route_table *)src_table)->default_policy;
 

@@ -4289,7 +4289,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_context_clone(
 #endif
 
     if (WOLFSENTRY_CHECK_BITS(flags, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION)) {
-        ret = WOLFSENTRY_ERROR_ENCODE(OK);
+        /* the fresh route table needs its own fallthrough route, as wolfsentry_init_ex() provides. */
+        ret = wolfsentry_route_table_fallthrough_route_alloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*clone), (*clone)->routes);
         goto out;
     }
 

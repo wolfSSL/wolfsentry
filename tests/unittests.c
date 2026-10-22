@@ -5509,6 +5509,14 @@ static int test_json_uint64_negative(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_json_duration_negative(void) {
+    static const char json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"config-update\" : { \"penalty-box-duration\" : \"-100s\" } }";
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_json_uint8_hex_interface(void) {
     static const char json[] =
         "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"remote\" : { \"interface\" : \"0xff\" } } ] }";
@@ -5860,6 +5868,11 @@ int main(int argc, char* argv[]) {
     ret = test_json_uint8_hex_interface();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_uint8_hex_interface failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_json_duration_negative();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_duration_negative failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

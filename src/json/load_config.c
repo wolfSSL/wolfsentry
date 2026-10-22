@@ -493,6 +493,12 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
     }
     if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    /* durations are non-negative; a negative value (including a LONG_MIN
+     * saturation when errno is unavailable) would otherwise reach the interval
+     * conversion and overflow.
+     */
+    if (conv < 0)
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if ((ret = wolfsentry_interval_from_seconds(wolfsentry, conv, 0 /* howlong_nsecs */, out)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     else

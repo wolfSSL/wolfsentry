@@ -2416,7 +2416,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_flags(
    \brief Gets the metadata for a route
 
    \param route the route to get the metadata for
-   \param metadata a pointer to a pointer to receive the metadata
+   \param metadata a pointer to a caller-provided `struct wolfsentry_route_metadata_exports` to populate
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 */

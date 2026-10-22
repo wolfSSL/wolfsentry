@@ -581,16 +581,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
 
         if (WOLFSENTRY_CHECK_BITS(rule_route->flags, WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED))
             WOLFSENTRY_ERROR_RETURN(ALREADY);
-        else {
-            wolfsentry_route_flags_t flags_before;
-            wolfsentry_route_flags_t flags_after;
-            WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
-                rule_route->flags,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
-                &flags_before,
-                &flags_after);
-        }
 
         break;
     case WOLFSENTRY_ACTION_TYPE_MATCH:
@@ -604,16 +594,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
 
         if (WOLFSENTRY_CHECK_BITS(rule_route->flags, WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED))
             WOLFSENTRY_ERROR_RETURN(ALREADY);
-        else {
-            wolfsentry_route_flags_t flags_before;
-            wolfsentry_route_flags_t flags_after;
-            WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
-                rule_route->flags,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
-                &flags_before,
-                &flags_after);
-        }
 
         break;
     case WOLFSENTRY_ACTION_TYPE_DECISION:
@@ -629,6 +609,27 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     if (WOLFSENTRY_CHECK_BITS(wolfsentry->config.config.flags, WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS) ||
         (action_event->config && WOLFSENTRY_CHECK_BITS(action_event->config->config.flags, WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS)))
         WOLFSENTRY_RETURN_OK;
+
+    if (action_type == WOLFSENTRY_ACTION_TYPE_INSERT) {
+        wolfsentry_route_flags_t flags_before;
+        wolfsentry_route_flags_t flags_after;
+        WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
+            rule_route->flags,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before,
+            &flags_after);
+    }
+    else if (action_type == WOLFSENTRY_ACTION_TYPE_DELETE) {
+        wolfsentry_route_flags_t flags_before;
+        wolfsentry_route_flags_t flags_after;
+        WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
+            rule_route->flags,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before,
+            &flags_after);
+    }
 
     for (i = (struct wolfsentry_action_list_ent *)w_a_l->header.head;
          i;

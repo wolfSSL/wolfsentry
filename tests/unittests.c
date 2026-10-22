@@ -3170,6 +3170,146 @@ static int test_route_lookup_full_scan_honors_exclude_reject(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t regression_failing_insert_action(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_context,
+    void *caller_arg,
+    const struct wolfsentry_event *event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    (void)action;
+    (void)handler_context;
+    (void)caller_arg;
+    (void)event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+
+    WOLFSENTRY_ERROR_RETURN(NOT_PERMITTED);
+}
+
+static int test_route_insert_action_failure_detaches_route(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_eventconfig event_config;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_ent_id_t id, route_id;
+    wolfsentry_hitcount_t n_ents_before, purge_len_before;
+    const struct wolfsentry_route *last_af_wildcard_before;
+    wolfsentry_priority_t highest_priority_before;
+    struct regression_sockaddr_v4 remote, local, remote_wild, local_wild;
+    static const char event_label[] = "failing-insert-parent";
+    static const char action_label[] = "fail-on-insert";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            action_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            regression_failing_insert_action,
+            NULL /* handler_context */,
+            &id));
+
+    /* a purge deadline puts the route on the purge list, which must be undone
+     * along with the wildcard-AF bookkeeping when the insert is rolled back.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &event_config));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 3600, 0, &event_config.route_idle_time_for_purge));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* priority */,
+            &event_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_INSERT,
+            action_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    n_ents_before = wolfsentry->routes->header.n_ents;
+    purge_len_before = wolfsentry->routes->purge_list.len;
+    last_af_wildcard_before = wolfsentry->routes->last_af_wildcard_route;
+    highest_priority_before = wolfsentry->routes->highest_priority_route_in_table;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    memset(&remote_wild, 0, sizeof remote_wild);
+    memset(&local_wild, 0, sizeof local_wild);
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote_wild.sa, &local_wild.sa,
+            REGRESSION_AF_WILDCARD_FLAGS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes->header.n_ents == n_ents_before);
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes->purge_list.len == purge_len_before);
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes->last_af_wildcard_route == last_af_wildcard_before);
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->routes->highest_priority_route_in_table == highest_priority_before);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+
+    /* the lookup and purge paths that consult the auxiliary structures must
+     * still work after the rollback.
+     */
+    regression_sockaddr_v4_init(&remote, (const byte *)"\0\1\2\3", 12345, IPPROTO_TCP, 1);
+    regression_sockaddr_v4_init(&local, (const byte *)"\377\376\375\374", 443, IPPROTO_TCP, 1);
+    route_id = WOLFSENTRY_ENT_ID_NONE;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(
+        USED_FALLBACK,
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa, &local.sa,
+            WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            NULL /* event_label */, 0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &route_id, &inexact_matches, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_action_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, action_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -6097,6 +6237,11 @@ int main(int argc, char* argv[]) {
     ret = test_route_lookup_full_scan_honors_exclude_reject();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_route_lookup_full_scan_honors_exclude_reject failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_route_insert_action_failure_detaches_route();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_insert_action_failure_detaches_route failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

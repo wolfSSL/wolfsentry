@@ -3806,8 +3806,13 @@ static wolfsentry_errcode_t wolfsentry_context_free_1(
     )
 {
 #ifdef WOLFSENTRY_THREADSAFE
-    wolfsentry_errcode_t ret = wolfsentry_lock_have_mutex(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    wolfsentry_errcode_t ret;
+    /* a context whose lock never came up is still private to its allocator, so no mutex is possible or needed. */
+    int lock_inited = (WOLFSENTRY_ATOMIC_LOAD((*wolfsentry)->lock.state) != WOLFSENTRY_LOCK_UNINITED);
+    if (lock_inited) {
+        ret = wolfsentry_lock_have_mutex(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    }
 #endif
 
     if ((*wolfsentry)->routes != NULL)
@@ -3826,15 +3831,27 @@ static wolfsentry_errcode_t wolfsentry_context_free_1(
 #endif
 
 #ifdef WOLFSENTRY_THREADSAFE
-    ret = wolfsentry_lock_unlock(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    ret = wolfsentry_lock_destroy(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    if (lock_inited) {
+        ret = wolfsentry_lock_unlock(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        ret = wolfsentry_lock_destroy(&(*wolfsentry)->lock, thread, WOLFSENTRY_LOCK_FLAG_NONE);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    }
 #endif
 
     WOLFSENTRY_FREE_1((*wolfsentry)->hpi.allocator, *wolfsentry);
     *wolfsentry = NULL;
     WOLFSENTRY_RETURN_OK;
+}
+
+static void *wolfsentry_context_alloc_zeroed(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(const struct wolfsentry_host_platform_interface *hpi),
+    size_t size)
+{
+    void *ret = WOLFSENTRY_MALLOC_1(hpi->allocator, size);
+    if (ret != NULL)
+        memset(ret, 0, size);
+    WOLFSENTRY_RETURN_VALUE(ret);
 }
 
 static wolfsentry_errcode_t wolfsentry_context_init_1(
@@ -3880,36 +3897,29 @@ static wolfsentry_errcode_t wolfsentry_context_alloc_1(
     )
 {
     wolfsentry_errcode_t ret;
-    if ((*wolfsentry = (struct wolfsentry_context *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof **wolfsentry)) == NULL)
+    if ((*wolfsentry = (struct wolfsentry_context *)wolfsentry_context_alloc_zeroed(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(hpi), sizeof **wolfsentry)) == NULL)
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
-
-    memset(*wolfsentry, 0, sizeof **wolfsentry);
 
     (*wolfsentry)->hpi = *hpi;
 
-    if ((((*wolfsentry)->events = (struct wolfsentry_event_table *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof *(*wolfsentry)->events)) == NULL) ||
-        (((*wolfsentry)->actions = (struct wolfsentry_action_table *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof *(*wolfsentry)->actions)) == NULL) ||
-        (((*wolfsentry)->routes = (struct wolfsentry_route_table *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof *(*wolfsentry)->routes)) == NULL) ||
-        (((*wolfsentry)->user_values = (struct wolfsentry_kv_table *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof *(*wolfsentry)->user_values)) == NULL) ||
-        (((*wolfsentry)->addr_families_bynumber = (struct wolfsentry_addr_family_bynumber_table *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof *(*wolfsentry)->addr_families_bynumber)) == NULL)
+    /* each table is zeroed as allocated, so a partial failure leaves only well-formed tables for free_1 to tear down. */
+    if ((((*wolfsentry)->events = (struct wolfsentry_event_table *)wolfsentry_context_alloc_zeroed(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(hpi), sizeof *(*wolfsentry)->events)) == NULL) ||
+        (((*wolfsentry)->actions = (struct wolfsentry_action_table *)wolfsentry_context_alloc_zeroed(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(hpi), sizeof *(*wolfsentry)->actions)) == NULL) ||
+        (((*wolfsentry)->routes = (struct wolfsentry_route_table *)wolfsentry_context_alloc_zeroed(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(hpi), sizeof *(*wolfsentry)->routes)) == NULL) ||
+        (((*wolfsentry)->user_values = (struct wolfsentry_kv_table *)wolfsentry_context_alloc_zeroed(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(hpi), sizeof *(*wolfsentry)->user_values)) == NULL) ||
+        (((*wolfsentry)->addr_families_bynumber = (struct wolfsentry_addr_family_bynumber_table *)wolfsentry_context_alloc_zeroed(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(hpi), sizeof *(*wolfsentry)->addr_families_bynumber)) == NULL)
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-        || (((*wolfsentry)->addr_families_byname = (struct wolfsentry_addr_family_byname_table *)WOLFSENTRY_MALLOC_1(hpi->allocator, sizeof *(*wolfsentry)->addr_families_byname)) == NULL)
+        || (((*wolfsentry)->addr_families_byname = (struct wolfsentry_addr_family_byname_table *)wolfsentry_context_alloc_zeroed(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(hpi), sizeof *(*wolfsentry)->addr_families_byname)) == NULL)
 #endif
         )
     {
-        (void)wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     }
 
-    memset((*wolfsentry)->events, 0, sizeof *(*wolfsentry)->events);
-    memset((*wolfsentry)->actions, 0, sizeof *(*wolfsentry)->actions);
-    memset((*wolfsentry)->routes, 0, sizeof *(*wolfsentry)->routes);
-    memset((*wolfsentry)->user_values, 0, sizeof *(*wolfsentry)->user_values);
-    memset((*wolfsentry)->addr_families_bynumber, 0, sizeof *(*wolfsentry)->addr_families_bynumber);
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
-    memset((*wolfsentry)->addr_families_byname, 0, sizeof *(*wolfsentry)->addr_families_byname);
     if ((ret = wolfsentry_addr_family_table_pair(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(*wolfsentry), (*wolfsentry)->addr_families_bynumber, (*wolfsentry)->addr_families_byname)) < 0) {
-        (void)wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT);
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT));
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
 #endif
@@ -3919,7 +3929,12 @@ static wolfsentry_errcode_t wolfsentry_context_alloc_1(
                                          , lock_flags
 #endif
              )) < 0) {
-        (void)wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT);
+#ifdef WOLFSENTRY_THREADSAFE
+        /* init_1 can fail after the lock is up, and free_1 then needs the mutex, which no one else can hold yet. */
+        if (WOLFSENTRY_ATOMIC_LOAD((*wolfsentry)->lock.state) != WOLFSENTRY_LOCK_UNINITED)
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_lock_mutex_abstimed(&(*wolfsentry)->lock, NULL /* thread */, &timespec_deadline_now, WOLFSENTRY_LOCK_FLAG_NONE));
+#endif
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free_1(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(wolfsentry, NULL /* thread */)));
         WOLFSENTRY_ERROR_RERETURN(ret);
     }
 

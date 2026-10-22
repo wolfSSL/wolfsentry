@@ -709,7 +709,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_is_reserved(str
 
    \param lock a pointer to the lock
    \param thread pointer to the `wolfsentry_thread_context`
-   \param flags optional `wolfsentry_lock_flags_t`
+   \param flags non-NULL pointer to a `wolfsentry_lock_flags_t` that receives the current flags
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 

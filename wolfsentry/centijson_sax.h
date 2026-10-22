@@ -337,7 +337,7 @@ typedef int (*JSON_DUMP_CALLBACK)(const unsigned char* /*str*/, size_t /*size*/,
  * handles proper escaping of control characters.
  *
  * The provided writer callback must write all the data provided to it and
- * return zero to indicate success, or non-zero to indicate an error and abort
+ * return zero to indicate success, or a negative value to indicate an error and abort
  * the operation.
  *
  * All these return zero on success, JSON_ERR_OUTOFMEMORY, or an error code

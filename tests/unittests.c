@@ -3018,6 +3018,89 @@ static int test_route_lookup_exact_match_honors_exclude_reject(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_route_lookup_action_res_filter_bits_unset(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_eventconfig event_config;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_route_flags_t flags;
+    wolfsentry_ent_id_t event_id, id_filtered, route_id;
+    struct regression_sockaddr_v4 remote, local;
+    static const char event_label[] = "filter-bits-unset-test";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &event_config));
+    event_config.action_res_filter_bits_unset = WOLFSENTRY_ACTION_RES_USER2;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            event_label,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* priority */,
+            &event_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &event_id));
+
+    regression_sockaddr_v4_init(&remote, (const byte *)"\0\1\2\3", 12345, IPPROTO_TCP, 1);
+    regression_sockaddr_v4_init(&local, (const byte *)"\377\376\375\374", 443, IPPROTO_TCP, 1);
+    flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, flags,
+            event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &id_filtered, &action_results));
+
+    /* the forbidden bit is present, so the route must be skipped. */
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_SET_BITS(action_results, WOLFSENTRY_ACTION_RES_USER2);
+    route_id = WOLFSENTRY_ENT_ID_NONE;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(
+        USED_FALLBACK,
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &route_id, &inexact_matches, &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(route_id == id_filtered);
+
+    /* a different user bit is not forbidden, so the route must match. */
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_SET_BITS(action_results, WOLFSENTRY_ACTION_RES_USER1);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa, &local.sa, flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &route_id, &inexact_matches, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(route_id == id_filtered);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, id_filtered, NULL /* event_label */, 0 /* event_label_len */, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, event_label, WOLFSENTRY_LENGTH_NULL_TERMINATED, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -5935,6 +6018,11 @@ int main(int argc, char* argv[]) {
     ret = test_route_lookup_exact_match_honors_exclude_reject();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_route_lookup_exact_match_honors_exclude_reject failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_route_lookup_action_res_filter_bits_unset();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_lookup_action_res_filter_bits_unset failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

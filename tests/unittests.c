@@ -5509,6 +5509,18 @@ static int test_json_uint64_negative(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_json_uint16_bounds(void) {
+    static const char too_big[] =
+        "{ \"wolfsentry-config-version\" : 1, \"events\" : [ { \"label\" : \"e\", \"priority\" : 70000 } ] }";
+    static const char at_max[] =
+        "{ \"wolfsentry-config-version\" : 1, \"events\" : [ { \"label\" : \"e\", \"priority\" : 65535 } ] }";
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(too_big, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        test_json_oneshot_string(at_max, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_JSON */
 
 #ifdef TEST_JSON_CORPUS
@@ -5830,6 +5842,11 @@ int main(int argc, char* argv[]) {
     ret = test_json_uint64_negative();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_uint64_negative failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_json_uint16_bounds();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_uint16_bounds failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

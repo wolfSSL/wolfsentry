@@ -3602,11 +3602,24 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_set_wildcard(
     }
     if (wildcards_to_set & WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD) {
         route->flags |= WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD;
-        route->remote.addr_len = 0;
+        if (route->remote.addr_len > 0) {
+            /* the local address is stored immediately after the remote address,
+             * so dropping the remote address requires sliding the local bytes
+             * down to keep WOLFSENTRY_ROUTE_LOCAL_ADDR() valid. */
+            if (route->local.addr_len > 0)
+                memmove(WOLFSENTRY_ROUTE_REMOTE_ADDR(route),
+                        WOLFSENTRY_ROUTE_LOCAL_ADDR(route),
+                        WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(route));
+            route->remote.addr_len = 0;
+            route->data_addr_size = (uint16_t)WOLFSENTRY_ROUTE_LOCAL_ADDR_BYTES(route);
+        }
     }
     if (wildcards_to_set & WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD) {
         route->flags |= WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD;
-        route->local.addr_len = 0;
+        if (route->local.addr_len > 0) {
+            route->local.addr_len = 0;
+            route->data_addr_size = (uint16_t)WOLFSENTRY_ROUTE_REMOTE_ADDR_BYTES(route);
+        }
     }
     if (wildcards_to_set & WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD) {
         route->flags |= WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD;

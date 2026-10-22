@@ -3734,6 +3734,358 @@ static int test_track_peer_ephemeral_route_bound(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+/* find the non-wildcard route for the peer whose remote address ends in remote_last_byte. */
+static wolfsentry_errcode_t test_dynamic_ephemeral_route_exports(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    byte remote_last_byte,
+    struct wolfsentry_route_exports *exports_out)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_cursor *cursor;
+    struct wolfsentry_route *route;
+    struct wolfsentry_route_exports exports;
+    int found = 0;
+
+    ret = wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+    ret = wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes);
+    if (ret >= 0) {
+        ret = wolfsentry_route_table_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor);
+        if (ret >= 0) {
+            for (ret = wolfsentry_route_table_iterate_current(main_routes, cursor, &route);
+                 ret >= 0;
+                 ret = wolfsentry_route_table_iterate_next(main_routes, cursor, &route))
+            {
+                ret = wolfsentry_route_export(WOLFSENTRY_CONTEXT_ARGS_OUT, route, &exports);
+                if (ret < 0)
+                    break;
+                if ((! WOLFSENTRY_CHECK_BITS(exports.flags, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD)) &&
+                    (exports.remote.addr_len == 4 * BITS_PER_BYTE) &&
+                    (exports.remote_address[3] == remote_last_byte))
+                {
+                    *exports_out = exports;
+                    found = 1;
+                    break;
+                }
+            }
+            if (ret >= 0 || WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
+                ret = wolfsentry_route_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor);
+            else
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor));
+        }
+    }
+
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    if ((ret >= 0) && (! found))
+        ret = WOLFSENTRY_ERROR_ENCODE(ITEM_NOT_FOUND);
+
+    WOLFSENTRY_ERROR_RERETURN(ret);
+}
+
+static int test_track_peer_connect_count(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_eventconfig limit_config, nocount_config, nolimit_config;
+    struct wolfsentry_route_exports ephemeral_exports;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t rule_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+    wolfsentry_route_flags_t dispatch_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id;
+
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_generator",
+            -1 /* label_len */,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &limit_config));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 60, 0, &limit_config.route_idle_time_for_purge));
+    limit_config.max_connection_count = 1;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_limit",
+            -1 /* label_len */,
+            10,
+            &limit_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &nocount_config));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 60, 0, &nocount_config.route_idle_time_for_purge));
+    nocount_config.max_connection_count = 1;
+    nocount_config.route_flags_to_add_on_insert = WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_nocount",
+            -1 /* label_len */,
+            10,
+            &nocount_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_generator",
+            -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            WOLFSENTRY_BUILTIN_LABEL_PREFIX "track-peer-v1",
+            -1));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_generator",
+            -1,
+            "track_peer_cc_limit",
+            -1));
+
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 0;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memset(remote.sa.addr, 0, sizeof remote.addr_buf);
+    memcpy(local.sa.addr, "\377\376\375\374", sizeof local.addr_buf);
+
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD);
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD);
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_GREENLISTED);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa,
+            &local.sa,
+            rule_flags,
+            "track_peer_cc_generator",
+            -1,
+            &id,
+            &action_results));
+
+    WOLFSENTRY_SET_BITS(dispatch_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+
+    remote.sa.sa_port = 1234;
+    memcpy(remote.sa.addr, "\12\0\2\1", sizeof remote.addr_buf);
+
+    /* the CONNECT that spawns the tracking route must be counted on that route. */
+    action_results = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            dispatch_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 1, &ephemeral_exports));
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 1);
+
+    /* with a per-peer limit of 1, a second concurrent CONNECT from the same peer is rejected. */
+    action_results = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            dispatch_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 1, &ephemeral_exports));
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 1);
+
+    /* the matching DISCONNECT brings the count back to zero. */
+    action_results = WOLFSENTRY_ACTION_RES_DISCONNECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            dispatch_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 1, &ephemeral_exports));
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 0);
+
+    /* and the peer can connect again. */
+    action_results = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            dispatch_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 1, &ephemeral_exports));
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 1);
+
+    /* a tracking route flagged dont-count-current-connections stays at zero. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_generator",
+            -1,
+            "track_peer_cc_nocount",
+            -1));
+
+    remote.sa.sa_port = 2345;
+    memcpy(remote.sa.addr, "\12\0\3\2", sizeof remote.addr_buf);
+
+    action_results = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            dispatch_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 2, &ephemeral_exports));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(ephemeral_exports.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS));
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 0);
+
+    /* with the unlimited setting dispatch never counts connections, so the
+     * spawning CONNECT must not leave a count a later DISCONNECT can't undo.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &nolimit_config));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 60, 0, &nolimit_config.route_idle_time_for_purge));
+    nolimit_config.max_connection_count = 0;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_nolimit",
+            -1 /* label_len */,
+            10,
+            &nolimit_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_cc_generator",
+            -1,
+            "track_peer_cc_nolimit",
+            -1));
+
+    remote.sa.sa_port = 3456;
+    memcpy(remote.sa.addr, "\12\0\4\3", sizeof remote.addr_buf);
+
+    action_results = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            dispatch_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 3, &ephemeral_exports));
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 0);
+
+    action_results = WOLFSENTRY_ACTION_RES_DISCONNECT;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch_with_inited_result(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            dispatch_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 3, &ephemeral_exports));
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -6017,6 +6369,11 @@ int main(int argc, char* argv[]) {
     ret = test_track_peer_ephemeral_route_bound();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_track_peer_ephemeral_route_bound failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_track_peer_connect_count();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_track_peer_connect_count failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

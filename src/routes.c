@@ -4002,9 +4002,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
 
     if (sa_family == WOLFSENTRY_AF_LINK || sa_family == WOLFSENTRY_AF_LINK64) {
         unsigned int i;
-        if ((addr_bits >> 3) * 3 > (size_t)*buflen)
+        unsigned int addr_bytes = (unsigned int)WOLFSENTRY_BITS_TO_BYTES(addr_bits);
+        if (addr_bytes * 3 > (size_t)*buflen)
             WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
-        for (i=0; i < (addr_bits >> 3); ++i) {
+        for (i=0; i < addr_bytes; ++i) {
             if (i > 0)
                 *buf++ = ':';
             *buf++ = hexdigit_ntoa(addr[i] >> 4);
@@ -4031,7 +4032,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_address(
         *buf++ = '0';
         *buf++ = 'x';
         for (i=0; i < 4; ++i) {
-            if (i < (addr_bits >> 3)) {
+            if (i < (unsigned int)WOLFSENTRY_BITS_TO_BYTES(addr_bits)) {
                 *buf++ = hexdigit_ntoa(addr[i] >> 4);
                 *buf++ = hexdigit_ntoa(addr[i]);
             } else {
@@ -4531,7 +4532,7 @@ static wolfsentry_errcode_t wolfsentry_route_render_address(WOLFSENTRY_CONTEXT_A
 
     if (sa_family == WOLFSENTRY_AF_LINK || sa_family == WOLFSENTRY_AF_LINK64) {
         unsigned int i;
-        for (i=0; i < (addr_bits >> 3); ++i) {
+        for (i=0; i < (unsigned int)WOLFSENTRY_BITS_TO_BYTES(addr_bits); ++i) {
             if (fprintf(f, "%s%02x", i ? ":" : "", (unsigned int)addr[i]) < 0)
                 WOLFSENTRY_ERROR_RETURN(IO_FAILED);
         }

@@ -3839,6 +3839,9 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
     char default_event_label[WOLFSENTRY_MAX_LABEL_BYTES + 1];
     int default_event_label_len;
     int new_count;
+    char addr_fmt_buf[32];
+    int addr_fmt_len;
+    byte link_addr[2];
     struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
@@ -3960,6 +3963,18 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
             NOT_PERMITTED));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, (struct wolfsentry_route *)fallthrough_route, NULL /* action_results */));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* a link address whose length is not a whole number of bytes must render
+     * its final partial byte, not silently drop it. */
+    link_addr[0] = 0xAB;
+    link_addr[1] = 0xCD;
+    addr_fmt_len = (int)sizeof addr_fmt_buf;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_format_address(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_AF_LINK, link_addr, 12 /* addr_bits */,
+            addr_fmt_buf, &addr_fmt_len));
+    WOLFSENTRY_EXIT_ON_FALSE(addr_fmt_len == 5);
+    WOLFSENTRY_EXIT_ON_FALSE(addr_fmt_buf[2] == ':');
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));

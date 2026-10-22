@@ -4581,6 +4581,111 @@ static int test_event_aux_event_rejects_parent_event(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+#ifndef WOLFSENTRY_NO_JSON
+
+static int event_priority_check_winner(const char *priority_clause, int expect_accept) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_errcode_t ret;
+    wolfsentry_ent_id_t route_id;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_action_res_t action_results;
+    char err_buf[512];
+    char json[2048];
+    int json_len;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* default_config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    json_len = snprintf(
+        json, sizeof json,
+        "{ \"wolfsentry-config-version\" : 1,"
+        "  \"events-insert\" : ["
+        "    { \"label\" : \"first-event\" %s },"
+        "    { \"label\" : \"second-event\", \"priority\" : 1 } ],"
+        "  \"static-routes-insert\" : ["
+        "    { \"parent-event\" : \"first-event\", \"direction-in\" : true,"
+        "      \"green-listed\" : true, \"penalty-boxed\" : false, \"family\" : %u,"
+        "      \"remote\" : { \"address\" : \"10.0.0.0\", \"prefix-bits\" : 8 },"
+        "      \"local\" : { \"address\" : \"10.0.0.0\", \"prefix-bits\" : 8 } },"
+        "    { \"parent-event\" : \"second-event\", \"direction-in\" : true,"
+        "      \"green-listed\" : false, \"penalty-boxed\" : true, \"family\" : %u,"
+        "      \"remote\" : { \"address\" : \"10.1.2.3\" },"
+        "      \"local\" : { \"address\" : \"10.0.0.0\", \"prefix-bits\" : 8 } } ] }",
+        priority_clause, (unsigned int)AF_INET, (unsigned int)AF_INET);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+
+    ret = wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        (unsigned char *)json,
+        (size_t)json_len,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+        err_buf,
+        sizeof err_buf);
+    if (ret < 0)
+        (void)fprintf(stderr, "%s\n", err_buf);
+    WOLFSENTRY_EXIT_ON_FAILURE(ret);
+
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 12345;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memcpy(remote.sa.addr, "\12\1\2\3", sizeof remote.addr_buf);
+    memcpy(local.sa.addr, "\12\11\11\11", sizeof local.addr_buf);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &route_id,
+            &inexact_matches,
+            &action_results));
+
+    if (expect_accept) {
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    } else {
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_event_default_priority(void) {
+    /* an omitted priority behaves as priority 0, the highest */
+    WOLFSENTRY_EXIT_ON_FAILURE(event_priority_check_winner("", 1));
+    WOLFSENTRY_EXIT_ON_FAILURE(event_priority_check_winner(", \"priority\" : 0", 1));
+    WOLFSENTRY_EXIT_ON_FAILURE(event_priority_check_winner(", \"priority\" : 2", 0));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#endif /* !WOLFSENTRY_NO_JSON */
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -6915,6 +7020,14 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_event_aux_event_rejects_parent_event failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+
+#ifndef WOLFSENTRY_NO_JSON
+    ret = test_event_default_priority();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_default_priority failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_USER_VALUES

@@ -5527,6 +5527,20 @@ static int test_json_unknown_protocol_name(void) {
 }
 #endif /* !WOLFSENTRY_NO_GETPROTOBY */
 
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+static int test_json_bitmask_short_address(void) {
+    /* a partial address (prefix-bits smaller than the family width) followed by
+     * a bitmask exercises the right-justification move; the move must copy
+     * bytes, not the bit count, or it corrupts adjacent parse state.
+     */
+    static const char json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"remote\" : { \"prefix-bits\" : 16, \"address\" : \"1.2.0.0\", \"bitmask\" : \"255.255.0.0\" } } ] }";
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
+
 static int test_json_link64_short_address(void) {
     /* family 119 == WOLFSENTRY_AF_LINK64; a six-byte EUI-48 address must not be
      * silently accepted as LINK64.
@@ -5904,6 +5918,13 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_json_duration_negative failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+    ret = test_json_bitmask_short_address();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_bitmask_short_address failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
     ret = test_json_link64_short_address();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_link64_short_address failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));

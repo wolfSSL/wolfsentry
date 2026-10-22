@@ -1647,6 +1647,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     int contiguous_search;
     wolfsentry_route_flags_t inexact_matches_buf;
     int seen_target_af;
+    int af_wildcard_span_entered;
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
     int af_is_bitmask_matched;
 #endif
@@ -1803,6 +1804,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 #endif
 
     seen_target_af = 0;
+    af_wildcard_span_entered = 0;
 
     for (i = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
          i;
@@ -1812,9 +1814,15 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
             if (! seen_target_af)
                 seen_target_af = 1;
         } else {
+            /* jump to the wildcard-AF span at most once; the span's own
+             * members never match the target AF and would otherwise re-trigger
+             * the jump forever.
+             */
             if (seen_target_af &&
+                (! af_wildcard_span_entered) &&
                 (! (target_route->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)))
             {
+                af_wildcard_span_entered = 1;
                 if (table->last_af_wildcard_route) {
                     i = table->last_af_wildcard_route;
                     wolfsentry_table_cursor_set(&cursor, &i->header);

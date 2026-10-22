@@ -369,6 +369,27 @@ static wolfsentry_errcode_t test_eventconfig_alignment(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_eventconfig_derogatory_threshold(void) {
+    /* derogatory_threshold_for_penaltybox must fit the uint16_t per-route
+     * derogatory_count counter.
+     */
+    struct wolfsentry_eventconfig config;
+
+    memset(&config, 0, sizeof config);
+    /* the route's derogatory_count counter is 16-bit; only test the
+     * out-of-range rejection when the configured field can exceed that.
+     */
+    if (MAX_UINT_OF(config.derogatory_threshold_for_penaltybox) > (uint64_t)0xffffU) {
+        config.derogatory_threshold_for_penaltybox = (wolfsentry_hitcount_t)0x10000U;
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+    }
+
+    config.derogatory_threshold_for_penaltybox = (wolfsentry_hitcount_t)0xffffU;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_check(&config));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_INIT */
 
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
@@ -5828,6 +5849,11 @@ int main(int argc, char* argv[]) {
     ret = test_eventconfig_alignment();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_eventconfig_alignment failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_eventconfig_derogatory_threshold();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_eventconfig_derogatory_threshold failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

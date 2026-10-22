@@ -668,7 +668,10 @@ static void *wolfsentry_builtin_realloc(
         void *ret = realloc(ptr, size);
         if ((ptr == NULL) && (ret != NULL))
             WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
-        else if ((ptr != NULL) && (ret == NULL))
+        /* a failed nonzero-size realloc leaves the original block live, so
+         * only a zero-size request counts as a deallocation.
+         */
+        else if ((ptr != NULL) && (ret == NULL) && (size == 0))
             WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
         return ret;
     }

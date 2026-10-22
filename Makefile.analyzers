@@ -304,29 +304,71 @@ c99-test:
 
 WOLFCOSE_TEST_TOP ?= $(SRC_TOP)/../wolfCOSE
 WOLFCOSE_TEST_LIB ?= $(WOLFCOSE_TEST_TOP)/libwolfcose.a
+WOLFCOSE_TEST_MAKE_ARGS = $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" WOLFCOSE_LIB="$(WOLFCOSE_TEST_LIB)"
 
-.PHONY: wolfcose-test
+WOLFCOSE_TEST_ARGS_default := EXTRA_CFLAGS='-DWOLFSENTRY_WOLFCOSE'
+WOLFCOSE_TEST_ARGS_no-json := WOLFCOSE=1 NO_JSON=1
+WOLFCOSE_TEST_ARGS_no-json-dom := WOLFCOSE=1 NO_JSON_DOM=1
+WOLFCOSE_TEST_ARGS_singlethreaded := WOLFCOSE=1 SINGLETHREADED=1
+WOLFCOSE_TEST_ARGS_c99 := WOLFCOSE=1 NO_JSON=1 SINGLETHREADED=1 EXTRA_CFLAGS+='-std=c99 -pedantic'
+WOLFCOSE_TEST_ARGS_no-routes := WOLFCOSE=1 NO_CONFIG_ROUTES=1
+WOLFCOSE_TEST_ARGS_no-addr-family-names := WOLFCOSE=1 NO_CONFIG_ADDR_FAMILY_NAMES=1
+WOLFCOSE_TEST_ARGS_no-route-endpoints := WOLFCOSE=1 NO_CONFIG_ROUTE_ENDPOINTS=1
+WOLFCOSE_TEST_ARGS_no-events := WOLFCOSE=1 NO_CONFIG_EVENTS=1
+WOLFCOSE_TEST_ARGS_no-user-values := WOLFCOSE=1 NO_CONFIG_USER_VALUES=1
+WOLFCOSE_TEST_ARGS_no-eventconfig := WOLFCOSE=1 NO_CONFIG_EVENTCONFIG=1
+WOLFCOSE_TEST_ARGS_no-transactions := WOLFCOSE=1 NO_CONFIG_TRANSACTIONS=1
+WOLFCOSE_TEST_ARGS_no-legacy-event-syntax := WOLFCOSE=1 NO_CONFIG_LEGACY_EVENT_SYNTAX=1
+WOLFCOSE_TEST_ARGS_no-error-messages := WOLFCOSE=1 NO_CONFIG_ERROR_MESSAGES=1
+WOLFCOSE_TEST_ARGS_no-text-numbers := WOLFCOSE=1 NO_JSON=1 NO_CONFIG_TEXT_NUMBERS=1
+WOLFCOSE_TEST_ARGS_no-text-addresses := WOLFCOSE=1 NO_JSON=1 NO_CONFIG_TEXT_ADDRESSES=1
+WOLFCOSE_TEST_ARGS_minimal := WOLFCOSE=1 MINIMAL_CONFIG=1
+WOLFCOSE_TEST_ARGS_minimal-no-json := WOLFCOSE=1 NO_JSON=1 MINIMAL_CONFIG=1
+WOLFCOSE_TEST_ARGS_reduced := WOLFCOSE=1 NO_JSON=1 SINGLETHREADED=1 NO_CONFIG_USER_VALUES=1 NO_CONFIG_ADDR_FAMILY_NAMES=1 NO_CONFIG_TRANSACTIONS=1 NO_CONFIG_LEGACY_EVENT_SYNTAX=1 NO_CONFIG_TEXT_NUMBERS=1 NO_CONFIG_TEXT_ADDRESSES=1 NO_CONFIG_ERROR_MESSAGES=1
+WOLFCOSE_TEST_ARGS_total-limit := WOLFCOSE=1 SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_MAX_CBOR_TOTAL_LEN=29 -DWOLFSENTRY_TEST_CBOR_TOTAL_LIMIT'
+WOLFCOSE_TEST_ARGS_nesting-limit := WOLFCOSE=1 SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_MAX_CBOR_NESTING=4 -DWOLFSENTRY_TEST_CBOR_NESTING_LIMIT'
+
+WOLFCOSE_TEST_CONFIGS := $(patsubst WOLFCOSE_TEST_ARGS_%,%,$(filter WOLFCOSE_TEST_ARGS_%,$(.VARIABLES)))
+WOLFCOSE_TESTS := $(addprefix wolfcose-,$(addsuffix -test,$(WOLFCOSE_TEST_CONFIGS) user-settings dynamic))
+
+.PHONY: wolfcose-test wolfcose-lib $(WOLFCOSE_TESTS)
 ifneq (,$(wildcard $(WOLFCOSE_TEST_TOP)/Makefile)$(wildcard $(WOLFCOSE_TEST_LIB)))
-wolfcose-test:
-	@if [ ! -r "$(WOLFCOSE_TEST_LIB)" ]; then $(MAKE) -C "$(WOLFCOSE_TEST_TOP)" all; fi
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-builds" WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" EXTRA_CFLAGS='-DWOLFSENTRY_WOLFCOSE' "$(BUILD_PARENT)/wolfsentry-wolfcose-builds/tests/test_cbor"
-	@"$(BUILD_PARENT)/wolfsentry-wolfcose-builds/tests/test_cbor"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-no-json-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_JSON=1 "$(BUILD_PARENT)/wolfsentry-wolfcose-no-json-builds/tests/test_cbor"
-	@"$(BUILD_PARENT)/wolfsentry-wolfcose-no-json-builds/tests/test_cbor"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-c99-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_JSON=1 SINGLETHREADED=1 EXTRA_CFLAGS+='-std=c99 -pedantic' "$(BUILD_PARENT)/wolfsentry-wolfcose-c99-builds/tests/test_cbor"
-	@"$(BUILD_PARENT)/wolfsentry-wolfcose-c99-builds/tests/test_cbor"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-reduced-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_JSON=1 SINGLETHREADED=1 NO_CONFIG_USER_VALUES=1 NO_CONFIG_ADDR_FAMILY_NAMES=1 NO_CONFIG_TRANSACTIONS=1 NO_CONFIG_LEGACY_EVENT_SYNTAX=1 NO_CONFIG_TEXT_NUMBERS=1 NO_CONFIG_TEXT_ADDRESSES=1 NO_CONFIG_ERROR_MESSAGES=1 "$(BUILD_PARENT)/wolfsentry-wolfcose-reduced-builds/tests/test_cbor"
-	@"$(BUILD_PARENT)/wolfsentry-wolfcose-reduced-builds/tests/test_cbor"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-legacy-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" NO_CONFIG_LEGACY_EVENT_SYNTAX=1 "$(BUILD_PARENT)/wolfsentry-wolfcose-legacy-builds/tests/test_cbor"
-	@"$(BUILD_PARENT)/wolfsentry-wolfcose-legacy-builds/tests/test_cbor"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-total-limit-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_MAX_CBOR_TOTAL_LEN=29 -DWOLFSENTRY_TEST_CBOR_TOTAL_LIMIT' "$(BUILD_PARENT)/wolfsentry-wolfcose-total-limit-builds/tests/test_cbor"
-	@"$(BUILD_PARENT)/wolfsentry-wolfcose-total-limit-builds/tests/test_cbor"
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-nesting-limit-builds" WOLFCOSE=1 WOLFCOSE_TOP="$(WOLFCOSE_TEST_TOP)" SINGLETHREADED=1 EXTRA_CFLAGS+='-DWOLFSENTRY_MAX_CBOR_NESTING=4 -DWOLFSENTRY_TEST_CBOR_NESTING_LIMIT' "$(BUILD_PARENT)/wolfsentry-wolfcose-nesting-limit-builds/tests/test_cbor"
-	@"$(BUILD_PARENT)/wolfsentry-wolfcose-nesting-limit-builds/tests/test_cbor"
+wolfcose-test: $(WOLFCOSE_TESTS)
 	@echo "passed: wolfCOSE configuration tests."
+
+# The dynamic-library test links this archive into a shared object.
+wolfcose-lib:
+	@if [ ! -r "$(WOLFCOSE_TEST_LIB)" ]; then $(MAKE) -C "$(WOLFCOSE_TEST_TOP)" EXTRA_CFLAGS=-fPIC all; fi
+
+define WOLFCOSE_CONFIG_TEST
+wolfcose-$(1)-test: wolfcose-lib
+	@$$(MAKE) $$(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$$(BUILD_PARENT)/wolfsentry-wolfcose-$(1)-builds" $$(WOLFCOSE_TEST_ARGS_$(1)) clean
+	@$$(MAKE) $$(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$$(BUILD_PARENT)/wolfsentry-wolfcose-$(1)-builds" $$(WOLFCOSE_TEST_ARGS_$(1)) test
+	@$$(MAKE) $$(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$$(BUILD_PARENT)/wolfsentry-wolfcose-$(1)-builds" $$(WOLFCOSE_TEST_ARGS_$(1)) clean
+	@echo "passed: wolfCOSE $(1) test."
+endef
+$(foreach config,$(WOLFCOSE_TEST_CONFIGS),$(eval $(call WOLFCOSE_CONFIG_TEST,$(config))))
+
+wolfcose-user-settings-test: wolfcose-lib
+	@$(MAKE) $(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-user-settings-builds" WOLFCOSE=1 clean
+	@$(MAKE) $(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-user-settings-builds" WOLFCOSE=1 NO_JSON=1 SINGLETHREADED=1 NO_CONFIG_ERROR_MESSAGES=1 "$(BUILD_PARENT)/wolfsentry-wolfcose-user-settings-builds/wolfsentry/wolfsentry_options.h"
+	@$(MAKE) $(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-user-settings-builds" USER_SETTINGS_FILE="$(BUILD_PARENT)/wolfsentry-wolfcose-user-settings-builds/wolfsentry/wolfsentry_options.h" test
+	@$(MAKE) $(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-user-settings-builds" WOLFCOSE=1 clean
+	@echo "passed: wolfCOSE user-settings test."
+
+wolfcose-dynamic-test: wolfcose-lib
+	@$(MAKE) $(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-dynamic-builds" WOLFCOSE=1 clean
+	@$(MAKE) $(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-dynamic-builds" WOLFCOSE=1 "$(addprefix $(BUILD_PARENT)/wolfsentry-wolfcose-dynamic-builds/tests/,$(UNITTEST_LIST_SHARED))"
+	@for test in $(UNITTEST_LIST_SHARED); do LD_LIBRARY_PATH="$(BUILD_PARENT)/wolfsentry-wolfcose-dynamic-builds" $(TEST_ENV) $(EXE_LAUNCHER) "$(BUILD_PARENT)/wolfsentry-wolfcose-dynamic-builds/tests/$$test" >/dev/null || exit $$?; done
+	@$(MAKE) $(WOLFCOSE_TEST_MAKE_ARGS) BUILD_TOP="$(BUILD_PARENT)/wolfsentry-wolfcose-dynamic-builds" WOLFCOSE=1 clean
+	@echo "passed: wolfCOSE dynamic test."
+else ifdef WOLFCOSE_REQUIRED
+wolfcose-test wolfcose-lib $(WOLFCOSE_TESTS):
+	@echo "wolfCOSE sources not found at $(WOLFCOSE_TEST_TOP)." >&2
+	@exit 1
 else
-wolfcose-test:
-	@echo "wolfCOSE sources not found, skipping wolfcose-test."
+wolfcose-test wolfcose-lib $(WOLFCOSE_TESTS):
+	@echo "wolfCOSE sources not found, skipping $@."
 endif
 
 .PHONY: c89-test

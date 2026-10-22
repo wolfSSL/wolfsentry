@@ -72,3 +72,94 @@ jobs:
       run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
     - name: Test configuration
       run: make -j2 ${{ matrix.target }}
+
+  wolfcose-deps:
+    name: Build wolfCOSE dependencies
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    steps:
+    - name: Build wolfSSL and wolfCOSE
+      run: |
+        WOLFSSL_REF=$(git ls-remote --tags --refs \
+          https://github.com/wolfSSL/wolfssl.git 'v*-stable' \
+          | awk -F/ '{print $NF}' | sort -V | tail -n 1)
+        test -n "$WOLFSSL_REF"
+        mkdir -p /opt/wolfsentry-deps
+        cd /opt/wolfsentry-deps
+        git clone --depth 1 --branch "$WOLFSSL_REF" \
+          https://github.com/wolfSSL/wolfssl.git wolfssl
+        git clone --depth 1 https://github.com/wolfSSL/wolfCOSE.git wolfCOSE
+        cd wolfssl
+        ./autogen.sh
+        ./configure --enable-ecc --enable-ed25519 --enable-ed448 \
+          --enable-curve25519 --enable-curve448 --enable-aesgcm \
+          --enable-aesccm --enable-sha384 --enable-sha512 --enable-keygen \
+          --enable-hkdf --enable-aeskeywrap --enable-chacha \
+          --enable-poly1305 --enable-rsapss \
+          --prefix=/opt/wolfsentry-deps/wolfssl-install
+        make -j"$(nproc)"
+        make install
+        cd ..
+        make -C wolfCOSE -j"$(nproc)" EXTRA_CFLAGS=-fPIC \
+          WOLFSSL_CFLAGS="-isystem /opt/wolfsentry-deps/wolfssl-install/include" \
+          WOLFSSL_LIBS="-L/opt/wolfsentry-deps/wolfssl-install/lib -lwolfssl" \
+          all
+        tar -C /opt -czf "$GITHUB_WORKSPACE/wolfsentry-deps.tar.gz" \
+          wolfsentry-deps/wolfssl-install wolfsentry-deps/wolfCOSE/include \
+          wolfsentry-deps/wolfCOSE/libwolfcose.a
+    - uses: actions/upload-artifact@v4
+      with:
+        name: wolfcose-deps
+        path: wolfsentry-deps.tar.gz
+        retention-days: 1
+
+  wolfcose:
+    name: wolfCOSE ${{ matrix.config }}
+    needs: wolfcose-deps
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfcose-ci@sha256:c073c7afb4cd3f296b8c1a305db2f718530b7a8aca899482629aee3a5cf8bfbc
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - default
+          - no-json
+          - no-json-dom
+          - singlethreaded
+          - c99
+          - no-routes
+          - no-addr-family-names
+          - no-route-endpoints
+          - no-events
+          - no-user-values
+          - no-eventconfig
+          - no-transactions
+          - no-legacy-event-syntax
+          - no-error-messages
+          - no-text-numbers
+          - no-text-addresses
+          - minimal
+          - minimal-no-json
+          - reduced
+          - total-limit
+          - nesting-limit
+          - user-settings
+          - dynamic
+    env:
+      CPATH: /opt/wolfsentry-deps/wolfssl-install/include
+    steps:
+    - uses: actions/checkout@v4
+    - name: Trust workspace
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+    - uses: actions/download-artifact@v4
+      with:
+        name: wolfcose-deps
+    - name: Install dependencies
+      run: tar -C /opt -xzf wolfsentry-deps.tar.gz
+    - name: Test configuration
+      run: |
+        make -j2 WOLFCOSE_REQUIRED=1 \
+          WOLFCOSE_TEST_TOP=/opt/wolfsentry-deps/wolfCOSE \
+          wolfcose-${{ matrix.config }}-test

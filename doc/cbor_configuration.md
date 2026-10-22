@@ -200,3 +200,11 @@ if (ret == WOLFCOSE_SUCCESS) {
 
 The returned payload points into the COSE input buffer, so keep that buffer
 valid until `wolfsentry_config_cbor_oneshot()` returns.
+
+## Testing build options
+
+`make wolfcose-test` builds and runs the unit tests once for each supported
+wolfCOSE build option, using the wolfCOSE tree at `WOLFCOSE_TEST_TOP`
+(default `../wolfCOSE`). Run a single option with its own target, such as
+`make wolfcose-no-routes-test` or `make wolfcose-dynamic-test`. The targets
+skip when wolfCOSE is absent unless `WOLFCOSE_REQUIRED=1` is set.

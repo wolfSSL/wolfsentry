@@ -1741,9 +1741,16 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
      */
     if (cursor_position == 0) {
         struct wolfsentry_event *parent_event = ((struct wolfsentry_route *)cursor.point)->parent_event ? ((struct wolfsentry_route *)cursor.point)->parent_event : NULL;
-        if ((action_results == NULL) || (parent_event == NULL) || (parent_event->config == NULL) ||
-            (((*action_results & parent_event->config->config.action_res_filter_bits_set) == parent_event->config->config.action_res_filter_bits_set) &&
-             ((~(*action_results) & parent_event->config->config.action_res_filter_bits_unset) == parent_event->config->config.action_res_filter_bits_unset)))
+        /* PENALTYBOXED is mutable and not part of the key, so an exact hit
+         * must still honor the bind/listen exclusion applied by the full scan.
+         */
+        int excluded_reject_route = (action_results != NULL) &&
+            WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES) &&
+            WOLFSENTRY_MASKIN_BITS(((struct wolfsentry_route *)cursor.point)->flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED);
+        if ((! excluded_reject_route) &&
+            ((action_results == NULL) || (parent_event == NULL) || (parent_event->config == NULL) ||
+             (((*action_results & parent_event->config->config.action_res_filter_bits_set) == parent_event->config->config.action_res_filter_bits_set) &&
+              ((~(*action_results) & parent_event->config->config.action_res_filter_bits_unset) == parent_event->config->config.action_res_filter_bits_unset))))
         {
             int effective_priority = parent_event ? parent_event->priority : 0;
             if (effective_priority <= table->highest_priority_route_in_table) {

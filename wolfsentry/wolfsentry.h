@@ -1578,7 +1578,7 @@ typedef enum {
    \brief Clones a wolfsentry context
 
    \param clone the destination wolfsentry context, should be a pointer to a NULL pointer as this function will malloc
-   \param flags set to WOLFSENTRY_CLONE_FLAG_AT_CREATION to use the config at the creation of the original wolfsentry context instead of the current configuration
+   \param flags set to WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION to use the config at the creation of the original wolfsentry context instead of the current configuration
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 

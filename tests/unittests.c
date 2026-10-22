@@ -3830,9 +3830,12 @@ static wolfsentry_errcode_t test_regression_copy_metadata_purge_list(void) {
 
 static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
     struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *table;
     wolfsentry_action_res_t action_results;
     wolfsentry_route_flags_t inexact_matches;
     wolfsentry_ent_id_t id;
+    char default_event_label[WOLFSENTRY_MAX_LABEL_BYTES + 1];
+    int default_event_label_len;
     struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
@@ -3894,6 +3897,27 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
                 WOLFSENTRY_CONTEXT_ARGS_OUT,
                 WOLFSENTRY_ACTION_RES_ACCEPT | WOLFSENTRY_ACTION_RES_REJECT),
             INVALID_ARG));
+
+    /* reading back the default event must report the written label length, not
+     * leave the caller's in/out length untouched. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "default_evt", -1 /* label_len */, 10 /* priority */,
+            NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &table));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_table_set_default_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, table, "default_evt", -1));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    default_event_label_len = (int)sizeof default_event_label;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_table_get_default_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, table, default_event_label, &default_event_label_len));
+    WOLFSENTRY_EXIT_ON_FALSE(default_event_label_len == (int)strlen("default_evt"));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(default_event_label, "default_evt") == 0);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));

@@ -3652,6 +3652,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_get_default_event(
     if (table->default_event->label_len >= *event_label_len)
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(BUFFER_TOO_SMALL);
     memcpy(event_label, table->default_event->label, (size_t)(table->default_event->label_len + 1));
+    *event_label_len = table->default_event->label_len;
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 

@@ -186,7 +186,10 @@ static err_t ethernet_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -326,7 +329,10 @@ static err_t ip4_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -461,7 +467,10 @@ static err_t ip6_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -662,7 +671,10 @@ static err_t tcp_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
         ret = ERR_RST;
     else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
@@ -851,7 +863,10 @@ static err_t udp_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
         ret = ERR_RST;
     else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
@@ -999,7 +1014,10 @@ static err_t icmp4_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -1135,7 +1153,10 @@ static err_t icmp6_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    /* fail closed: a failed dispatch leaves no trustworthy verdict. */
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;

@@ -3520,6 +3520,75 @@ static int test_route_insert_with_actions_marks_parent_event(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_route_insert_rejects_expired_purge_after(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id;
+    wolfsentry_time_t now, one_hour;
+    struct wolfsentry_route_exports exp_route;
+    static const byte exp_remote_addr[4] = { 0, 1, 2, 3 };
+    static const byte exp_local_addr[4] = { 255, 254, 253, 252 };
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(&exp_route, 0, sizeof exp_route);
+    exp_route.sa_family = AF_INET;
+    exp_route.sa_proto = IPPROTO_TCP;
+    exp_route.flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+    exp_route.remote_address = exp_remote_addr;
+    exp_route.remote.addr_len = sizeof exp_remote_addr * BITS_PER_BYTE;
+    exp_route.remote.sa_port = 12345;
+    exp_route.local_address = exp_local_addr;
+    exp_route.local.addr_len = sizeof exp_local_addr * BITS_PER_BYTE;
+    exp_route.local.sa_port = 443;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_time_now_plus_delta(wolfsentry, 0, &now));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 3600, 0, &one_hour));
+
+    /* a deadline at or before the insert time can never be served. */
+    exp_route.meta.purge_after = now;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &exp_route,
+            &id, &action_results));
+
+    exp_route.meta.purge_after = now - one_hour;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &exp_route,
+            &id, &action_results));
+
+    exp_route.meta.purge_after = now + one_hour;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &exp_route,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, id, NULL /* event_label */, 0 /* event_label_len */, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_STATIC_ROUTES */
 
 #ifdef TEST_DYNAMIC_RULES
@@ -6464,6 +6533,11 @@ int main(int argc, char* argv[]) {
     ret = test_route_insert_with_actions_marks_parent_event();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_route_insert_with_actions_marks_parent_event failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_route_insert_rejects_expired_purge_after();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_route_insert_rejects_expired_purge_after failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

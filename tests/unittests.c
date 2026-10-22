@@ -3469,6 +3469,271 @@ static int test_dynamic_rules(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_dynamic_count_main_routes(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_hitcount_t *n_routes)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_route_table *main_routes;
+    struct wolfsentry_cursor *cursor;
+    struct wolfsentry_route *route;
+
+    *n_routes = 0;
+
+    ret = wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+    ret = wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes);
+    if (ret >= 0) {
+        ret = wolfsentry_route_table_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor);
+        if (ret >= 0) {
+            for (ret = wolfsentry_route_table_iterate_current(main_routes, cursor, &route);
+                 ret >= 0;
+                 ret = wolfsentry_route_table_iterate_next(main_routes, cursor, &route))
+            {
+                ++*n_routes;
+            }
+            ret = wolfsentry_route_table_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &cursor);
+        }
+    }
+
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_ERROR_RERETURN(ret);
+}
+
+static wolfsentry_errcode_t test_track_peer_sentinel_action(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const struct wolfsentry_action *action,
+    void *handler_context,
+    void *caller_arg,
+    const struct wolfsentry_event *event,
+    wolfsentry_action_type_t action_type,
+    const struct wolfsentry_route *target_route,
+    struct wolfsentry_route_table *route_table,
+    struct wolfsentry_route *rule_route,
+    wolfsentry_action_res_t *action_results)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    (void)action;
+    (void)caller_arg;
+    (void)event;
+    (void)action_type;
+    (void)target_route;
+    (void)route_table;
+    (void)rule_route;
+    (void)action_results;
+
+    ++*(int *)handler_context;
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_track_peer_ephemeral_route_bound(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_eventconfig aux_config;
+    int sentinel_hits = 0;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t rule_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+    wolfsentry_route_flags_t dispatch_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id;
+    wolfsentry_hitcount_t n_routes;
+    int i;
+
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_generator",
+            -1 /* label_len */,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    /* an aux event with no purge time would make every tracked peer a permanent route. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_unpurgeable",
+            -1 /* label_len */,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &aux_config));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 60, 0, &aux_config.route_idle_time_for_purge));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_purgeable",
+            -1 /* label_len */,
+            10,
+            &aux_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_generator",
+            -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            WOLFSENTRY_BUILTIN_LABEL_PREFIX "track-peer-v1",
+            -1));
+
+    /* a refused insert must not stop the rest of the match chain. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_sentinel",
+            -1,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            test_track_peer_sentinel_action,
+            &sentinel_hits,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_generator",
+            -1,
+            WOLFSENTRY_ACTION_TYPE_MATCH,
+            "track_peer_sentinel",
+            -1));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_generator",
+            -1,
+            "track_peer_unpurgeable",
+            -1));
+
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 0;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memset(remote.sa.addr, 0, sizeof remote.addr_buf);
+    memcpy(local.sa.addr, "\377\376\375\374", sizeof local.addr_buf);
+
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD);
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD);
+    WOLFSENTRY_SET_BITS(rule_flags, WOLFSENTRY_ROUTE_FLAG_GREENLISTED);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa,
+            &local.sa,
+            rule_flags,
+            "track_peer_generator",
+            -1,
+            &id,
+            &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_count_main_routes(WOLFSENTRY_CONTEXT_ARGS_OUT, &n_routes));
+    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 1);
+
+    WOLFSENTRY_SET_BITS(dispatch_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+
+    for (i = 1; i <= 3; ++i) {
+        remote.sa.sa_port = (wolfsentry_port_t)(1000 + i);
+        remote.sa.addr[0] = 10;
+        remote.sa.addr[1] = 0;
+        remote.sa.addr[2] = 0;
+        remote.sa.addr[3] = (byte)i;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                dispatch_flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_count_main_routes(WOLFSENTRY_CONTEXT_ARGS_OUT, &n_routes));
+    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(sentinel_hits == 3);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_generator",
+            -1,
+            "track_peer_purgeable",
+            -1));
+
+    for (i = 1; i <= 3; ++i) {
+        remote.sa.sa_port = (wolfsentry_port_t)(2000 + i);
+        remote.sa.addr[0] = 10;
+        remote.sa.addr[1] = 0;
+        remote.sa.addr[2] = 1;
+        remote.sa.addr[3] = (byte)i;
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                dispatch_flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_count_main_routes(WOLFSENTRY_CONTEXT_ARGS_OUT, &n_routes));
+    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 4);
+    WOLFSENTRY_EXIT_ON_FALSE(sentinel_hits == 6);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -5747,6 +6012,11 @@ int main(int argc, char* argv[]) {
     ret = test_dynamic_rules();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_dynamic_rules failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_track_peer_ephemeral_route_bound();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_track_peer_ephemeral_route_bound failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

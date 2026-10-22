@@ -44,6 +44,8 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
 {
     wolfsentry_route_flags_t rule_flags;
     const struct wolfsentry_event *rule_parent_event = NULL, *rule_aux_event = NULL;
+    const struct wolfsentry_event *ephemeral_parent_event = NULL;
+    const struct wolfsentry_eventconfig_internal *ephemeral_config;
     wolfsentry_addr_bits_t rule_local_addr_len, rule_remote_addr_len;
     struct wolfsentry_route_exports target_exports;
     wolfsentry_errcode_t ret;
@@ -99,16 +101,30 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     rule_parent_event = wolfsentry_route_parent_event(rule_route);
     if (rule_parent_event)
         rule_aux_event = wolfsentry_event_get_aux_event(rule_parent_event);
-    if (rule_aux_event) {
-        target_exports.parent_event_label = wolfsentry_event_get_label(rule_aux_event);
-        target_exports.parent_event_label_len = WOLFSENTRY_LENGTH_NULL_TERMINATED;
-    } else if (rule_parent_event) {
-        target_exports.parent_event_label = wolfsentry_event_get_label(rule_parent_event);
+    if (rule_aux_event)
+        ephemeral_parent_event = rule_aux_event;
+    else
+        ephemeral_parent_event = rule_parent_event;
+
+    if (ephemeral_parent_event != NULL) {
+        target_exports.parent_event_label = wolfsentry_event_get_label(ephemeral_parent_event);
         target_exports.parent_event_label_len = WOLFSENTRY_LENGTH_NULL_TERMINATED;
     } else {
         target_exports.parent_event_label = NULL;
         target_exports.parent_event_label_len = 0;
     }
+
+    if ((ephemeral_parent_event != NULL) && (ephemeral_parent_event->config != NULL))
+        ephemeral_config = ephemeral_parent_event->config;
+    else
+        ephemeral_config = &wolfsentry->config;
+
+    /* an ephemeral route with no purge time escapes both the idle purge and
+     * max_purgeable_routes, letting a remote peer grow the table without bound.
+     * skip the insert but return OK so the rest of the match chain still runs.
+     */
+    if (ephemeral_config->config.route_idle_time_for_purge <= 0)
+        WOLFSENTRY_RETURN_OK;
 
     target_exports.private_data = NULL;
     target_exports.private_data_size = 0;

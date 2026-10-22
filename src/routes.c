@@ -3462,10 +3462,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_increment_derogatory_count(
         WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(route->meta.derogatory_count, (unsigned)count_to_add, new_derogatory_count);
         if (new_derogatory_count == 0)
             WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
-    } else {
-        WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(route->meta.derogatory_count, (unsigned)(-count_to_add), new_derogatory_count);
+    } else if (count_to_add < 0) {
+        /* negate in the unsigned domain so INT_MIN does not overflow. */
+        WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(route->meta.derogatory_count, 0U - (unsigned)count_to_add, new_derogatory_count);
         if (new_derogatory_count == MAX_UINT_OF(route->meta.derogatory_count))
             WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    } else {
+        new_derogatory_count = WOLFSENTRY_ATOMIC_LOAD(route->meta.derogatory_count);
     }
 
     if (new_derogatory_count_ptr)
@@ -3488,10 +3491,13 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_increment_commendable_count
         WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY(route->meta.commendable_count, (unsigned)count_to_add, new_commendable_count);
         if (new_commendable_count == 0)
             WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
-    } else {
-        WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(route->meta.commendable_count, (unsigned)(-count_to_add), new_commendable_count);
+    } else if (count_to_add < 0) {
+        /* negate in the unsigned domain so INT_MIN does not overflow. */
+        WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(route->meta.commendable_count, 0U - (unsigned)count_to_add, new_commendable_count);
         if (new_commendable_count == MAX_UINT_OF(route->meta.commendable_count))
             WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+    } else {
+        new_commendable_count = WOLFSENTRY_ATOMIC_LOAD(route->meta.commendable_count);
     }
 
     if (new_commendable_count_ptr)

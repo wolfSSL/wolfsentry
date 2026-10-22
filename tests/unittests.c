@@ -3831,11 +3831,13 @@ static wolfsentry_errcode_t test_regression_copy_metadata_purge_list(void) {
 static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_route_table *table;
+    struct wolfsentry_route *route;
     wolfsentry_action_res_t action_results;
-    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_route_flags_t inexact_matches, route_flags;
     wolfsentry_ent_id_t id;
     char default_event_label[WOLFSENTRY_MAX_LABEL_BYTES + 1];
     int default_event_label_len;
+    int new_count;
     struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
@@ -3918,6 +3920,34 @@ static wolfsentry_errcode_t test_regression_route_api_invariants(void) {
             WOLFSENTRY_CONTEXT_ARGS_OUT, table, default_event_label, &default_event_label_len));
     WOLFSENTRY_EXIT_ON_FALSE(default_event_label_len == (int)strlen("default_evt"));
     WOLFSENTRY_EXIT_ON_FALSE(strcmp(default_event_label, "default_evt") == 0);
+
+    /* incrementing a derogatory count by zero is a no-op that must succeed even
+     * when the count is saturated, not be mistaken for an averted overflow. */
+    WOLFSENTRY_CLEAR_ALL_BITS(route_flags);
+    WOLFSENTRY_SET_BITS(route_flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS
+                                   | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN
+                                   | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_LOCAL_INTERFACE_WILDCARD
+                                   | WOLFSENTRY_ROUTE_FLAG_REMOTE_INTERFACE_WILDCARD);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa, &local.sa, route_flags,
+            NULL /* event_label */, 0 /* event_label_len */,
+            &id, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, id, (struct wolfsentry_table_ent_header **)&route));
+    new_count = -1;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_increment_derogatory_count(WOLFSENTRY_CONTEXT_ARGS_OUT, route, 65535, &new_count));
+    WOLFSENTRY_EXIT_ON_FALSE(new_count == 65535);
+    new_count = -1;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_increment_derogatory_count(WOLFSENTRY_CONTEXT_ARGS_OUT, route, 0, &new_count));
+    WOLFSENTRY_EXIT_ON_FALSE(new_count == 65535);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));

@@ -3148,6 +3148,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_wit
 WOLFSENTRY_LOCAL_VOID wolfsentry_route_purge_list_insert(struct wolfsentry_route_table *route_table, struct wolfsentry_route *route_to_insert) {
     struct wolfsentry_list_ent_header *point_ent;
 
+    /* deletion leaves an entry's own links stale, and a head insert keeps prev */
+    route_to_insert->purge_links.prev = NULL;
+    route_to_insert->purge_links.next = NULL;
     for (wolfsentry_list_ent_get_first(&route_table->purge_list, &point_ent); point_ent; point_ent = point_ent->next) {
         const struct wolfsentry_route *point_route = WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(point_ent);
         if (point_route->meta.purge_after < route_to_insert->meta.purge_after)

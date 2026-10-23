@@ -4394,6 +4394,55 @@ static wolfsentry_errcode_t test_regression_connection_count_zero_limit(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_regression_purge_list_reinsert(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *table;
+    struct wolfsentry_route_metadata_exports meta;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t ids[3], matched_id;
+    static const char * const addrs[3] = { "\x0A\x08\x0A\x01", "\x0A\x08\x0A\x02", "\x0A\x08\x0A\x03" };
+    int i;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &table));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_table_max_purgeable_idle_time_set(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, table, (wolfsentry_time_t)1 << 30));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* three expired routes, each protected by a live connection */
+    for (i = 0; i < 3; ++i) {
+        WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, addrs[i], 32, NULL, WOLFSENTRY_ROUTE_FLAG_NONE, &ids[i]));
+        WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, addrs[i], WOLFSENTRY_ACTION_RES_CONNECT, &matched_id, &action_results));
+        WOLFSENTRY_EXIT_ON_FAILURE(regression_set_purge_time(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[i], (wolfsentry_time_t)(10 * (i + 1))));
+    }
+    /* moving the stalest entry to the head must not leave a stale back link,
+     * so a scan that visits every protected entry still terminates. */
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_set_purge_time(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[0], 40));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ALREADY, wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL));
+    for (i = 0; i < 3; ++i)
+        WOLFSENTRY_EXIT_ON_FAILURE(regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[i], &meta));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t test_regression_prefix_specificity(void) {
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
@@ -4441,6 +4490,7 @@ static int test_dynamic_rules_regressions(void) {
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_route_timing(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_connection_limits(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_connection_count_zero_limit(), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_purge_list_reinsert(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_prefix_specificity(), OK));
     WOLFSENTRY_RETURN_OK;
 }

@@ -1387,6 +1387,384 @@ TEST_SKIP(test_rw_locks)
 
 #endif /* WOLFSENTRY_THREADSAFE */
 
+#if defined(WOLFSENTRY_THREADSAFE)
+
+static int test_rw_locks_auto_downgrade(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_rwlock *lock;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_TEST_HPI,
+                                                  thread,
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_alloc(wolfsentry_get_hpi(wolfsentry), thread, &lock, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* promote through a redeemed reservation, which records the promotion depth. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(LOCK_OK_AND_GOT_RESV, wolfsentry_lock_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(HAVE_MUTEX, wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* unwinding to the promotion depth with AUTO_DOWNGRADE must leave a shared lock. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(HAVE_READ_LOCK, wolfsentry_lock_have_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(LACKING_MUTEX, wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FALSE(thread->shared_count == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(thread->mutex_and_reservation_count == 0);
+    WOLFSENTRY_EXIT_ON_FALSE(thread->tracked_shared_lock == lock);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_destroy(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* same again, but downgrade with a new reservation and redeem it. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_init(wolfsentry_get_hpi(wolfsentry), thread, lock, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(LOCK_OK_AND_GOT_RESV, wolfsentry_lock_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(LOCK_OK_AND_GOT_RESV, wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE | WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(HAVE_READ_LOCK, wolfsentry_lock_have_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_have_shared2mutex_reservation(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(HAVE_MUTEX, wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* unwinding past the promotion depth without AUTO_DOWNGRADE stays exclusive. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(LOCK_OK_AND_GOT_RESV, wolfsentry_lock_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_GET_RESERVATION_TOO));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared2mutex_redeem(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(HAVE_MUTEX, wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(&lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry, thread));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static void *wr_timeout_routine(struct rwlock_args *args) {
+    WOLFSENTRY_THREAD_HEADER(WOLFSENTRY_THREAD_FLAG_NONE);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_GET_ERROR);
+    INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(TIMED_OUT, wolfsentry_lock_mutex_timed(args->lock, thread, args->max_wait, WOLFSENTRY_LOCK_FLAG_NONE));
+    INCREMENT_PHASE(args);
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    return 0;
+}
+
+static int test_rw_locks_reader_wakeup(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_rwlock *lock;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+    volatile int measured_sequence[8], measured_sequence_i = 0;
+    pthread_t reader_thread, writer_thread;
+    struct rwlock_args reader_args, writer_args;
+    int reader_phase;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    (void)alarm(2);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_TEST_HPI,
+                                                  thread,
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_alloc(wolfsentry_get_hpi(wolfsentry), thread, &lock, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    memset(&reader_args, 0, sizeof reader_args);
+    reader_args.wolfsentry = wolfsentry;
+    reader_args.measured_sequence = measured_sequence;
+    reader_args.measured_sequence_i = &measured_sequence_i;
+    reader_args.lock = lock;
+    writer_args = reader_args;
+    reader_args.thread_id = 1;
+    reader_args.max_wait = -1;
+    writer_args.thread_id = 2;
+    writer_args.max_wait = MAX_WAIT;
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&reader_args.thread_phase_lock, NULL));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_init(&writer_args.thread_phase_lock, NULL));
+
+    /* hold the lock shared twice, so the first unlock leaves a shared holder in place. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_shared(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* a timed writer queues, which forces the subsequent reader to queue behind it. */
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&writer_thread, 0 /* attr */, (void *(*)(void *))wr_timeout_routine, (void *)&writer_args));
+    WAIT_FOR_PHASE(writer_args, 1);
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_kill(writer_thread, 0));
+    usleep(10000);
+
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_create(&reader_thread, 0 /* attr */, (void *(*)(void *))rd_routine, (void *)&reader_args));
+    WAIT_FOR_PHASE(reader_args, 1);
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_kill(reader_thread, 0));
+    usleep(10000);
+
+    /* the writer times out and dequeues itself, leaving the reader queued. */
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(writer_thread, 0 /* retval */));
+
+    /* the reader must still be parked, not already holding the lock, else the scenario was not reached. */
+    usleep(10000);
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_lock(&reader_args.thread_phase_lock));
+    reader_phase = reader_args.thread_phase;
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_unlock(&reader_args.thread_phase_lock));
+    WOLFSENTRY_EXIT_ON_FALSE(reader_phase == 1);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ATOMIC_LOAD(measured_sequence_i) == 0);
+
+    /* this unlock releases the queued reader, and must post exactly one wakeup. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_join(reader_thread, 0 /* retval */));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ATOMIC_LOAD(measured_sequence_i) == 2);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* a surplus wakeup token is detected as an inconsistency at destroy time. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(&lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_destroy(&reader_args.thread_phase_lock));
+    WOLFSENTRY_EXIT_ON_FAILURE_PTHREAD(pthread_mutex_destroy(&writer_args.thread_phase_lock));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry, thread));
+
+    (void)alarm(0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#else
+
+TEST_SKIP(test_rw_locks_auto_downgrade)
+TEST_SKIP(test_rw_locks_reader_wakeup)
+
+#endif /* WOLFSENTRY_THREADSAFE */
+
+static int test_object_release_tableless(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_table *main_routes;
+    const struct wolfsentry_route *fallthrough_route;
+    struct wolfsentry_route *route_ref;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* the fallthrough route is never linked into a table, but is documented as releasable. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_fallthrough_route_get(WOLFSENTRY_CONTEXT_ARGS_OUT, main_routes, &fallthrough_route));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry_get_object_type(fallthrough_route) == WOLFSENTRY_OBJECT_TYPE_UNINITED);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT, (void *)fallthrough_route, NULL /* action_results */));
+
+    /* a checked-out route that has since been deleted is table-less too, and must be rejected, not dereferenced. */
+    memset(&remote, 0, sizeof remote);
+    memset(&local, 0, sizeof local);
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 12345;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memcpy(remote.sa.addr,"\0\1\2\3",sizeof remote.addr_buf);
+    memcpy(local.sa.addr,"\377\376\375\374",sizeof local.addr_buf);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_insert_and_check_out(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, &remote.sa, &local.sa, flags, 0 /* event_label */, 0 /* event_label_len */, &route_ref, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry_get_object_type(route_ref) == WOLFSENTRY_OBJECT_TYPE_ROUTE);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_delete_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, wolfsentry_get_object_id(route_ref), 0 /* trigger_label */, 0 /* trigger_label_len */, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry_get_object_type(route_ref) == WOLFSENTRY_OBJECT_TYPE_UNINITED);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, route_ref, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_DEALLOCATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#if defined(WOLFSENTRY_THREADSAFE)
+
+static int test_context_clone_readonly_thread(void) {
+    struct wolfsentry_context *wolfsentry, *clone = NULL;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_TEST_HPI,
+                                                  thread,
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* a read-only thread can clone, but cannot take the clone's mutex, so the clone must be torn down. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_thread_readonly(thread));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NOT_PERMITTED, wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &clone, WOLFSENTRY_CLONE_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FALSE(clone == NULL);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_set_thread_readwrite(thread));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(&wolfsentry, thread));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#else
+
+TEST_SKIP(test_context_clone_readonly_thread)
+
+#endif /* WOLFSENTRY_THREADSAFE */
+
+static int test_context_clone_fallthrough(void) {
+    struct wolfsentry_context *wolfsentry, *clone = NULL;
+    struct wolfsentry_route_table *clone_routes;
+    const struct wolfsentry_route *fallthrough_route;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* a full-flush clone starts with an empty route table, which must still carry a fallthrough route. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &clone, WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone), &clone_routes));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_table_fallthrough_route_get(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone), clone_routes, &fallthrough_route));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_object_release(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone), (void *)fallthrough_route, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&clone)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t failing_interval_from_seconds(time_t howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
+    (void)howlong_secs;
+    (void)howlong_nsecs;
+    (void)howlong;
+    WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+}
+
+static int test_init_interval_conversion_failure(void) {
+    struct wolfsentry_context *wolfsentry, *wolfsentry2 = NULL;
+    struct wolfsentry_host_platform_interface hpi;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10, .penaltybox_duration = 1 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* borrow the working platform interface, then make the seconds conversion fail. */
+    hpi = *wolfsentry_get_hpi(wolfsentry);
+    hpi.timecbs.interval_from_seconds = failing_interval_from_seconds;
+
+    /* a rejected duration must fail initialization and leave no context behind. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NUMERIC_ARG_TOO_BIG, wolfsentry_init_ex(wolfsentry_build_settings,
+                                                                                   WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&hpi),
+                                                                                   &config,
+                                                                                   &wolfsentry2,
+                                                                                   WOLFSENTRY_INIT_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry2 == NULL);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_context_exchange_default_policy(void) {
+    struct wolfsentry_context *wolfsentry, *clone = NULL;
+    wolfsentry_action_res_t policy;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+#else
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_init_ex(wolfsentry_build_settings,
+                                                  WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+                                                  &config,
+                                                  &wolfsentry,
+                                                  WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_REJECT));
+
+    /* stage a new policy in a clone, then swap it in, as a config reload does. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_clone(WOLFSENTRY_CONTEXT_ARGS_OUT, &clone, WOLFSENTRY_CLONE_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(clone), WOLFSENTRY_ACTION_RES_ACCEPT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_exchange(WOLFSENTRY_CONTEXT_ARGS_OUT, clone));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &policy));
+    WOLFSENTRY_EXIT_ON_FALSE(policy == WOLFSENTRY_ACTION_RES_ACCEPT);
+    /* the lock-free dispatch fallback reads the context-level copy, which must follow the swap. */
+    WOLFSENTRY_EXIT_ON_FALSE(wolfsentry->default_policy == WOLFSENTRY_ACTION_RES_ACCEPT);
+    WOLFSENTRY_EXIT_ON_FALSE(clone->default_policy == WOLFSENTRY_ACTION_RES_REJECT);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_free(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&clone)));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_RWLOCKS */
 
 #ifdef TEST_STATIC_ROUTES
@@ -5731,6 +6109,41 @@ int main(int argc, char* argv[]) {
     ret = test_rw_locks();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_rw_locks failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_rw_locks_auto_downgrade();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_rw_locks_auto_downgrade failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_rw_locks_reader_wakeup();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_rw_locks_reader_wakeup failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_object_release_tableless();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_object_release_tableless failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_context_clone_readonly_thread();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_context_clone_readonly_thread failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_context_clone_fallthrough();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_context_clone_fallthrough failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_init_interval_conversion_failure();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_init_interval_conversion_failure failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_context_exchange_default_policy();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_context_exchange_default_policy failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

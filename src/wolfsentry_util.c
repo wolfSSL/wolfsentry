@@ -3605,6 +3605,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (config->derogatory_threshold_for_penaltybox > MAX_UINT_OF(instance_of_field(struct wolfsentry_route, meta.derogatory_count)))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+    if (config->max_connection_count > MAX_UINT_OF(instance_of_field(struct wolfsentry_route, meta.connection_count)))
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     ret = wolfsentry_route_check_flags_sensical(config->route_flags_to_add_on_insert);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 

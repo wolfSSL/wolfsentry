@@ -3236,6 +3236,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
         struct wolfsentry_route *route = NULL;
         int found = 0;
         int requeue = 0;
+        wolfsentry_time_t idle = 0;
         /* re-scan from the most stale entry each pass, because a delete runs
          * application callbacks that can mutate the purge list; skip routes
          * that still have a live connection within the idle limit so one
@@ -3248,9 +3249,11 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
             if (mode != 3) {
                 if (route->meta.purge_after > now)
                     break;
+                /* a route never hit since insertion has been idle since its insertion */
+                idle = WOLFSENTRY_DIFF_TIME(now, (route->meta.last_hit_time > route->meta.insert_time) ? route->meta.last_hit_time : route->meta.insert_time);
                 if ((route->meta.connection_count > 0) &&
                     (! (route->flags & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
-                    ((table->max_purgeable_idle_time == 0) || (WOLFSENTRY_DIFF_TIME(now, route->meta.last_hit_time) <= table->max_purgeable_idle_time)))
+                    ((table->max_purgeable_idle_time <= 0) || (idle <= table->max_purgeable_idle_time)))
                 {
                     if (mode != 2)
                         continue;
@@ -3278,7 +3281,6 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
         }
 #endif
         if (requeue) {
-            wolfsentry_time_t idle = WOLFSENTRY_DIFF_TIME(now, route->meta.last_hit_time);
             wolfsentry_time_t delay = requeue_delay;
             /* not before the margin, unless the idle limit expires sooner */
             if ((table->max_purgeable_idle_time > 0) && (idle >= 0) &&

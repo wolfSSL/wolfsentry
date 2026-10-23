@@ -3565,6 +3565,40 @@ static wolfsentry_errcode_t test_regression_bitmask_match_specificity(void) {
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
     WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
 
+    /* non-nested masks: 192.0.0.1 inexactly matches a two-bit mask whose
+     * address is closer to it and a three-bit mask whose address is not; the
+     * three-bit mask constrains more bits, so it must win.
+     */
+    memcpy(broad_addr, "\xC0\x00\x00\x00\xC0\x00\x00\x00", 8); /* NOLINT(bugprone-not-null-terminated-result) */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &broad_route,
+            &broad_id, &action_results));
+    memcpy(narrow_addr, "\x00\x00\x00\x00\x38\x00\x00\x00", 8); /* NOLINT(bugprone-not-null-terminated-result) */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert_by_exports(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &narrow_route,
+            &narrow_id, &action_results));
+
+    memcpy(remote.sa.addr, "\xC0\x00\x00\x01", 4); /* NOLINT(bugprone-not-null-terminated-result) */
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa, &local.sa,
+            WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN,
+            NULL /* event_label */, 0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &route_id, &inexact_matches, &action_results));
+
+    WOLFSENTRY_EXIT_ON_FALSE(route_id == narrow_id);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ACCEPT));
+
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
     WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
     WOLFSENTRY_RETURN_OK;

@@ -275,6 +275,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_coupled_table_clone(
             goto out;
         new1->parent_table = dest_table1;
         new2->parent_table = dest_table2;
+        new1->prev = prev;
         if (prev)
             prev->next = new1;
         else
@@ -317,6 +318,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(
     )
 {
     wolfsentry_errcode_t ret;
+    wolfsentry_ent_id_t first_candidate = WOLFSENTRY_ENT_ID_NONE;
 
     WOLFSENTRY_HAVE_MUTEX_OR_RETURN();
 
@@ -326,7 +328,20 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_id_allocate(
             if (ret < 0)
                 break;
         } else {
-            ent->id = ++wolfsentry->mk_id_cb_state.id_counter;
+            ++wolfsentry->mk_id_cb_state.id_counter;
+            /* the counter wraps past the reserved null ID; collisions with
+             * live IDs are handled by the ITEM_ALREADY_PRESENT retry.
+             */
+            if (wolfsentry->mk_id_cb_state.id_counter == WOLFSENTRY_ENT_ID_NONE)
+                ++wolfsentry->mk_id_cb_state.id_counter;
+            if (first_candidate == WOLFSENTRY_ENT_ID_NONE)
+                first_candidate = wolfsentry->mk_id_cb_state.id_counter;
+            else if (wolfsentry->mk_id_cb_state.id_counter == first_candidate) {
+                ent->id = WOLFSENTRY_ENT_ID_NONE;
+                ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
+                break;
+            }
+            ent->id = wolfsentry->mk_id_cb_state.id_counter;
         }
 
         ret = wolfsentry_table_ent_insert_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, ent);
@@ -429,8 +444,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSE
     --wolfsentry->ents_by_id.n_ents;
     ++wolfsentry->ents_by_id.n_deletes;
 
-    /* if possible, reclaim the ID */
-    if ((! wolfsentry->mk_id_cb) && (ent->id == (wolfsentry->mk_id_cb_state.id_counter - 1)))
+    /* if possible, reclaim the ID (the counter equals the newest issued ID). */
+    if ((! wolfsentry->mk_id_cb) && (ent->id == wolfsentry->mk_id_cb_state.id_counter))
         --wolfsentry->mk_id_cb_state.id_counter;
 
     ent->id = WOLFSENTRY_ENT_ID_NONE;
@@ -555,7 +570,10 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_free_ents(WOLFSENTRY_CONT
          * e.g., a coupled wolfsentry_addr_family_byname is freed when the
          * corresponding wolfsentry_addr_family_bynumber is freed.
          */
-        table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, NULL /* action_results */);
+        ret = table->free_fn(WOLFSENTRY_CONTEXT_ARGS_OUT, i, NULL /* action_results */);
+        /* teardown must run to completion and release its lock, so report a
+         * failed destructor and keep freeing instead of abandoning the table. */
+        WOLFSENTRY_WARN_ON_FAILURE(ret);
         i = next;
     }
     WOLFSENTRY_RETURN_OK;

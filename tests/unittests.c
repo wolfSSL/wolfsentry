@@ -33,6 +33,11 @@
 #define PRIVATE_DATA_ALIGNMENT 16
 #endif
 
+#ifdef __GNUC__
+/* the list tests call the inline list primitives directly from run-once code */
+#pragma GCC diagnostic ignored "-Winline"
+#endif
+
 #include "src/wolfsentry_internal.h"
 
 #if (defined(_POSIX_C_SOURCE) || defined(__MACH__)) && !defined(FREERTOS)

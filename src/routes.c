@@ -295,28 +295,21 @@ static inline int addr_bitmask_match_size(
     const byte *b,
     unsigned int b_len)
 {
-    const byte *longer_addr, *shorter_addr;
-    unsigned int mask_len, i, padding_offset;
+    const byte *mask;
+    unsigned int mask_len, i;
     int ret = 0;
 
+    /* specificity is the number of bits the longer, maskful address's mask constrains */
     if (a_len < b_len) {
-        longer_addr = b;
         mask_len = WOLFSENTRY_BITS_TO_BYTES(b_len >> 1);
-        shorter_addr = a;
-        padding_offset = mask_len - WOLFSENTRY_BITS_TO_BYTES(a_len);
+        mask = b + mask_len;
     } else {
-        longer_addr = a;
         mask_len = WOLFSENTRY_BITS_TO_BYTES(a_len >> 1);
-        shorter_addr = b;
-        padding_offset = mask_len - WOLFSENTRY_BITS_TO_BYTES(b_len);
+        mask = a + mask_len;
     }
 
-    for (ret = 0, i = 0; i < mask_len; ++i) {
-        if (i < padding_offset)
-            ret += popcount32(~(uint32_t)(longer_addr[i])) - 24;
-        else
-            ret += popcount32(~(uint32_t)(longer_addr[i] ^ shorter_addr[i - padding_offset])) - 24;
-    }
+    for (i = 0; i < mask_len; ++i)
+        ret += popcount32((uint32_t)mask[i]);
 
     return ret;
 }

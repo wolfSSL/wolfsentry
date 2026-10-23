@@ -3605,6 +3605,11 @@ static wolfsentry_errcode_t test_regression_bitmask_match_specificity(void) {
 }
 #endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */
 
+/* a stale purge either purged something or had nothing due */
+static int regression_purge_ok(wolfsentry_errcode_t ret) {
+    return WOLFSENTRY_IS_SUCCESS(ret) || WOLFSENTRY_ERROR_CODE_IS(ret, ALREADY);
+}
+
 static wolfsentry_errcode_t test_regression_stale_purge_connected_idle(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_route_table *table;
@@ -3701,7 +3706,7 @@ static wolfsentry_errcode_t test_regression_stale_purge_connected_idle(void) {
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_purge_time_set(WOLFSENTRY_CONTEXT_ARGS_OUT, route, 2));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
 
-    (void)wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(regression_purge_ok(wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL)));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
     /* the route's live connection is within the idle limit, so it must survive. */
@@ -3849,7 +3854,7 @@ static wolfsentry_errcode_t test_regression_copy_metadata_purge_list(void) {
 
     /* the swapped-in route now has a stale purge_after, so it must be reachable
      * from the purge list and get purged. */
-    (void)wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(regression_purge_ok(wolfsentry_route_stale_purge(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL)));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
@@ -4547,7 +4552,7 @@ static wolfsentry_errcode_t test_regression_bounded_purge_progress(void) {
         WOLFSENTRY_EXIT_ON_FAILURE(regression_set_purge_time(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[i], (wolfsentry_time_t)(10 * (i + 1))));
 
     for (i = 0; i < 3; ++i)
-        (void)wolfsentry_route_stale_purge_one_opportunistically(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(regression_purge_ok(wolfsentry_route_stale_purge_one_opportunistically(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL)));
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_NOT_FOUND, regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[8], &meta));
     /* the connected routes are requeued one purge margin out, as an interval */
     for (i = 0; i < 8; ++i) {

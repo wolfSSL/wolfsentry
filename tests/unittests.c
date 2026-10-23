@@ -5888,13 +5888,14 @@ static int test_json_af_local_registered_handler(void) {
     WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
 
     af_local_custom_parser_calls = 0;
-    (void)wolfsentry_config_json_oneshot(
-        WOLFSENTRY_CONTEXT_ARGS_OUT,
-        (const unsigned char *)json,
-        (size_t)json_len,
-        WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
-        NULL,
-        0);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            (const unsigned char *)json,
+            (size_t)json_len,
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+            NULL,
+            0));
     WOLFSENTRY_EXIT_ON_FALSE(af_local_custom_parser_calls == 1);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

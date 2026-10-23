@@ -169,8 +169,8 @@ typedef struct JSON_CALLBACKS {
      * corresponding values in the alternating fashion (i.e. in the order
      * as they are in the JSON input.).
      *
-     * Application can abort the parsing operation by returning a non-zero.
-     * Note the non-zero return value of the callback is propagated to
+     * Application can abort the parsing operation by returning a negative
+     * value. Note the negative return value of the callback is propagated to
      * json_feed() and json_fini().
      */
     int (*process)(JSON_TYPE /*type*/, const unsigned char* /*data*/,
@@ -337,7 +337,7 @@ typedef int (*JSON_DUMP_CALLBACK)(const unsigned char* /*str*/, size_t /*size*/,
  * handles proper escaping of control characters.
  *
  * The provided writer callback must write all the data provided to it and
- * return zero to indicate success, or non-zero to indicate an error and abort
+ * return zero to indicate success, or a negative value to indicate an error and abort
  * the operation.
  *
  * All these return zero on success, JSON_ERR_OUTOFMEMORY, or an error code

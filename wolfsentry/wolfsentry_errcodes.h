@@ -260,7 +260,7 @@ static inline int WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(wolfsentry_errcode_t x) {
     /*!< \brief Get a shared lock on the current context, and on failure, return the `wolfsentry_errcode_t`. @hideinitializer */
 
     #define WOLFSENTRY_PROMOTABLE_EX(ctx) wolfsentry_context_lock_shared_with_reservation_abstimed(ctx, thread, NULL)
-    /*!< \brief Get a mutex on a `wolfsentry_context`, evaluating to the resulting `wolfsentry_errcode_t`. @hideinitializer */
+    /*!< \brief Get a shared lock with mutex promotion reservation on a `wolfsentry_context`, evaluating to the resulting `wolfsentry_errcode_t`. @hideinitializer */
 
     #define WOLFSENTRY_PROMOTABLE_OR_RETURN() do {              \
         wolfsentry_errcode_t _lock_ret;                         \
@@ -304,7 +304,7 @@ static inline int WOLFSENTRY_ERROR_DECODE_LINE_NUMBER(wolfsentry_errcode_t x) {
     /*!< \brief Calculate the `wolfsentry_errcode_t` return value for an expression `y`, then unlock the current context, and finally, return the encoded `wolfsentry_errcode_t`. @hideinitializer */
 
 #define WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN(name) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_SUCCESS_RETURN(name); } while (0)
-    /*!< \brief Unlock the current context, and return a `wolfsentry_errcode_t` encoding the current source ID and line number, and the designated short-form success `name` (e.g. `INVALID_ARG`). @hideinitializer */
+    /*!< \brief Unlock the current context, and return a `wolfsentry_errcode_t` encoding the current source ID and line number, and the designated short-form success `name` (e.g. `OK`). @hideinitializer */
 #define WOLFSENTRY_SUCCESS_UNLOCK_AND_RETURN_RECODED(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_SUCCESS_RETURN_RECODED(x); } while (0)
     /*!< \brief Unlock the current context, then take an encoded `wolfsentry_errcode_t` `x`, recode it with the current source ID and line number, and return it. @hideinitializer */
 #define WOLFSENTRY_SUCCESS_UNLOCK_AND_RERETURN(x) do { WOLFSENTRY_UNLOCK_FOR_RETURN(); WOLFSENTRY_SUCCESS_RERETURN(x); } while (0)

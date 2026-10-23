@@ -61,15 +61,15 @@
 #define WOLFSENTRY_VERSION WOLFSENTRY_VERSION_ENCODE(WOLFSENTRY_VERSION_MAJOR, WOLFSENTRY_VERSION_MINOR, WOLFSENTRY_VERSION_TINY)
     /*!< \brief The version recorded in wolfsentry.h, encoded as an integer @hideinitializer */
 #define WOLFSENTRY_VERSION_GT(major, minor, tiny) (WOLFSENTRY_VERSION > WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is greater than that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is greater than the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_GE(major, minor, tiny) (WOLFSENTRY_VERSION >= WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is greater than or equal to that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is greater than or equal to the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_EQ(major, minor, tiny) (WOLFSENTRY_VERSION == WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version equals that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h equals the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_LT(major, minor, tiny) (WOLFSENTRY_VERSION < WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is less than that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is less than the given version. @hideinitializer */
 #define WOLFSENTRY_VERSION_LE(major, minor, tiny) (WOLFSENTRY_VERSION <= WOLFSENTRY_VERSION_ENCODE(major, minor, tiny))
-    /*!< \brief Helper macro that is true if the given version is less than or equal to that in wolfsentry.h. @hideinitializer */
+    /*!< \brief Helper macro that is true if the version in wolfsentry.h is less than or equal to the given version. @hideinitializer */
 
 /*! \brief flags to pass to wolfsentry_init_ex(), to be `OR`d together. */
 typedef enum {
@@ -198,7 +198,7 @@ struct wolfsentry_timecbs {
  */
 
 typedef int (*sem_init_cb_t)(sem_t *sem, int pshared, unsigned int value);
-   /*!< Pointer to function with arguments and semantics of POSIX `sem_init()`.  Currently, `pshared` and `value` are always zero as called by wolfSentry, so implementations can ignore them. */
+   /*!< Pointer to function with arguments and semantics of POSIX `sem_init()`.  Currently, `value` is always zero as called by wolfSentry. `pshared` is zero unless the lock is initialized with `WOLFSENTRY_LOCK_FLAG_PSHARED`, in which case it is nonzero. */
 typedef int (*sem_post_cb_t)(sem_t *sem);
    /*!< Pointer to function with arguments and semantics of POSIX `sem_post()` */
 typedef int (*sem_wait_cb_t)(sem_t *sem);
@@ -709,7 +709,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_shared2mutex_is_reserved(str
 
    \param lock a pointer to the lock
    \param thread pointer to the `wolfsentry_thread_context`
-   \param flags optional `wolfsentry_lock_flags_t`
+   \param flags non-NULL pointer to a `wolfsentry_lock_flags_t` that receives the current flags
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 
@@ -1578,7 +1578,7 @@ typedef enum {
    \brief Clones a wolfsentry context
 
    \param clone the destination wolfsentry context, should be a pointer to a NULL pointer as this function will malloc
-   \param flags set to WOLFSENTRY_CLONE_FLAG_AT_CREATION to use the config at the creation of the original wolfsentry context instead of the current configuration
+   \param flags set to WOLFSENTRY_CLONE_FLAG_AS_AT_CREATION to use the config at the creation of the original wolfsentry context instead of the current configuration
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 
@@ -1852,7 +1852,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete_from_table(
    \param flags flags for the route
    \param trigger_label a label for the trigger event (or null)
    \param trigger_label_len the length of the trigger_label parameter
-   \param action_results a pointer to results of the insert action -- all bits are cleared on entry.
+   \param action_results a pointer to results of the delete action -- all bits are cleared on entry.
    \param n_deleted a counter for the number of entries deleted
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
@@ -1877,7 +1877,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_delete(
    \param id the object ID, as returned by wolfsentry_route_insert() or wolfsentry_get_object_id()
    \param trigger_label a label for a trigger event (or null)
    \param trigger_label_len the length of the trigger_label parameter
-   \param action_results a pointer to results of the insert action -- all bits are cleared on entry.
+   \param action_results a pointer to results of the delete action -- all bits are cleared on entry.
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 
@@ -2192,7 +2192,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_with_table(
     /*!< \brief Variant of wolfsentry_route_event_dispatch() that accepts an explicit \p route_table. */
 
 /*!
-   \brief Submit an event into wolfsentry and pass it through the filters. The action_results are cleared on entry, and can be checked to see what actions wolfsentry took, and what actions the caller should take (most saliently, #WOLFSENTRY_ACTION_RES_ACCEPT or #WOLFSENTRY_ACTION_RES_REJECT).  \p action_results can be filtered with constructs like `WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT)`
+   \brief Submit an event into wolfsentry and pass it through the filters. The action_results are cleared on entry, and can be checked to see what actions wolfsentry took, and what actions the caller should take (most saliently, #WOLFSENTRY_ACTION_RES_ACCEPT or #WOLFSENTRY_ACTION_RES_REJECT).  \p action_results can be filtered with constructs like `WOLFSENTRY_MASKIN_BITS(*action_results, WOLFSENTRY_ACTION_RES_REJECT)`
 
    \param remote the remote sockaddr details
    \param local the local sockaddr details
@@ -2275,7 +2275,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route(
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     wolfsentry_action_res_t *action_results
     );
-    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route by ID, mainly for use by application code that tracks route/session relationships. */
+    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route with the supplied route pointer, mainly for use by application code that tracks route/session relationships. */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_with_inited_result(
     WOLFSENTRY_CONTEXT_ARGS_IN,
@@ -2285,7 +2285,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_event_dispatch_by_route_wit
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     wolfsentry_action_res_t *action_results
     );
-    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route by ID, and doesn't clear \p action_results on entry, mainly for use by application code that tracks route/session relationships. */
+    /*!< \brief Variant of wolfsentry_route_event_dispatch() that preselects the matched route with the supplied route pointer, and doesn't clear \p action_results on entry, mainly for use by application code that tracks route/session relationships. */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_max_purgeable_routes_get(
     WOLFSENTRY_CONTEXT_ARGS_IN,
@@ -2416,7 +2416,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_flags(
    \brief Gets the metadata for a route
 
    \param route the route to get the metadata for
-   \param metadata a pointer to a pointer to receive the metadata
+   \param metadata a pointer to a caller-provided `struct wolfsentry_route_metadata_exports` to populate
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 */
@@ -3075,7 +3075,7 @@ struct wolfsentry_kv_pair {
 #define WOLFSENTRY_KV_V_UINT(kv) ((kv)->a.v_uint)
     /*!< \brief Evaluates to the `uint64_t` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_UINT`. @hideinitializer */
 #define WOLFSENTRY_KV_V_SINT(kv) ((kv)->a.v_sint)
-    /*!< \brief Evaluates to the `int64_t` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_INT`. @hideinitializer */
+    /*!< \brief Evaluates to the `int64_t` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_SINT`. @hideinitializer */
 #define WOLFSENTRY_KV_V_FLOAT(kv) ((kv)->a.v_float)
     /*!< \brief Evaluates to the `double` value of a `wolfsentry_kv_pair` of type `WOLFSENTRY_KV_FLOAT`. @hideinitializer */
 #define WOLFSENTRY_KV_V_STRING_LEN(kv) ((kv)->a.string_len)
@@ -3179,7 +3179,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_sint(
     const char *key,
     int key_len,
     int64_t *value);
-    /*!< \brief Gets a `WOLFSENTRY_KV_UINT` value with the designated `key`. */
+    /*!< \brief Gets a `WOLFSENTRY_KV_SINT` value with the designated `key`. */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_double(
     WOLFSENTRY_CONTEXT_ARGS_IN,
@@ -3194,7 +3194,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_float(
     const char *key,
     int key_len,
     double *value);
-    /*!< \brief Gets a `WOLFSENTRY_KV_UINT` value with the designated `key`. */
+    /*!< \brief Gets a `WOLFSENTRY_KV_FLOAT` value with the designated `key`. */
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_string(
     WOLFSENTRY_CONTEXT_ARGS_IN,

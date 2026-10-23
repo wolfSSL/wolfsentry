@@ -85,7 +85,7 @@ WOLFSENTRY_API const char *wolfsentry_errcode_source_string(wolfsentry_errcode_t
 }
 
 static const char *user_defined_errors[WOLFSENTRY_ERROR_ID_MAX - WOLFSENTRY_ERROR_ID_USER_BASE + 1] = {0};
-static const char *user_defined_successes[WOLFSENTRY_ERROR_ID_MAX + WOLFSENTRY_SUCCESS_ID_USER_BASE + 1] = {0};
+static const char *user_defined_successes[WOLFSENTRY_ERROR_ID_MAX - WOLFSENTRY_SUCCESS_ID_USER_BASE + 1] = {0};
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_error_string_set(enum wolfsentry_error_id wolfsentry_error_id, const char *message_string) {
     if (wolfsentry_error_id < 0) {
@@ -586,15 +586,23 @@ static void *wolfsentry_builtin_memalign(
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
 
     if (alignment && size) {
-        uint32_t hdr_size = sizeof(uint16_t) + (alignment - 1);
-        void *p = pvPortMalloc(size + hdr_size);
-        if (p) {
+        size_t hdr_size = sizeof(uint16_t) + (alignment - 1);
+        /* require power-of-two alignment, a base offset that fits the stored
+         * uint16_t, and no overflow when reserving the header.
+         */
+        if (((alignment & (alignment - 1)) == 0) &&
+            (hdr_size <= (size_t)MAX_UINT_OF(uint16_t)) &&
+            (size <= (size_t)MAX_UINT_OF(size_t) - hdr_size))
+        {
+            void *p = pvPortMalloc(size + hdr_size);
+            if (p) {
 #ifdef WOLFSENTRY_MALLOC_DEBUG
-            WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
+                WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
 #endif
-            /* Align to powers of two */
-            ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
-            *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+                /* Align to powers of two */
+                ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
+                *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+            }
         }
     }
     WOLFSENTRY_RETURN_VALUE(ptr);
@@ -668,7 +676,10 @@ static void *wolfsentry_builtin_realloc(
         void *ret = realloc(ptr, size);
         if ((ptr == NULL) && (ret != NULL))
             WOLFSENTRY_ATOMIC_INCREMENT(n_mallocs, 1);
-        else if ((ptr != NULL) && (ret == NULL))
+        /* a failed nonzero-size realloc leaves the original block live, so
+         * only a zero-size request counts as a deallocation.
+         */
+        else if ((ptr != NULL) && (ret == NULL) && (size == 0))
             WOLFSENTRY_ATOMIC_DECREMENT(n_mallocs, 1);
         return ret;
     }
@@ -687,14 +698,22 @@ static void *wolfsentry_builtin_memalign(
     WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
     if (alignment && size) {
         size_t hdr_size = sizeof(uint16_t) + (alignment - 1);
-        void *p = malloc(size + hdr_size);
-        if (p) {
-            /* Align to powers of two */
-            ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
-            *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
-        }
-        /* cppcheck-suppress memleak
+        /* require power-of-two alignment, a base offset that fits the stored
+         * uint16_t, and no overflow when reserving the header.
          */
+        if (((alignment & (alignment - 1)) == 0) &&
+            (hdr_size <= (size_t)MAX_UINT_OF(uint16_t)) &&
+            (size <= (size_t)MAX_UINT_OF(size_t) - hdr_size))
+        {
+            void *p = malloc(size + hdr_size);
+            if (p) {
+                /* Align to powers of two */
+                ptr = (void *) ((((uintptr_t)p + sizeof(uint16_t)) + (alignment - 1)) & ~(alignment - 1));
+                *((uint16_t *)ptr - 1) = (uint16_t)((uintptr_t)ptr - (uintptr_t)p);
+            }
+            /* cppcheck-suppress memleak
+             */
+        }
     }
 #ifdef WOLFSENTRY_MALLOC_DEBUG
     if (ptr != NULL)
@@ -912,31 +931,34 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_free_thread_context(struct wolfse
     WOLFSENTRY_RETURN_OK;
 }
 
-static wolfsentry_time_t usecs_to_wolfsentry_time(struct wolfsentry_context *wolfsentry, long usecs) {
-    wolfsentry_time_t wolfsentry_time;
-    wolfsentry_errcode_t ret = WOLFSENTRY_INTERVAL_FROM_SECONDS(0, usecs * 1000L, &wolfsentry_time);
-    if (ret < 0) {
-        WOLFSENTRY_WARN_ON_FAILURE(ret);
-        return 0;
-    }
-    else
-        return wolfsentry_time;
+static wolfsentry_errcode_t usecs_to_wolfsentry_time(struct wolfsentry_context *wolfsentry, long usecs, wolfsentry_time_t *wolfsentry_time) {
+    /* split into seconds and nanoseconds so the full long range of usecs is
+     * preserved without overflowing the intermediate multiplication.
+     */
+    WOLFSENTRY_RERETURN_IF_ERROR(WOLFSENTRY_INTERVAL_FROM_SECONDS(usecs / 1000000L, (usecs % 1000000L) * 1000L, wolfsentry_time));
+    WOLFSENTRY_RETURN_OK;
 }
 
-static long wolfsentry_time_to_usecs(struct wolfsentry_context *wolfsentry, wolfsentry_time_t ts) {
+static wolfsentry_errcode_t wolfsentry_time_to_usecs(struct wolfsentry_context *wolfsentry, wolfsentry_time_t ts, long *usecs) {
     time_t howlong_secs;
     long howlong_nsecs;
-    wolfsentry_errcode_t ret = WOLFSENTRY_INTERVAL_TO_SECONDS(ts, &howlong_secs, &howlong_nsecs);
-    if (ret < 0) {
-        WOLFSENTRY_WARN_ON_FAILURE(ret);
-        return 0;
-    }
-    else if (howlong_secs * (time_t)1000000 >= (time_t)MAX_SINT_OF(long) - (time_t)1000000L)
-        return (long)MAX_SINT_OF(long);
-    else if (howlong_secs * (time_t)1000000 <= (time_t)MIN_SINT_OF(long))
-        return (long)MIN_SINT_OF(long);
+    long howlong_usecs;
+    WOLFSENTRY_RERETURN_IF_ERROR(WOLFSENTRY_INTERVAL_TO_SECONDS(ts, &howlong_secs, &howlong_nsecs));
+    howlong_usecs = howlong_nsecs / 1000L;
+    /* compare the seconds quotient and then the remainder so a representable
+     * value is never saturated, and the multiply never overflows long.
+     */
+    if ((howlong_secs > (time_t)(MAX_SINT_OF(long) / (int64_t)1000000)) ||
+        ((howlong_secs == (time_t)(MAX_SINT_OF(long) / (int64_t)1000000)) &&
+         (howlong_usecs > (long)(MAX_SINT_OF(long) % (int64_t)1000000))))
+        *usecs = (long)MAX_SINT_OF(long);
+    else if ((howlong_secs < (time_t)(MIN_SINT_OF(long) / (int64_t)1000000)) ||
+             ((howlong_secs == (time_t)(MIN_SINT_OF(long) / (int64_t)1000000)) &&
+              (howlong_usecs < (long)(MIN_SINT_OF(long) % (int64_t)1000000))))
+        *usecs = (long)MIN_SINT_OF(long);
     else
-        return ((long)howlong_secs * 1000000L) + (howlong_nsecs / 1000L);
+        *usecs = ((long)howlong_secs * 1000000L) + howlong_usecs;
+    WOLFSENTRY_RETURN_OK;
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t rel_when) {
@@ -963,7 +985,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel(WOLFSENTRY_CONTE
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_set_deadline_rel_usecs(WOLFSENTRY_CONTEXT_ARGS_IN, long usecs) {
-    return wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_OUT, usecs_to_wolfsentry_time(wolfsentry, usecs));
+    wolfsentry_time_t rel_when;
+    wolfsentry_errcode_t ret = usecs_to_wolfsentry_time(wolfsentry, usecs, &rel_when);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    return wolfsentry_set_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_OUT, rel_when);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel(WOLFSENTRY_CONTEXT_ARGS_IN, wolfsentry_time_t *rel_when) {
@@ -1004,8 +1029,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_get_deadline_rel_usecs(WOLFSENTRY
     {
         return ret;
     }
-    if (usecs)
-        *usecs = wolfsentry_time_to_usecs(wolfsentry, rel_when);
+    if (usecs) {
+        wolfsentry_errcode_t conv_ret = wolfsentry_time_to_usecs(wolfsentry, rel_when, usecs);
+        WOLFSENTRY_RERETURN_IF_ERROR(conv_ret);
+    }
     return ret;
 }
 
@@ -3471,7 +3498,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_now_plus_delta(struct wolfse
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_to_timespec(struct wolfsentry_context *wolfsentry, wolfsentry_time_t t, struct timespec *ts) {
     time_t epoch_secs;
     long int epoch_nsecs;
-    WOLFSENTRY_TO_EPOCH_TIME(t, &epoch_secs, &epoch_nsecs);
+    wolfsentry_errcode_t ret = WOLFSENTRY_TO_EPOCH_TIME(t, &epoch_secs, &epoch_nsecs);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     ts->tv_sec = epoch_secs;
     ts->tv_nsec = epoch_nsecs;
     WOLFSENTRY_RETURN_OK;
@@ -3483,7 +3511,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_time_now_plus_delta_timespec(stru
     long int epoch_nsecs;
     wolfsentry_errcode_t ret = WOLFSENTRY_GET_TIME(&now);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, td), &epoch_secs, &epoch_nsecs);
+    ret = WOLFSENTRY_TO_EPOCH_TIME(WOLFSENTRY_ADD_TIME(now, td), &epoch_secs, &epoch_nsecs);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     ts->tv_sec = epoch_secs;
     ts->tv_nsec = epoch_nsecs;
     WOLFSENTRY_RETURN_OK;
@@ -4358,12 +4387,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, si
             else
                 WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         } else if (this_char == (uint32_t)'@') {
-            if ((src + 1 < src_end) && (base64_inv_lut[*((unsigned char *)src + 1)] != '@'))
-                WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
             ++pad_chars;
             decoded <<= 6U;
             continue;
         }
+
+        /* data must not appear after padding, in strict or lenient mode */
+        if (pad_chars != 0)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
         decoded <<= 6U;
         decoded |= this_char;
@@ -4391,12 +4422,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(const char *src, si
     case 0:
         break;
     case 1:
+        if (decoded_bits != 18U)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         *dest++ = (byte)(decoded >> 16U);
         *dest++ = (byte)(decoded >> 8U);
         dest_len += 2;
         break;
-        /* fall through */
     case 2:
+        if (decoded_bits != 12U)
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
         *dest++ = (byte)(decoded >> 16U);
         ++dest_len;
         break;

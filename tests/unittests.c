@@ -272,6 +272,139 @@ static wolfsentry_errcode_t test_init(void) {
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
+static wolfsentry_errcode_t test_base64_decode_lenient_padding(void) {
+    /* A correctly padded value followed by ignorable whitespace must be
+     * accepted when lenient parsing is requested.
+     */
+    static const char input[] = "QQ==\n";
+    byte outbuf[8];
+    size_t outbuf_spc = sizeof outbuf;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_base64_decode(input, strlen(input), outbuf, &outbuf_spc, 1 /* ignore_junk_p */));
+    WOLFSENTRY_EXIT_ON_FALSE((outbuf_spc == 1) && (outbuf[0] == 'A'));
+
+    /* lenient parsing still rejects data appearing after padding */
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("Q=Q=", 4, outbuf, &outbuf_spc, 1 /* ignore_junk_p */));
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("QQ==QUJD", 8, outbuf, &outbuf_spc, 1 /* ignore_junk_p */));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t test_base64_decode_quantum(void) {
+    /* A padded quantum must carry enough data sextets for its pad count; a
+     * single data sextet followed by padding is structurally invalid.
+     */
+    byte outbuf[8];
+    size_t outbuf_spc;
+
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("A=", 2, outbuf, &outbuf_spc, 0 /* ignore_junk_p */));
+
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_base64_decode("A==", 3, outbuf, &outbuf_spc, 0 /* ignore_junk_p */));
+
+    /* A well-formed padded quantum is still accepted. */
+    outbuf_spc = sizeof outbuf;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_base64_decode("QQ==", 4, outbuf, &outbuf_spc, 0 /* ignore_junk_p */));
+    WOLFSENTRY_EXIT_ON_FALSE((outbuf_spc == 1) && (outbuf[0] == 'A'));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t test_eventconfig_overlap_bits(void) {
+    /* A bit cannot be simultaneously requested for addition and clearing. */
+    struct wolfsentry_eventconfig config;
+
+    memset(&config, 0, sizeof config);
+    config.route_flags_to_add_on_insert = WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+    config.route_flags_to_clear_on_insert = WOLFSENTRY_ROUTE_FLAG_GREENLISTED;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    memset(&config, 0, sizeof config);
+    config.action_res_filter_bits_set = WOLFSENTRY_ACTION_RES_CONNECT;
+    config.action_res_filter_bits_unset = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    memset(&config, 0, sizeof config);
+    config.action_res_bits_to_add = WOLFSENTRY_ACTION_RES_CONNECT;
+    config.action_res_bits_to_clear = WOLFSENTRY_ACTION_RES_CONNECT;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t test_eventconfig_alignment(void) {
+    struct wolfsentry_eventconfig config;
+
+    /* Non-zero alignment with zero private-data size is contradictory. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_alignment = sizeof(void *);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* Alignment smaller than a pointer is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = 32;
+    config.route_private_data_alignment = 1;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* Non-power-of-two alignment is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = 64;
+    config.route_private_data_alignment = (3 * sizeof(void *));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* Alignment larger than the private-data size is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = sizeof(void *);
+    config.route_private_data_alignment = (2 * sizeof(void *));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+
+    /* A private-data size beyond the data_addr_offset field is rejected. */
+    memset(&config, 0, sizeof config);
+    config.route_private_data_size = (size_t)0x10000;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NUMERIC_ARG_TOO_BIG, wolfsentry_eventconfig_check(&config));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t test_eventconfig_derogatory_threshold(void) {
+    /* derogatory_threshold_for_penaltybox must fit the uint16_t per-route
+     * derogatory_count counter.
+     */
+    struct wolfsentry_eventconfig config;
+
+    memset(&config, 0, sizeof config);
+    /* the route's derogatory_count counter is 16-bit; only test the
+     * out-of-range rejection when the configured field can exceed that.
+     */
+    if (MAX_UINT_OF(config.derogatory_threshold_for_penaltybox) > (uint64_t)0xffffU) {
+        config.derogatory_threshold_for_penaltybox = (wolfsentry_hitcount_t)0x10000U;
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, wolfsentry_eventconfig_check(&config));
+    }
+
+    config.derogatory_threshold_for_penaltybox = (wolfsentry_hitcount_t)0xffffU;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_check(&config));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#ifdef WOLFSENTRY_ERROR_STRINGS
+static wolfsentry_errcode_t test_user_string_table_bounds(void) {
+    /* Guard that the user-defined success/error string tables are sized to
+     * hold their highest valid index.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_error_string_set((enum wolfsentry_error_id)WOLFSENTRY_ERROR_ID_MAX, "boundary success string"));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_ALREADY_PRESENT, wolfsentry_user_error_string_set((enum wolfsentry_error_id)WOLFSENTRY_ERROR_ID_MAX, "boundary success string"));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_error_string_set((enum wolfsentry_error_id)(-WOLFSENTRY_ERROR_ID_MAX), "boundary error string"));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_ALREADY_PRESENT, wolfsentry_user_error_string_set((enum wolfsentry_error_id)(-WOLFSENTRY_ERROR_ID_MAX), "boundary error string"));
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* WOLFSENTRY_ERROR_STRINGS */
+
 #endif /* TEST_INIT */
 
 static __attribute_maybe_unused__ wolfsentry_errcode_t my_addr_family_parser(
@@ -5713,6 +5846,38 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_init failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+    ret = test_base64_decode_lenient_padding();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_base64_decode_lenient_padding failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_base64_decode_quantum();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_base64_decode_quantum failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_eventconfig_overlap_bits();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_eventconfig_overlap_bits failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_eventconfig_alignment();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_eventconfig_alignment failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_eventconfig_derogatory_threshold();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_eventconfig_derogatory_threshold failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#ifdef WOLFSENTRY_ERROR_STRINGS
+    ret = test_user_string_table_bounds();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_user_string_table_bounds failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_LWIP

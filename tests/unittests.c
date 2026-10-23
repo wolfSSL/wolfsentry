@@ -1395,7 +1395,7 @@ static int test_rw_locks_auto_downgrade(void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -1467,7 +1467,7 @@ static int test_rw_locks_reader_wakeup(void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
     volatile int measured_sequence[8], measured_sequence_i = 0;
     pthread_t reader_thread, writer_thread;
@@ -1567,7 +1567,7 @@ static int test_object_release_tableless(void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -1620,7 +1620,7 @@ static int test_context_clone_readonly_thread(void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -1657,7 +1657,7 @@ static int test_context_clone_fallthrough(void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -1697,7 +1697,7 @@ static int test_init_interval_conversion_failure(void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10, .penaltybox_duration = 1 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 1, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -1732,7 +1732,7 @@ static int test_context_exchange_default_policy(void) {
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
 #else
-    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0 };
+    struct wolfsentry_eventconfig config = { 32, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);

@@ -710,6 +710,13 @@ static inline int convert_hex_byte(const unsigned char **in, size_t *in_len, byt
     return 0;
 }
 
+/* a handler registered for AF_LOCAL takes precedence over the built-in literal path */
+static int af_local_is_builtin(struct wolfsentry_json_process_state *jps)
+{
+    wolfsentry_addr_family_parser_t parser;
+    return (wolfsentry_addr_family_get_parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_AF_LOCAL, &parser) < 0);
+}
+
 static wolfsentry_errcode_t convert_sockaddr_address(
     struct wolfsentry_json_process_state *jps,
     JSON_TYPE type,
@@ -850,7 +857,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(
             sa->addr_len = 32;
         WOLFSENTRY_RETURN_OK;
     }
-    else if (sa->sa_family == WOLFSENTRY_AF_LOCAL) {
+    else if ((sa->sa_family == WOLFSENTRY_AF_LOCAL) && af_local_is_builtin(jps)) {
         /* mirror wolfsentry_route_format_address(): the address is a raw path
          * stored verbatim, with addr_len recording its length.
          */
@@ -860,7 +867,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(
         /* an empty path would be a zero-length, match-all prefix. */
         if (data_size == 0)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
-        if (data_size > (size_t)WOLFSENTRY_BITS_TO_BYTES(WOLFSENTRY_MAX_ADDR_BITS))
+        if (data_size > (size_t)(WOLFSENTRY_MAX_ADDR_BITS / 8))
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
         /* the route formatter emits the path verbatim between quotes without
          * escaping, so reject bytes that would corrupt or inject into that
@@ -1081,8 +1088,8 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
          * no fixed family width (and no entry in the family table), so bound
          * them by the staging buffer, matching the formatter's dump output.
          */
-        if (sa->sa_family == WOLFSENTRY_AF_LOCAL) {
-            max_addr_bits = WOLFSENTRY_MAX_ADDR_BITS;
+        if ((sa->sa_family == WOLFSENTRY_AF_LOCAL) && af_local_is_builtin(jps)) {
+            max_addr_bits = (wolfsentry_addr_bits_t)((WOLFSENTRY_MAX_ADDR_BITS / 8) * 8);
             /* an AF_LOCAL prefix-bits only denotes the pathname length, so it
              * must be nonzero whole bytes and match any pathname already parsed;
              * keeping it nonzero leaves addr_len == 0 meaning "not supplied".

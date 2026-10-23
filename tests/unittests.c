@@ -5816,6 +5816,94 @@ static int test_json_link_prefix_bits_key_order(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int af_local_custom_parser_calls;
+
+static wolfsentry_errcode_t af_local_custom_parser(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const char *addr_text,
+    int addr_text_len,
+    byte *addr_internal,
+    wolfsentry_addr_bits_t *addr_internal_bits)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    (void)addr_text;
+    (void)addr_text_len;
+    ++af_local_custom_parser_calls;
+    addr_internal[0] = 0x5a;
+    *addr_internal_bits = 8;
+    WOLFSENTRY_RETURN_OK;
+}
+
+static wolfsentry_errcode_t af_local_custom_formatter(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const byte *addr_internal,
+    unsigned int addr_internal_bits,
+    char *addr_text,
+    int *addr_text_len)
+{
+    WOLFSENTRY_CONTEXT_ARGS_NOT_USED;
+    (void)addr_internal;
+    (void)addr_internal_bits;
+    if (*addr_text_len < 1)
+        WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
+    addr_text[0] = 'z';
+    *addr_text_len = 1;
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_json_af_local_registered_handler(void) {
+    struct wolfsentry_context *wolfsentry;
+    char json[256];
+    int json_len;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_handler_install(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            WOLFSENTRY_AF_LOCAL,
+            "test_local",
+            -1,
+            af_local_custom_parser,
+            af_local_custom_formatter,
+            8));
+
+    json_len = snprintf(
+        json, sizeof json,
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : %u, \"remote\" : { \"address\" : \"anything\" } } ] }",
+        (unsigned int)WOLFSENTRY_AF_LOCAL);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+
+    af_local_custom_parser_calls = 0;
+    (void)wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        (const unsigned char *)json,
+        (size_t)json_len,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+        NULL,
+        0);
+    WOLFSENTRY_EXIT_ON_FALSE(af_local_custom_parser_calls == 1);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_JSON */
 
 #ifdef TEST_JSON_CORPUS
@@ -6206,6 +6294,11 @@ int main(int argc, char* argv[]) {
     ret = test_json_link_prefix_bits_key_order();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_link_prefix_bits_key_order failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_json_af_local_registered_handler();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_af_local_registered_handler failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

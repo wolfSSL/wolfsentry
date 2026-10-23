@@ -4349,6 +4349,23 @@ static wolfsentry_errcode_t test_regression_connection_limits(void) {
     limit_config.max_connection_count = 2;
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "limit2", -1, 10, &limit_config, WOLFSENTRY_EVENT_FLAG_NONE, &matched_id));
 
+    /* a limit the 16-bit per-route counter cannot enforce is refused rather
+     * than silently capped, and the counter maximum is enforced exactly. */
+    limit_config.max_connection_count = 0x10000U;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(NUMERIC_ARG_TOO_BIG, wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "limitmax", -1, 10, &limit_config, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    limit_config.max_connection_count = 0xffffU;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "limitmax", -1, 10, &limit_config, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x08\x03", 32, "limitmax", WOLFSENTRY_ROUTE_FLAG_NONE, &id));
+    for (i = 0; i < 0xffffU; ++i) {
+        WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x08\x03", WOLFSENTRY_ACTION_RES_CONNECT, &matched_id, &action_results));
+        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    }
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x08\x03", WOLFSENTRY_ACTION_RES_CONNECT, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, id, &meta));
+    WOLFSENTRY_EXIT_ON_FALSE(meta.connection_count == 0xffffU);
+    limit_config.max_connection_count = 2;
+
     /* a route that opts out of connection counting is never limited. */
     WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x08\x01", 32, "limit2", WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS, &id));
     for (i = 0; i < 3; ++i) {

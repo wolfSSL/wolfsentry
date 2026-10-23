@@ -2921,6 +2921,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_action_insert_after(
 
    \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
 
+   An action handler invoked during event dispatch must not call this from
+   within the dispatch; it returns #WOLFSENTRY_ERROR_ID_BUSY while any dispatch
+   is in progress.  Perform action-list deletions outside dispatch;
+   append/prepend/insert remain permitted.
+
    \sa WOLFSENTRY_CONTEXT_ARGS_IN
 */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_action_delete(

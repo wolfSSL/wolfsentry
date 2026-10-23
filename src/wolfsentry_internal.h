@@ -494,6 +494,7 @@ struct wolfsentry_context {
 #endif
     struct wolfsentry_table_header ents_by_id;
     struct wolfsentry_list_header cleanup_hooks;
+    int action_dispatch_depth; /* nonzero while an action dispatch loop is active, so list mutators refuse to free a live entry */
 };
 
 #ifdef WOLFSENTRY_THREADSAFE

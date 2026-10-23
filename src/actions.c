@@ -256,6 +256,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_action_drop_reference(WOLFSENTRY_
     if ((action->header.parent_table != NULL) &&
         (action->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ACTION))
         WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
+    if (action_results)
+        WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
     WOLFSENTRY_REFCOUNT_DECREMENT(action->header.refcount, refs_left, ret);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     if (refs_left > 0)
@@ -504,6 +506,9 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_delete(
 
     WOLFSENTRY_MUTEX_OR_RETURN();
 
+    if (wolfsentry->action_dispatch_depth != 0)
+        WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(BUSY);
+
     for (wolfsentry_list_ent_get_first(&action_list->header, &i);
          i;
          wolfsentry_list_ent_get_next(&action_list->header, &i))
@@ -533,6 +538,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_delete_all(
     struct wolfsentry_list_ent_header *i, *next;
 
     WOLFSENTRY_MUTEX_OR_RETURN();
+
+    /* no dispatch-in-progress guard here: this runs only from event teardown
+     * (at refcount zero) and clone error cleanup, never on a list being
+     * iterated, so it must not fail while an unrelated dispatch is active.
+     */
 
     for (wolfsentry_list_ent_get_first(&action_list->header, &i);
          i;
@@ -581,16 +591,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
 
         if (WOLFSENTRY_CHECK_BITS(rule_route->flags, WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED))
             WOLFSENTRY_ERROR_RETURN(ALREADY);
-        else {
-            wolfsentry_route_flags_t flags_before;
-            wolfsentry_route_flags_t flags_after;
-            WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
-                rule_route->flags,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
-                &flags_before,
-                &flags_after);
-        }
 
         break;
     case WOLFSENTRY_ACTION_TYPE_MATCH:
@@ -604,16 +604,6 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
 
         if (WOLFSENTRY_CHECK_BITS(rule_route->flags, WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED))
             WOLFSENTRY_ERROR_RETURN(ALREADY);
-        else {
-            wolfsentry_route_flags_t flags_before;
-            wolfsentry_route_flags_t flags_after;
-            WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
-                rule_route->flags,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED,
-                (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
-                &flags_before,
-                &flags_after);
-        }
 
         break;
     case WOLFSENTRY_ACTION_TYPE_DECISION:
@@ -630,6 +620,38 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
         (action_event->config && WOLFSENTRY_CHECK_BITS(action_event->config->config.flags, WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS)))
         WOLFSENTRY_RETURN_OK;
 
+    /* hold a reference on the event before marking lifecycle state, so a failed
+     * acquisition cannot leave the route flagged with its handlers never run.
+     */
+    WOLFSENTRY_REFCOUNT_INCREMENT(action_event->header.refcount, ret);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+
+    if (action_type == WOLFSENTRY_ACTION_TYPE_INSERT) {
+        wolfsentry_route_flags_t flags_before;
+        wolfsentry_route_flags_t flags_after;
+        WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
+            rule_route->flags,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_INSERT_ACTIONS_CALLED,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before,
+            &flags_after);
+    }
+    else if (action_type == WOLFSENTRY_ACTION_TYPE_DELETE) {
+        wolfsentry_route_flags_t flags_before;
+        wolfsentry_route_flags_t flags_after;
+        WOLFSENTRY_ATOMIC_UPDATE_FLAGS(
+            rule_route->flags,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_DELETE_ACTIONS_CALLED,
+            (wolfsentry_route_flags_t)WOLFSENTRY_ROUTE_FLAG_NONE,
+            &flags_before,
+            &flags_after);
+    }
+
+    /* mark a dispatch in progress, so a reentrant handler cannot free a live
+     * list entry (the single-entry mutator returns BUSY).
+     */
+    WOLFSENTRY_ATOMIC_INCREMENT(wolfsentry->action_dispatch_depth, 1);
+
     for (i = (struct wolfsentry_action_list_ent *)w_a_l->header.head;
          i;
          i = (struct wolfsentry_action_list_ent *)i->header.next)
@@ -641,11 +663,21 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
 #ifdef WOLFSENTRY_DEBUG_ACTIONS
         fprintf(stderr,"calling action %s for event %s and action type %u\n", wolfsentry_action_get_label(i->action), wolfsentry_event_get_label(trigger_event), (unsigned)action_type);
 #endif
-        if ((ret = i->action->handler(WOLFSENTRY_CONTEXT_ARGS_OUT, i->action, i->action->handler_arg, caller_arg, trigger_event, action_type, target_route, route_table, rule_route, action_results)) < 0)
+        if ((ret = i->action->handler(WOLFSENTRY_CONTEXT_ARGS_OUT, i->action, i->action->handler_arg, caller_arg, trigger_event, action_type, target_route, route_table, rule_route, action_results)) < 0) {
+            WOLFSENTRY_ATOMIC_DECREMENT(wolfsentry->action_dispatch_depth, 1);
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, action_event, NULL /* action_results */));
             WOLFSENTRY_ERROR_RERETURN(ret);
-        if (WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP))
+        }
+        if (WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP)) {
+            WOLFSENTRY_ATOMIC_DECREMENT(wolfsentry->action_dispatch_depth, 1);
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, action_event, NULL /* action_results */));
             WOLFSENTRY_RETURN_OK;
+        }
     }
+
+    WOLFSENTRY_ATOMIC_DECREMENT(wolfsentry->action_dispatch_depth, 1);
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, action_event, NULL /* action_results */));
+
     WOLFSENTRY_RETURN_OK;
 }
 

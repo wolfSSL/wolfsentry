@@ -981,13 +981,34 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     } else if (! strcmp(jps->cur_keyname, "address")) {
+        wolfsentry_addr_bits_t prior_addr_len = sa->addr_len;
+        wolfsentry_addr_bits_t max_addr_bits;
+        int prefix_given = (prior_addr_len != 0);
+        wolfsentry_errcode_t ret;
         if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        /* a bitmask also sets addr_len, to the combined address and mask width */
+        if (jps->o_u_c.route.flags & (sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
+                                      WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK :
+                                      WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+            prefix_given = 0;
+#endif
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
                               WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD :
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD);
-        WOLFSENTRY_ERROR_RERETURN(convert_sockaddr_address(jps, type, data, data_size, sa, sa->addr));
+        ret = convert_sockaddr_address(jps, type, data, data_size, sa, sa->addr);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        /* an earlier prefix-bits on generic LINK was allowed the EUI-64 width;
+         * now that the address has settled the family, the prefix must fit it. */
+        if (prefix_given && (sa->sa_family == WOLFSENTRY_AF_LINK48)) {
+            ret = wolfsentry_addr_family_max_addr_bits(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, sa->sa_family, &max_addr_bits);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+            if (prior_addr_len > max_addr_bits)
+                WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+        }
+        WOLFSENTRY_RETURN_OK;
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
     else if (! strcmp(jps->cur_keyname, "bitmask")) {
@@ -1039,6 +1060,7 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
     else if (! strcmp(jps->cur_keyname, "prefix-bits")) {
         wolfsentry_addr_bits_t max_addr_bits;
         wolfsentry_addr_bits_t prior_addr_len = sa->addr_len;
+        wolfsentry_addr_family_t width_family = sa->sa_family;
         wolfsentry_errcode_t ret;
         if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
@@ -1071,7 +1093,12 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
                 WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         }
         else {
-            ret = wolfsentry_addr_family_max_addr_bits(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, sa->sa_family, &max_addr_bits);
+            /* generic LINK becomes EUI-48 or EUI-64 from the address length, so
+             * before an address arrives allow the wider width; the address
+             * handler then checks the prefix against the settled family. */
+            if ((width_family == WOLFSENTRY_AF_LINK48) && (prior_addr_len == 0))
+                width_family = WOLFSENTRY_AF_LINK64;
+            ret = wolfsentry_addr_family_max_addr_bits(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, width_family, &max_addr_bits);
             WOLFSENTRY_RERETURN_IF_ERROR(ret);
         }
         if (sa->addr_len > max_addr_bits)

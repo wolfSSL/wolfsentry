@@ -5782,6 +5782,40 @@ static int test_json_tcplike_explicit_flag(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_json_link_prefix_bits_key_order(void) {
+    static const char fmt[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : %u,"
+        " \"remote\" : { %s }, \"local\" : { \"address\" : \"%s\" } } ] }";
+    static const char eui64[] = "00:11:22:33:44:55:66:77";
+    static const char eui48[] = "00:11:22:33:44:55";
+    char json[512];
+    int json_len;
+
+    /* generic LINK resolves to EUI-48 or EUI-64 from the address, so a
+     * prefix-bits key must be judged the same before or after the address. */
+    json_len = snprintf(json, sizeof json, fmt, (unsigned int)WOLFSENTRY_AF_LINK, "\"prefix-bits\" : 64, \"address\" : \"00:11:22:33:44:55:66:77\"", eui64);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE), OK));
+
+    json_len = snprintf(json, sizeof json, fmt, (unsigned int)WOLFSENTRY_AF_LINK, "\"address\" : \"00:11:22:33:44:55:66:77\", \"prefix-bits\" : 64", eui64);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE), OK));
+
+    json_len = snprintf(json, sizeof json, fmt, (unsigned int)WOLFSENTRY_AF_LINK, "\"prefix-bits\" : 64, \"address\" : \"00:11:22:33:44:55\"", eui48);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE), NUMERIC_ARG_TOO_BIG));
+
+    json_len = snprintf(json, sizeof json, fmt, (unsigned int)WOLFSENTRY_AF_LINK, "\"address\" : \"00:11:22:33:44:55\", \"prefix-bits\" : 64", eui48);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE), NUMERIC_ARG_TOO_BIG));
+
+    json_len = snprintf(json, sizeof json, fmt, (unsigned int)WOLFSENTRY_AF_LINK, "\"prefix-bits\" : 48, \"address\" : \"00:11:22:33:44:55\"", eui48);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE), OK));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_JSON */
 
 #ifdef TEST_JSON_CORPUS
@@ -6167,6 +6201,11 @@ int main(int argc, char* argv[]) {
     ret = test_json_tcplike_explicit_flag();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_tcplike_explicit_flag failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_json_link_prefix_bits_key_order();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_link_prefix_bits_key_order failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

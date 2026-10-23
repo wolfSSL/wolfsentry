@@ -4477,6 +4477,12 @@ static wolfsentry_errcode_t test_regression_purge_list_reinsert(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+/* intervals in milliseconds, unlike the microsecond absolute clock. */
+static wolfsentry_errcode_t regression_ms_interval_from_seconds(time_t howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
+    *howlong = ((wolfsentry_time_t)howlong_secs * 1000) + (howlong_nsecs / 1000000);
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t test_regression_bounded_purge_progress(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_route_table *table;
@@ -4503,6 +4509,7 @@ static wolfsentry_errcode_t test_regression_bounded_purge_progress(void) {
 
     regression_fake_now = 1000000;
     wolfsentry_get_timecbs(wolfsentry)->get_time = regression_fake_get_time;
+    wolfsentry_get_timecbs(wolfsentry)->interval_from_seconds = regression_ms_interval_from_seconds;
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_mutex(WOLFSENTRY_CONTEXT_ARGS_OUT));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &table));
@@ -4525,9 +4532,11 @@ static wolfsentry_errcode_t test_regression_bounded_purge_progress(void) {
     for (i = 0; i < 3; ++i)
         (void)wolfsentry_route_stale_purge_one_opportunistically(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL, NULL);
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(ITEM_NOT_FOUND, regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[8], &meta));
+    /* the connected routes are requeued one purge margin out, as an interval */
     for (i = 0; i < 8; ++i) {
         WOLFSENTRY_EXIT_ON_FAILURE(regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, ids[i], &meta));
         WOLFSENTRY_EXIT_ON_FALSE(meta.connection_count == 1);
+        WOLFSENTRY_EXIT_ON_FALSE(meta.purge_after == regression_fake_now + (WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS * 1000));
     }
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

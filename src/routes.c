@@ -3200,7 +3200,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
     }
 
     if (mode == 2) {
-        if ((ret = WOLFSENTRY_FROM_EPOCH_TIME(WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS, 0 /* epoch_nsecs */, &requeue_delay)) < 0)
+        if ((ret = WOLFSENTRY_INTERVAL_FROM_SECONDS(WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS, 0 /* howlong_nsecs */, &requeue_delay)) < 0)
             WOLFSENTRY_ERROR_RERETURN(ret);
     }
 
@@ -3250,7 +3250,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
                     break;
                 if ((route->meta.connection_count > 0) &&
                     (! (route->flags & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
-                    ((table->max_purgeable_idle_time == 0) || (now - route->meta.last_hit_time <= table->max_purgeable_idle_time)))
+                    ((table->max_purgeable_idle_time == 0) || (WOLFSENTRY_DIFF_TIME(now, route->meta.last_hit_time) <= table->max_purgeable_idle_time)))
                 {
                     if (mode != 2)
                         continue;
@@ -3278,15 +3278,16 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
         }
 #endif
         if (requeue) {
-            wolfsentry_list_ent_delete(&table->purge_list, &route->purge_links);
+            wolfsentry_time_t idle = WOLFSENTRY_DIFF_TIME(now, route->meta.last_hit_time);
+            wolfsentry_time_t delay = requeue_delay;
             /* not before the margin, unless the idle limit expires sooner */
-            route->meta.purge_after = now + requeue_delay;
-            if ((table->max_purgeable_idle_time > 0) &&
-                (now - route->meta.last_hit_time >= 0) &&
-                (table->max_purgeable_idle_time - (now - route->meta.last_hit_time) < requeue_delay))
+            if ((table->max_purgeable_idle_time > 0) && (idle >= 0) &&
+                (table->max_purgeable_idle_time - idle < requeue_delay))
             {
-                route->meta.purge_after = route->meta.last_hit_time + table->max_purgeable_idle_time + 1;
+                delay = table->max_purgeable_idle_time - idle + 1;
             }
+            wolfsentry_list_ent_delete(&table->purge_list, &route->purge_links);
+            route->meta.purge_after = WOLFSENTRY_ADD_TIME(now, delay);
             wolfsentry_route_purge_list_insert(table, route);
             continue;
         }

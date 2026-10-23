@@ -1100,7 +1100,7 @@ static wolfsentry_errcode_t handle_event_clause(struct wolfsentry_json_process_s
     }
 
     if ((jps->cur_depth == 3) && (type == JSON_STRING) && (! strcmp(jps->cur_keyname, "label"))) {
-        if (data_size >= sizeof jps->o_u_c.event.label)
+        if (data_size > sizeof jps->o_u_c.event.label)
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
         memcpy(jps->o_u_c.event.label, data, data_size);
         jps->o_u_c.event.label_len = (int)data_size;

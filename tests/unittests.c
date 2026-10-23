@@ -4684,6 +4684,71 @@ static int test_event_default_priority(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_json_event_max_length_label(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_eventconfig config;
+    char label[WOLFSENTRY_MAX_LABEL_BYTES + 1];
+    char err_buf[512];
+    char json[WOLFSENTRY_MAX_LABEL_BYTES + 128];
+    int json_len;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* default_config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(label, 'L', sizeof label);
+
+    json_len = snprintf(
+        json, sizeof json,
+        "{ \"wolfsentry-config-version\" : 1, \"events-insert\" : [ { \"label\" : \"%.*s\" } ] }",
+        (int)WOLFSENTRY_MAX_LABEL_BYTES, label);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    ret = wolfsentry_config_json_oneshot(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        (unsigned char *)json,
+        (size_t)json_len,
+        WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+        err_buf,
+        sizeof err_buf);
+    if (ret < 0)
+        (void)fprintf(stderr, "%s\n", err_buf);
+    WOLFSENTRY_EXIT_ON_FAILURE(ret);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_get_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            label,
+            (int)WOLFSENTRY_MAX_LABEL_BYTES,
+            &config));
+
+    json_len = snprintf(
+        json, sizeof json,
+        "{ \"wolfsentry-config-version\" : 1, \"events-insert\" : [ { \"label\" : \"%.*s\" } ] }",
+        (int)WOLFSENTRY_MAX_LABEL_BYTES + 1, label);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        STRING_ARG_TOO_LONG,
+        wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            (unsigned char *)json,
+            (size_t)json_len,
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NONE,
+            err_buf,
+            sizeof err_buf));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* !WOLFSENTRY_NO_JSON */
 
 #endif /* TEST_DYNAMIC_RULES */
@@ -7025,6 +7090,12 @@ int main(int argc, char* argv[]) {
     ret = test_event_default_priority();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_event_default_priority failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_json_event_max_length_label();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_event_max_length_label failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

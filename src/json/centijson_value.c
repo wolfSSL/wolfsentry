@@ -1871,7 +1871,7 @@ json_value_dict_clean(
         stack = NULL;
     }
 
-    stack_size = json_value_dict_leftmost_path(stack, d->root);
+    stack_size = (stack != NULL) ? json_value_dict_leftmost_path(stack, d->root) : 0;
 
     while(stack_size > 0) {
         node = stack[--stack_size];
@@ -2044,7 +2044,7 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                 if ((src_dict->root != NULL) && (stack == NULL)) {
                     ret = JSON_ERR_OUTOFMEMORY;
                 } else {
-                    stack_size = json_value_dict_leftmost_path(stack, src_dict->root);
+                    stack_size = (stack != NULL) ? json_value_dict_leftmost_path(stack, src_dict->root) : 0;
 
                     while(stack_size > 0) {
                         src_dict_node = stack[--stack_size];

@@ -2550,28 +2550,32 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
 
         if (! (current_rule_route_flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)) {
             if (*action_results & WOLFSENTRY_ACTION_RES_CONNECT) {
-                /* the limit is only enforced when configured; a zero limit
-                 * means unlimited, so no increment or rejection applies. */
-                if (config->config.max_connection_count > 0) {
-                    if (rule_route->meta.connection_count >= config->config.max_connection_count) {
-                        *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-                        ret = WOLFSENTRY_ERROR_ENCODE(OK);
-                        goto done;
-                    }
-                    if (WOLFSENTRY_ATOMIC_INCREMENT_BY_ONE(rule_route->meta.connection_count) > config->config.max_connection_count) {
+                uint16_t new_connection_count;
+                /* count every connection so disconnects stay balanced when the
+                 * limit changes; a zero limit only means nothing is rejected. */
+                if ((config->config.max_connection_count > 0) &&
+                    (rule_route->meta.connection_count >= config->config.max_connection_count))
+                {
+                    *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
+                    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+                    goto done;
+                }
+                WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(rule_route->meta.connection_count, new_connection_count);
+                /* with no limit a saturated counter simply stops counting; under a
+                 * limit it cannot track another connection, so refuse it. */
+                if ((config->config.max_connection_count > 0) &&
+                    ((new_connection_count == 0) || (new_connection_count > config->config.max_connection_count)))
+                {
+                    if (new_connection_count != 0)
                         WOLFSENTRY_ATOMIC_DECREMENT_BY_ONE(rule_route->meta.connection_count);
-                        *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
-                        ret = WOLFSENTRY_ERROR_ENCODE(OK);
-                        goto done;
-                    }
+                    *action_results |= WOLFSENTRY_ACTION_RES_REJECT;
+                    ret = WOLFSENTRY_ERROR_ENCODE(OK);
+                    goto done;
                 }
             } else if (*action_results & WOLFSENTRY_ACTION_RES_DISCONNECT) {
                 uint16_t new_connection_count;
-                /* decrement regardless of the limit, so counts seeded at insert
-                 * time still drain when the limit is zero (unlimited); decrement
-                 * safely because untimely route deletions can assign a decrement
-                 * to a different route than the one originally incremented.
-                 */
+                /* decrement safely: an untimely route deletion can assign a
+                 * decrement to a different route than the one incremented. */
                 WOLFSENTRY_ATOMIC_DECREMENT_UNSIGNED_SAFELY(rule_route->meta.connection_count, 1, new_connection_count);
                 /* only an already-zero count under an enforced limit is
                  * anomalous; with no limit, unconnected routes legitimately see

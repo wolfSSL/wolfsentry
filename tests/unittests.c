@@ -4346,6 +4346,54 @@ static wolfsentry_errcode_t test_regression_connection_limits(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_regression_connection_count_zero_limit(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_route_metadata_exports meta;
+    struct wolfsentry_eventconfig limit_config;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id, matched_id;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    memset(&limit_config, 0, sizeof limit_config);
+    limit_config.route_private_data_size = PRIVATE_DATA_SIZE;
+    limit_config.route_private_data_alignment = PRIVATE_DATA_ALIGNMENT;
+    limit_config.max_connection_count = 2;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "zerolimit", -1, 10, &limit_config, WOLFSENTRY_EVENT_FLAG_NONE, &matched_id));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x09\x01", 32, "zerolimit", WOLFSENTRY_ROUTE_FLAG_NONE, &id));
+
+    /* a connection opened under a limit stays counted after the limit is
+     * removed, and connections opened afterward are counted too. */
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x09\x01", WOLFSENTRY_ACTION_RES_CONNECT, &matched_id, &action_results));
+    limit_config.max_connection_count = 0;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_update_config(WOLFSENTRY_CONTEXT_ARGS_OUT, "zerolimit", -1, &limit_config));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x09\x01", WOLFSENTRY_ACTION_RES_CONNECT, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x09\x01", WOLFSENTRY_ACTION_RES_DISCONNECT, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, id, &meta));
+    WOLFSENTRY_EXIT_ON_FALSE(meta.connection_count == 1);
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_dispatch(WOLFSENTRY_CONTEXT_ARGS_OUT, "\x0A\x08\x09\x01", WOLFSENTRY_ACTION_RES_DISCONNECT, &matched_id, &action_results));
+    WOLFSENTRY_EXIT_ON_FAILURE(regression_route_meta(WOLFSENTRY_CONTEXT_ARGS_OUT, id, &meta));
+    WOLFSENTRY_EXIT_ON_FALSE(meta.connection_count == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t test_regression_prefix_specificity(void) {
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
@@ -4392,6 +4440,7 @@ static int test_dynamic_rules_regressions(void) {
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_route_api_invariants(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_route_timing(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_connection_limits(), OK));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_connection_count_zero_limit(), OK));
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_ERROR_CODE_IS(test_regression_prefix_specificity(), OK));
     WOLFSENTRY_RETURN_OK;
 }

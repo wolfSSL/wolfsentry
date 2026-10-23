@@ -4822,6 +4822,196 @@ static int test_action_insert_failure_leaves_id_untouched(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_event_aux_event_layout_pinned(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+    static const struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_aux_owner",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            NULL /* config */,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            &config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_aux_owner",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "layout_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config2));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_aux_owner",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            NULL /* aux_event_label */,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_aux",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config2));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_event_layout_guard_held_deleted_route(void) {
+    struct wolfsentry_context *wolfsentry;
+    wolfsentry_ent_id_t id;
+    wolfsentry_action_res_t action_results;
+    struct wolfsentry_route *route = NULL;
+    wolfsentry_route_flags_t flags = WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS | WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
+    static const struct wolfsentry_eventconfig config2 = { .route_private_data_size = PRIVATE_DATA_SIZE * 2, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT * 2, .max_connection_count = 15 };
+#else
+    static const struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const struct wolfsentry_eventconfig config2 = { PRIVATE_DATA_SIZE * 2, PRIVATE_DATA_ALIGNMENT * 2, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_action_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_insert_action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_FLAG_NONE,
+            test_action_insert_noop,
+            NULL /* handler_arg */,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_held_parent",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            10,
+            &config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_action_append(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_held_parent",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            WOLFSENTRY_ACTION_TYPE_INSERT,
+            "layout_insert_action",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    remote.sa.sa_port = 12345;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memcpy(remote.sa.addr, "\0\1\2\3", sizeof remote.addr_buf);
+    memcpy(local.sa.addr, "\377\376\375\374", sizeof local.addr_buf);
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_insert_and_check_out(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            &remote.sa,
+            &local.sa,
+            flags,
+            "layout_held_parent",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &route,
+            &action_results));
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_delete_by_id(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            NULL /* caller_arg */,
+            route->header.id,
+            NULL /* trigger_label */,
+            0,
+            &action_results));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INCOMPATIBLE_STATE,
+        wolfsentry_event_update_config(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "layout_held_parent",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &config2));
+
+    WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_drop_reference(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            route,
+            &action_results));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 #endif /* TEST_DYNAMIC_RULES */
 
 #ifdef TEST_USER_VALUES
@@ -7174,6 +7364,18 @@ int main(int argc, char* argv[]) {
     ret = test_action_insert_failure_leaves_id_untouched();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_action_insert_failure_leaves_id_untouched failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_aux_event_layout_pinned();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_aux_event_layout_pinned failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_layout_guard_held_deleted_route();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_layout_guard_held_deleted_route failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #endif

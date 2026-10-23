@@ -400,6 +400,12 @@ static int wolfsentry_event_has_routes(const struct wolfsentry_context *wolfsent
 
     if (WOLFSENTRY_CHECK_BITS(event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT))
         return 1;
+    /* an aux event parents the ephemeral routes its owners generate */
+    if (WOLFSENTRY_ATOMIC_LOAD(event->aux_owner_count) != 0)
+        return 1;
+    /* beyond the table's own reference, each live route, deleted or not, holds one */
+    if (WOLFSENTRY_ATOMIC_LOAD(event->header.refcount) > 1)
+        return 1;
     for (ent = wolfsentry_table_first(&wolfsentry->routes->header); ent != NULL; ent = ent->next) {
         if (((const struct wolfsentry_route *)ent)->parent_event == event)
             return 1;

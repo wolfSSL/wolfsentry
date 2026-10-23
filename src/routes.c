@@ -3187,6 +3187,8 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
     int n = 0;
     wolfsentry_action_res_t fallback_action_results = 0;
     struct wolfsentry_list_ent_header *cursor;
+    int examined = 0;
+    wolfsentry_time_t requeue_delay = 0;
 #ifdef WOLFSENTRY_THREADSAFE
     int have_mutex = 0;
     int got_lock = 0;
@@ -3202,6 +3204,11 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
         if ((! table->purge_list.tail) ||
             ((mode != 3) && (WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(table->purge_list.tail)->meta.purge_after > now)))
             WOLFSENTRY_ERROR_RETURN(ALREADY);
+    }
+
+    if (mode == 2) {
+        if ((ret = WOLFSENTRY_FROM_EPOCH_TIME(WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS, 0 /* epoch_nsecs */, &requeue_delay)) < 0)
+            WOLFSENTRY_ERROR_RERETURN(ret);
     }
 
     if (action_results == NULL)
@@ -3235,7 +3242,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
     while (table->purge_list.tail) {
         struct wolfsentry_route *route = NULL;
         int found = 0;
-        int examined = 0;
+        int requeue = 0;
         /* re-scan from the most stale entry each pass, because a delete runs
          * application callbacks that can mutate the purge list; skip routes
          * that still have a live connection within the idle limit so one
@@ -3252,7 +3259,10 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
                     (! (route->flags & WOLFSENTRY_ROUTE_FLAG_PENDING_DELETE)) &&
                     ((table->max_purgeable_idle_time == 0) || (now - route->meta.last_hit_time <= table->max_purgeable_idle_time)))
                 {
-                    continue;
+                    if (mode != 2)
+                        continue;
+                    /* requeue it so later bounded scans reach the routes behind it */
+                    requeue = 1;
                 }
             }
             found = 1;
@@ -3274,6 +3284,19 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
             have_mutex = 1;
         }
 #endif
+        if (requeue) {
+            wolfsentry_list_ent_delete(&table->purge_list, &route->purge_links);
+            /* not before the margin, unless the idle limit expires sooner */
+            route->meta.purge_after = now + requeue_delay;
+            if ((table->max_purgeable_idle_time > 0) &&
+                (now - route->meta.last_hit_time >= 0) &&
+                (table->max_purgeable_idle_time - (now - route->meta.last_hit_time) < requeue_delay))
+            {
+                route->meta.purge_after = route->meta.last_hit_time + table->max_purgeable_idle_time + 1;
+            }
+            wolfsentry_route_purge_list_insert(table, route);
+            continue;
+        }
         ret = wolfsentry_route_delete_0(WOLFSENTRY_CONTEXT_ARGS_OUT, NULL /* caller_arg */, table, NULL /* trigger_event */, route, action_results, 0 /* defer_p */);
         if (ret < 0) {
 #ifdef WOLFSENTRY_THREADSAFE

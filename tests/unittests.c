@@ -4238,6 +4238,38 @@ static int test_user_addr_families(void) {
 #include "wolfsentry/wolfsentry_json.h"
 #ifdef WOLFSENTRY_HAVE_JSON_DOM
 #include <wolfsentry/centijson_dom.h>
+
+static int test_dom_allocator_marker;
+static int test_dom_allocator_context_ok;
+static int test_dom_allocator_malloc_calls;
+
+static void *test_dom_allocator_malloc(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), size_t size)
+{
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    ++test_dom_allocator_malloc_calls;
+    if (context != (void *)&test_dom_allocator_marker)
+        test_dom_allocator_context_ok = 0;
+    return malloc(size);
+}
+
+static void test_dom_allocator_free(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr)
+{
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    if (context != (void *)&test_dom_allocator_marker)
+        test_dom_allocator_context_ok = 0;
+    free(ptr);
+}
+
+static void *test_dom_allocator_realloc(
+    WOLFSENTRY_CONTEXT_ARGS_IN_EX(void *context), void *ptr, size_t size)
+{
+    WOLFSENTRY_CONTEXT_ARGS_THREAD_NOT_USED;
+    if (context != (void *)&test_dom_allocator_marker)
+        test_dom_allocator_context_ok = 0;
+    return realloc(ptr, size);
+}
 #endif
 
 static int test_json(const char *fname, const char *extra_fname) {
@@ -5100,6 +5132,128 @@ static int test_json(const char *fname, const char *extra_fname) {
             free(test_json_document);
         if (fd != -1)
             (void)close(fd);
+    }
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    /* A duplicate key whose value is a container, parsed with USEFIRST, must
+     * leave the DOM nesting intact: the first value wins and the discarded
+     * container must not leak its children into the enclosing object. */
+    {
+        static const char dupkey_doc[] =
+            "{ \"k\" : 1, \"k\" : { \"x\" : 2 }, \"after\" : 3 }";
+        static const JSON_CONFIG dupkey_config = {
+            65536, 1000, 20, WOLFSENTRY_KV_MAX_VALUE_BYTES,
+            WOLFSENTRY_MAX_LABEL_BYTES, 10, JSON_NOSCALARROOT
+        };
+        JSON_VALUE dupkey_root;
+        JSON_VALUE *dupkey_v;
+        JSON_INPUT_POS dupkey_pos;
+
+        WOLFSENTRY_EXIT_ON_TRUE(
+            json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)),
+                (const unsigned char *)dupkey_doc, strlen(dupkey_doc), &dupkey_config,
+                JSON_DOM_DUPKEY_USEFIRST, &dupkey_root, &dupkey_pos) < 0);
+
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_type(&dupkey_root) == JSON_VALUE_DICT);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_dict_size(&dupkey_root) == 2);
+        WOLFSENTRY_EXIT_ON_TRUE((dupkey_v = json_value_path(&dupkey_root, "k")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(dupkey_v) == 1);
+        WOLFSENTRY_EXIT_ON_TRUE((dupkey_v = json_value_path(&dupkey_root, "after")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(dupkey_v) == 3);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&dupkey_root, "x") == NULL);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(
+            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &dupkey_root)));
+    }
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    /* USEFIRST must also drop duplicate containers whose value is a nested
+     * object or an array: the first value wins, the duplicate (and anything
+     * nested in it) is dropped whole, and the surrounding keys stay intact. */
+    {
+        static const char dupnest_doc[] =
+            "{ \"k\" : { \"a\" : 1 },"
+            " \"k\" : { \"b\" : { \"c\" : 2 } },"
+            " \"arr\" : [ 10, 20 ],"
+            " \"arr\" : [ 30, 40, 50 ],"
+            " \"after\" : 7 }";
+        static const JSON_CONFIG dupnest_config = {
+            65536, 1000, 20, WOLFSENTRY_KV_MAX_VALUE_BYTES,
+            WOLFSENTRY_MAX_LABEL_BYTES, 10, JSON_NOSCALARROOT
+        };
+        JSON_VALUE dupnest_root;
+        JSON_VALUE *dupnest_v;
+        JSON_INPUT_POS dupnest_pos;
+
+        WOLFSENTRY_EXIT_ON_TRUE(
+            json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)),
+                (const unsigned char *)dupnest_doc, strlen(dupnest_doc), &dupnest_config,
+                JSON_DOM_DUPKEY_USEFIRST, &dupnest_root, &dupnest_pos) < 0);
+
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_type(&dupnest_root) == JSON_VALUE_DICT);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_dict_size(&dupnest_root) == 3);
+
+        /* first (object) value of "k" wins; the nested duplicate is dropped whole */
+        WOLFSENTRY_EXIT_ON_TRUE((dupnest_v = json_value_path(&dupnest_root, "k")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_type(dupnest_v) == JSON_VALUE_DICT);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_dict_size(dupnest_v) == 1);
+        WOLFSENTRY_EXIT_ON_TRUE((dupnest_v = json_value_path(&dupnest_root, "k/a")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(dupnest_v) == 1);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&dupnest_root, "k/b") == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&dupnest_root, "b") == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_path(&dupnest_root, "c") == NULL);
+
+        /* first (array) value of "arr" wins; the longer duplicate is dropped */
+        WOLFSENTRY_EXIT_ON_TRUE((dupnest_v = json_value_path(&dupnest_root, "arr")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_type(dupnest_v) == JSON_VALUE_ARRAY);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_array_size(dupnest_v) == 2);
+        WOLFSENTRY_EXIT_ON_TRUE(json_value_array_get(dupnest_v, 0) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(json_value_array_get(dupnest_v, 0)) == 10);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(json_value_array_get(dupnest_v, 1)) == 20);
+
+        WOLFSENTRY_EXIT_ON_TRUE((dupnest_v = json_value_path(&dupnest_root, "after")) == NULL);
+        WOLFSENTRY_EXIT_ON_FALSE(json_value_int32(dupnest_v) == 7);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_centijson_errcode_translate(
+            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(wolfsentry_get_allocator(wolfsentry)), &dupnest_root)));
+    }
+#endif /* WOLFSENTRY_HAVE_JSON_DOM */
+
+#ifdef WOLFSENTRY_HAVE_JSON_DOM
+    /* A custom allocator must receive its own context pointer, not the
+     * allocator object, as the first argument to its callbacks. */
+    {
+        static const char ctx_doc[] = "{ \"a\" : [ 1, 2, 3 ] }";
+        static const JSON_CONFIG ctx_config = {
+            65536, 1000, 20, WOLFSENTRY_KV_MAX_VALUE_BYTES,
+            WOLFSENTRY_MAX_LABEL_BYTES, 10, JSON_NOSCALARROOT
+        };
+        struct wolfsentry_allocator ctx_allocator;
+        JSON_VALUE ctx_root;
+        JSON_INPUT_POS ctx_pos;
+
+        ctx_allocator.context = &test_dom_allocator_marker;
+        ctx_allocator.malloc = test_dom_allocator_malloc;
+        ctx_allocator.free = test_dom_allocator_free;
+        ctx_allocator.realloc = test_dom_allocator_realloc;
+        ctx_allocator.memalign = NULL;
+        ctx_allocator.free_aligned = NULL;
+
+        test_dom_allocator_context_ok = 1;
+        test_dom_allocator_malloc_calls = 0;
+
+        WOLFSENTRY_EXIT_ON_TRUE(
+            json_dom_parse(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_allocator),
+                (const unsigned char *)ctx_doc, strlen(ctx_doc), &ctx_config,
+                0, &ctx_root, &ctx_pos) < 0);
+
+        WOLFSENTRY_EXIT_ON_FALSE(test_dom_allocator_malloc_calls > 0);
+        WOLFSENTRY_EXIT_ON_FALSE(test_dom_allocator_context_ok == 1);
+
+        WOLFSENTRY_EXIT_ON_TRUE(
+            json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&ctx_allocator), &ctx_root) < 0);
     }
 #endif /* WOLFSENTRY_HAVE_JSON_DOM */
 

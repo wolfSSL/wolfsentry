@@ -3211,6 +3211,7 @@ static int test_route_table_max_purgeable_routes_shrink(WOLFSENTRY_CONTEXT_ARGS_
     wolfsentry_hitcount_t max_purgeable_routes;
     wolfsentry_ent_id_t ids[3];
     unsigned int i;
+    byte addr[4] = { 0x0a, 0x0b, 0x0c, 0x00 };
 
     memset(&remote, 0, sizeof remote);
     memset(&local, 0, sizeof local);
@@ -3228,8 +3229,8 @@ static int test_route_table_max_purgeable_routes_shrink(WOLFSENTRY_CONTEXT_ARGS_
 
     /* three routes with no connections, all already due for purging. */
     for (i = 0; i < sizeof ids / sizeof ids[0]; ++i) {
-        memcpy(remote.sa.addr, "\x0a\x0b\x0c\x00", sizeof remote.addr_buf);
-        remote.sa.addr[3] = (byte)(0x20 + i);
+        addr[3] = (byte)(0x20 + i);
+        memcpy(remote.sa.addr, addr, sizeof addr);
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_route_insert(
                 WOLFSENTRY_CONTEXT_ARGS_OUT,

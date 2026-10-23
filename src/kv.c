@@ -1151,12 +1151,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_bytes_base64(
     wolfsentry_errcode_t ret;
     int decoded_len;
     struct wolfsentry_kv_pair_internal *kv;
+    /* the decoded size computation adds 3 to the length */
     if (value_len < 0) {
         size_t value_strlen = strlen(value);
-        if (value_strlen > (size_t)INT_MAX)
+        if (value_strlen > (size_t)(INT_MAX - 3))
             WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
         value_len = (int)value_strlen;
-    }
+    } else if (value_len > INT_MAX - 3)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     decoded_len = WOLFSENTRY_BASE64_DECODED_BUFSPC(value, value_len);
     if (decoded_len > WOLFSENTRY_KV_MAX_VALUE_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);

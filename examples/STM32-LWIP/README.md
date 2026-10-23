@@ -68,7 +68,10 @@ In `StartDefaultTask()`:
 ```c
   /* USER CODE BEGIN 5 */
   printf("Sentry init\n");
-  sentry_init();
+  if (sentry_init() != 0) {
+    printf("Sentry init failed, all traffic will be denied\n");
+    Error_Handler();
+  }
   printf("Echo init\n");
   echo_init();
   printf("Ping init\n");

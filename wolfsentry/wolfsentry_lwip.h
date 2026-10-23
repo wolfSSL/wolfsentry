@@ -39,6 +39,8 @@
  * `FILT_PORT_UNREACHABLE` -- Call into wolfSentry when inbound traffic attempts to reach an unlistened/unbound port<br>
  * `FILT_INBOUND_ERR` -- Call into wolfSentry when inbound traffic results in detection of an error by lwIP<br>
  * `FILT_OUTBOUND_ERR` -- Call into wolfSentry when outbound traffic results in detection of an error by lwIP<br>
+ *
+ * lwIP has a single process-wide set of filter slots, so at most one wolfSentry context can own them at a time.  The first context to install a callback with a nonzero mask becomes the owner of all slots.  While it owns them, any installation or disabling call from a different context fails with `WOLFSENTRY_ERROR_ID_INCOMPATIBLE_STATE` and leaves the owner's callbacks in place.  Ownership is released when the owner disables every slot it installed (mask zero), or when the owner is shut down, which runs `wolfsentry_cleanup_lwip_filter_callbacks()`; a replacement context can install only after that.  A filter callback denies the packet whenever the wolfSentry dispatch fails or no context is attached.
  */
 
 #ifndef WOLFSENTRY_LWIP_H

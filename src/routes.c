@@ -3235,11 +3235,15 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
     while (table->purge_list.tail) {
         struct wolfsentry_route *route = NULL;
         int found = 0;
+        int examined = 0;
         /* re-scan from the most stale entry each pass, because a delete runs
          * application callbacks that can mutate the purge list; skip routes
          * that still have a live connection within the idle limit so one
          * protected route does not strand the expired routes behind it. */
         for (cursor = table->purge_list.tail; cursor != NULL; cursor = cursor->prev) {
+            /* the per-dispatch purge runs on the packet path, so bound its scan */
+            if ((mode == 2) && (++examined > 8))
+                break;
             route = WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(cursor);
             if (mode != 3) {
                 if (route->meta.purge_after > now)

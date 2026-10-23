@@ -71,8 +71,10 @@ static inline void wolfsentry_list_ent_insert_before(struct wolfsentry_list_head
     if (point_ent->prev) {
         new_ent->prev = point_ent->prev;
         new_ent->prev->next = new_ent;
-    } else
+    } else {
+        new_ent->prev = NULL;
         list->head = new_ent;
+    }
     point_ent->prev = new_ent;
     ++list->len;
 }
@@ -89,8 +91,10 @@ static inline void wolfsentry_list_ent_insert_after(struct wolfsentry_list_heade
     if (point_ent->next) {
         new_ent->next = point_ent->next;
         new_ent->next->prev = new_ent;
-    } else
+    } else {
+        new_ent->next = NULL;
         list->tail = new_ent;
+    }
     point_ent->next = new_ent;
     ++list->len;
 }

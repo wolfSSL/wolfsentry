@@ -33,6 +33,11 @@
 #define PRIVATE_DATA_ALIGNMENT 16
 #endif
 
+#ifdef __GNUC__
+/* the list tests call the inline list primitives directly from run-once code */
+#pragma GCC diagnostic ignored "-Winline"
+#endif
+
 #include "src/wolfsentry_internal.h"
 
 #if (defined(_POSIX_C_SOURCE) || defined(__MACH__)) && !defined(FREERTOS)
@@ -1391,6 +1396,60 @@ TEST_SKIP(test_rw_locks)
 
 #ifdef TEST_STATIC_ROUTES
 
+static wolfsentry_errcode_t test_ll_insert_before_head_links(void) {
+    struct wolfsentry_list_header list;
+    struct wolfsentry_list_ent_header a, b, c, d;
+    struct wolfsentry_list_ent_header *cursor;
+    wolfsentry_hitcount_t n;
+
+    WOLFSENTRY_LIST_HEADER_RESET(list);
+    wolfsentry_list_ent_append(&list, &a);
+    wolfsentry_list_ent_append(&list, &b);
+    wolfsentry_list_ent_append(&list, &c);
+
+    /* unlink a middle entry and reinsert it before the head, as purge-list
+     * refresh does; the unlink leaves its old links, so the head insertion
+     * must clear prev.
+     */
+    wolfsentry_list_ent_delete(&list, &b);
+    wolfsentry_list_ent_insert_before(&list, list.head, &b);
+
+    if (list.head != &b)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    if (list.head->prev != NULL)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    if (list.tail->next != NULL)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    wolfsentry_list_ent_insert_before(&list, list.head, &d);
+    if ((list.head != &d) || (list.head->prev != NULL))
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    n = 0;
+    for (cursor = list.head; cursor != NULL; cursor = cursor->next) {
+        ++n;
+        if (n > list.len)
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        if ((cursor->next == NULL) && (cursor != list.tail))
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    }
+    if (n != list.len)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    n = 0;
+    for (cursor = list.tail; cursor != NULL; cursor = cursor->prev) {
+        ++n;
+        if (n > list.len)
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        if ((cursor->prev == NULL) && (cursor != list.head))
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    }
+    if (n != list.len)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t replace_rule_transactionally(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const char *event_label,
@@ -1455,6 +1514,59 @@ out:
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
+static wolfsentry_errcode_t test_ll_insert_after_tail_links(void) {
+    struct wolfsentry_list_header list;
+    struct wolfsentry_list_ent_header a, b, c;
+    struct wolfsentry_list_ent_header sentinel;
+    struct wolfsentry_list_ent_header *cursor;
+    wolfsentry_hitcount_t n;
+
+    WOLFSENTRY_LIST_HEADER_RESET(list);
+    wolfsentry_list_ent_append(&list, &a);
+    wolfsentry_list_ent_append(&list, &b);
+
+    /* a freshly allocated entry carries an unrelated non-NULL next, which a
+     * correct tail insertion must overwrite with NULL.
+     */
+    sentinel.prev = NULL;
+    sentinel.next = NULL;
+    c.prev = &sentinel;
+    c.next = &sentinel;
+
+    wolfsentry_list_ent_insert_after(&list, list.tail, &c);
+
+    if (list.tail != &c)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    if (list.tail->next != NULL)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    if (list.head->prev != NULL)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    n = 0;
+    for (cursor = list.head; cursor != NULL; cursor = cursor->next) {
+        ++n;
+        if (n > list.len)
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        if ((cursor->next == NULL) && (cursor != list.tail))
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    }
+    if (n != list.len)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    n = 0;
+    for (cursor = list.tail; cursor != NULL; cursor = cursor->prev) {
+        ++n;
+        if (n > list.len)
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+        if ((cursor->prev == NULL) && (cursor != list.head))
+            WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+    }
+    if (n != list.len)
+        WOLFSENTRY_ERROR_RETURN(UNIT_TEST_FAILURE);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_static_routes(void) {
 
     struct wolfsentry_context *wolfsentry;
@@ -1504,6 +1616,9 @@ static int test_static_routes(void) {
     size_t private_data_size;
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(test_ll_insert_before_head_links());
+    WOLFSENTRY_EXIT_ON_FAILURE(test_ll_insert_after_tail_links());
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(

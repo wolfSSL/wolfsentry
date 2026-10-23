@@ -1320,13 +1320,27 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
             wolfsentry_route_flags_t flags_before, flags_after;
             WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &route_to_insert->header));
             wolfsentry_route_update_flags_1(route_to_insert, WOLFSENTRY_ROUTE_FLAG_NONE, WOLFSENTRY_ROUTE_FLAG_IN_TABLE, &flags_before, &flags_after);
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+            if (route_to_insert->flags & (WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK | WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_bitmask_matching_downref(route_to_insert->sa_family, route_table));
+#endif
+            WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_INSERTED);
+            /* the caller drops the last reference on failure, so the route
+             * must not be linked into the purge list or wildcard bookkeeping.
+             */
+            WOLFSENTRY_ERROR_RERETURN(ret);
         }
-    } else {
-        if (route_to_insert->parent_event) {
-            if (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT))
-                WOLFSENTRY_SET_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);
-        }
+    } else
         ret = WOLFSENTRY_ERROR_ENCODE(OK);
+
+    /* an aux event parents the ephemeral routes it generates, so it keeps its
+     * subevent role rather than taking on the mutually exclusive parent role.
+     */
+    if ((route_to_insert->parent_event != NULL) &&
+        (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT)) &&
+        (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT)))
+    {
+        WOLFSENTRY_SET_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);
     }
 
     if (route_to_insert->meta.purge_after)
@@ -1647,6 +1661,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
     int contiguous_search;
     wolfsentry_route_flags_t inexact_matches_buf;
     int seen_target_af;
+    int af_wildcard_span_entered;
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
     int af_is_bitmask_matched;
 #endif
@@ -1740,9 +1755,16 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
      */
     if (cursor_position == 0) {
         struct wolfsentry_event *parent_event = ((struct wolfsentry_route *)cursor.point)->parent_event ? ((struct wolfsentry_route *)cursor.point)->parent_event : NULL;
-        if ((action_results == NULL) || (parent_event == NULL) || (parent_event->config == NULL) ||
-            (((*action_results & parent_event->config->config.action_res_filter_bits_set) == parent_event->config->config.action_res_filter_bits_set) &&
-             ((~(*action_results) & parent_event->config->config.action_res_filter_bits_unset) == parent_event->config->config.action_res_filter_bits_unset)))
+        /* PENALTYBOXED is mutable and not part of the key, so an exact hit
+         * must still honor the bind/listen exclusion applied by the full scan.
+         */
+        int excluded_reject_route = (action_results != NULL) &&
+            WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_EXCLUDE_REJECT_ROUTES) &&
+            WOLFSENTRY_MASKIN_BITS(((struct wolfsentry_route *)cursor.point)->flags, WOLFSENTRY_ROUTE_FLAG_PENALTYBOXED);
+        if ((! excluded_reject_route) &&
+            ((action_results == NULL) || (parent_event == NULL) || (parent_event->config == NULL) ||
+             (((*action_results & parent_event->config->config.action_res_filter_bits_set) == parent_event->config->config.action_res_filter_bits_set) &&
+              ((~(*action_results) & parent_event->config->config.action_res_filter_bits_unset) == parent_event->config->config.action_res_filter_bits_unset))))
         {
             int effective_priority = parent_event ? parent_event->priority : 0;
             if (effective_priority <= table->highest_priority_route_in_table) {
@@ -1803,6 +1825,7 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
 #endif
 
     seen_target_af = 0;
+    af_wildcard_span_entered = 0;
 
     for (i = (struct wolfsentry_route *)wolfsentry_table_cursor_current(&cursor);
          i;
@@ -1812,9 +1835,15 @@ static wolfsentry_errcode_t wolfsentry_route_lookup_0(
             if (! seen_target_af)
                 seen_target_af = 1;
         } else {
+            /* jump to the wildcard-AF span at most once; the span's own
+             * members never match the target AF and would otherwise re-trigger
+             * the jump forever.
+             */
             if (seen_target_af &&
+                (! af_wildcard_span_entered) &&
                 (! (target_route->flags & WOLFSENTRY_ROUTE_FLAG_SA_FAMILY_WILDCARD)))
             {
+                af_wildcard_span_entered = 1;
                 if (table->last_af_wildcard_route) {
                     i = table->last_af_wildcard_route;
                     wolfsentry_table_cursor_set(&cursor, &i->header);
@@ -4074,6 +4103,30 @@ static wolfsentry_errcode_t ws_itoa(int i, unsigned char **out, size_t *spc) {
 #define unwrite_byte() do { --(*json_out); ++(*json_out_len); } while (0)
 #define unwrite_bytes(l) do { size_t _l = (size_t)(l); (*json_out) -= _l; (*json_out_len) += _l; } while (0)
 
+/* labels and names are arbitrary bytes, so they must be escaped to keep the
+ * output parseable and to keep them from injecting JSON structure.
+ */
+static wolfsentry_errcode_t write_json_string(unsigned char **json_out, size_t *json_out_len, const char *s, size_t s_len) {
+    static const char hexdigits[] = "0123456789abcdef";
+    size_t i;
+
+    write_byte('"');
+    for (i = 0; i < s_len; ++i) {
+        unsigned char c = (unsigned char)s[i];
+        if ((c == '"') || (c == '\\')) {
+            write_byte('\\');
+            write_byte(c);
+        } else if (c < 0x20U) {
+            write_string("\\u00");
+            write_byte((unsigned char)hexdigits[c >> 4U]);
+            write_byte((unsigned char)hexdigits[c & 0xfU]);
+        } else
+            write_byte(c);
+    }
+    write_byte('"');
+    WOLFSENTRY_RETURN_OK;
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_route *r,
@@ -4085,9 +4138,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
 
     write_byte('{');
     if (r->parent_event) {
-        write_string("\"parent-event\":\"");
-        write_bytes(r->parent_event->label, r->parent_event->label_len);
-        write_string("\",");
+        write_string("\"parent-event\":");
+        WOLFSENTRY_RERETURN_IF_ERROR(write_json_string(json_out, json_out_len, r->parent_event->label, (size_t)r->parent_event->label_len));
+        write_byte(',');
     }
     {
         const struct wolfsentry_route_flag_name_map_ent *i;
@@ -4119,10 +4172,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
                 if (family_name_len + 2 > *json_out_len)
                     ret = WOLFSENTRY_ERROR_ENCODE(BUFFER_TOO_SMALL);
                 else {
-                    write_byte('"');
-                    write_bytes(family_name, family_name_len);
-                    write_byte('"');
-                    rendered_family = 1;
+                    ret = write_json_string(json_out, json_out_len, family_name, family_name_len);
+                    if (WOLFSENTRY_IS_SUCCESS(ret))
+                        rendered_family = 1;
                 }
                 if (addr_family) {
                     wolfsentry_errcode_t drop_ret = wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, NULL /* action_results */ );
@@ -4151,18 +4203,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
              (r->sa_family == WOLFSENTRY_AF_INET6)))
         {
             char get_buf[256];
-            struct protoent protoent, *p;
+            struct protoent protoent, *p = NULL;
             /* note this is glibc-specific and non-standard; other libc
              * implementations have same name but different args.
+             * an unknown number returns 0 with a null result pointer.
              */
-            if (getprotobynumber_r(r->sa_proto,
-                                   &protoent,
-                                   get_buf, sizeof get_buf,
-                                   &p) == 0)
+            if ((getprotobynumber_r(r->sa_proto,
+                                    &protoent,
+                                    get_buf, sizeof get_buf,
+                                    &p) == 0) &&
+                (p != NULL))
             {
-                write_byte('"');
-                write_string(protoent.p_name);
-                write_byte('"');
+                WOLFSENTRY_RERETURN_IF_ERROR(write_json_string(json_out, json_out_len, p->p_name, strlen(p->p_name)));
                 rendered_proto = 1;
             }
         }
@@ -4183,8 +4235,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
         if (have_r_attr(SA_REMOTE_ADDR)) {
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
             if (r->flags & WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK) {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,
@@ -4211,8 +4264,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
             } else
 #endif
             {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,
@@ -4251,8 +4305,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
         if (have_r_attr(SA_LOCAL_ADDR)) {
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
             if (r->flags & WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK) {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,
@@ -4279,8 +4334,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_format_json(
             } else
 #endif
             {
-                int len_in_out = (int)*json_out_len;
+                int len_in_out;
                 write_string("\"address\":\"");
+                len_in_out = (int)*json_out_len;
                 ret = wolfsentry_route_format_address(
                     WOLFSENTRY_CONTEXT_ARGS_OUT,
                     r->sa_family,

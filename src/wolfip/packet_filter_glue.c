@@ -699,13 +699,11 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_icmp_callba
 
 static uint32_t wolfip_normalize_tcp_mask(uint32_t tcp_mask)
 {
-    /* connection-count increments and decrements are balanced only when the
-     * accept, close, and reset lifecycle events are delivered together. */
-    if (tcp_mask & (WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING) |
-                    WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
-                    WOLFIP_FILT_MASK(WOLFIP_FILT_REMOTE_RESET)))
-        tcp_mask |= WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING) |
-            WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
+    /* an accept is counted as a connection, so when accepts are requested also
+     * deliver the close and reset events that release it; teardown-only masks
+     * must not turn on accept counting. */
+    if (tcp_mask & WOLFIP_FILT_MASK(WOLFIP_FILT_ACCEPTING))
+        tcp_mask |= WOLFIP_FILT_MASK(WOLFIP_FILT_CLOSED) |
             WOLFIP_FILT_MASK(WOLFIP_FILT_REMOTE_RESET);
     return tcp_mask;
 }

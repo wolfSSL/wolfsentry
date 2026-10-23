@@ -3544,6 +3544,7 @@ static int test_track_peer_ephemeral_route_bound(void) {
     wolfsentry_ent_id_t id;
     wolfsentry_hitcount_t n_routes;
     int i;
+    byte addr[4];
 
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
@@ -3667,10 +3668,11 @@ static int test_track_peer_ephemeral_route_bound(void) {
 
     for (i = 1; i <= 3; ++i) {
         remote.sa.sa_port = (wolfsentry_port_t)(1000 + i);
-        remote.sa.addr[0] = 10;
-        remote.sa.addr[1] = 0;
-        remote.sa.addr[2] = 0;
-        remote.sa.addr[3] = (byte)i;
+        addr[0] = 10;
+        addr[1] = 0;
+        addr[2] = 0;
+        addr[3] = (byte)i;
+        memcpy(remote.sa.addr, addr, sizeof addr);
 
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_route_event_dispatch(
@@ -3702,10 +3704,11 @@ static int test_track_peer_ephemeral_route_bound(void) {
 
     for (i = 1; i <= 3; ++i) {
         remote.sa.sa_port = (wolfsentry_port_t)(2000 + i);
-        remote.sa.addr[0] = 10;
-        remote.sa.addr[1] = 0;
-        remote.sa.addr[2] = 1;
-        remote.sa.addr[3] = (byte)i;
+        addr[0] = 10;
+        addr[1] = 0;
+        addr[2] = 1;
+        addr[3] = (byte)i;
+        memcpy(remote.sa.addr, addr, sizeof addr);
 
         WOLFSENTRY_EXIT_ON_FAILURE(
             wolfsentry_route_event_dispatch(

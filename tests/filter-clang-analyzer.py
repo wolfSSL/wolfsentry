@@ -8,9 +8,9 @@ import sys
 
 
 ALLOWED_RESULTS = {
-    ("core.uninitialized.Assign", "src/json/centijson_value.c", 1285),
-    ("core.NullDereference", "src/json/centijson_value.c", 1483),
-    ("core.NullDereference", "src/json/centijson_value.c", 1520),
+    ("core.uninitialized.Assign", "src/json/centijson_value.c", 1366),
+    ("core.NullDereference", "src/json/centijson_value.c", 1564),
+    ("core.NullDereference", "src/json/centijson_value.c", 1601),
 }
 
 

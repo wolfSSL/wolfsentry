@@ -105,26 +105,23 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
         family_byname_len = (int)strlen(family_byname);
     if (family_byname_len == 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
-    if (family_byname_len > WOLFSENTRY_MAX_LABEL_BYTES) {
-        ret = WOLFSENTRY_ERROR_ENCODE(STRING_ARG_TOO_LONG);
-        goto out;
-    }
+    if (family_byname_len > WOLFSENTRY_MAX_LABEL_BYTES)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
 #endif
 
-    if ((bynumber = (struct wolfsentry_addr_family_bynumber *)WOLFSENTRY_MALLOC(sizeof *bynumber)) == NULL) {
-        ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
-        goto out;
-    }
+    if ((bynumber = (struct wolfsentry_addr_family_bynumber *)WOLFSENTRY_MALLOC(sizeof *bynumber)) == NULL)
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+
+    memset(bynumber, 0, sizeof *bynumber);
 
 #ifdef WOLFSENTRY_PROTOCOL_NAMES
     byname_size = sizeof *byname + (size_t)family_byname_len + 1;
     if ((byname = (struct wolfsentry_addr_family_byname *)WOLFSENTRY_MALLOC(byname_size)) == NULL) {
-        ret = WOLFSENTRY_ERROR_ENCODE(SYS_RESOURCE_FAILED);
-        goto out;
+        WOLFSENTRY_FREE(bynumber);
+        WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
     }
 #endif
 
-    memset(bynumber, 0, sizeof *bynumber);
     bynumber->number = family_bynumber;
     bynumber->parser = parser;
     bynumber->formatter = formatter;
@@ -142,8 +139,13 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
 #endif
 
     ret = WOLFSENTRY_MUTEX_EX(wolfsentry);
-    if (ret < 0)
-        goto out;
+    if (ret < 0) {
+        WOLFSENTRY_FREE(bynumber);
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+        WOLFSENTRY_FREE(byname);
+#endif
+        WOLFSENTRY_ERROR_RERETURN(ret);
+    }
 
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &bynumber->header)) < 0)
         goto out;
@@ -165,6 +167,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_addr_family_insert(
 
   out:
 
+    /* reached only after the context lock is held, so unlocking is correct. */
     if (ret < 0) {
         if (bynumber != NULL) {
             if (bynumber->header.id != WOLFSENTRY_ENT_ID_NONE)
@@ -497,6 +500,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
      */
     if (WOLFSENTRY_ATOMIC_LOAD(wolfsentry->addr_families_byname->header.n_ents) > 0) {
         struct wolfsentry_addr_family_bynumber *addr_family;
+        wolfsentry_addr_family_t found_number = WOLFSENTRY_AF_UNSPEC;
         WOLFSENTRY_SHARED_OR_RETURN();
         ret = wolfsentry_addr_family_get_byname_1(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -504,14 +508,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_addr_family_pton(
             family_name,
             family_name_len,
             &addr_family);
+        if (ret >= 0)
+            found_number = addr_family->number;
         WOLFSENTRY_UNLOCK_FOR_RETURN();
         if (ret >= 0) {
-            *family_number = addr_family->number;
+            *family_number = found_number;
             WOLFSENTRY_RETURN_OK;
         } else if (! WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
             WOLFSENTRY_ERROR_RERETURN(ret);
     }
 
+    if (strcaseeq(family_name, "UNSPEC", (size_t)family_name_len))
+        { *family_number = WOLFSENTRY_AF_UNSPEC; WOLFSENTRY_RETURN_OK; }
     if (strcaseeq(family_name, "UNIX", (size_t)family_name_len))
         { *family_number = WOLFSENTRY_AF_UNIX; WOLFSENTRY_RETURN_OK; }
     if (strcaseeq(family_name, "LOCAL", (size_t)family_name_len))

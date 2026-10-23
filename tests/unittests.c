@@ -3956,6 +3956,11 @@ static int test_user_addr_families(void) {
 
     struct wolfsentry_context *wolfsentry;
     wolfsentry_action_res_t action_results;
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    char overlong_family_name[WOLFSENTRY_MAX_LABEL_BYTES + 2];
+    wolfsentry_addr_family_t unspec_family_number;
+    const char *unspec_family_name;
+#endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
@@ -4222,6 +4227,46 @@ static int test_user_addr_families(void) {
                 WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_addr_family_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, addr_family, &action_results));
         }
     }
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
+
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    /* A family name longer than the maximum label length must propagate
+     * STRING_ARG_TOO_LONG rather than a lock-management error from an error
+     * path that returns before the context lock is acquired.
+     */
+    memset(overlong_family_name, 'a', sizeof overlong_family_name - 1);
+    overlong_family_name[sizeof overlong_family_name - 1] = 0;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        STRING_ARG_TOO_LONG,
+        wolfsentry_addr_family_handler_install(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            WOLFSENTRY_AF_USER_OFFSET + 1,
+            overlong_family_name,
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            my_addr_family_parser,
+            my_addr_family_formatter,
+            24 /* max_addr_bits */));
+#endif /* WOLFSENTRY_PROTOCOL_NAMES */
+
+#ifdef WOLFSENTRY_PROTOCOL_NAMES
+    /* WOLFSENTRY_AF_UNSPEC formats to "UNSPEC" through ntop and must parse back
+     * to the same number through pton so the encode/decode roundtrip holds.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_ntop(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            WOLFSENTRY_AF_UNSPEC,
+            NULL,
+            &unspec_family_name));
+    WOLFSENTRY_EXIT_ON_FALSE((unspec_family_name != NULL) &&
+                             (! strcmp(unspec_family_name, "UNSPEC")));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_addr_family_pton(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "UNSPEC",
+            WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &unspec_family_number));
+    WOLFSENTRY_EXIT_ON_FALSE(unspec_family_number == WOLFSENTRY_AF_UNSPEC);
 #endif /* WOLFSENTRY_PROTOCOL_NAMES */
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));

@@ -1017,16 +1017,21 @@ json_value_array_insert(
     JSON_VALUE* v, size_t index)
 {
     ARRAY* a = json_value_array_payload(v);
+    size_t new_alloc;
 
     if(a == NULL  ||  index > a->size)
         return NULL;
 
     if(a->size >= a->alloc) {
+        new_alloc = (a->alloc > 0) ? a->alloc * 2 : 1;
+        /* a wrapped doubling must not reach the shrink-to-zero path */
+        if(new_alloc <= a->size)
+            return NULL;
         if(json_value_array_realloc(
 #ifdef WOLFSENTRY
                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
-               a, (a->alloc > 0) ? a->alloc * 2 : 1) != 0)
+               a, new_alloc) != 0)
             return NULL;
     }
 

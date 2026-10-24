@@ -245,7 +245,7 @@ static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *
 
     if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
-    ret = convert_check_magnitude(buf, (uint64_t)MAX_UINT_OF(*out));
+    ret = convert_check_magnitude(buf, (uint64_t)MAX_UINT_OF(conv));
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *out = (uint64_t)conv;
 
@@ -290,9 +290,9 @@ static wolfsentry_errcode_t convert_sint64(JSON_TYPE type, const unsigned char *
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     sign_p = convert_skip_blanks(buf);
     if (*sign_p == '-')
-        magnitude_limit = (uint64_t)MAX_SINT_OF(*out) + 1U;
+        magnitude_limit = (uint64_t)MAX_SINT_OF(conv) + 1U;
     else
-        magnitude_limit = (uint64_t)MAX_SINT_OF(*out);
+        magnitude_limit = (uint64_t)MAX_SINT_OF(conv);
     ret = convert_check_magnitude(buf, magnitude_limit);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *out = (int64_t)conv;

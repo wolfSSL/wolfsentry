@@ -3948,6 +3948,475 @@ static int test_user_values(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_kv_reference_lifetime(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_kv_pair_internal *kv_ref = NULL;
+    const char *value = NULL;
+    int value_len = -1;
+    static const char key[] = "lifetime_key";
+    static const char str[] = "lifetime_value";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            str, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &value, &value_len, &kv_ref));
+
+    /* delete the key while the reference returned by get_string is still held;
+     * the held reference must keep the entry alive and readable.
+     */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)strlen(str));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(value, str) == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_release_record(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_ref));
+
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        wolfsentry_user_value_get_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &value, &value_len, &kv_ref));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_kv_get2_reference_balance(void) {
+    struct wolfsentry_context *wolfsentry;
+    static const char key[] = "balance_key";
+    uint64_t uint_value = 0;
+    int mutable = -1;
+    int i;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_uint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            42, 0));
+
+    /* the non-reference getters take and release an internal reference each
+     * call; repeated calls must leave the refcount balanced so the entry can
+     * still be deleted afterwards.
+     */
+    for (i = 0; i < 100; ++i) {
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_uint(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &uint_value));
+        WOLFSENTRY_EXIT_ON_FALSE(uint_value == 42);
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_get_mutability(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                &mutable));
+    }
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        wolfsentry_user_value_get_uint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &uint_value));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_kv_get_bad_key_errcode(void) {
+    struct wolfsentry_context *wolfsentry;
+    const char *value = NULL;
+    int value_len = -1;
+    struct wolfsentry_kv_pair_internal *kv_ref = NULL;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* a rejected key must surface the validation error itself, not an error
+     * from an unlock attempted without a held lock.
+     */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_user_value_get_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "unused_key", 0 /* key_len */,
+            &value, &value_len, &kv_ref));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int render_only_user_value(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    char *out,
+    int out_space)
+{
+    struct wolfsentry_cursor *cursor;
+    struct wolfsentry_kv_pair_internal *kv_ref;
+    const struct wolfsentry_kv_pair *kv_exports;
+    int render_space = out_space;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_current(WOLFSENTRY_CONTEXT_ARGS_OUT, cursor, &kv_ref));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_pair_export(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_ref, &kv_exports));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_render_value(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_exports, out, &render_space));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_kv_render_large_int(void) {
+    struct wolfsentry_context *wolfsentry;
+    char buf[64];
+    /* 0x1234567890ABCDEF and -(2^33), built without long-long literals so the
+     * test stays legal under WOLFSENTRY_C89; compared against the exact decimal
+     * rendering to avoid strtoull()/strtoll().
+     */
+    uint64_t stored_uint = ((uint64_t)0x12345678u << 32) | (uint64_t)0x90abcdefu;
+    int64_t stored_sint = -((int64_t)1 << 33);
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_uint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "big_uint", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            stored_uint, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(buf, "1311768467294899695") == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "big_uint", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_sint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "big_sint", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            stored_sint, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(buf, "-8589934592") == 0);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_kv_render_float_roundtrip(void) {
+    struct wolfsentry_context *wolfsentry;
+    char buf[64];
+    double stored = 3.141592653589793;
+#ifndef WOLFSENTRY_NO_JSON
+    char json[128];
+    int json_len;
+    double reloaded;
+#endif
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "pi", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            stored, 0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+
+    /* the rendered form must reparse to the exact same double. */
+    WOLFSENTRY_EXIT_ON_FALSE(strtod(buf, NULL) == stored);
+
+#ifndef WOLFSENTRY_NO_JSON
+    /* the longest %.17g form, 24 characters, must reload through the JSON loader */
+    stored = -2.2250738585072014e-308;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "pi", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_store_double(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED, stored, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(strlen(buf) == 24);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    json_len = snprintf(json, sizeof json, "{ \"wolfsentry-config-version\" : 1, \"user-values\" : { \"tiny\" : %s } }", buf);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT, (const unsigned char *)json, (size_t)json_len, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED, &reloaded));
+    WOLFSENTRY_EXIT_ON_FALSE(reloaded == stored);
+#endif
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#ifndef WOLFSENTRY_C89
+static int test_kv_render_nonfinite_float(void) {
+    struct wolfsentry_context *wolfsentry;
+    char buf[64];
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            (double)NAN, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    /* a bare nan/inf is not valid JSON; the rendered value must be quoted and
+     * must reparse to the same non-finite value.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
+    WOLFSENTRY_EXIT_ON_FALSE(isnan(strtod(buf + 1, NULL)));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            (double)INFINITY, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
+    WOLFSENTRY_EXIT_ON_FALSE(isinf(strtod(buf + 1, NULL)) && (strtod(buf + 1, NULL) > 0.0));
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_delete(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_double(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "ninf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            -(double)INFINITY, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
+    WOLFSENTRY_EXIT_ON_FALSE(isinf(strtod(buf + 1, NULL)) && (strtod(buf + 1, NULL) < 0.0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* !WOLFSENTRY_C89 */
+
+static int test_kv_empty_key_rejected(void) {
+    struct wolfsentry_context *wolfsentry;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    /* an empty key must be rejected consistently, whether supplied as an
+     * explicit zero length or as a null-terminated empty string.
+     */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "", 0 /* key_len */,
+            "v", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "v", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+static int test_kv_readonly_overwrite_rejected(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_kv_pair_internal *kv_ref = NULL;
+    const char *value = NULL;
+    int value_len = -1;
+    wolfsentry_errcode_t ret;
+    static const char key[] = "ro_key";
+    static const char orig[] = "orig";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            orig, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_set_mutability(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            0 /* not mutable */));
+
+    /* overwriting a read-only value must be rejected. */
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        NOT_PERMITTED,
+        ret = wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            "different", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            1 /* overwrite_p */));
+
+    /* and the value must be unchanged. */
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            &value, &value_len, &kv_ref));
+    WOLFSENTRY_EXIT_ON_FALSE(value_len == (int)strlen(orig));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(value, orig) == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_release_record(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_ref));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+#ifndef WOLFSENTRY_HAVE_JSON_DOM
+static int test_kv_render_string_escape(void) {
+    struct wolfsentry_context *wolfsentry;
+    char buf[64];
+    static const char raw[] = "a\"b\\c\nd";
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_string(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "esc", WOLFSENTRY_LENGTH_NULL_TERMINATED,
+            raw, (int)(sizeof raw - 1),
+            0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+
+    /* the rendered JSON string must not contain a raw control byte, and the
+     * quote, backslash and newline must all appear escaped.
+     */
+    WOLFSENTRY_EXIT_ON_FALSE(strchr(buf + 1, '\n') == NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(strstr(buf, "\\\"") != NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(strstr(buf, "\\\\") != NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(strstr(buf, "\\n") != NULL);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+#endif /* !WOLFSENTRY_HAVE_JSON_DOM */
+
 #endif /* TEST_USER_VALUES */
 
 #ifdef TEST_USER_ADDR_FAMILIES
@@ -5757,6 +6226,55 @@ int main(int argc, char* argv[]) {
         (void)fprintf(stderr, "test_user_values failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
+    ret = test_kv_reference_lifetime();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_reference_lifetime failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_get2_reference_balance();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_get2_reference_balance failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_get_bad_key_errcode();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_get_bad_key_errcode failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_render_large_int();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_render_large_int failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_render_float_roundtrip();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_render_float_roundtrip failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#ifndef WOLFSENTRY_C89
+    ret = test_kv_render_nonfinite_float();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_render_nonfinite_float failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif /* !WOLFSENTRY_C89 */
+    ret = test_kv_readonly_overwrite_rejected();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_readonly_overwrite_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+    ret = test_kv_empty_key_rejected();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_empty_key_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#ifndef WOLFSENTRY_HAVE_JSON_DOM
+    ret = test_kv_render_string_escape();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_render_string_escape failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+#endif
 #endif
 
 #ifdef TEST_USER_ADDR_FAMILIES

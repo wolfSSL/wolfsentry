@@ -4170,6 +4170,11 @@ static int test_kv_render_float_roundtrip(void) {
     struct wolfsentry_context *wolfsentry;
     char buf[64];
     double stored = 3.141592653589793;
+#ifndef WOLFSENTRY_NO_JSON
+    char json[128];
+    int json_len;
+    double reloaded;
+#endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
@@ -4191,6 +4196,21 @@ static int test_kv_render_float_roundtrip(void) {
 
     /* the rendered form must reparse to the exact same double. */
     WOLFSENTRY_EXIT_ON_FALSE(strtod(buf, NULL) == stored);
+
+#ifndef WOLFSENTRY_NO_JSON
+    /* the longest %.17g form, 24 characters, must reload through the JSON loader */
+    stored = -2.2250738585072014e-308;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "pi", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_store_double(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED, stored, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(strlen(buf) == 24);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    json_len = snprintf(json, sizeof json, "{ \"wolfsentry-config-version\" : 1, \"user-values\" : { \"tiny\" : %s } }", buf);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT, (const unsigned char *)json, (size_t)json_len, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED, &reloaded));
+    WOLFSENTRY_EXIT_ON_FALSE(reloaded == stored);
+#endif
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

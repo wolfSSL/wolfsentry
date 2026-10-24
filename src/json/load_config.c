@@ -327,7 +327,8 @@ static wolfsentry_errcode_t convert_uint8(JSON_TYPE type, const unsigned char *d
 }
 
 static wolfsentry_errcode_t convert_double(JSON_TYPE type, const unsigned char *data, size_t data_size, double *out) {
-    char buf[24];
+    /* fits the longest %.17g rendering, 24 characters */
+    char buf[25];
     char *endptr;
     double conv;
 
@@ -1735,7 +1736,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
         .max_total_len = WOLFSENTRY_MAX_JSON_TOTAL_LEN,
         .max_total_values = 0,
-        .max_number_len = 20,
+        .max_number_len = 24,
         .max_string_len = WOLFSENTRY_KV_MAX_VALUE_BYTES,
         .max_key_len = WOLFSENTRY_MAX_LABEL_BYTES,
         .max_nesting_level = WOLFSENTRY_MAX_JSON_NESTING,
@@ -1743,7 +1744,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
 #else
         WOLFSENTRY_MAX_JSON_TOTAL_LEN,
         0,
-        20,
+        24,
         WOLFSENTRY_KV_MAX_VALUE_BYTES,
         WOLFSENTRY_MAX_LABEL_BYTES,
         WOLFSENTRY_MAX_JSON_NESTING,

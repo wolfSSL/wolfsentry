@@ -143,12 +143,12 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_insert_1(
         goto out;
     if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header)) < 0)
         goto out;
-    if (id)
-        *id = new->header.id;
     if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &new->header, &wolfsentry->actions->header, 1 /* unique_p */)) < 0) {
         ret = WOLFSENTRY_ERROR_RECODE(ret);
         goto out;
     }
+    if (id != NULL)
+        *id = new->header.id;
     ret = WOLFSENTRY_ERROR_ENCODE(OK);
 
 out:

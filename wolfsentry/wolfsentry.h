@@ -2801,7 +2801,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_event_get_config(
    \param label_len the length of the label
    \param config the updated configuration
 
-   \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.
+   \return WOLFSENTRY_IS_SUCCESS(ret) is true on success.  Once any route has used the event as its parent, or while the event is another event's aux event or is otherwise referenced, changes to `route_private_data_size` or `route_private_data_alignment` are rejected with `INCOMPATIBLE_STATE`, even after that route is deleted, because a deleted route can still be held by a checked-out reference.
 
    \sa WOLFSENTRY_CONTEXT_ARGS_IN
 */

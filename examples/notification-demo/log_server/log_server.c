@@ -315,6 +315,10 @@ wolfsentry_errcode_t circlog_enqueue_one(size_t msg_len, char **msg_buf) {
     if (new_ent_size > circlog_size)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
+    /* reset a fully drained queue so a wrap cannot strand a stale head. */
+    if (circlog_head == circlog_tail)
+        circlog_head = circlog_tail = 0;
+
     if (circlog_tail + new_ent_size > circlog_size) {
         /* if the new ent will wrap, old ents need to be cleared out to the end, and a skip ent inserted. */
         if (circlog_tail + circlog_ent_size_from_msg_len(0) < circlog_size) {
@@ -342,13 +346,18 @@ wolfsentry_errcode_t circlog_enqueue_one(size_t msg_len, char **msg_buf) {
      * the =, circlog_tail could be incremented below to equal circlog_head,
      * which is defined to be an empty queue.
      */
-    while ((circlog_head > new_msg_start) &&
+    while ((circlog_nents > 0) &&
+           (circlog_head >= new_msg_start) &&
            (circlog_head <= new_msg_start + new_ent_size))
     {
         ret = circlog_dequeue_one(NULL);
         if (ret < 0)
             return ret;
     }
+
+    /* if eviction drained the queue, the new entry alone defines the head. */
+    if (circlog_nents == 0)
+        circlog_head = new_msg_start;
 
     new_ent = (struct circlog_message *)(void *)(circlog + new_msg_start);
     ret = wolfsentry_time_now_plus_delta(global_wolfsentry, 0 /* td */, &new_ent->when);
@@ -417,15 +426,37 @@ struct log_server_data {
     int error_code;
 };
 
+#if defined(DEBUG_TLS) && defined(OPENSSL_EXTRA)
+/* certificate DN strings are peer-controlled; drop control bytes before logging. */
+static const char *sanitize_log_str(const char *in, char *out, size_t outsz) {
+    size_t i;
+    unsigned char c;
+
+    if (in == NULL)
+        return "(null)";
+    if (outsz == 0)
+        return out;
+    for (i = 0; (i + 1 < outsz) && (in[i] != '\0'); ++i) {
+        c = (unsigned char)in[i];
+        if ((c < 0x20) || (c == 0x7f))
+            out[i] = '?';
+        else
+            out[i] = (char)c;
+    }
+    out[i] = '\0';
+    return out;
+}
+#endif
 
 static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     struct log_server_data *app_data = NULL;
-    const char* issuerName = NULL;
+    char* issuerName = NULL;
     unsigned long issuerHash = 0;
 #if defined(DEBUG_TLS) && defined(OPENSSL_EXTRA)
     const char *subjectCN;
-    const char* subjectName;
+    char* subjectName = NULL;
     unsigned long subjectHash = 0;
+    char subjectCN_buf[256], subjectName_buf[256], issuerName_buf[256];
 #endif
     struct ca_cert *ca_certs_i;
 
@@ -473,6 +504,10 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     issuerHash = wolfSSL_X509_issuer_name_hash(store->current_cert);
     issuerName = wolfSSL_X509_NAME_oneline(
             wolfSSL_X509_get_issuer_name(store->current_cert), 0, 0);
+    if (issuerName == NULL) {
+        fprintf(stderr, "ERROR: %s L%d null issuer name.\n", __FILE__,__LINE__);
+        return WOLFSSL_FAILURE;
+    }
 
     #ifdef DEBUG_TLS
     subjectCN = wolfSSL_X509_get_subjectCN(store->current_cert);
@@ -480,8 +515,11 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     subjectName = wolfSSL_X509_NAME_oneline(
             wolfSSL_X509_get_subject_name(store->current_cert), 0, 0);
     fprintf(stderr, "CN=%s subjectName->name=\"%s\" subject_hash=%lu\n",
-        subjectCN, subjectName, subjectHash);
-    fprintf(stderr, "issuerName->name=\"%s\" issuer_hash=%lu\n", issuerName, issuerHash);
+        sanitize_log_str(subjectCN, subjectCN_buf, sizeof subjectCN_buf),
+        sanitize_log_str(subjectName, subjectName_buf, sizeof subjectName_buf),
+        subjectHash);
+    fprintf(stderr, "issuerName->name=\"%s\" issuer_hash=%lu\n",
+        sanitize_log_str(issuerName, issuerName_buf, sizeof issuerName_buf), issuerHash);
     #endif
 #endif
 
@@ -497,11 +535,23 @@ static int myVerifyCheck(int preverify, WOLFSSL_X509_STORE_CTX* store) {
     }
     if (app_data->issuer_cert == NULL) {
         fprintf(stderr, "ERROR: %s L%d app_data->issuer_cert NULL.\n",__FILE__,__LINE__);
+#ifdef OPENSSL_EXTRA
+        XFREE(issuerName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #ifdef DEBUG_TLS
+        XFREE(subjectName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #endif
+#endif
         return WOLFSSL_FAILURE;
     }
 
     app_data->error_code = 0;
 
+#ifdef OPENSSL_EXTRA
+    XFREE(issuerName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #ifdef DEBUG_TLS
+    XFREE(subjectName, NULL, DYNAMIC_TYPE_OPENSSL);
+    #endif
+#endif
     return WOLFSSL_SUCCESS;
 }
 
@@ -1120,6 +1170,7 @@ static int http_write_header(WOLFSSL *ssl, char *http_buf, size_t http_buf_size,
 #ifndef NO_FILESYSTEM
 /* reads file size, allocates buffer, reads into buffer, returns buffer */
 #include <stdio.h>
+#define LOAD_FILE_MAX_SZ (64 * 1024 * 1024)
 static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
 {
     int ret;
@@ -1142,9 +1193,9 @@ static int load_file(const char* fname, unsigned char** buf, size_t* bufLen)
     }
 
     fseek(lFile, 0, SEEK_END);
-    fileSz = (int)ftell(lFile);
+    fileSz = ftell(lFile);
     rewind(lFile);
-    if (fileSz  > 0) {
+    if ((fileSz > 0) && (fileSz <= (long int)LOAD_FILE_MAX_SZ)) {
         *bufLen = (size_t)fileSz;
         *buf = (unsigned char*)malloc(*bufLen);
         if (*buf == NULL) {
@@ -1417,6 +1468,12 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    if (circlog_size_uint64 > (uint64_t)SIZE_MAX) {
+        fprintf(stderr, "ERROR: \"circlog-size\" value %llu exceeds SIZE_MAX on this ABI\n",
+                (unsigned long long)circlog_size_uint64);
+        exit(1);
+    }
+
     ret = circlog_init((size_t)circlog_size_uint64);
     if (ret < 0) {
         fprintf(stderr, "ERROR: circlog_init() failed: " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
@@ -1477,6 +1534,47 @@ int main(int argc, char **argv) {
 
     fprintf(stderr,"circlog_head=%zu circlog_tail=%zu\n",circlog_head,circlog_tail);
 }
+
+    if (circlog != NULL) {
+        char *wrap_buf;
+        struct circlog_message *wrap_msg;
+        size_t wrap_filled, wrap_reachable;
+        static const char wrap_s[] = "wrap eviction regression probe entry.";
+        size_t wrap_ent = circlog_ent_size_from_msg_len(strlen(wrap_s));
+
+        if ((circlog_reset() >= 0) && ((wrap_ent * 2) <= circlog_size)) {
+            wrap_filled = 0;
+            while ((circlog_tail + wrap_ent) <= circlog_size) {
+                ret = circlog_enqueue_one(strlen(wrap_s), &wrap_buf);
+                if (ret < 0) {
+                    fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                    exit(1);
+                }
+                memcpy(wrap_buf, wrap_s, strlen(wrap_s));
+                ++wrap_filled;
+            }
+
+            ret = circlog_enqueue_one(strlen(wrap_s), &wrap_buf);
+            if (ret < 0) {
+                fprintf(stderr, "ERROR: %s L%d circlog failed: " WOLFSENTRY_ERROR_FMT "\n", __FILE__, __LINE__, WOLFSENTRY_ERROR_FMT_ARGS(ret));
+                exit(1);
+            }
+            memcpy(wrap_buf, wrap_s, strlen(wrap_s));
+
+            wrap_reachable = 0;
+            wrap_msg = NULL;
+            while (circlog_iterate(&wrap_msg) >= 0)
+                ++wrap_reachable;
+
+            if (circlog_nents != wrap_reachable) {
+                fprintf(stderr, "ERROR: %s L%d circlog nents=%zu disagrees with reachable=%zu after wrap (filled=%zu).\n",
+                        __FILE__, __LINE__, circlog_nents, wrap_reachable, wrap_filled);
+                exit(1);
+            }
+
+            fprintf(stderr, "circlog wrap-eviction check OK: nents=%zu reachable=%zu\n", circlog_nents, wrap_reachable);
+        }
+    }
 #endif /* CIRCLOG_UNIT_TEST */
 
     log_server_init();
@@ -1871,7 +1969,8 @@ int main(int argc, char **argv) {
             }
 #endif
 
-            if (! (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)) {
+            if ((! (wolfsentry_data->action_results & WOLFSENTRY_ACTION_RES_FALLTHROUGH)) &&
+                (wolfsentry_data->rule_route != NULL)) {
                 wolfsentry_action_res_t action_results;
                 if (transaction_successful) {
                     ret = wolfsentry_route_event_dispatch_by_route(WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(global_wolfsentry, global_thread),

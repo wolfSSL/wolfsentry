@@ -320,6 +320,39 @@ static int wolfSentry_NetworkFilterCallback(
 }
 
 
+/* labels come from loaded config; escape them so they cannot break the JSON record. */
+static const char *json_escape_label(const char *in, char *out, size_t outsz) {
+    size_t i, o;
+    unsigned char c;
+
+    if (in == NULL)
+        return "";
+    if (outsz == 0)
+        return "";
+    o = 0;
+    for (i = 0; in[i] != '\0'; ++i) {
+        c = (unsigned char)in[i];
+        if ((c == '"') || (c == '\\')) {
+            if ((o + 2) >= outsz)
+                break;
+            out[o++] = '\\';
+            out[o++] = (char)c;
+        }
+        else if ((c < 0x20) || (c == 0x7f)) {
+            if ((o + 1) >= outsz)
+                break;
+            out[o++] = '?';
+        }
+        else {
+            if ((o + 1) >= outsz)
+                break;
+            out[o++] = (char)c;
+        }
+    }
+    out[o] = '\0';
+    return out;
+}
+
 static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_action *action,
@@ -353,6 +386,10 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     char msgbuf[1024], *msgbuf_ptr = msgbuf;
     int msgbuf_space_left = (int)sizeof msgbuf;
     int msgbuf_len;
+    char action_label_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
+    char trigger_label_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
+    char parent_label_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
+    char family_name_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
 
     (void)handler_arg;
     (void)route_table;
@@ -451,12 +488,12 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         (size_t)msgbuf_space_left,
         "{ \"timestamp\" : \"%s\", \"action\" : \"%s\", \"trigger\" : %s%s%s, \"parent\" : %s%s%s, \"rule-id\" : " WOLFSENTRY_ENT_ID_FMT ", \"rule-hitcount\" : " WOLFSENTRY_HITCOUNT_FMT ", \"af\" : \"%s\", \"proto\" : %d, \"remote\" : { \"address\" : \"",
         timebuf,
-        wolfsentry_action_get_label(action),
-        trigger_event ? "\"" : "", trigger_event ? wolfsentry_event_get_label(trigger_event) : "null", trigger_event ? "\"" : "",
-        trigger_route_exports.parent_event_label ? "\"" : "", trigger_route_exports.parent_event_label ? trigger_route_exports.parent_event_label : "null", trigger_route_exports.parent_event_label ? "\"" : "",
+        json_escape_label(wolfsentry_action_get_label(action), action_label_buf, sizeof action_label_buf),
+        trigger_event ? "\"" : "", trigger_event ? json_escape_label(wolfsentry_event_get_label(trigger_event), trigger_label_buf, sizeof trigger_label_buf) : "null", trigger_event ? "\"" : "",
+        trigger_route_exports.parent_event_label ? "\"" : "", trigger_route_exports.parent_event_label ? json_escape_label(trigger_route_exports.parent_event_label, parent_label_buf, sizeof parent_label_buf) : "null", trigger_route_exports.parent_event_label ? "\"" : "",
         wolfsentry_get_object_id(rule_route),
         rule_route_exports.meta.hit_count,
-        family_name,
+        json_escape_label(family_name, family_name_buf, sizeof family_name_buf),
         trigger_route_exports.sa_proto);
 
     msgbuf_space_left -= msgbuf_len;
@@ -551,10 +588,10 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         if ((res_string = wolfsentry_action_res_assoc_by_flag(*action_results, res_bit)) != NULL) {
             ++n_res_bits;
             if (n_res_bits > 1) {
+                if (msgbuf_space_left <= 0)
+                    WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
                 *msgbuf_ptr++ = ',';
                 --msgbuf_space_left;
-                if (msgbuf_space_left < 0)
-                    WOLFSENTRY_ERROR_RETURN(BUFFER_TOO_SMALL);
             }
             msgbuf_len = snprintf(msgbuf_ptr, (size_t)msgbuf_space_left, "\"%s\"", res_string);
             msgbuf_space_left -= msgbuf_len;

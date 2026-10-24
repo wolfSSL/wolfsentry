@@ -56,6 +56,7 @@
 #endif
 
 #include <stdlib.h>
+#include <float.h>
 #ifndef WOLFSENTRY_NO_ALLOCA
 #include <alloca.h>
 #endif
@@ -255,6 +256,27 @@ json_value_type(const JSON_VALUE* v)
     return (JSON_VALUE_TYPE)(v->data.data_bytes[0] & TYPE_MASK);
 }
 
+static uint64_t json_int_magnitude(int64_t x)
+{
+    return (x < 0) ? (~(uint64_t)x + 1U) : (uint64_t)x;
+}
+
+/* An integer is exactly representable in a binary floating type with
+ * mantissa_bits of precision when its significant bits (ignoring trailing
+ * zeros) fit in that precision. */
+static int json_int_fits_mantissa(uint64_t u, int mantissa_bits)
+{
+    int bits = 0;
+
+    while((u != 0)  &&  ((u & 1U) == 0))
+        u >>= 1;
+    while(u != 0) {
+        ++bits;
+        u >>= 1;
+    }
+    return bits <= mantissa_bits;
+}
+
 WOLFSENTRY_API int
 json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
 {
@@ -265,39 +287,43 @@ json_value_is_compatible(const JSON_VALUE* v, JSON_VALUE_TYPE type)
      * long as the conversion does not loose much information. */
     switch(json_value_type(v)) {
         case JSON_VALUE_INT32:
-            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa(json_int_magnitude(json_value_int32(v)), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_UINT32 && json_value_int32(v) >= 0)  ||
                    (type == JSON_VALUE_UINT64 && json_value_int32(v) >= 0);
 
         case JSON_VALUE_UINT32:
-            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_UINT64 || type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_INT64 || type == JSON_VALUE_UINT64 || type == JSON_VALUE_DOUBLE)  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa((uint64_t)json_value_uint32(v), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_INT32 && json_value_uint32(v) <= INT32_MAX);
 
         case JSON_VALUE_INT64:
-            return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_DOUBLE && json_int_fits_mantissa(json_int_magnitude(json_value_int64(v)), DBL_MANT_DIG))  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa(json_int_magnitude(json_value_int64(v)), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_INT32 && json_value_int64(v) >= INT32_MIN && json_value_int64(v) <= INT32_MAX)  ||
                    (type == JSON_VALUE_UINT32 && json_value_int64(v) >= 0 && json_value_int64(v) <= UINT32_MAX)  ||
                    (type == JSON_VALUE_UINT64 && json_value_int64(v) >= 0);
 
         case JSON_VALUE_UINT64:
-            return (type == JSON_VALUE_FLOAT || type == JSON_VALUE_DOUBLE)  ||
+            return (type == JSON_VALUE_DOUBLE && json_int_fits_mantissa(json_value_uint64(v), DBL_MANT_DIG))  ||
+                   (type == JSON_VALUE_FLOAT && json_int_fits_mantissa(json_value_uint64(v), FLT_MANT_DIG))  ||
                    (type == JSON_VALUE_INT32 && json_value_uint64(v) <= INT32_MAX)  ||
                    (type == JSON_VALUE_UINT32 && json_value_uint64(v) <= UINT32_MAX)  ||
                    (type == JSON_VALUE_INT64 && json_value_uint64(v) <= INT64_MAX);
 
         case JSON_VALUE_FLOAT:
             return (type == JSON_VALUE_DOUBLE)  ||
-                   (type == JSON_VALUE_INT32 && json_value_float(v) == (float)json_value_int32(v))  ||
-                   (type == JSON_VALUE_UINT32 && json_value_float(v) == (float)json_value_uint32(v))  ||
-                   (type == JSON_VALUE_INT64 && json_value_float(v) == (float)json_value_int64(v))  ||
-                   (type == JSON_VALUE_UINT64 && json_value_float(v) == (float)json_value_uint64(v));
+                   (type == JSON_VALUE_INT32 && (double)json_value_float(v) >= -2147483648.0 && (double)json_value_float(v) <= 2147483647.0 && json_value_float(v) == (float)json_value_int32(v))  ||
+                   (type == JSON_VALUE_UINT32 && (double)json_value_float(v) >= 0.0 && (double)json_value_float(v) <= 4294967295.0 && json_value_float(v) == (float)json_value_uint32(v))  ||
+                   (type == JSON_VALUE_INT64 && (double)json_value_float(v) >= -9223372036854775808.0 && (double)json_value_float(v) < 9223372036854775808.0 && json_value_float(v) == (float)json_value_int64(v))  ||
+                   (type == JSON_VALUE_UINT64 && (double)json_value_float(v) >= 0.0 && (double)json_value_float(v) < 18446744073709551616.0 && json_value_float(v) == (float)json_value_uint64(v));
 
         case JSON_VALUE_DOUBLE:
-            return (type == JSON_VALUE_FLOAT)  ||
-                   (type == JSON_VALUE_INT32 && json_value_double(v) == (double)json_value_int32(v))  ||
-                   (type == JSON_VALUE_UINT32 && json_value_double(v) == (double)json_value_uint32(v))  ||
-                   (type == JSON_VALUE_INT64 && json_value_double(v) == (double)json_value_int64(v))  ||
-                   (type == JSON_VALUE_UINT64 && json_value_double(v) == (double)json_value_uint64(v));
+            return (type == JSON_VALUE_FLOAT && json_value_double(v) >= -(double)FLT_MAX && json_value_double(v) <= (double)FLT_MAX && (double)(float)json_value_double(v) == json_value_double(v))  ||
+                   (type == JSON_VALUE_INT32 && json_value_double(v) >= -2147483648.0 && json_value_double(v) <= 2147483647.0 && json_value_double(v) == (double)json_value_int32(v))  ||
+                   (type == JSON_VALUE_UINT32 && json_value_double(v) >= 0.0 && json_value_double(v) <= 4294967295.0 && json_value_double(v) == (double)json_value_uint32(v))  ||
+                   (type == JSON_VALUE_INT64 && json_value_double(v) >= -9223372036854775808.0 && json_value_double(v) < 9223372036854775808.0 && json_value_double(v) == (double)json_value_int64(v))  ||
+                   (type == JSON_VALUE_UINT64 && json_value_double(v) >= 0.0 && json_value_double(v) < 18446744073709551616.0 && json_value_double(v) == (double)json_value_uint64(v));
 
         default:
             break;
@@ -320,30 +346,67 @@ json_value_path(JSON_VALUE* root, const char* path)
 {
     const unsigned char* token_beg = (const unsigned char *)path;
     const unsigned char* token_end;
+    const unsigned char* p;
     JSON_VALUE* v = root;
+    size_t path_index;
+    size_t arr_size;
+    int negative;
+    int have_digit;
 
     while(1) {
         token_end = token_beg;
         while(*token_end != '\0'  &&  *token_end != '/')
             token_end++;
 
-        if(token_end - token_beg > 2  &&  token_beg[0] == '['  &&  token_end[-1] == ']') {
-            size_t path_index = 0;
+        p = token_beg;
 
-            token_beg++;
-            while('0' <= *token_beg  &&  *token_beg <= '9') {
-                path_index = (path_index * 10U) + (*token_beg - (unsigned)'0');
-                token_beg++;
-            }
-            if(*token_beg != ']')
+        /* Optional leading dictionary key, up to the first '[' or token end. */
+        if(p < token_end  &&  *p != '[') {
+            const unsigned char* key_end = p;
+            while(key_end < token_end  &&  *key_end != '[')
+                key_end++;
+            v = json_value_dict_get_(v, p, (size_t)(key_end - p));
+            if(v == NULL)
                 return NULL;
-
-            v = json_value_array_get(v, path_index);
-        } else if(token_end - token_beg > 0) {
-            v = json_value_dict_get_(v, token_beg, (size_t)(token_end - token_beg));
+            p = key_end;
         }
 
-        if(v == NULL)
+        /* Zero or more attached array indexes "[n]", where n may be negative
+         * (relative to the array length). */
+        while(p < token_end  &&  *p == '[') {
+            p++;
+            negative = 0;
+            if(*p == '-') {
+                negative = 1;
+                p++;
+            }
+            path_index = 0;
+            have_digit = 0;
+            while('0' <= *p  &&  *p <= '9') {
+                size_t digit = (size_t)(*p - (unsigned char)'0');
+                if(path_index > (SIZE_MAX - digit) / 10U)
+                    return NULL;
+                path_index = (path_index * 10U) + digit;
+                have_digit = 1;
+                p++;
+            }
+            if((! have_digit)  ||  (*p != ']'))
+                return NULL;
+            p++;
+
+            if(negative) {
+                arr_size = json_value_array_size(v);
+                if((path_index == 0)  ||  (path_index > arr_size))
+                    return NULL;
+                path_index = arr_size - path_index;
+            }
+            v = json_value_array_get(v, path_index);
+            if(v == NULL)
+                return NULL;
+        }
+
+        /* The token must be fully consumed; reject trailing bytes. */
+        if(p != token_end)
             return NULL;
 
         if(*token_end == '\0')
@@ -881,6 +944,15 @@ json_value_array_realloc(
 {
     JSON_VALUE* json_value_buf;
 
+    /* Shrinking to zero: free the buffer directly rather than via realloc(p, 0),
+     * which is allowed to free and return NULL and would leave a dangling buffer. */
+    if(alloc == 0) {
+        free(a->json_value_buf);
+        a->json_value_buf = NULL;
+        a->alloc = 0;
+        return 0;
+    }
+
     json_value_buf = (JSON_VALUE*) realloc(a->json_value_buf, alloc * sizeof(JSON_VALUE));
     if(json_value_buf == NULL)
         return -1;
@@ -945,16 +1017,21 @@ json_value_array_insert(
     JSON_VALUE* v, size_t index)
 {
     ARRAY* a = json_value_array_payload(v);
+    size_t new_alloc;
 
     if(a == NULL  ||  index > a->size)
         return NULL;
 
     if(a->size >= a->alloc) {
+        new_alloc = (a->alloc > 0) ? a->alloc * 2 : 1;
+        /* a wrapped doubling must not reach the shrink-to-zero path */
+        if(new_alloc <= a->size)
+            return NULL;
         if(json_value_array_realloc(
 #ifdef WOLFSENTRY
                WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
-               a, (a->alloc > 0) ? a->alloc * 2 : 1) != 0)
+               a, new_alloc) != 0)
             return NULL;
     }
 
@@ -990,12 +1067,16 @@ json_value_array_remove_range(
 {
     ARRAY* a = json_value_array_payload(v);
     size_t i;
+    size_t end;
     int ret;
 
-    if(a == NULL  ||  index + count > a->size)
+    /* Validate without adding, so index + count cannot wrap. */
+    if(a == NULL  ||  index > a->size  ||  count > a->size - index)
         return -1;
 
-    for(i = index; i < index + count; i++) {
+    end = index + count;
+
+    for(i = index; i < end; i++) {
         ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
@@ -1005,9 +1086,9 @@ json_value_array_remove_range(
             return ret;
     }
 
-    if(index + count < a->size) {
-        memmove(a->json_value_buf + index, a->json_value_buf + index + count,
-                (a->size - (index + count)) * sizeof(JSON_VALUE));
+    if(end < a->size) {
+        memmove(a->json_value_buf + index, a->json_value_buf + end,
+                (a->size - end) * sizeof(JSON_VALUE));
     }
     a->size -= count;
 
@@ -1556,6 +1637,7 @@ json_value_dict_remove_(
     int path_len = 0;
     int cmp;
     int ret;
+    int ret2;
 
     if (node == NULL)
         return -1;
@@ -1673,24 +1755,24 @@ json_value_dict_remove_(
         else
             d->order_tail = node->order_prev;
     }
+    /* The node is already unlinked, so finalize both members best-effort, then
+     * always free it and decrement the size to keep the dictionary consistent. */
     ret = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->key);
-    if (ret < 0)
-        return ret;
-    ret = json_value_fini(
+    ret2 = json_value_fini(
 #ifdef WOLFSENTRY
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
         &node->json_value);
-    if (ret < 0)
-        return ret;
+    if (ret == 0)
+        ret = ret2;
     free(node);
     d->size--;
 
-    return 0;
+    return ret;
 }
 
 WOLFSENTRY_API int
@@ -1779,11 +1861,17 @@ json_value_dict_clean(
     if(d == NULL)
         return 0;
 
-    stack = (RBTREE **)malloc(rbtree_stack_size_needed(d));
-    if (stack == NULL)
-        return JSON_ERR_OUTOFMEMORY;
+    /* An empty tree needs no stack; a conforming allocator may return NULL for a
+     * zero-size request, so do not treat that as an error. */
+    if(d->root != NULL) {
+        stack = (RBTREE **)malloc(rbtree_stack_size_needed(d));
+        if (stack == NULL)
+            return JSON_ERR_OUTOFMEMORY;
+    } else {
+        stack = NULL;
+    }
 
-    stack_size = json_value_dict_leftmost_path(stack, d->root);
+    stack_size = (stack != NULL) ? json_value_dict_leftmost_path(stack, d->root) : 0;
 
     while(stack_size > 0) {
         node = stack[--stack_size];
@@ -1795,7 +1883,6 @@ json_value_dict_clean(
 #endif
             &node->key);
         if (ret < 0) {
-            free(node);
             free((void *)stack);
             return ret;
         }
@@ -1805,9 +1892,24 @@ json_value_dict_clean(
 #endif
             &node->json_value);
         if (ret < 0) {
-            free(node);
             free((void *)stack);
             return ret;
+        }
+        /* unlink before freeing so a failed clean leaves only live nodes for a
+         * retry; size is kept, as it still bounds the retry's stack */
+        if(stack_size > 0)
+            stack[stack_size - 1]->left = right;
+        else
+            d->root = right;
+        if(v->data.data_bytes[0] & HAS_ORDERLIST) {
+            if(node->order_prev != NULL)
+                node->order_prev->order_next = node->order_next;
+            else
+                d->order_head = node->order_next;
+            if(node->order_next != NULL)
+                node->order_next->order_prev = node->order_prev;
+            else
+                d->order_tail = node->order_prev;
         }
         free(node);
 
@@ -1876,38 +1978,47 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
             const ARRAY* src_a = json_value_array_payload((JSON_VALUE *)node);
             size_t n = json_value_array_size(node);
             const JSON_VALUE* src_values = json_value_array_get_all(node);
-            ARRAY* dest_a;
-            JSON_VALUE* dest_values;
+            ARRAY* dest_a = NULL;
+            JSON_VALUE* dest_values = NULL;
             size_t i;
 
             ret = json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);
-            if (ret < 0)
-                break;
 
-            dest_a = json_value_array_payload(clone);
-            if (! dest_a) {
-                ret = JSON_ERR_INTERNAL;
-                break;
+            if (ret == 0) {
+                dest_a = json_value_array_payload(clone);
+                if (dest_a == NULL)
+                    ret = JSON_ERR_INTERNAL;
             }
 
-            ret = json_value_array_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
-                                           dest_a, src_a->alloc);
-            if (ret < 0)
-                break;
+            /* Skip the element buffer entirely for an empty array; a zero-size
+             * allocation may legitimately return NULL. */
+            if ((ret == 0) && (src_a->alloc > 0))
+                ret = json_value_array_realloc(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
+                                               dest_a, src_a->alloc);
 
-            dest_values = json_value_array_get_all(clone);
-            if (! dest_values) {
-                ret = JSON_ERR_INTERNAL;
-                break;
+            if (ret == 0) {
+                dest_values = json_value_array_get_all(clone);
+                if ((n > 0) && (dest_values == NULL))
+                    ret = JSON_ERR_INTERNAL;
             }
 
-            for(i = 0; i < n; i++) {
-                ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_values[i], &dest_values[i]);
-                if (ret < 0)
-                    break;
+            if (ret == 0) {
+                for(i = 0; i < n; i++) {
+                    json_value_init_null(&dest_values[i]);
+                    ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_values[i], &dest_values[i]);
+                    if (ret < 0)
+                        break;
+                    dest_a->size = i + 1;
+                }
             }
 
-            dest_a->size = src_a->size;
+            /* On any failure finalize the clone so the initialized prefix and
+             * the array allocation are released, not leaked. */
+            if (ret < 0) {
+                int ret2 = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), clone);
+                if (ret2 < 0)
+                    WOLFSENTRY_WARN("json_value_fini: %s\n", json_error_str(ret2));
+            }
 
             break;
         }
@@ -1940,11 +2051,16 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
                 }
             } else {
                 int stack_size;
-                RBTREE **stack = (RBTREE **)malloc(rbtree_stack_size_needed(src_dict)); /* put this on the heap to avoid runaway growth of stack on deep JSON trees. */
-                if (! stack) {
+                RBTREE **stack = NULL;
+                /* put the stack on the heap to avoid runaway growth of the C
+                 * stack on deep JSON trees; an empty tree needs none, and a
+                 * zero-size allocation may legitimately return NULL. */
+                if (src_dict->root != NULL)
+                    stack = (RBTREE **)malloc(rbtree_stack_size_needed(src_dict));
+                if ((src_dict->root != NULL) && (stack == NULL)) {
                     ret = JSON_ERR_OUTOFMEMORY;
                 } else {
-                    stack_size = json_value_dict_leftmost_path(stack, src_dict->root);
+                    stack_size = (stack != NULL) ? json_value_dict_leftmost_path(stack, src_dict->root) : 0;
 
                     while(stack_size > 0) {
                         src_dict_node = stack[--stack_size];

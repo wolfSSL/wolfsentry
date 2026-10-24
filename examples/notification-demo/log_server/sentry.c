@@ -386,6 +386,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
     char msgbuf[1024], *msgbuf_ptr = msgbuf;
     int msgbuf_space_left = (int)sizeof msgbuf;
     int msgbuf_len;
+    char action_label_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
     char trigger_label_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
     char parent_label_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
     char family_name_buf[(WOLFSENTRY_MAX_LABEL_BYTES * 2) + 1];
@@ -487,7 +488,7 @@ static wolfsentry_errcode_t wolfsentry_notify_via_UDP_JSON(
         (size_t)msgbuf_space_left,
         "{ \"timestamp\" : \"%s\", \"action\" : \"%s\", \"trigger\" : %s%s%s, \"parent\" : %s%s%s, \"rule-id\" : " WOLFSENTRY_ENT_ID_FMT ", \"rule-hitcount\" : " WOLFSENTRY_HITCOUNT_FMT ", \"af\" : \"%s\", \"proto\" : %d, \"remote\" : { \"address\" : \"",
         timebuf,
-        wolfsentry_action_get_label(action),
+        json_escape_label(wolfsentry_action_get_label(action), action_label_buf, sizeof action_label_buf),
         trigger_event ? "\"" : "", trigger_event ? json_escape_label(wolfsentry_event_get_label(trigger_event), trigger_label_buf, sizeof trigger_label_buf) : "null", trigger_event ? "\"" : "",
         trigger_route_exports.parent_event_label ? "\"" : "", trigger_route_exports.parent_event_label ? json_escape_label(trigger_route_exports.parent_event_label, parent_label_buf, sizeof parent_label_buf) : "null", trigger_route_exports.parent_event_label ? "\"" : "",
         wolfsentry_get_object_id(rule_route),

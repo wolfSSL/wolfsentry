@@ -5529,14 +5529,19 @@ static int test_json_unknown_protocol_name(void) {
 
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
 static int test_json_bitmask_short_address(void) {
-    /* a partial address (prefix-bits smaller than the family width) followed by
-     * a bitmask exercises the right-justification move; the move must copy
-     * bytes, not the bit count, or it corrupts adjacent parse state.
+    /* prefix-bits before a bitmask would right-justify only the prefix-sized
+     * leading bytes of a full-width address, so the combination is refused,
+     * as prefix-bits after a bitmask already is; address then bitmask loads.
      */
-    static const char json[] =
+    static const char json_prefixed[] =
         "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"remote\" : { \"prefix-bits\" : 16, \"address\" : \"1.2.0.0\", \"bitmask\" : \"255.255.0.0\" } } ] }";
+    static const char json_plain[] =
+        "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"remote\" : { \"address\" : \"1.2.0.0\", \"bitmask\" : \"255.255.0.0\" } } ] }";
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        CONFIG_MISPLACED_KEY,
+        test_json_oneshot_string(json_prefixed, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
     WOLFSENTRY_EXIT_ON_FAILURE(
-        test_json_oneshot_string(json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+        test_json_oneshot_string(json_plain, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
     WOLFSENTRY_RETURN_OK;
 }
 #endif /* WOLFSENTRY_ADDR_BITMASK_MATCHING */

@@ -112,6 +112,8 @@ struct wolfsentry_json_process_state {
             WOLFSENTRY_SOCKADDR(WOLFSENTRY_MAX_ADDR_BITS) local;
             wolfsentry_route_flags_t flags;
             int tcplike_port_numbers_explicit;
+            int remote_prefix_bits_given;
+            int local_prefix_bits_given;
         } route;
         struct {
             char label[WOLFSENTRY_MAX_LABEL_BYTES];
@@ -1025,6 +1027,14 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
         if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
 
+        /* the right-justify below would keep only the prefix-sized leading bytes of a full address */
+        if ((jps->section_under_construction == S_U_C_REMOTE_ENDPOINT) ?
+            jps->o_u_c.route.remote_prefix_bits_given :
+            jps->o_u_c.route.local_prefix_bits_given)
+        {
+            WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
+        }
+
         ret = wolfsentry_addr_family_max_addr_bits(
             JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
             sa->sa_family,
@@ -1110,6 +1120,10 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
         }
         if (sa->addr_len > max_addr_bits)
             WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+        if (jps->section_under_construction == S_U_C_REMOTE_ENDPOINT)
+            jps->o_u_c.route.remote_prefix_bits_given = 1;
+        else
+            jps->o_u_c.route.local_prefix_bits_given = 1;
         WOLFSENTRY_RETURN_OK;
     }
     else if (! strcmp(jps->cur_keyname, "interface")) {

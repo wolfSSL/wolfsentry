@@ -111,6 +111,9 @@ struct wolfsentry_json_process_state {
             WOLFSENTRY_SOCKADDR(WOLFSENTRY_MAX_ADDR_BITS) remote;
             WOLFSENTRY_SOCKADDR(WOLFSENTRY_MAX_ADDR_BITS) local;
             wolfsentry_route_flags_t flags;
+            int tcplike_port_numbers_explicit;
+            int remote_prefix_bits_given;
+            int local_prefix_bits_given;
         } route;
         struct {
             char label[WOLFSENTRY_MAX_LABEL_BYTES];
@@ -154,7 +157,58 @@ static wolfsentry_errcode_t reset_o_u_c(struct wolfsentry_json_process_state *jp
     WOLFSENTRY_RETURN_OK;
 }
 
+/* Range check that does not depend on errno: re-scan the already
+ * syntactically-validated numeric string in buf (strtol-style base-0 rules) and
+ * reject it when its magnitude exceeds limit. A leading sign is skipped so the
+ * caller decides sign handling.
+ */
+static wolfsentry_errcode_t convert_check_magnitude(const char *buf, uint64_t limit) {
+    uint64_t acc = 0;
+    uint64_t base = 10;
+    const char *p = buf;
+
+    while ((*p == ' ') || (*p == '\t'))
+        ++p;
+    if ((*p == '-') || (*p == '+'))
+        ++p;
+    if ((p[0] == '0') && ((p[1] == 'x') || (p[1] == 'X'))) {
+        base = 16;
+        p += 2;
+    } else if (p[0] == '0') {
+        base = 8;
+        ++p;
+    }
+
+    while (*p != 0) {
+        uint64_t digit;
+        if ((*p >= '0') && (*p <= '9'))
+            digit = (uint64_t)(*p - '0');
+        else if ((*p >= 'a') && (*p <= 'f'))
+            digit = (uint64_t)(*p - 'a' + 10);
+        else if ((*p >= 'A') && (*p <= 'F'))
+            digit = (uint64_t)(*p - 'A' + 10);
+        else
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        if (digit >= base)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        if (acc > (limit - digit) / base)
+            WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+        acc = (acc * base) + digit;
+        ++p;
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
+/* local equivalent of strspn(p, " \t"), which freestanding targets may lack. */
+static const char *convert_skip_blanks(const char *p) {
+    while ((*p == ' ') || (*p == '\t'))
+        ++p;
+    return p;
+}
+
 static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *data, size_t data_size, uint64_t *out) {
+    wolfsentry_errcode_t ret;
     char buf[24];
     char *endptr;
 #ifdef WOLFSENTRY_HAVE_LONG_LONG
@@ -172,6 +226,12 @@ static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *
     memcpy(buf, data, data_size);
     buf[data_size] = 0;
 
+    /* strtoull()/strtoul() silently negate a leading minus; reject it so a
+     * negative literal does not wrap to a large unsigned value.
+     */
+    if (*convert_skip_blanks(buf) == '-')
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+
 #ifndef WOLFSENTRY_NO_ERRNO_H
     errno = 0;
 #endif
@@ -187,14 +247,19 @@ static wolfsentry_errcode_t convert_uint64(JSON_TYPE type, const unsigned char *
 
     if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    ret = convert_check_magnitude(buf, (uint64_t)MAX_UINT_OF(conv));
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *out = (uint64_t)conv;
 
     WOLFSENTRY_RETURN_OK;
 }
 
 static wolfsentry_errcode_t convert_sint64(JSON_TYPE type, const unsigned char *data, size_t data_size, int64_t *out) {
+    wolfsentry_errcode_t ret;
     char buf[24];
     char *endptr;
+    const char *sign_p;
+    uint64_t magnitude_limit;
 #ifdef WOLFSENTRY_HAVE_LONG_LONG
     long long conv;
 #else
@@ -225,6 +290,13 @@ static wolfsentry_errcode_t convert_sint64(JSON_TYPE type, const unsigned char *
 
     if ((size_t)(endptr - buf) != data_size)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    sign_p = convert_skip_blanks(buf);
+    if (*sign_p == '-')
+        magnitude_limit = (uint64_t)MAX_SINT_OF(conv) + 1U;
+    else
+        magnitude_limit = (uint64_t)MAX_SINT_OF(conv);
+    ret = convert_check_magnitude(buf, magnitude_limit);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *out = (int64_t)conv;
 
     WOLFSENTRY_RETURN_OK;
@@ -233,7 +305,14 @@ static wolfsentry_errcode_t convert_sint64(JSON_TYPE type, const unsigned char *
 static wolfsentry_errcode_t convert_uint32(JSON_TYPE type, const unsigned char *data, size_t data_size, uint32_t *out) {
     char buf[16];
     char *endptr;
+    /* use the widest available unsigned type so the range check below is live
+     * even on ILP32 ABIs, where unsigned long is the same width as *out.
+     */
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+    unsigned long long conv;
+#else
     unsigned long conv;
+#endif
 
     /* allow JSON_STRING to accommodate hex and octal values. */
     if ((type != JSON_NUMBER) && (type != JSON_STRING))
@@ -247,7 +326,11 @@ static wolfsentry_errcode_t convert_uint32(JSON_TYPE type, const unsigned char *
 #ifndef WOLFSENTRY_NO_ERRNO_H
     errno = 0;
 #endif
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+    conv = strtoull(buf, &endptr, 0);
+#else
     conv = strtoul(buf, &endptr, 0);
+#endif
 #ifndef WOLFSENTRY_NO_ERRNO_H
     if (errno != 0)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -295,7 +378,7 @@ static wolfsentry_errcode_t convert_uint16(JSON_TYPE type, const unsigned char *
 }
 
 static wolfsentry_errcode_t convert_uint8(JSON_TYPE type, const unsigned char *data, size_t data_size, uint8_t *out) {
-    char buf[4];
+    char buf[8];
     char *endptr;
     unsigned long conv;
 
@@ -412,6 +495,12 @@ static wolfsentry_errcode_t convert_wolfsentry_duration(struct wolfsentry_contex
         break;
     }
     if ((size_t)(endptr - buf) != data_size)
+        WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+    /* durations are non-negative; a negative value (including a LONG_MIN
+     * saturation when errno is unavailable) would otherwise reach the interval
+     * conversion and overflow.
+     */
+    if (conv < 0)
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     if ((ret = wolfsentry_interval_from_seconds(wolfsentry, conv, 0 /* howlong_nsecs */, out)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
@@ -623,6 +712,13 @@ static inline int convert_hex_byte(const unsigned char **in, size_t *in_len, byt
     return 0;
 }
 
+/* a handler registered for AF_LOCAL takes precedence over the built-in literal path */
+static int af_local_is_builtin(struct wolfsentry_json_process_state *jps)
+{
+    wolfsentry_addr_family_parser_t parser;
+    return (wolfsentry_addr_family_get_parser(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_AF_LOCAL, &parser) < 0);
+}
+
 static wolfsentry_errcode_t convert_sockaddr_address(
     struct wolfsentry_json_process_state *jps,
     JSON_TYPE type,
@@ -632,6 +728,7 @@ static wolfsentry_errcode_t convert_sockaddr_address(
     byte *sa_addr)
 {
     if ((sa->sa_family == WOLFSENTRY_AF_LINK48) || (sa->sa_family == WOLFSENTRY_AF_LINK64)) {
+        wolfsentry_addr_family_t requested_family = sa->sa_family;
         int n;
         if (type != JSON_STRING)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
@@ -642,6 +739,12 @@ static wolfsentry_errcode_t convert_sockaddr_address(
                 WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
             ++n;
             if (data_size == 0) {
+                /* an explicit EUI-64 family must not be silently reclassified
+                 * as EUI-48 by the parsed byte count (LINK48 and the generic
+                 * LINK alias share a value, so only LINK64 can be enforced).
+                 */
+                if ((requested_family == WOLFSENTRY_AF_LINK64) && (n != 8))
+                    WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
                 if (n == 6)
                     sa->sa_family = WOLFSENTRY_AF_LINK48;
                 else if (n == 8)
@@ -704,7 +807,14 @@ static wolfsentry_errcode_t convert_sockaddr_address(
     else if (sa->sa_family == WOLFSENTRY_AF_CAN) {
         /* accept CAN addrs as either strings consisting of hex or octal numbers, or as a JSON-native decimal integer. */
         char d_buf[13], *endptr;
+        /* use the widest available unsigned type so the range check below is
+         * live even on ILP32 ABIs, where unsigned long equals uint32_t.
+         */
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+        unsigned long long addr;
+#else
         unsigned long addr;
+#endif
         if ((type != JSON_STRING) && (type != JSON_NUMBER))
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         if (data_size >= sizeof d_buf)
@@ -725,7 +835,18 @@ static wolfsentry_errcode_t convert_sockaddr_address(
         }
         memcpy(d_buf, data, data_size);
         d_buf[data_size] = 0;
+#ifndef WOLFSENTRY_NO_ERRNO_H
+        errno = 0;
+#endif
+#ifdef WOLFSENTRY_HAVE_LONG_LONG
+        addr = strtoull(d_buf, &endptr, 0);
+#else
         addr = strtoul(d_buf, &endptr, 0);
+#endif
+#ifndef WOLFSENTRY_NO_ERRNO_H
+        if (errno != 0)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+#endif
         if ((size_t)(endptr - d_buf) != data_size)
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         if (addr > MAX_UINT_OF(uint32_t))
@@ -736,6 +857,35 @@ static wolfsentry_errcode_t convert_sockaddr_address(
         sa_addr[3] = (byte)addr;
         if (sa->addr_len == 0)
             sa->addr_len = 32;
+        WOLFSENTRY_RETURN_OK;
+    }
+    else if ((sa->sa_family == WOLFSENTRY_AF_LOCAL) && af_local_is_builtin(jps)) {
+        /* mirror wolfsentry_route_format_address(): the address is a raw path
+         * stored verbatim, with addr_len recording its length.
+         */
+        size_t i;
+        if (type != JSON_STRING)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        /* an empty path would be a zero-length, match-all prefix. */
+        if (data_size == 0)
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        if (data_size > (size_t)(WOLFSENTRY_MAX_ADDR_BITS / 8))
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        /* the route formatter emits the path verbatim between quotes without
+         * escaping, so reject bytes that would corrupt or inject into that
+         * dump (quote, backslash, control bytes including NUL).
+         */
+        for (i = 0; i < data_size; ++i) {
+            if ((data[i] < 0x20) || (data[i] == 0x7f) || (data[i] == '"') || (data[i] == '\\'))
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        }
+        /* addr_len must equal the pathname length, so a prefix-bits supplied
+         * before the address cannot leave trailing implicit bytes in the dump.
+         */
+        if ((sa->addr_len != 0) && (sa->addr_len != (wolfsentry_addr_bits_t)(data_size * 8)))
+            WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        memcpy(sa_addr, data, data_size);
+        sa->addr_len = (wolfsentry_addr_bits_t)(data_size * 8);
         WOLFSENTRY_RETURN_OK;
     }
     else if (sa->sa_family == WOLFSENTRY_AF_UNSPEC) {
@@ -813,6 +963,10 @@ static wolfsentry_errcode_t convert_sockaddr_port_name(struct wolfsentry_json_pr
             WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
     }
 
+    /* glibc reports an unknown service with a zero return and a NULL result. */
+    if (s == NULL)
+        WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+
     sa->sa_port = (wolfsentry_port_t)ntohs((uint16_t)s->s_port);
     WOLFSENTRY_RETURN_OK;
 }
@@ -836,13 +990,34 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
     } else if (! strcmp(jps->cur_keyname, "address")) {
+        wolfsentry_addr_bits_t prior_addr_len = sa->addr_len;
+        wolfsentry_addr_bits_t max_addr_bits;
+        int prefix_given = (prior_addr_len != 0);
+        wolfsentry_errcode_t ret;
         if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
+#ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
+        /* a bitmask also sets addr_len, to the combined address and mask width */
+        if (jps->o_u_c.route.flags & (sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
+                                      WOLFSENTRY_ROUTE_FLAG_REMOTE_ADDR_BITMASK :
+                                      WOLFSENTRY_ROUTE_FLAG_LOCAL_ADDR_BITMASK))
+            prefix_given = 0;
+#endif
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,
                               sa == (struct wolfsentry_sockaddr *)&jps->o_u_c.route.remote ?
                               WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_ADDR_WILDCARD :
                               WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_ADDR_WILDCARD);
-        WOLFSENTRY_ERROR_RERETURN(convert_sockaddr_address(jps, type, data, data_size, sa, sa->addr));
+        ret = convert_sockaddr_address(jps, type, data, data_size, sa, sa->addr);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        /* an earlier prefix-bits on generic LINK was allowed the EUI-64 width;
+         * now that the address has settled the family, the prefix must fit it. */
+        if (prefix_given && (sa->sa_family == WOLFSENTRY_AF_LINK48)) {
+            ret = wolfsentry_addr_family_max_addr_bits(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, sa->sa_family, &max_addr_bits);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+            if (prior_addr_len > max_addr_bits)
+                WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+        }
+        WOLFSENTRY_RETURN_OK;
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
     else if (! strcmp(jps->cur_keyname, "bitmask")) {
@@ -851,6 +1026,14 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
 
         if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
+
+        /* the right-justify below would keep only the prefix-sized leading bytes of a full address */
+        if ((jps->section_under_construction == S_U_C_REMOTE_ENDPOINT) ?
+            jps->o_u_c.route.remote_prefix_bits_given :
+            jps->o_u_c.route.local_prefix_bits_given)
+        {
+            WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
+        }
 
         ret = wolfsentry_addr_family_max_addr_bits(
             JPS_WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -868,8 +1051,14 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
          * move it to right-justified position.
          */
         if ((sa->addr_len != 0) && (sa->addr_len != addr_size)) {
-            size_t pad_bytes = WOLFSENTRY_BITS_TO_BYTES((size_t)addr_size - (size_t)sa->addr_len);
-            memmove(sa->addr + pad_bytes, sa->addr, sa->addr_len);
+            size_t addr_bytes;
+            size_t pad_bytes;
+            if (sa->addr_len > addr_size)
+                WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+            /* addr_len is a bit count; the move operates on whole bytes. */
+            addr_bytes = WOLFSENTRY_BITS_TO_BYTES((size_t)sa->addr_len);
+            pad_bytes = WOLFSENTRY_BITS_TO_BYTES((size_t)addr_size) - addr_bytes;
+            memmove(sa->addr + pad_bytes, sa->addr, addr_bytes);
             memset(sa->addr, 0, pad_bytes);
         }
 
@@ -886,6 +1075,10 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
     }
 #endif
     else if (! strcmp(jps->cur_keyname, "prefix-bits")) {
+        wolfsentry_addr_bits_t max_addr_bits;
+        wolfsentry_addr_bits_t prior_addr_len = sa->addr_len;
+        wolfsentry_addr_family_t width_family = sa->sa_family;
+        wolfsentry_errcode_t ret;
         if (sa->sa_family == WOLFSENTRY_AF_UNSPEC)
             WOLFSENTRY_ERROR_RETURN(CONFIG_OUT_OF_SEQUENCE);
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING
@@ -898,7 +1091,40 @@ static wolfsentry_errcode_t handle_route_endpoint_clause(struct wolfsentry_json_
             WOLFSENTRY_ERROR_RETURN(CONFIG_MISPLACED_KEY);
         }
 #endif
-        WOLFSENTRY_ERROR_RERETURN(convert_uint16(type, data, data_size, &sa->addr_len));
+        ret = convert_uint16(type, data, data_size, &sa->addr_len);
+        WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        /* bound prefix-bits to the address family width so a later copy cannot
+         * read past the fixed-size staging buffer. AF_LOCAL path addresses have
+         * no fixed family width (and no entry in the family table), so bound
+         * them by the staging buffer, matching the formatter's dump output.
+         */
+        if ((sa->sa_family == WOLFSENTRY_AF_LOCAL) && af_local_is_builtin(jps)) {
+            max_addr_bits = (wolfsentry_addr_bits_t)((WOLFSENTRY_MAX_ADDR_BITS / 8) * 8);
+            /* an AF_LOCAL prefix-bits only denotes the pathname length, so it
+             * must be nonzero whole bytes and match any pathname already parsed;
+             * keeping it nonzero leaves addr_len == 0 meaning "not supplied".
+             */
+            if ((sa->addr_len == 0) || (sa->addr_len & 0x7))
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+            if ((prior_addr_len != 0) && (sa->addr_len != prior_addr_len))
+                WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
+        }
+        else {
+            /* generic LINK becomes EUI-48 or EUI-64 from the address length, so
+             * before an address arrives allow the wider width; the address
+             * handler then checks the prefix against the settled family. */
+            if ((width_family == WOLFSENTRY_AF_LINK48) && (prior_addr_len == 0))
+                width_family = WOLFSENTRY_AF_LINK64;
+            ret = wolfsentry_addr_family_max_addr_bits(JPS_WOLFSENTRY_CONTEXT_ARGS_OUT, width_family, &max_addr_bits);
+            WOLFSENTRY_RERETURN_IF_ERROR(ret);
+        }
+        if (sa->addr_len > max_addr_bits)
+            WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+        if (jps->section_under_construction == S_U_C_REMOTE_ENDPOINT)
+            jps->o_u_c.route.remote_prefix_bits_given = 1;
+        else
+            jps->o_u_c.route.local_prefix_bits_given = 1;
+        WOLFSENTRY_RETURN_OK;
     }
     else if (! strcmp(jps->cur_keyname, "interface")) {
         WOLFSENTRY_CLEAR_BITS(jps->o_u_c.route.flags,
@@ -981,6 +1207,10 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
                 WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
         }
 
+        /* glibc reports an unknown protocol with a zero return and a NULL result. */
+        if (p == NULL)
+            WOLFSENTRY_ERROR_RETURN(ITEM_NOT_FOUND);
+
         jps->o_u_c.route.remote.sa_proto = (wolfsentry_proto_t)p->p_proto;
         jps->o_u_c.route.local.sa_proto = (wolfsentry_proto_t)p->p_proto;
     }
@@ -988,7 +1218,9 @@ static wolfsentry_errcode_t handle_route_protocol_clause(struct wolfsentry_json_
     else
         WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
 
-    if (((jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET) || (jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET6)) &&
+    /* implicit default only; an explicit tcplike-port-numbers setting wins. */
+    if ((! jps->o_u_c.route.tcplike_port_numbers_explicit) &&
+        ((jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET) || (jps->o_u_c.route.remote.sa_family == WOLFSENTRY_AF_INET6)) &&
         ((jps->o_u_c.route.remote.sa_proto == IPPROTO_TCP) || (jps->o_u_c.route.remote.sa_proto == IPPROTO_UDP)))
         WOLFSENTRY_SET_BITS(jps->o_u_c.route.flags, WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS);
 
@@ -1071,8 +1303,12 @@ static wolfsentry_errcode_t handle_route_clause(struct wolfsentry_json_process_s
     else {
         wolfsentry_route_flags_t flag;
         ret = wolfsentry_route_flag_assoc_by_name(jps->cur_keyname, WOLFSENTRY_LENGTH_NULL_TERMINATED, &flag);
-        if (ret >= 0)
-            WOLFSENTRY_ERROR_RERETURN(handle_route_boolean_clause(type, &jps->o_u_c.route.flags, flag));
+        if (ret >= 0) {
+            ret = handle_route_boolean_clause(type, &jps->o_u_c.route.flags, flag);
+            if ((ret >= 0) && (flag == WOLFSENTRY_ROUTE_FLAG_TCPLIKE_PORT_NUMBERS))
+                jps->o_u_c.route.tcplike_port_numbers_explicit = 1;
+            WOLFSENTRY_ERROR_RERETURN(ret);
+        }
         else {
             if (WOLFSENTRY_ERROR_CODE_IS(ret, ITEM_NOT_FOUND))
                 WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_KEY);
@@ -1632,7 +1868,7 @@ static wolfsentry_errcode_t json_process(
                     WOLFSENTRY_RETURN_OK;
                 }
                 if (! strcmp(jps->cur_keyname, "actions-update")) {
-                    WOLFSENTRY_ERROR_RETURN(CONFIG_MISSING_HANDLER);
+                    WOLFSENTRY_ERROR_OUT(CONFIG_MISSING_HANDLER);
                     /*
                     jps->table_under_construction = T_U_C_ACTIONS;
                     WOLFSENTRY_RETURN_OK;
@@ -2008,13 +2244,21 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
 
         if (full_cycle_of_insert_actions_p) {
             wolfsentry_action_res_t action_results = WOLFSENTRY_ACTION_RES_NONE;
-            if ((ret = wolfsentry_route_bulk_clear_insert_action_status(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &action_results)) < 0)
+            ret = wolfsentry_route_bulk_clear_insert_action_status(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &action_results);
+            if (ret >= 0)
+                ret = wolfsentry_context_flush(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT);
+            /* the candidate is already live after the exchange; re-enable its
+             * actions even if the preceding steps failed, so a post-exchange
+             * failure cannot leave the running configuration action-inhibited.
+             * keep the first error.
+             */
+            if (ret >= 0)
+                ret = wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT);
+            else
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT));
+            if (ret < 0)
                 goto out;
-            if ((ret = wolfsentry_context_flush(JPSP_WOLFSENTRY_CONTEXT_ARGS_OUT)) < 0)
-                goto out;
-        }
-
-        if ((ret = wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT)) < 0)
+        } else if ((ret = wolfsentry_context_enable_actions(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT)) < 0)
             goto out;
 
         {
@@ -2035,6 +2279,26 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
 
     if ((*jps)->wolfsentry && ((*jps)->wolfsentry != (*jps)->wolfsentry_actual))
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT));
+
+    /* In the default (non-transactional) load mode the live context was flushed
+     * before parsing; a failure leaves it partially populated while its default
+     * policy is unchanged. Fail closed so a half-loaded policy cannot admit
+     * traffic: clear the routes and set a REJECT default policy.
+     */
+    if ((ret < 0) &&
+        (! WOLFSENTRY_MASKIN_BITS((*jps)->load_flags,
+             WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN |
+             WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT |
+             WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH)))
+    {
+        struct wolfsentry_route_table *main_table;
+        wolfsentry_action_res_t action_results;
+        WOLFSENTRY_CLEAR_ALL_BITS(action_results);
+        if (wolfsentry_route_get_main_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &main_table) >= 0) {
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_flush_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, main_table, &action_results));
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_table_default_policy_set(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, main_table, WOLFSENTRY_ACTION_RES_REJECT));
+        }
+    }
 
 #ifdef WOLFSENTRY_THREADSAFE
     {

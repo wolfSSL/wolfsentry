@@ -3368,6 +3368,10 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_base64_decode(
     #include "wolfsentry/wolfsentry_wolfip.h"
 #endif
 
+#ifdef WOLFSENTRY_WOLFCOSE
+    #include "wolfsentry/wolfsentry_cbor.h"
+#endif
+
 #ifdef WOLFSENTRY_NETXDUO
     #include "wolfsentry/wolfsentry_netxduo.h"
 #endif

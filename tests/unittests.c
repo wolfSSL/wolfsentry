@@ -5869,6 +5869,43 @@ static int test_cjvalue_dict_remove_orphan(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct 
     return 0;
 }
 
+static int test_cjvalue_dict_clean_retry_later_node(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE outer;
+    JSON_VALUE *nested;
+    JSON_VALUE *slot;
+    char keybuf[8];
+    int i;
+    int ret;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+    for (i = 0; i < 3; ++i) {
+        (void)snprintf(keybuf, sizeof keybuf, "k%03d", i);
+        slot = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)keybuf, strlen(keybuf));
+        WOLFSENTRY_EXIT_ON_TRUE(slot == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, (int32_t)i) < 0);
+    }
+    nested = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"zz", 2);
+    WOLFSENTRY_EXIT_ON_TRUE(nested == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested) < 0);
+    slot = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested, (const unsigned char *)"in", 2);
+    WOLFSENTRY_EXIT_ON_TRUE(slot == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, 7) < 0);
+
+    /* the earlier keys are freed before the nested dictionary's stack
+     * allocation fails on the last key. */
+    test_cjv_budget = 1;
+    ret = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer);
+    test_cjv_budget = -1;
+    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+
+    /* a retry must not reach the nodes freed before the failure */
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
+
+    return 0;
+}
+
 static int test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
 {
     JSON_VALUE outer;
@@ -5993,6 +6030,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_clean_retry_later_node(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_empty_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);

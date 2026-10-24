@@ -1895,6 +1895,22 @@ json_value_dict_clean(
             free((void *)stack);
             return ret;
         }
+        /* unlink before freeing so a failed clean leaves only live nodes for a
+         * retry; size is kept, as it still bounds the retry's stack */
+        if(stack_size > 0)
+            stack[stack_size - 1]->left = right;
+        else
+            d->root = right;
+        if(v->data.data_bytes[0] & HAS_ORDERLIST) {
+            if(node->order_prev != NULL)
+                node->order_prev->order_next = node->order_next;
+            else
+                d->order_head = node->order_next;
+            if(node->order_next != NULL)
+                node->order_next->order_prev = node->order_prev;
+            else
+                d->order_tail = node->order_prev;
+        }
         free(node);
 
         stack_size += json_value_dict_leftmost_path(stack + stack_size, right);

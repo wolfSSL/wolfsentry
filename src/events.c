@@ -345,7 +345,17 @@ WOLFSENTRY_API const char *wolfsentry_event_get_label(const struct wolfsentry_ev
 
 WOLFSENTRY_API wolfsentry_event_flags_t wolfsentry_event_get_flags(const struct wolfsentry_event *event)
 {
-    return event ? event->flags : WOLFSENTRY_EVENT_FLAG_NONE;
+    wolfsentry_event_flags_t flags;
+
+    if (event == NULL)
+        return WOLFSENTRY_EVENT_FLAG_NONE;
+    /* an owner freed without the context lock only drops the count, so derive the mark from it */
+    flags = event->flags;
+    if (WOLFSENTRY_ATOMIC_LOAD(event->aux_owner_count) > 0)
+        WOLFSENTRY_SET_BITS(flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT);
+    else
+        WOLFSENTRY_CLEAR_BITS(flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT);
+    return flags;
 }
 
 WOLFSENTRY_API const struct wolfsentry_event *wolfsentry_event_get_aux_event(const struct wolfsentry_event *event)

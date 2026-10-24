@@ -4436,6 +4436,37 @@ static int test_event_aux_event_reuse_after_clear(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_event_aux_mark_cleared_on_owner_free(void) {
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_event *aux;
+    wolfsentry_ent_id_t id;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* default_config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "mark_owner", WOLFSENTRY_LENGTH_NULL_TERMINATED, 10, NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, "mark_aux", WOLFSENTRY_LENGTH_NULL_TERMINATED, 10, NULL /* config */, WOLFSENTRY_EVENT_FLAG_NONE, &id));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_set_aux_event(WOLFSENTRY_CONTEXT_ARGS_OUT, "mark_owner", WOLFSENTRY_LENGTH_NULL_TERMINATED, "mark_aux", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_get_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, "mark_aux", WOLFSENTRY_LENGTH_NULL_TERMINATED, &aux));
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(wolfsentry_event_get_flags(aux), WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT));
+
+    /* freeing the only owner leaves the aux event with no owners */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "mark_owner", WOLFSENTRY_LENGTH_NULL_TERMINATED, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(wolfsentry_event_get_flags(aux), WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, aux, NULL /* action_results */));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_event_aux_event_rejects_subevent_owner(void) {
     struct wolfsentry_context *wolfsentry;
     wolfsentry_ent_id_t id;
@@ -7332,6 +7363,12 @@ int main(int argc, char* argv[]) {
     ret = test_event_aux_event_reuse_after_clear();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_event_aux_event_reuse_after_clear failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_event_aux_mark_cleared_on_owner_free();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_event_aux_mark_cleared_on_owner_free failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 

@@ -67,6 +67,25 @@
     }
 #endif
 
+/* On a dispatch failure the action_results are not trustworthy.  Fall back to
+ * the context's configured default policy: reject only if that policy rejects,
+ * or if it can't be determined (including a NULL context).
+ */
+static int lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_IN) {
+    wolfsentry_action_res_t default_policy;
+    wolfsentry_errcode_t ws_ret;
+    if (wolfsentry == NULL)
+        return 1;
+    ws_ret = wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        return 1;
+    ws_ret = wolfsentry_route_default_policy_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &default_policy);
+    (void)wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT);
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        return 1;
+    return WOLFSENTRY_MASKIN_BITS(default_policy, WOLFSENTRY_ACTION_RES_REJECT) ? 1 : 0;
+}
+
 #if LWIP_ARP || LWIP_ETHERNET
 
 #include "netif/ethernet.h"
@@ -105,7 +124,7 @@ static err_t ethernet_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -136,7 +155,7 @@ static err_t ethernet_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
     }
 
     remote.remote.sa_family = WOLFSENTRY_AF_LINK;
@@ -186,7 +205,9 @@ static err_t ethernet_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT) ? ERR_ABRT : ERR_OK;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -242,7 +263,7 @@ static err_t ip4_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -276,7 +297,7 @@ static err_t ip4_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
     }
 
     remote.remote.sa_family = WOLFSENTRY_AF_INET;
@@ -326,7 +347,9 @@ static err_t ip4_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT) ? ERR_ABRT : ERR_OK;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -377,7 +400,7 @@ static err_t ip6_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -411,7 +434,7 @@ static err_t ip6_filter_with_wolfsentry(
     case FILT_LISTENING:
     case FILT_STOP_LISTENING:
         /* can't happen. */
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
     }
 
     remote.remote.sa_family = WOLFSENTRY_AF_INET6;
@@ -461,7 +484,9 @@ static err_t ip6_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT) ? ERR_ABRT : ERR_OK;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -515,7 +540,7 @@ static err_t tcp_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_ACCEPTING:
@@ -593,7 +618,7 @@ static err_t tcp_filter_with_wolfsentry(
     case FILT_DISSOCIATE:
     case FILT_ADDR_UNREACHABLE:
         /* can't happen. */
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
     }
 
 #if LWIP_IPV6
@@ -662,10 +687,12 @@ static err_t tcp_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
-        ret = ERR_RST;
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT) ? ERR_ABRT : ERR_OK;
     else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+        ret = ERR_RST;
     else
         ret = ERR_OK;
 
@@ -727,7 +754,7 @@ static err_t udp_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_BINDING:
@@ -782,7 +809,7 @@ static err_t udp_filter_with_wolfsentry(
     case FILT_ADDR_UNREACHABLE:
     case FILT_CLOSE_WAIT:
         /* can't happen. */
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
     }
 
 #if LWIP_IPV6
@@ -851,10 +878,12 @@ static err_t udp_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
-        ret = ERR_RST;
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT) ? ERR_ABRT : ERR_OK;
     else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_PORT_RESET))
+        ret = ERR_RST;
     else
         ret = ERR_OK;
 
@@ -914,7 +943,7 @@ static err_t icmp4_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -949,7 +978,7 @@ static err_t icmp4_filter_with_wolfsentry(
     case FILT_STOP_LISTENING:
     case FILT_CLOSE_WAIT:
         /* can't happen. */
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
     }
 
     remote.remote.sa_family = WOLFSENTRY_AF_INET;
@@ -999,7 +1028,9 @@ static err_t icmp4_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT) ? ERR_ABRT : ERR_OK;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;
@@ -1050,7 +1081,7 @@ static err_t icmp6_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -1085,7 +1116,7 @@ static err_t icmp6_filter_with_wolfsentry(
     case FILT_STOP_LISTENING:
     case FILT_CLOSE_WAIT:
         /* can't happen. */
-        WOLFSENTRY_RETURN_VALUE(ERR_OK);
+        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
     }
 
     remote.remote.sa_family = WOLFSENTRY_AF_INET6;
@@ -1135,7 +1166,9 @@ static err_t icmp6_filter_with_wolfsentry(
 
     WOLFSENTRY_WARN_ON_FAILURE(ws_ret);
 
-    if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
+    if (WOLFSENTRY_IS_FAILURE(ws_ret))
+        ret = lwip_ws_failure_rejects(WOLFSENTRY_CONTEXT_ARGS_OUT) ? ERR_ABRT : ERR_OK;
+    else if (WOLFSENTRY_MASKIN_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT))
         ret = ERR_ABRT;
     else
         ret = ERR_OK;

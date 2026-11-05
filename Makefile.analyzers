@@ -432,7 +432,7 @@ minimal-threaded-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-minimal-threaded-builds" clean
 	@echo "passed: minimal threaded build test."
 
-LIBRARY_DEPENDENCY_SUPPRESSIONS_BASE := U wolfsentry_|U json_|U (inet_ntop|inet_pton|memchr|memcmp|memcpy|__memcpy_chk|memmove|memset|__popcountdi2|snprintf|__snprintf_chk|strchr|strcmp|strlen|strncasecmp|strncmp|strtod|strtol|strtoll|strtoul|strtoull)$$
+LIBRARY_DEPENDENCY_SUPPRESSIONS_BASE := U wolfsentry_|U json_|U (inet_ntop|inet_pton|memchr|memcmp|memcpy|__memcpy_chk|memmove|memset|__popcountdi2|snprintf|__snprintf_chk|strchr|strcmp|strlen|strncasecmp|strncmp|strtod|strtol|strtoll|strtoul|strtoull|__isoc23_strtol|__isoc23_strtoll|__isoc23_strtoul|__isoc23_strtoull)$$
 
 .PHONY: library-dependency-singlethreaded-build-test
 library-dependency-singlethreaded-build-test:

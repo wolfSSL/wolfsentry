@@ -11295,6 +11295,7 @@ static int test_kv_render_float_roundtrip(void) {
 static int test_kv_render_nonfinite_float(void) {
     struct wolfsentry_context *wolfsentry;
     char buf[64];
+    double reparsed;
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
 
@@ -11310,13 +11311,14 @@ static int test_kv_render_nonfinite_float(void) {
         wolfsentry_user_value_store_double(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
-            (double)NAN, 0));
+            strtod("nan", NULL), 0));
     WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
     /* a bare nan/inf is not valid JSON; the rendered value must be quoted and
      * must reparse to the same non-finite value.
      */
     WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
-    WOLFSENTRY_EXIT_ON_FALSE(isnan(strtod(buf + 1, NULL)));
+    reparsed = strtod(buf + 1, NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(isnan(reparsed));
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_user_value_delete(
             WOLFSENTRY_CONTEXT_ARGS_OUT, "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
@@ -11325,10 +11327,11 @@ static int test_kv_render_nonfinite_float(void) {
         wolfsentry_user_value_store_double(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
-            (double)INFINITY, 0));
+            strtod("inf", NULL), 0));
     WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
     WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
-    WOLFSENTRY_EXIT_ON_FALSE(isinf(strtod(buf + 1, NULL)) && (strtod(buf + 1, NULL) > 0.0));
+    reparsed = strtod(buf + 1, NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(isinf(reparsed) && (reparsed > 0.0));
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_user_value_delete(
             WOLFSENTRY_CONTEXT_ARGS_OUT, "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
@@ -11337,10 +11340,11 @@ static int test_kv_render_nonfinite_float(void) {
         wolfsentry_user_value_store_double(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "ninf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
-            -(double)INFINITY, 0));
+            -strtod("inf", NULL), 0));
     WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
     WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
-    WOLFSENTRY_EXIT_ON_FALSE(isinf(strtod(buf + 1, NULL)) && (strtod(buf + 1, NULL) < 0.0));
+    reparsed = strtod(buf + 1, NULL);
+    WOLFSENTRY_EXIT_ON_FALSE(isinf(reparsed) && (reparsed < 0.0));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

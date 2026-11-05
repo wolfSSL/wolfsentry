@@ -1910,7 +1910,7 @@ static int test_context_exchange_default_policy(void) {
 static wolfsentry_errcode_t test_ll_insert_before_head_links(void) {
     struct wolfsentry_list_header list;
     struct wolfsentry_list_ent_header a, b, c, d;
-    struct wolfsentry_list_ent_header *cursor;
+    const struct wolfsentry_list_ent_header *cursor;
     wolfsentry_hitcount_t n;
 
     WOLFSENTRY_LIST_HEADER_RESET(list);
@@ -2029,7 +2029,7 @@ static wolfsentry_errcode_t test_ll_insert_after_tail_links(void) {
     struct wolfsentry_list_header list;
     struct wolfsentry_list_ent_header a, b, c;
     struct wolfsentry_list_ent_header sentinel;
-    struct wolfsentry_list_ent_header *cursor;
+    const struct wolfsentry_list_ent_header *cursor;
     wolfsentry_hitcount_t n;
 
     WOLFSENTRY_LIST_HEADER_RESET(list);
@@ -4494,7 +4494,7 @@ static int test_static_routes_clone_addr_family_links(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_context *clone = NULL;
     wolfsentry_action_res_t action_results;
-    struct wolfsentry_table_ent_header *i, *prev;
+    const struct wolfsentry_table_ent_header *i, *prev;
     wolfsentry_addr_bits_t bits;
     unsigned int n;
     static const char * const names[3] = { "clone_AF_0", "clone_AF_1", "clone_AF_2" };
@@ -11398,7 +11398,6 @@ static int test_kv_readonly_overwrite_rejected(void) {
     struct wolfsentry_kv_pair_internal *kv_ref = NULL;
     const char *value = NULL;
     int value_len = -1;
-    wolfsentry_errcode_t ret;
     static const char key[] = "ro_key";
     static const char orig[] = "orig";
 
@@ -11428,7 +11427,7 @@ static int test_kv_readonly_overwrite_rejected(void) {
     /* overwriting a read-only value must be rejected. */
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
         NOT_PERMITTED,
-        ret = wolfsentry_user_value_store_string(
+        wolfsentry_user_value_store_string(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             key, WOLFSENTRY_LENGTH_NULL_TERMINATED,
             "different", WOLFSENTRY_LENGTH_NULL_TERMINATED,
@@ -12737,7 +12736,7 @@ static int test_json(const char *fname, const char *extra_fname) {
             WOLFSENTRY_MAX_LABEL_BYTES, 10, JSON_NOSCALARROOT
         };
         JSON_VALUE dupkey_root;
-        JSON_VALUE *dupkey_v;
+        const JSON_VALUE *dupkey_v;
         JSON_INPUT_POS dupkey_pos;
 
         WOLFSENTRY_EXIT_ON_TRUE(
@@ -12774,7 +12773,7 @@ static int test_json(const char *fname, const char *extra_fname) {
             WOLFSENTRY_MAX_LABEL_BYTES, 10, JSON_NOSCALARROOT
         };
         JSON_VALUE dupnest_root;
-        JSON_VALUE *dupnest_v;
+        const JSON_VALUE *dupnest_v;
         JSON_INPUT_POS dupnest_pos;
 
         WOLFSENTRY_EXIT_ON_TRUE(
@@ -13305,7 +13304,7 @@ static int test_cjvalue_path(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_all
     JSON_VALUE root;
     JSON_VALUE *list;
     JSON_VALUE *elem;
-    JSON_VALUE *found;
+    const JSON_VALUE *found;
 
     WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &root) < 0);
 

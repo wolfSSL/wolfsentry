@@ -14326,7 +14326,8 @@ static wolfsentry_errcode_t test_json_sax_number_text_boundary(void) {
     for (len = 62; len <= 63; ++len) {
         result = 0.0;
         WOLFSENTRY_EXIT_ON_FAILURE(json_number_to_double(num, len, &result));
-        WOLFSENTRY_EXIT_ON_FALSE(result == ((len == 62) ? 1e61 : 1e62));
+        /* the cast drops x87 excess precision from the constants */
+        WOLFSENTRY_EXIT_ON_FALSE(result == (double)((len == 62) ? 1e61 : 1e62));
     }
 
     WOLFSENTRY_EXIT_ON_TRUE(json_number_to_double(num, 64, &result) >= 0);

@@ -512,6 +512,31 @@ static int wolfsentry_kv_render_string_escaped(
 
 #endif /* !WOLFSENTRY_HAVE_JSON_DOM */
 
+/* snprintf() semantics; C89 has no portable 64-bit conversion specifier. */
+static int wolfsentry_kv_render_uint64(uint64_t magnitude, int negative, char *out, size_t out_space)
+{
+    char digits[20];
+    size_t n_digits = 0;
+    size_t needed;
+    size_t pos = 0;
+
+    do {
+        digits[n_digits++] = (char)('0' + (int)(magnitude % 10U));
+        magnitude /= 10U;
+    } while (magnitude != 0);
+    needed = n_digits + (negative ? 1U : 0U);
+
+    if (out_space > 0) {
+        if (negative && (pos < out_space - 1))
+            out[pos++] = '-';
+        while ((n_digits > 0) && (pos < out_space - 1))
+            out[pos++] = digits[--n_digits];
+        out[pos] = 0;
+    }
+
+    return (int)needed;
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_pair *kv,
@@ -535,19 +560,16 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
         *out_len = snprintf(out, out_space, "false");
         break;
     case WOLFSENTRY_KV_UINT:
-#ifdef PRIu64
-        *out_len = snprintf(out, out_space, "%" PRIu64, WOLFSENTRY_KV_V_UINT(kv));
-#else
-        *out_len = snprintf(out, out_space, "%lu", (long unsigned int)WOLFSENTRY_KV_V_UINT(kv));
-#endif
+        *out_len = wolfsentry_kv_render_uint64(WOLFSENTRY_KV_V_UINT(kv), 0, out, out_space);
         break;
-    case WOLFSENTRY_KV_SINT:
-#ifdef PRId64
-        *out_len = snprintf(out, out_space, "%" PRId64, WOLFSENTRY_KV_V_SINT(kv));
-#else
-        *out_len = snprintf(out, out_space, "%ld", (long int)WOLFSENTRY_KV_V_SINT(kv));
-#endif
+    case WOLFSENTRY_KV_SINT: {
+        int64_t v_sint = WOLFSENTRY_KV_V_SINT(kv);
+        if (v_sint < 0)
+            *out_len = wolfsentry_kv_render_uint64((uint64_t)(-(v_sint + 1)) + 1U, 1, out, out_space);
+        else
+            *out_len = wolfsentry_kv_render_uint64((uint64_t)v_sint, 0, out, out_space);
         break;
+    }
     case WOLFSENTRY_KV_FLOAT: {
         double v_float = WOLFSENTRY_KV_V_FLOAT(kv);
         /* non-finite values have no bare JSON token, so emit a quoted string

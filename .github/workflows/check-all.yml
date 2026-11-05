@@ -1,0 +1,74 @@
+name: make check-all
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+    branches: [ 'master', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  check-all:
+    name: ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [ analyze-all, check, check-extra ]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        path: wolfsentry
+        fetch-depth: 0
+    - uses: actions/checkout@v4
+      with:
+        repository: FreeRTOS/FreeRTOS-Kernel
+        ref: dbf70559b27d39c1fdb68dfb9a32140b6a6777a0
+        path: third/FreeRTOS/FreeRTOS/Source
+    - uses: actions/checkout@v4
+      with:
+        repository: lwip-tcpip/lwip
+        ref: 3fe8d2fc43a9b69f7ed28c63d44a7744f9c0def9
+        path: third/lwip
+    - uses: actions/checkout@v4
+      if: matrix.group == 'check-extra'
+      with:
+        repository: wolfSSL/wolfssl
+        ref: master
+        path: wolfssl
+    - name: Apply the lwIP packet filter patch
+      run: patch --directory third/lwip --strip 1 < wolfsentry/lwip/LWIP_PACKET_FILTER_API.patch
+    - name: Lower mmap randomization for ThreadSanitizer
+      run: sudo sysctl -w vm.mmap_rnd_bits=28
+    - name: Build the check-all image
+      run: |
+        docker build \
+          --file wolfsentry/.github/docker/wolfsentry-check-all/Dockerfile \
+          --tag wolfsentry-check-all:local wolfsentry
+    - name: Run ${{ matrix.group }}
+      run: |
+        docker run --rm \
+          --volume "$GITHUB_WORKSPACE:/workspace" \
+          --workdir /workspace \
+          wolfsentry-check-all:local \
+          wolfsentry/.github/docker/wolfsentry-check-all/run-check-all.sh "${{ matrix.group }}"

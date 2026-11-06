@@ -27,17 +27,14 @@ defaults:
 
 jobs:
   check-all:
-    name: ${{ matrix.group }}
+    name: make check-all
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [ analyze-all, check, check-extra ]
+    timeout-minutes: 240
 
     steps:
     - uses: actions/checkout@v4
       with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
         path: wolfsentry
         fetch-depth: 0
     - uses: actions/checkout@v4
@@ -54,15 +51,17 @@ jobs:
       with:
         repository: json-schema-org/JSON-Schema-Test-Suite
         ref: 245a45abc90190c0bff04d97e6d2b541b4bb9f12
-        path: JSON-Schema-Test-Suite
+        path: wolfsentry/tests/JSON-Schema-Test-Suite
     - uses: actions/checkout@v4
-      if: matrix.group == 'check-extra'
       with:
         repository: wolfSSL/wolfssl
         ref: master
         path: wolfssl
     - name: Apply the lwIP packet filter patch
       run: patch --directory third/lwip --strip 1 < wolfsentry/lwip/LWIP_PACKET_FILTER_API.patch
+    # stand-in until the maintainer's local scripts/analyzer-config.sh is available; cppcheck needs the file to exist
+    - name: Provide scripts/analyzer-config.sh
+      run: touch wolfsentry/scripts/analyzer-config.sh
     - name: Lower mmap randomization for ThreadSanitizer
       run: sudo sysctl -w vm.mmap_rnd_bits=28
     - name: Build the check-all image
@@ -70,10 +69,18 @@ jobs:
         docker build \
           --file wolfsentry/.github/docker/wolfsentry-check-all/Dockerfile \
           --tag wolfsentry-check-all:local wolfsentry
-    - name: Run ${{ matrix.group }}
+    # make pre-push-check runs scripts/pre-push.sh, which runs make check-all on this commit.
+    # The image's gcc 14 arm-none-eabi toolchain needs larger FreeRTOS image limits than the defaults.
+    - name: make pre-push-check
       run: |
         docker run --rm \
           --volume "$GITHUB_WORKSPACE:/workspace" \
-          --workdir /workspace \
+          --workdir /workspace/wolfsentry \
+          --env TMPDIR=/tmp \
+          --env CLANG_PATH=/usr/bin \
+          --env NOTIFICATION_SANDBOX= \
+          --env FREERTOS_ARM32_MAX_IMAGE_SIZE=270000 \
+          --env FREERTOS_ARM32_MAX_SECTIONS_SIZE=145000 \
+          --env FREERTOS_ARM32_THUMB_MAX_SECTIONS_SIZE=145000 \
           wolfsentry-check-all:local \
-          wolfsentry/.github/docker/wolfsentry-check-all/run-check-all.sh "${{ matrix.group }}"
+          bash -ec 'git config --global --add safe.directory "*"; make pre-push-check'

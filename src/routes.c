@@ -1337,9 +1337,10 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
 
     /* an aux event parents the ephemeral routes it generates, so it keeps its
      * subevent role rather than taking on the mutually exclusive parent role.
+     * the owner count is authoritative, since a freed owner leaves the stored mark stale.
      */
     if ((route_to_insert->parent_event != NULL) &&
-        (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_SUBEVENT)) &&
+        (WOLFSENTRY_ATOMIC_LOAD(route_to_insert->parent_event->aux_owner_count) == 0) &&
         (! WOLFSENTRY_CHECK_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT)))
     {
         WOLFSENTRY_SET_BITS(route_to_insert->parent_event->flags, WOLFSENTRY_EVENT_FLAG_IS_PARENT_EVENT);

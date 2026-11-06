@@ -51,6 +51,11 @@ jobs:
         ref: 3fe8d2fc43a9b69f7ed28c63d44a7744f9c0def9
         path: third/lwip
     - uses: actions/checkout@v4
+      with:
+        repository: json-schema-org/JSON-Schema-Test-Suite
+        ref: 245a45abc90190c0bff04d97e6d2b541b4bb9f12
+        path: JSON-Schema-Test-Suite
+    - uses: actions/checkout@v4
       if: matrix.group == 'check-extra'
       with:
         repository: wolfSSL/wolfssl

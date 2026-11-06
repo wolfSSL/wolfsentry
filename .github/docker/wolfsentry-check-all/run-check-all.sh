@@ -1,6 +1,6 @@
 #!/bin/bash
-# Usage: run-check-all.sh <analyze-all|check|check-extra>, from a directory
-# holding wolfsentry/, third/ (FreeRTOS, patched lwIP) and wolfssl/.
+# Usage: run-check-all.sh <analyze-all|check|check-extra>, from a directory holding
+# wolfsentry/, third/ (FreeRTOS, patched lwIP), wolfssl/ and JSON-Schema-Test-Suite/.
 
 set -euo pipefail
 
@@ -11,15 +11,15 @@ git config --global --add safe.directory '*'
 mkdir -p "$top/analyzer-root/scripts"
 : > "$top/analyzer-root/scripts/analyzer-config.sh"
 
+if [ -d "$top/JSON-Schema-Test-Suite/tests/latest/." ]; then
+    export JSON_TEST_CORPUS_DIR="$top/JSON-Schema-Test-Suite/tests/latest/."
+fi
+
 cd "$top/wolfsentry"
 
 case "$group" in
-analyze-all)
-    # Ubuntu packages no big-endian ARM cross toolchain.
-    targets=$(sed -n 's/^analyze-all: //p' Makefile.analyzers | sed 's/\<sanitize-armeb-test\>//')
-    ;;
 check-extra)
-    # Ubuntu's arm-none-eabi-gcc 14 output exceeds the fixed 230000 byte image limit.
+    # The FreeRTOS image size limits are tuned to a different arm-none-eabi-gcc than Ubuntu ships.
     targets=$(sed -n 's/^check-extra: //p' Makefile.analyzers | sed -E 's/\<freertos-arm32-(thumb-)?build-test\>//g')
     ;;
 *)

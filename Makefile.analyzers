@@ -566,6 +566,9 @@ else
     LWIP_TOP_FOR_TEST := $(SRC_TOP)/../third/lwip
 endif
 
+FREERTOS_ARM32_MAX_IMAGE_SIZE ?= 240000
+FREERTOS_ARM32_THUMB_MAX_SECTIONS_SIZE ?= 110000
+
 .PHONY: freertos-arm32-thumb-build-test
 freertos-arm32-thumb-build-test:
 	@[ -d $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source/. ] || ( echo '$@: $(FREERTOS_TOP_FOR_TEST)/FreeRTOS/Source not found.' >&2; exit 1)
@@ -574,15 +577,17 @@ freertos-arm32-thumb-build-test:
 	@rm -rf "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds"
 #	first build without FUNCTION_SECTIONS=1 to detect any bloat or unresolved symbols anywhere in the library.
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1
-	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 240000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt $(FREERTOS_ARM32_MAX_IMAGE_SIZE) ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-thumb-test-builds/tests/{freertos,lwip}
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
 #	now rebuild with FUNCTION_SECTIONS=1, to test expected text size on a parsimonious link.
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1 FUNCTION_SECTIONS=1
-	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 110000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt $(FREERTOS_ARM32_THUMB_MAX_SECTIONS_SIZE) ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-thumb-test-builds/tests/{freertos,lwip}
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-thumb-build test."
+
+FREERTOS_ARM32_MAX_SECTIONS_SIZE ?= 100000
 
 .PHONY: freertos-arm32-build-test
 freertos-arm32-build-test:
@@ -592,12 +597,12 @@ freertos-arm32-build-test:
 	@rm -rf "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds"
 #	first build without FUNCTION_SECTIONS=1 to detect any bloat or unresolved symbols anywhere in the library.
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1
-	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 240000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt $(FREERTOS_ARM32_MAX_IMAGE_SIZE) ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-test-builds/tests/{freertos,lwip}
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3' UNITTEST_LIST=test_lwip clean
 #	now rebuild with FUNCTION_SECTIONS=1, to test expected text size on a parsimonious link.
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3 -specs=nano.specs -Wno-inline' NO_STDIO_STREAMS=1 '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip' UNITTEST_LIST=test_lwip OPTIM='-Os' STRIPPED=1 FUNCTION_SECTIONS=1
-	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt 100000 ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
+	@TEST_LWIP_SZ=$$(stat --format='%s' '$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip'); if [[ "$$TEST_LWIP_SZ" -gt $(FREERTOS_ARM32_MAX_SECTIONS_SIZE) ]]; then echo "$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds/tests/test_lwip is unexpectedly large ($$TEST_LWIP_SZ bytes)."; exit 1; fi
 	@rm -rf '$(BUILD_PARENT)/'wolfsentry-freertos-arm32-test-builds/tests/{freertos,lwip}
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mcpu=cortex-m3' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-build test."

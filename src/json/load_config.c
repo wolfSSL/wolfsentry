@@ -184,9 +184,9 @@ static wolfsentry_errcode_t convert_check_magnitude(const char *buf, uint64_t li
         if ((*p >= '0') && (*p <= '9'))
             digit = (uint64_t)(*p - '0');
         else if ((*p >= 'a') && (*p <= 'f'))
-            digit = (uint64_t)(*p - 'a' + 10);
+            digit = (uint64_t)(*p - 'a') + 10U;
         else if ((*p >= 'A') && (*p <= 'F'))
-            digit = (uint64_t)(*p - 'A' + 10);
+            digit = (uint64_t)(*p - 'A') + 10U;
         else
             WOLFSENTRY_ERROR_RETURN(CONFIG_INVALID_VALUE);
         if (digit >= base)

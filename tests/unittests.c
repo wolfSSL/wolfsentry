@@ -8895,9 +8895,7 @@ static int test_track_peer_connect_count(void) {
     WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(ephemeral_exports.flags, WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS));
     WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 0);
 
-    /* with the unlimited setting dispatch never counts connections, so the
-     * spawning CONNECT must not leave a count a later DISCONNECT can't undo.
-     */
+    /* an unlimited route still counts the spawning CONNECT, so a later DISCONNECT balances it. */
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &nolimit_config));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 60, 0, &nolimit_config.route_idle_time_for_purge));
     nolimit_config.max_connection_count = 0;
@@ -8940,7 +8938,7 @@ static int test_track_peer_connect_count(void) {
     WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_REJECT));
 
     WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 3, &ephemeral_exports));
-    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 0);
+    WOLFSENTRY_EXIT_ON_FALSE(ephemeral_exports.meta.connection_count == 1);
 
     action_results = WOLFSENTRY_ACTION_RES_DISCONNECT;
     WOLFSENTRY_EXIT_ON_FAILURE(
@@ -11354,6 +11352,47 @@ static int test_kv_render_nonfinite_float(void) {
 }
 #endif /* !WOLFSENTRY_C89 */
 
+static wolfsentry_errcode_t failing_mk_id_cb(void *context, wolfsentry_ent_id_t *id) {
+    (void)context;
+    (void)id;
+    WOLFSENTRY_ERROR_RETURN(SYS_RESOURCE_FAILED);
+}
+
+static int test_kv_replace_keeps_value_on_id_failure(void) {
+    struct wolfsentry_context *wolfsentry;
+    int64_t value = 0;
+
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            NULL /* config */,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_store_sint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "replaced", WOLFSENTRY_LENGTH_NULL_TERMINATED, 1, 1 /* overwrite_p */));
+
+    wolfsentry->mk_id_cb = failing_mk_id_cb;
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        wolfsentry_user_value_store_sint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "replaced", WOLFSENTRY_LENGTH_NULL_TERMINATED, 2, 1 /* overwrite_p */));
+    wolfsentry->mk_id_cb = NULL;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_user_value_get_sint(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, "replaced", WOLFSENTRY_LENGTH_NULL_TERMINATED, &value));
+    WOLFSENTRY_EXIT_ON_FALSE(value == 1);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_kv_empty_key_rejected(void) {
     struct wolfsentry_context *wolfsentry;
 
@@ -13563,7 +13602,6 @@ static int test_cjvalue_compatible_float_to_int(WOLFSENTRY_CONTEXT_ARGS_IN_EX(st
 static int test_cjvalue_dict_remove_orphan(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
 {
     JSON_VALUE outer;
-    JSON_VALUE nested_copy;
     JSON_VALUE *nested;
     JSON_VALUE *slot;
     char keybuf[8];
@@ -13588,23 +13626,12 @@ static int test_cjvalue_dict_remove_orphan(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct 
 
     WOLFSENTRY_EXIT_ON_FALSE(json_value_dict_size(&outer) == 2);
 
-    /* Keep an alias to the nested dictionary so the test can reclaim it after
-     * removal frees the owning node (see below). */
-    nested = json_value_dict_get(&outer, (const unsigned char *)"a");
-    WOLFSENTRY_EXIT_ON_TRUE(nested == NULL);
-    memcpy(&nested_copy, nested, sizeof nested_copy);
-
-    /* Force value finalization (nested dictionary cleanup) to fail during removal. */
+    /* Removing a nested dictionary needs no allocation, so it succeeds and frees the subtree with none available. */
     test_cjv_budget = 0;
     ret = json_value_dict_remove_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"a", 1);
     test_cjv_budget = -1;
-    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
-
-    /* The removed node must not remain counted in the dictionary. */
+    WOLFSENTRY_EXIT_ON_FALSE(ret == 0);
     WOLFSENTRY_EXIT_ON_FALSE(json_value_dict_size(&outer) == 1);
-
-    /* Reclaim the nested dictionary, whose finalization the fault interrupted. */
-    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &nested_copy) < 0);
 
     WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
     WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
@@ -13635,15 +13662,11 @@ static int test_cjvalue_dict_clean_retry_later_node(WOLFSENTRY_CONTEXT_ARGS_IN_E
     WOLFSENTRY_EXIT_ON_TRUE(slot == NULL);
     WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, 7) < 0);
 
-    /* the earlier keys are freed before the nested dictionary's stack
-     * allocation fails on the last key. */
-    test_cjv_budget = 1;
+    /* cleanup allocates nothing, so the earlier keys and the nested dictionary are all freed with no budget */
+    test_cjv_budget = 0;
     ret = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer);
     test_cjv_budget = -1;
-    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
-
-    /* a retry must not reach the nodes freed before the failure */
-    WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(ret == 0);
     WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
 
     return 0;
@@ -13669,14 +13692,73 @@ static int test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wo
         WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, (int32_t)i) < 0);
     }
 
-    /* First cleanup allocates the outer traversal stack, then fails on the
-     * nested dictionary's stack allocation. */
-    test_cjv_budget = 1;
+    /* Cleanup allocates nothing, so it must succeed and free every node even
+     * with no allocation budget left. */
+    test_cjv_budget = 0;
     ret = json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer);
     test_cjv_budget = -1;
-    WOLFSENTRY_EXIT_ON_FALSE(ret < 0);
+    WOLFSENTRY_EXIT_ON_FALSE(ret == 0);
+    WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
 
-    /* A retry must succeed: no node may have been freed while still linked. */
+    return 0;
+}
+
+static int test_cjvalue_nested_cleanup_no_leak(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allocator))
+{
+    JSON_VALUE outer;
+    JSON_VALUE clone;
+    JSON_VALUE *nested;
+    JSON_VALUE *arr;
+    JSON_VALUE *slot;
+    JSON_VALUE *member;
+    char keybuf[8];
+    size_t live_before;
+    long budget;
+    int i;
+    int ret;
+
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
+    nested = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"a", 1);
+    WOLFSENTRY_EXIT_ON_TRUE(nested == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested) < 0);
+    arr = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"b", 1);
+    WOLFSENTRY_EXIT_ON_TRUE(arr == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_array(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), arr) < 0);
+    slot = json_value_array_append(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), arr);
+    WOLFSENTRY_EXIT_ON_TRUE(slot == NULL);
+    WOLFSENTRY_EXIT_ON_TRUE(json_value_init_dict(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot) < 0);
+    for (i = 0; i < 4; ++i) {
+        (void)snprintf(keybuf, sizeof keybuf, "k%03d", i);
+        member = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), nested, (const unsigned char *)keybuf, strlen(keybuf));
+        WOLFSENTRY_EXIT_ON_TRUE(member == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), member, (int32_t)i) < 0);
+        member = json_value_dict_add_(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), slot, (const unsigned char *)keybuf, strlen(keybuf));
+        WOLFSENTRY_EXIT_ON_TRUE(member == NULL);
+        WOLFSENTRY_EXIT_ON_TRUE(json_value_init_int32(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), member, (int32_t)i) < 0);
+    }
+
+    /* Cloning the array must release everything it built at every possible allocation failure. */
+    live_before = test_cjv_live;
+    for (budget = 0; ; ++budget) {
+        json_value_init_null(&clone);
+        test_cjv_budget = budget;
+        ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), arr, &clone);
+        test_cjv_budget = -1;
+        if (ret == 0) {
+            WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &clone) < 0);
+            WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == live_before);
+            break;
+        }
+        WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == live_before);
+        WOLFSENTRY_EXIT_ON_TRUE(budget > 64);
+    }
+
+    /* Removing a nested dictionary must free it even with no allocation budget. */
+    test_cjv_budget = 0;
+    ret = json_value_dict_remove(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer, (const unsigned char *)"a");
+    test_cjv_budget = -1;
+    WOLFSENTRY_EXIT_ON_FALSE(ret == 0);
+
     WOLFSENTRY_EXIT_ON_TRUE(json_value_fini(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &outer) < 0);
     WOLFSENTRY_EXIT_ON_FALSE(test_cjv_live == 0);
 
@@ -13773,6 +13855,9 @@ static wolfsentry_errcode_t test_cjvalue_fixes(void) {
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_clean_retry(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
+
+    test_cjv_reset();
+    WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_nested_cleanup_no_leak(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
 
     test_cjv_reset();
     WOLFSENTRY_EXIT_ON_TRUE(test_cjvalue_dict_clean_retry_later_node(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&test_allocator)) != 0);
@@ -15039,6 +15124,11 @@ int main(int argc, char* argv[]) {
         err = 1;
     }
 #endif /* !WOLFSENTRY_C89 */
+    ret = test_kv_replace_keeps_value_on_id_failure();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_kv_replace_keeps_value_on_id_failure failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
     ret = test_kv_readonly_overwrite_rejected();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_kv_readonly_overwrite_rejected failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));

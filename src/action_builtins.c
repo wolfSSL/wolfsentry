@@ -47,11 +47,9 @@ static wolfsentry_errcode_t wolfsentry_builtin_track_peer_count_connect(
     if (WOLFSENTRY_CHECK_BITS(WOLFSENTRY_ATOMIC_LOAD(route->flags), WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS))
         WOLFSENTRY_RETURN_OK;
 
-    /* dispatch counts connections only under a limit, so match it: an unlimited route must stay at zero. */
-    if (config->config.max_connection_count == 0)
-        WOLFSENTRY_RETURN_OK;
-
-    if (WOLFSENTRY_ATOMIC_LOAD(route->meta.connection_count) >= config->config.max_connection_count)
+    /* dispatch counts every connection and enforces the limit only when it is nonzero, so match it. */
+    if ((config->config.max_connection_count > 0) &&
+        (WOLFSENTRY_ATOMIC_LOAD(route->meta.connection_count) >= config->config.max_connection_count))
         WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
 
     WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(route->meta.connection_count, new_count);

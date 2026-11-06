@@ -1852,55 +1852,41 @@ json_value_dict_clean(
     JSON_VALUE* v)
 {
     DICT* d = json_value_dict_payload(v);
-    RBTREE **stack;
-    int stack_size;
     RBTREE* node;
-    RBTREE* right;
+    RBTREE* left;
     int ret;
 
     if(d == NULL)
         return 0;
 
-    /* An empty tree needs no stack; a conforming allocator may return NULL for a
-     * zero-size request, so do not treat that as an error. */
-    if(d->root != NULL) {
-        stack = (RBTREE **)malloc(rbtree_stack_size_needed(d));
-        if (stack == NULL)
-            return JSON_ERR_OUTOFMEMORY;
-    } else {
-        stack = NULL;
-    }
-
-    stack_size = (stack != NULL) ? json_value_dict_leftmost_path(stack, d->root) : 0;
-
-    while(stack_size > 0) {
-        node = stack[--stack_size];
-        right = node->right;
+    /* Rotate left children up instead of keeping a traversal stack, so cleanup
+     * cannot fail on allocation; d->root always holds every remaining node. */
+    node = d->root;
+    while(node != NULL) {
+        if(node->left != NULL) {
+            left = node->left;
+            node->left = left->right;
+            left->right = node;
+            node = left;
+            d->root = node;
+            continue;
+        }
 
         ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->key);
-        if (ret < 0) {
-            free((void *)stack);
+        if (ret < 0)
             return ret;
-        }
         ret = json_value_fini(
 #ifdef WOLFSENTRY
             WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator),
 #endif
             &node->json_value);
-        if (ret < 0) {
-            free((void *)stack);
+        if (ret < 0)
             return ret;
-        }
-        /* unlink before freeing so a failed clean leaves only live nodes for a
-         * retry; size is kept, as it still bounds the retry's stack */
-        if(stack_size > 0)
-            stack[stack_size - 1]->left = right;
-        else
-            d->root = right;
+        d->root = node->right;
         if(v->data.data_bytes[0] & HAS_ORDERLIST) {
             if(node->order_prev != NULL)
                 node->order_prev->order_next = node->order_next;
@@ -1912,16 +1898,13 @@ json_value_dict_clean(
                 d->order_tail = node->order_prev;
         }
         free(node);
-
-        stack_size += json_value_dict_leftmost_path(stack + stack_size, right);
+        node = d->root;
     }
 
     if(v->data.data_bytes[0] & HAS_ORDERLIST)
         memset(d, 0, OFFSETOF(DICT, cmp_func));
     else
         memset(d, 0, OFFSETOF(DICT, order_head));
-
-    free((void *)stack);
 
     return 0;
 }
@@ -2005,10 +1988,10 @@ json_value_clone(WOLFSENTRY_CONTEXT_ARGS_IN_EX(struct wolfsentry_allocator *allo
             if (ret == 0) {
                 for(i = 0; i < n; i++) {
                     json_value_init_null(&dest_values[i]);
+                    dest_a->size = i + 1;
                     ret = json_value_clone(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(allocator), &src_values[i], &dest_values[i]);
                     if (ret < 0)
                         break;
-                    dest_a->size = i + 1;
                 }
             }
 

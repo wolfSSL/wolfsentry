@@ -66,7 +66,8 @@ jobs:
       run: sudo sysctl -w vm.mmap_rnd_bits=28
     - name: Build the check-all image
       run: |
-        docker build \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker build \
           --file wolfsentry/.github/docker/wolfsentry-check-all/Dockerfile \
           --tag wolfsentry-check-all:local wolfsentry
     # make pre-push-check runs scripts/pre-push.sh, which runs make check-all on this commit.

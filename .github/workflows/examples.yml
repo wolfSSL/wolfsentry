@@ -36,7 +36,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build and start the lwIP network
-      run: docker compose up --build --detach
+      run: |
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker compose up --build --detach
     - name: Exercise allowed and rejected traffic
       run: |
         for attempt in $(seq 1 30); do
@@ -94,7 +96,8 @@ jobs:
         path: wolfip
     - name: Build the wolfSentry CI image
       run: |
-        docker build \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker build \
           --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
           --tag wolfsentry-ci:local wolfsentry
     - name: Build and run the wolfIP example
@@ -146,7 +149,8 @@ jobs:
         path: wolfssl
     - name: Build the wolfSentry CI image
       run: |
-        docker build \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker build \
           --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
           --tag wolfsentry-ci:local wolfsentry
     - name: Build and exercise the notification demo

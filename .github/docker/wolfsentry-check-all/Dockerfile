@@ -2,6 +2,8 @@ FROM ubuntu:26.04@sha256:157dc3d6e4a3e4f2c68d12df9df9ed6e808b59af6d4c3757b432b4f
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         autoconf \
@@ -44,7 +46,7 @@ ARG ARMEB_TOOLCHAIN_SHA256=4d93a7b26c0909ea7574e98246522cf6b77491d43a7ca7aa08ae1
 
 # Buildroot's compiler wrapper finds its real binary from argv[0], so expose the
 # armeb-linux-gnueabihf names as exec shims, and put the sanitizer runtimes in the sysroot qemu loads from.
-RUN curl -fsSL --retry 3 -o /tmp/armeb.tar.xz \
+RUN curl -fsSL --retry 5 --retry-all-errors -o /tmp/armeb.tar.xz \
         "https://toolchains.bootlin.com/downloads/releases/toolchains/armebv7-eabihf/tarballs/${ARMEB_TOOLCHAIN}.tar.xz" \
     && echo "${ARMEB_TOOLCHAIN_SHA256}  /tmp/armeb.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/armeb.tar.xz -C /opt \

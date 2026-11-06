@@ -1,5 +1,7 @@
 FROM debian:12 AS builder
 
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates cmake git libpcap-dev netbase patch \
     && rm -rf /var/lib/apt/lists/*
@@ -8,9 +10,10 @@ WORKDIR /src
 
 COPY . wolfsentry
 
-RUN git clone --depth 1 --branch STABLE-2_1_3_RELEASE \
+RUN retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; } \
+    && retry git clone --depth 1 --branch STABLE-2_1_3_RELEASE \
         https://github.com/lwip-tcpip/lwip.git \
-    && git clone --depth 1 --branch STABLE-2_1_0_RELEASE \
+    && retry git clone --depth 1 --branch STABLE-2_1_0_RELEASE \
         https://git.savannah.nongnu.org/git/lwip/lwip-contrib.git \
         lwip/contrib \
     && cd lwip \

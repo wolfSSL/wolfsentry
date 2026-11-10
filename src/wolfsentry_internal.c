@@ -444,10 +444,9 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_table_ent_delete_by_id_1(WOLFSE
     --wolfsentry->ents_by_id.n_ents;
     ++wolfsentry->ents_by_id.n_deletes;
 
-    /* if possible, reclaim the ID (the counter equals the newest issued ID). */
-    if ((! wolfsentry->mk_id_cb) && (ent->id == wolfsentry->mk_id_cb_state.id_counter))
-        --wolfsentry->mk_id_cb_state.id_counter;
-
+    /* IDs are deliberately not reclaimed (monotonic until wrap), so a stale ID
+     * held by an application cannot resolve to a newer object.
+     */
     ent->id = WOLFSENTRY_ENT_ID_NONE;
 
     WOLFSENTRY_RETURN_OK;

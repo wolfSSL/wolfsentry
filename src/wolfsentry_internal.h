@@ -427,6 +427,7 @@ struct wolfsentry_route_table {
         wolfsentry_addr_family_t af;
     } bitmask_matching_afs[WOLFSENTRY_MAX_BITMASK_MATCHED_AFS];
 #endif
+    byte default_policy_configured; /* set by any default_policy_set(), including an explicit NONE. */
 };
 
 struct wolfsentry_kv_pair_internal {

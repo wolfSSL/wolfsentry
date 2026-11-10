@@ -2090,6 +2090,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_table_default_policy_set(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     WOLFSENTRY_MUTEX_OR_RETURN();
     table->default_policy = default_policy;
+    table->default_policy_configured = 1;
     if (table == wolfsentry->routes)
         wolfsentry->default_policy = default_policy;
     WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(OK);
@@ -2567,7 +2568,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        route_table,
                                        rule_route,
                                        action_results);
+#ifdef WOLFSENTRY_DEBUG_ACTIONS
         WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+#endif
         if (action_ret < 0)
             *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
@@ -2605,7 +2608,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        route_table,
                                        rule_route,
                                        action_results);
+#ifdef WOLFSENTRY_DEBUG_ACTIONS
         WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+#endif
         if (action_ret < 0)
             *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         WOLFSENTRY_CLEAR_BITS(*action_results, WOLFSENTRY_ACTION_RES_STOP);
@@ -2780,7 +2785,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        route_table,
                                        rule_route,
                                        action_results);
+#ifdef WOLFSENTRY_DEBUG_ACTIONS
         WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+#endif
         if (action_ret < 0)
             *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         /* no need to refresh current_rule_route_flags */
@@ -2798,7 +2805,9 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
                                        route_table,
                                        rule_route,
                                        action_results);
+#ifdef WOLFSENTRY_DEBUG_ACTIONS
         WOLFSENTRY_WARN_ON_FAILURE(action_ret);
+#endif
         if (action_ret < 0)
             *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
         /* no need to refresh current_rule_route_flags */
@@ -2958,7 +2967,7 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_1(
         }
         if (inexact_matches)
             *inexact_matches = WOLFSENTRY_ROUTE_WILDCARD_FLAGS | WOLFSENTRY_ROUTE_FLAG_PARENT_EVENT_WILDCARD;
-        if (route_table->default_policy == WOLFSENTRY_ACTION_RES_NONE) {
+        if ((route_table->default_policy == WOLFSENTRY_ACTION_RES_NONE) && (! route_table->default_policy_configured)) {
             /* claim the one-shot atomically so only a single caller warns. */
             int warn_expected = 0;
 #ifdef WOLFSENTRY_THREADSAFE
@@ -5138,6 +5147,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_table_clone_header(
         ((struct wolfsentry_route_table *)src_table)->max_purgeable_idle_time;
     ((struct wolfsentry_route_table *)dest_table)->default_policy =
         ((struct wolfsentry_route_table *)src_table)->default_policy;
+    ((struct wolfsentry_route_table *)dest_table)->default_policy_configured =
+        ((struct wolfsentry_route_table *)src_table)->default_policy_configured;
 
     if (((struct wolfsentry_route_table *)src_table)->default_event != NULL) {
         struct wolfsentry_event *default_event;

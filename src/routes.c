@@ -2462,7 +2462,8 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
     struct wolfsentry_route_table *table,
     wolfsentry_action_res_t *action_results,
     int mode,
-    wolfsentry_time_t now);
+    wolfsentry_time_t now,
+    const struct wolfsentry_route *exclude_route);
 
 static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
     WOLFSENTRY_CONTEXT_ARGS_IN,
@@ -2548,8 +2549,8 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         }
     }
 
-    /* opportunistic garbage collection. */
-    (void)wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, NULL /* action_results */, 2, now);
+    /* opportunistic garbage collection, sparing the route this dispatch is still using. */
+    (void)wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, NULL /* action_results */, 2, now, rule_route);
 
     if (trigger_event && (wolfsentry_list_ent_get_len(&trigger_event->post_action_list.header) > 0)) {
         /* for dynamic blocking, e.g. of a port scanner, one of the plugins in
@@ -3258,7 +3259,8 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
     struct wolfsentry_route_table *table,
     wolfsentry_action_res_t *action_results,
     int mode,
-    wolfsentry_time_t now)
+    wolfsentry_time_t now,
+    const struct wolfsentry_route *exclude_route)
 {
     wolfsentry_errcode_t ret;
     int n = 0;
@@ -3327,9 +3329,11 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
          * protected route does not strand the expired routes behind it. */
         for (cursor = table->purge_list.tail; cursor != NULL; cursor = cursor->prev) {
             /* the per-dispatch purge runs on the packet path, so bound its scan */
-            if ((mode == 2) && (++examined > 8))
+            if ((mode == 2) && (++examined > WOLFSENTRY_PURGE_SCAN_LIMIT))
                 break;
             route = WOLFSENTRY_ROUTE_PURGE_HEADER_TO_TABLE_ENT_HEADER(cursor);
+            if (route == exclude_route)
+                continue;
             if (mode != 3) {
                 if (route->meta.purge_after > now)
                     break;
@@ -3365,15 +3369,28 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_1(
         }
 #endif
         if (requeue) {
-            wolfsentry_time_t delay = requeue_delay;
-            /* not before the margin, unless the idle limit expires sooner */
-            if ((table->max_purgeable_idle_time > 0) && (idle >= 0) &&
-                (table->max_purgeable_idle_time - idle < requeue_delay))
-            {
-                delay = table->max_purgeable_idle_time - idle + 1;
+            /* an open connection is activity: refresh from the route's own idle
+             * time, floored at the margin so it cannot re-expire immediately.
+             */
+            const struct wolfsentry_event *parent_event = route->parent_event ? route->parent_event : table->default_event;
+            const struct wolfsentry_eventconfig_internal *config =
+                (parent_event && parent_event->config) ? parent_event->config : &wolfsentry->config;
+            wolfsentry_time_t delay;
+            ret = wolfsentry_route_effective_idle_time(wolfsentry, config, &delay);
+            if (ret < 0) {
+#ifdef WOLFSENTRY_THREADSAFE
+                if (got_lock)
+                    WOLFSENTRY_UNLOCK_AND_UNRESERVE_FOR_RETURN();
+#endif
+                WOLFSENTRY_ERROR_RERETURN(ret);
             }
+            if (delay < requeue_delay)
+                delay = requeue_delay;
+            /* next look must land past the absolute idle limit, not beyond it by a full idle time. */
+            if ((table->max_purgeable_idle_time > 0) && (idle >= 0) && (table->max_purgeable_idle_time - idle < delay))
+                delay = table->max_purgeable_idle_time - idle + 1;
             wolfsentry_list_ent_delete(&table->purge_list, &route->purge_links);
-            route->meta.purge_after = WOLFSENTRY_ADD_TIME(now, delay);
+            route->meta.purge_after = wolfsentry_route_deadline(wolfsentry, now, delay);
             wolfsentry_route_purge_list_insert(table, route);
             continue;
         }
@@ -3405,7 +3422,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge(
     struct wolfsentry_route_table *table,
     wolfsentry_action_res_t *action_results)
 {
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 0, 0));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 0, 0, NULL /* exclude_route */));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge_one(
@@ -3413,7 +3430,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge_one(
     struct wolfsentry_route_table *table,
     wolfsentry_action_res_t *action_results)
 {
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 1, 0));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 1, 0, NULL /* exclude_route */));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge_one_opportunistically(
@@ -3422,7 +3439,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_stale_purge_one_opportunist
     wolfsentry_action_res_t *action_results)
 {
     /* use "try" lock semantics. */
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 2, 0));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 2, 0, NULL /* exclude_route */));
 }
 
 static wolfsentry_errcode_t wolfsentry_route_stale_purge_one_unconditionally(
@@ -3430,7 +3447,7 @@ static wolfsentry_errcode_t wolfsentry_route_stale_purge_one_unconditionally(
     struct wolfsentry_route_table *table,
     wolfsentry_action_res_t *action_results)
 {
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 3, 0));
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_route_stale_purge_1(WOLFSENTRY_CONTEXT_ARGS_OUT, table, action_results, 3, 0, NULL /* exclude_route */));
 }
 
 struct route_delete_filter_args {

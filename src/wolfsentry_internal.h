@@ -368,6 +368,10 @@ struct wolfsentry_route {
         wolfsentry_time_t last_hit_time;
         wolfsentry_time_t last_penaltybox_time;
         wolfsentry_time_t purge_after;
+#ifndef WOLFSENTRY_PURGE_SCAN_LIMIT
+#define WOLFSENTRY_PURGE_SCAN_LIMIT 8
+#endif
+
 #ifndef WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS
 #define WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS 60
 #endif

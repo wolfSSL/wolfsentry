@@ -36,6 +36,12 @@
 
 #if LWIP_PACKET_FILTER_API
 
+#ifdef WOLFSENTRY_PACKET_FILTER_FAIL_OPEN
+#define WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT ERR_OK
+#else
+#define WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT ERR_ABRT
+#endif
+
 #ifdef WOLFSENTRY_DEBUG_LWIP
     #define V4_FMT "%d.%d.%d.%d"
     #define V4_2_V4ARGS(x) (int)((x)->addr & 0xff), (int)(((x)->addr >> 8) & 0xff), (int)(((x)->addr >> 16) & 0xff), (int)(((x)->addr >> 24))
@@ -105,7 +111,7 @@ static err_t ethernet_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -245,7 +251,7 @@ static err_t ip4_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -383,7 +389,7 @@ static err_t ip6_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -524,7 +530,7 @@ static err_t tcp_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT);
 
     switch(event->reason) {
     case FILT_ACCEPTING:
@@ -740,7 +746,7 @@ static err_t udp_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT);
 
     switch(event->reason) {
     case FILT_BINDING:
@@ -930,7 +936,7 @@ static err_t icmp4_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT);
 
     switch(event->reason) {
     case FILT_RECEIVING:
@@ -1069,7 +1075,7 @@ static err_t icmp6_filter_with_wolfsentry(
 #endif
 
     if (wolfsentry == NULL)
-        WOLFSENTRY_RETURN_VALUE(ERR_ABRT);
+        WOLFSENTRY_RETURN_VALUE(WOLFSENTRY_LWIP_NO_CONTEXT_VERDICT);
 
     switch(event->reason) {
     case FILT_RECEIVING:

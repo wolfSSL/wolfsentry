@@ -707,6 +707,9 @@ static __attribute_maybe_unused__ wolfsentry_errcode_t json_feed_file(WOLFSENTRY
 
 #include <wolfsentry/wolfsentry_json.h>
 #include <wolfsentry/wolfsentry_lwip.h>
+#if LWIP_ARP || LWIP_ETHERNET
+#include "netif/ethernet.h"
+#endif
 
 static struct wolfsentry_context *wolfsentry_lwip_ctx = NULL;
 
@@ -950,6 +953,26 @@ static int test_lwip(const char *json_path) {
 
 #else /* !FREERTOS */
 
+/* with no context attached, the glue must give the build-selected verdict. */
+static int test_lwip_no_context_verdict(void) {
+#if LWIP_ARP || LWIP_ETHERNET
+    struct eth_hdr hdr;
+    err_t verdict;
+
+    memset(&hdr, 0, sizeof hdr);
+    ethernet_filter_arg(NULL);
+    /* a reason below 8, since lwIP drops higher ones when -fshort-enums shrinks packet_filter_event_t. */
+    verdict = ethernet_filter_dispatch_incoming(FILT_BINDING, NULL /* netif */, &hdr, PP_HTONS(ETHTYPE_IP), NULL /* p */);
+    ethernet_filter_arg(wolfsentry_lwip_ctx);
+#ifdef WOLFSENTRY_PACKET_FILTER_FAIL_OPEN
+    WOLFSENTRY_EXIT_ON_FALSE(verdict == ERR_OK);
+#else
+    WOLFSENTRY_EXIT_ON_FALSE(verdict == ERR_ABRT);
+#endif
+#endif /* LWIP_ARP || LWIP_ETHERNET */
+    return 0;
+}
+
 static int test_lwip(const char *json_path) {
     if (json_path) {
         struct stat st;
@@ -973,6 +996,7 @@ static int test_lwip(const char *json_path) {
         munmap((void *)json, (size_t)st.st_size);
     } else
         WOLFSENTRY_EXIT_ON_FAILURE(activate_wolfsentry_lwip(NULL, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(test_lwip_no_context_verdict());
     WOLFSENTRY_EXIT_ON_FAILURE(shutdown_wolfsentry_lwip());
     return 0;
 }

@@ -61,6 +61,8 @@ jobs:
             target: user-settings-build-test
           - name: Short enums
             target: short-enums-test
+          - name: Fail-open load default
+            target: fail-open-test
           - name: Prefix-only address matching
             target: no-addr-bitmask-matching-test
           - name: No IPv6

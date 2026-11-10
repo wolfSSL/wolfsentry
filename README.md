@@ -136,6 +136,7 @@ topic.
 | `SINGLETHREADED` | `WOLFSENTRY_SINGLETHREADED` | Define to omit thread safety logic, and replace thread safety functions and macros with no-op macros. |
 | | `WOLFSENTRY_NO_PROTOCOL_NAMES` | If defined, omit APIs for rendering error codes and source code files in human readable form. They will be rendered numerically. |
 | | `WOLFSENTRY_NO_GETPROTOBY` | Define to disable lookup and rendering of protocols and services by name. |
+| | `WOLFSENTRY_PACKET_FILTER_FAIL_OPEN` | Define to make the lwIP and wolfIP packet filter glue pass packets when no wolfSentry context is attached, or (wolfIP) when the stack reports an event the glue cannot map.  By default these packets are denied. |
 | | `WOLFSENTRY_NO_ERROR_STRINGS` | If defined, omit APIs for rendering error codes and source code files in human readable form. They will be rendered numerically. |
 | | `WOLFSENTRY_NO_MALLOC_BUILTINS` | If defined, omit built-in heap allocator primitives; the `wolfsentry_host_platform_interface` supplied to wolfSentry APIs must include implementations of all functions in `struct wolfsentry_allocator`. |
 | | `WOLFSENTRY_HAVE_NONGNU_ATOMICS` | Define if gnu-style atomic intrinsics are not available. `WOLFSENTRY_ATOMIC_*()` macro definitions for intrinsics will need to be supplied in `WOLFSENTRY_USER_SETTINGS_FILE` (see `wolfsentry_util.h`). |

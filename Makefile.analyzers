@@ -465,6 +465,13 @@ short-enums-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-short-enums" clean
 	@echo "passed: short enums test."
 
+.PHONY: fail-open-test
+fail-open-test:
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-fail-open" clean
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-fail-open" EXTRA_CFLAGS='-DWOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-fail-open" clean
+	@echo "passed: fail-open load default test."
+
 .PHONY: no-addr-bitmask-matching-test
 no-addr-bitmask-matching-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-addr-bitmask-matching-builds" clean
@@ -730,7 +737,7 @@ linux-lwip-test:
 .PHONY: linux-lwip-test-no-ipv6
 linux-lwip-test-no-ipv6:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-no-ipv6-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip NO_IPV6=1 clean
-	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-no-ipv6-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip EXTRA_CFLAGS='-DWOLFSENTRY_DEBUG_LWIP -DLWIP_IPV6=0' NO_IPV6=1 TEST_JSON_CFLAGS='-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-ipv6.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric-no-ipv6.json\"' test
+	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-no-ipv6-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip EXTRA_CFLAGS='-DWOLFSENTRY_DEBUG_LWIP -DLWIP_IPV6=0 -DWOLFSENTRY_PACKET_FILTER_FAIL_OPEN' NO_IPV6=1 TEST_JSON_CFLAGS='-DTEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-no-ipv6.json\" -DEXTRA_TEST_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/extra-test-config.json\" -DTEST_NUMERIC_JSON_CONFIG_PATH=\"$(SRC_TOP)/tests/test-config-numeric-no-ipv6.json\"' test
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-linux-lwip-no-ipv6-test-builds" RUNTIME=Linux-lwIP LWIP_TOP=$(LWIP_TOP_FOR_TEST) UNITTEST_LIST_EXTRAS=test_lwip NO_IPV6=1 clean
 	@echo "passed: linux-lwip-no-ipv6 test."
 

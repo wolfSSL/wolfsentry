@@ -11459,25 +11459,38 @@ static int test_kv_get_bad_key_errcode(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
-static int render_only_user_value(
+/* returns the render result, so callers can expect a render failure. */
+static wolfsentry_errcode_t render_only_user_value_len(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     char *out,
-    int out_space)
+    int out_space,
+    int *rendered_len)
 {
     struct wolfsentry_cursor *cursor;
     struct wolfsentry_kv_pair_internal *kv_ref;
     const struct wolfsentry_kv_pair *kv_exports;
     int render_space = out_space;
+    wolfsentry_errcode_t render_ret;
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_lock_shared(WOLFSENTRY_CONTEXT_ARGS_OUT));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_start(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_current(WOLFSENTRY_CONTEXT_ARGS_OUT, cursor, &kv_ref));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_pair_export(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_ref, &kv_exports));
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_kv_render_value(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_exports, out, &render_space));
+    render_ret = wolfsentry_kv_render_value(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_exports, out, &render_space);
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_values_iterate_end(WOLFSENTRY_CONTEXT_ARGS_OUT, &cursor));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_context_unlock(WOLFSENTRY_CONTEXT_ARGS_OUT));
 
-    WOLFSENTRY_RETURN_OK;
+    if (rendered_len != NULL)
+        *rendered_len = render_space;
+    WOLFSENTRY_ERROR_RERETURN(render_ret);
+}
+
+static wolfsentry_errcode_t render_only_user_value(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    char *out,
+    int out_space)
+{
+    WOLFSENTRY_ERROR_RERETURN(render_only_user_value_len(WOLFSENTRY_CONTEXT_ARGS_OUT, out, out_space, NULL));
 }
 
 static int test_kv_render_large_int(void) {
@@ -11534,6 +11547,8 @@ static int test_kv_render_float_roundtrip(void) {
     char json[128];
     int json_len;
     double reloaded;
+    int64_t three_sint;
+    int space, rendered_len;
 #endif
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
@@ -11570,6 +11585,30 @@ static int test_kv_render_float_roundtrip(void) {
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT, (const unsigned char *)json, (size_t)json_len, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED, &reloaded));
     WOLFSENTRY_EXIT_ON_FALSE(reloaded == stored);
+
+    /* an integral double must reload as a float, not as an integer. */
+    stored = 3.0;
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "tiny", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_store_double(WOLFSENTRY_CONTEXT_ARGS_OUT, "three", WOLFSENTRY_LENGTH_NULL_TERMINATED, stored, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(buf, "3.0") == 0);
+    /* a short buffer still learns the full length, ".0" included. */
+    for (space = 0; space <= 4; ++space) {
+        rendered_len = -1;
+        if (space < 4)
+            WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(BUFFER_TOO_SMALL, render_only_user_value_len(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, space, &rendered_len));
+        else
+            WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value_len(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, space, &rendered_len));
+        WOLFSENTRY_EXIT_ON_FALSE(rendered_len == 3);
+    }
+    WOLFSENTRY_EXIT_ON_FALSE(strcmp(buf, "3.0") == 0);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_delete(WOLFSENTRY_CONTEXT_ARGS_OUT, "three", WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    json_len = snprintf(json, sizeof json, "{ \"wolfsentry-config-version\" : 1, \"user-values\" : { \"three\" : %s } }", buf);
+    WOLFSENTRY_EXIT_ON_TRUE((json_len < 0) || ((size_t)json_len >= sizeof json));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_config_json_oneshot(WOLFSENTRY_CONTEXT_ARGS_OUT, (const unsigned char *)json, (size_t)json_len, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_user_value_get_float(WOLFSENTRY_CONTEXT_ARGS_OUT, "three", WOLFSENTRY_LENGTH_NULL_TERMINATED, &reloaded));
+    WOLFSENTRY_EXIT_ON_FALSE(reloaded == stored);
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(WRONG_TYPE, wolfsentry_user_value_get_sint(WOLFSENTRY_CONTEXT_ARGS_OUT, "three", WOLFSENTRY_LENGTH_NULL_TERMINATED, &three_sint));
 #endif
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
@@ -11583,9 +11622,15 @@ static int test_kv_render_float_roundtrip(void) {
 static int test_kv_render_nonfinite_float(void) {
     struct wolfsentry_context *wolfsentry;
     char buf[64];
-    double reparsed;
+    static const char * const labels[3] = { "nan_val", "inf_val", "ninf_val" };
+    double values[3];
+    int i;
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    values[0] = strtod("nan", NULL);
+    values[1] = strtod("inf", NULL);
+    values[2] = -strtod("inf", NULL);
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_init_ex(
@@ -11595,44 +11640,20 @@ static int test_kv_render_nonfinite_float(void) {
             &wolfsentry,
             WOLFSENTRY_INIT_FLAG_NONE));
 
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_user_value_store_double(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
-            strtod("nan", NULL), 0));
-    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
-    /* a bare nan/inf is not valid JSON; the rendered value must be quoted and
-     * must reparse to the same non-finite value.
+    /* no JSON form reloads as a non-finite float, so rendering must fail at
+     * export rather than produce something that fails or changes type on load.
      */
-    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
-    reparsed = strtod(buf + 1, NULL);
-    WOLFSENTRY_EXIT_ON_FALSE(isnan(reparsed));
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_user_value_delete(
-            WOLFSENTRY_CONTEXT_ARGS_OUT, "nan_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
-
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_user_value_store_double(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
-            strtod("inf", NULL), 0));
-    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
-    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
-    reparsed = strtod(buf + 1, NULL);
-    WOLFSENTRY_EXIT_ON_FALSE(isinf(reparsed) && (reparsed > 0.0));
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_user_value_delete(
-            WOLFSENTRY_CONTEXT_ARGS_OUT, "inf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED));
-
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_user_value_store_double(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "ninf_val", WOLFSENTRY_LENGTH_NULL_TERMINATED,
-            -strtod("inf", NULL), 0));
-    WOLFSENTRY_EXIT_ON_FAILURE(render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
-    WOLFSENTRY_EXIT_ON_FALSE(buf[0] == '"');
-    reparsed = strtod(buf + 1, NULL);
-    WOLFSENTRY_EXIT_ON_FALSE(isinf(reparsed) && (reparsed < 0.0));
+    for (i = 0; i < 3; ++i) {
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_store_double(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                labels[i], WOLFSENTRY_LENGTH_NULL_TERMINATED,
+                values[i], 0));
+        WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(INVALID_ARG, render_only_user_value(WOLFSENTRY_CONTEXT_ARGS_OUT, buf, (int)sizeof buf));
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_user_value_delete(
+                WOLFSENTRY_CONTEXT_ARGS_OUT, labels[i], WOLFSENTRY_LENGTH_NULL_TERMINATED));
+    }
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 

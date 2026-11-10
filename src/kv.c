@@ -573,19 +573,23 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     }
     case WOLFSENTRY_KV_FLOAT: {
         double v_float = WOLFSENTRY_KV_V_FLOAT(kv);
-        /* non-finite values have no bare JSON token, so emit a quoted string
-         * that the loader's strtod path re-reads to the same value.  finiteness
-         * is tested with DBL_MAX comparisons to stay legal under C89 (no C99
-         * isnan()/isinf()).
+        char rendered[32];
+        int rendered_len;
+        int integral_form;
+        /* JSON has no encoding for NaN or infinities that reloads as a float.
+         * (DBL_MAX comparisons rather than C99 isfinite(), for C89.)
          */
-        if (!(v_float <= DBL_MAX) && !(v_float >= -DBL_MAX)) /* NaN */
-            *out_len = snprintf(out, out_space, "\"nan\"");
-        else if (!(v_float <= DBL_MAX)) /* +Inf */
-            *out_len = snprintf(out, out_space, "\"inf\"");
-        else if (!(v_float >= -DBL_MAX)) /* -Inf */
-            *out_len = snprintf(out, out_space, "\"-inf\"");
-        else
-            *out_len = snprintf(out, out_space, "%.17g", v_float);
+        if ((! (v_float <= DBL_MAX)) || (! (v_float >= -DBL_MAX)))
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        /* render locally first, so the reported length never depends on out_space. */
+        rendered_len = snprintf(rendered, sizeof rendered, "%.17g", v_float);
+        if ((rendered_len < 0) || ((size_t)rendered_len >= sizeof rendered))
+            WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+        /* keep a decimal point, so an integral value reloads as a float, not an int. */
+        integral_form = (memchr(rendered, '.', (size_t)rendered_len) == NULL) &&
+            (memchr(rendered, 'e', (size_t)rendered_len) == NULL) &&
+            (memchr(rendered, 'E', (size_t)rendered_len) == NULL);
+        *out_len = snprintf(out, out_space, "%s%s", rendered, integral_form ? ".0" : "");
         break;
     }
     case WOLFSENTRY_KV_STRING: {

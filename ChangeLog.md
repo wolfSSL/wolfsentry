@@ -10,6 +10,8 @@ A zero `route_idle_time_for_purge` (JSON `route-idle-time-for-purge`) now gives 
 
 A failed JSON load that flushed the running configuration now flushes the main route table and sets its default policy to `REJECT`, rather than leaving a partially loaded configuration in force.  Pass `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN` to keep the old behavior for one load, or build with `WOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT` to keep it for all loads.  `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` extends fail-closed to `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` loads.
 
+`wolfsentry_kv_render_value()` renders floats with `%.17g` so they reload exactly, appends `.0` to integral values so they reload as floats rather than integers, and fails with `INVALID_ARG` for NaN and infinities, which have no JSON encoding that reloads as a float.
+
 <br>
 
 # wolfSentry Release 1.6.3 (January 22, 2025)

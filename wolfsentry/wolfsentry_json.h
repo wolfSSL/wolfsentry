@@ -82,6 +82,10 @@ enum wolfsentry_config_load_flags {
         /*!< \brief When loading JSON user values, store extra sequence information so that dictionaries are rendered in same sequence by `json_dom_dump()` and `wolfsentry_kv_render_value()`. @hideinitializer */
     WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES = 1U << 8U,
         /*!< \brief Don't flush the events or user values, just flush the routes, before loading incremental configuration JSON. @hideinitializer */
+    WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED      = 1U << 9U,
+        /*!< \brief If a load that modifies the live configuration fails, including one with #WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH, clear the main route table's default event, flush the context (routes, events, and user values), and set the default policy to REJECT.  Ignored with #WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN or #WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT. @hideinitializer */
+    WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN        = 1U << 10U,
+        /*!< \brief If a load fails, leave the partially loaded configuration and the default policy in place.  Mutually exclusive with #WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED. @hideinitializer */
     WOLFSENTRY_CONFIG_LOAD_FLAG_FINI             = 1U << 30U
         /*!< \brief Internal use. @hideinitializer */
 };

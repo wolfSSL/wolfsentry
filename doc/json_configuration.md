@@ -70,9 +70,9 @@ The `flags` argument to `wolfsentry_config_json_init()` and
 `wolfsentry_config_json_oneshot()`, constructed by bitwise-or, changes the way
 the JSON is processed, as follows:
 
-* `WOLFSENTRY_CONFIG_LOAD_FLAG_NONE` -- Not a flag, but all-zeros, signifying default behavior:  The wolfSentry core is locked, the current configuration is flushed, and the new configuration is loaded incrementally.  Any error during load leaves wolfSentry in an undefined state that can be recovered with a subsequent flush and load that succeeds.
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_NONE` -- Not a flag, but all-zeros, signifying default behavior:  The wolfSentry core is locked, the current configuration is flushed, and the new configuration is loaded incrementally.  The flush is `wolfsentry_context_flush()`, which removes routes, events, and user values (the application's KV store), unless `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES` is supplied.  The flush keeps the main route table's default event, so a new configuration that sets no `"default-event"` keeps the previous one.  An error during load fails closed by default (see `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED`), and wolfSentry can be recovered with a subsequent flush and load that succeeds.
 
-* `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` -- Inhibit initial flush of configuration, to allow incremental load.  Error during load leaves wolfSentry in an undefined state that can only be recovered with a subsequent flush and load that succeeds, unless `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` or `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT` was also supplied.
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` -- Inhibit initial flush of configuration, to allow incremental load.  Error during load leaves wolfSentry in an undefined state that can only be recovered with a subsequent flush and load that succeeds, unless `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` or `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT` was also supplied.  With `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED`, a failed load instead leaves a flushed context with a `REJECT` default policy.
 
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` -- Load into a temporary configuration, and deallocate before return.  Running configuration is unchanged.
 
@@ -81,6 +81,10 @@ the JSON is processed, as follows:
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS` -- Inhibit loading of `"routes"` and `"events"` sections in the supplied JSON.
 
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES` -- At beginning of load process, retain all current configuration except for routes, which are flushed.  This is convenient in combination with `wolfsentry_route_table_dump_json_*()` for save/restore of dynamically added routes.
+
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` -- If the load fails, clear the main route table's default event, flush the context as `wolfsentry_context_flush()` does (routes, events, and user values), and set the default policy to `REJECT`, so nothing from a partially loaded configuration can admit traffic.  This also removes whatever `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES` or `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` would otherwise have kept.  This is the default for loads that flush, unless the library is built with `WOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT`.  With `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH`, it applies only when supplied explicitly.
+
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN` -- If the load fails, leave the partially loaded configuration and the existing default policy in place.  Mutually exclusive with `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` (supplying both is `INVALID_ARG`).  Both flags are ignored with `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` and `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT`.  Those loads leave the running configuration untouched when parsing fails, but a `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT` load commits before running insert actions, so an insert action that fails returns its error with the new configuration already in place.
 
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_ABORT` -- When processing user-defined JSON values, abort load on duplicate keys.
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USEFIRST` -- When processing user-defined JSON values, for any given key in an object use the first occurrence encountered.

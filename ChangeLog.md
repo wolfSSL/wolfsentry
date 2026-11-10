@@ -8,6 +8,8 @@
 
 A zero `route_idle_time_for_purge` (JSON `route-idle-time-for-purge`) now gives routes inserted by `track-peer-v1` the library default purge time, `WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS` (300 seconds, build-overridable), so tracked peers stay subject to the idle purge and `max-purgeable-routes`.  Applications that relied on zero meaning permanent tracking routes must set `WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED`, or `"never"` in JSON.  Other negative values are rejected.  Routes inserted without a purge time are unaffected.
 
+A failed JSON load that flushed the running configuration now flushes the main route table and sets its default policy to `REJECT`, rather than leaving a partially loaded configuration in force.  Pass `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN` to keep the old behavior for one load, or build with `WOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT` to keep it for all loads.  `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` extends fail-closed to `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` loads.
+
 <br>
 
 # wolfSentry Release 1.6.3 (January 22, 2025)

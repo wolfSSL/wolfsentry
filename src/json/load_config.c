@@ -1956,6 +1956,46 @@ static wolfsentry_errcode_t json_process(
         WOLFSENTRY_RETURN_OK;
 }
 
+static int wolfsentry_config_load_fail_closed_by_default(wolfsentry_config_load_flags_t load_flags) {
+#ifdef WOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT
+    (void)load_flags;
+    return 0;
+#else
+    /* without an explicit flag, only a load that flushed the live config fails closed. */
+    return ! WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH);
+#endif
+}
+
+static int wolfsentry_config_load_fails_closed(wolfsentry_config_load_flags_t load_flags) {
+    if (WOLFSENTRY_MASKIN_BITS(load_flags,
+            WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN |
+            WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT |
+            WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN))
+        return 0;
+    return WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED) ||
+        wolfsentry_config_load_fail_closed_by_default(load_flags);
+}
+
+/* leave the live context flushed with a REJECT default policy. */
+static void wolfsentry_config_load_fail_closed(WOLFSENTRY_CONTEXT_ARGS_IN)
+{
+    struct wolfsentry_route_table *main_table;
+    struct wolfsentry_eventconfig live_config;
+    int actions_were_inhibited = 0;
+    if (wolfsentry_defaultconfig_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &live_config) >= 0)
+        actions_were_inhibited = WOLFSENTRY_CHECK_BITS(live_config.flags, WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS);
+    /* a delete action run by the flush could insert a route the flush has already passed. */
+    WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_inhibit_actions(WOLFSENTRY_CONTEXT_ARGS_OUT));
+    if (wolfsentry_route_get_main_table(WOLFSENTRY_CONTEXT_ARGS_OUT, &main_table) >= 0) {
+        /* the table's own reference keeps a partially loaded default event alive through the flush. */
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_table_clear_default_event(WOLFSENTRY_CONTEXT_ARGS_OUT, main_table));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_OUT));
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_table_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, main_table, WOLFSENTRY_ACTION_RES_REJECT));
+    }
+    if (! actions_were_inhibited)
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_enable_actions(WOLFSENTRY_CONTEXT_ARGS_OUT));
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_config_load_flags_t load_flags,
@@ -2004,6 +2044,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if (WOLFSENTRY_MASKIN_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FINI))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+
+    if (WOLFSENTRY_CHECK_BITS(load_flags, WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED | WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN))
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
 
     if ((*jps = (struct wolfsentry_json_process_state *)wolfsentry_malloc(WOLFSENTRY_CONTEXT_ARGS_OUT, sizeof **jps)) == NULL)
@@ -2109,8 +2152,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_init_ex(
         } else {
             ret = wolfsentry_context_flush(WOLFSENTRY_CONTEXT_ARGS_OUT);
         }
-        if (ret < 0)
+        if (ret < 0) {
+            /* a flush that fails partway has already changed the live context. */
+            if (wolfsentry_config_load_fails_closed(load_flags))
+                wolfsentry_config_load_fail_closed(WOLFSENTRY_CONTEXT_ARGS_OUT);
             goto out;
+        }
     }
 
   out:
@@ -2286,25 +2333,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_config_json_fini(
     if ((*jps)->wolfsentry && ((*jps)->wolfsentry != (*jps)->wolfsentry_actual))
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_context_free(JPSP_P_WOLFSENTRY_CONTEXT_ARGS_OUT));
 
-    /* In the default (non-transactional) load mode the live context was flushed
-     * before parsing; a failure leaves it partially populated while its default
-     * policy is unchanged. Fail closed so a half-loaded policy cannot admit
-     * traffic: clear the routes and set a REJECT default policy.
-     */
-    if ((ret < 0) &&
-        (! WOLFSENTRY_MASKIN_BITS((*jps)->load_flags,
-             WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN |
-             WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT |
-             WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH)))
-    {
-        struct wolfsentry_route_table *main_table;
-        wolfsentry_action_res_t action_results;
-        WOLFSENTRY_CLEAR_ALL_BITS(action_results);
-        if (wolfsentry_route_get_main_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, &main_table) >= 0) {
-            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_flush_table(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, main_table, &action_results));
-            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_route_table_default_policy_set(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT, main_table, WOLFSENTRY_ACTION_RES_REJECT));
-        }
-    }
+    /* a failed load into the live context leaves it partially populated. */
+    if ((ret < 0) && wolfsentry_config_load_fails_closed((*jps)->load_flags))
+        wolfsentry_config_load_fail_closed(JPSP_WOLFSENTRY_ACTUAL_CONTEXT_ARGS_OUT);
 
 #ifdef WOLFSENTRY_THREADSAFE
     {

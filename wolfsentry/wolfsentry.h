@@ -371,7 +371,7 @@ typedef enum {
     WOLFSENTRY_LOCK_FLAG_ABANDON_RESERVATION_TOO = 1<<6,
         /*!< \brief In a call to wolfsentry_lock_unlock(), if a shared lock is released and a mutex upgrade reservation is held, drop it too. @hideinitializer */
     WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE = 1<<7,
-        /*!< \brief In a call to wolfsentry_lock_unlock(), if a held mutex was previously gotten by an upgrade, and this release will restore the recursion depth at which the upgrade was gotten, downgrade to a shared lock. @hideinitializer */
+        /*!< \brief In a call to wolfsentry_lock_unlock(), if a held mutex was previously gotten by an upgrade, and this release will restore the recursion depth at which the upgrade was gotten, downgrade to a shared lock.  A release at that depth without this flag forfeits the downgrade for that promotion. @hideinitializer */
     WOLFSENTRY_LOCK_FLAG_RETAIN_SEMAPHORE = 1<<8
         /*!< \brief For use in an interrupt handler: get an async-signal-safe mutex on the lock.  Implicitly has `try` dynamics (immediate return). @hideinitializer */
 } wolfsentry_lock_flags_t;

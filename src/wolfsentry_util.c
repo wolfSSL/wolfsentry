@@ -3082,13 +3082,15 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_lock_unlock(struct wolfsentry_rwl
     WOLFSENTRY_THREAD_ASSERT_NULL_OR_INITED(thread);
 
     /* unlocking a recursive mutex, like recursively locking one, can be done
-     * lock-free, except when unwinding to the promotion depth, which must
-     * evaluate the downgrade logic below.
+     * lock-free, except for an AUTO_DOWNGRADE release at the promotion depth.
      */
     if ((WOLFSENTRY_ATOMIC_LOAD(lock->write_lock_holder) == WOLFSENTRY_THREAD_GET_ID) &&
         (lock->holder_count.write > 1) &&
-        (lock->holder_count.write - 1 != lock->promoted_at_count))
+        (! ((flags & WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE) &&
+            (lock->holder_count.write - 1 == lock->promoted_at_count))))
     {
+        if (lock->holder_count.write - 1 == lock->promoted_at_count)
+            lock->promoted_at_count = 0;
         --lock->holder_count.write;
         if (thread)
             --thread->mutex_and_reservation_count;

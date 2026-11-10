@@ -1580,6 +1580,11 @@ static int test_rw_locks_auto_downgrade(void) {
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(HAVE_MUTEX, wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+
+    /* the forfeited downgrade must not come back at the same depth later. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_AUTO_DOWNGRADE));
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_SUCCESS(HAVE_MUTEX, wolfsentry_lock_have_mutex(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_unlock(lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_lock_free(&lock, thread, WOLFSENTRY_LOCK_FLAG_NONE));

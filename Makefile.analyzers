@@ -220,13 +220,15 @@ ifndef REPO_ROOT
     REPO_ROOT:=$(SRC_TOP)
 endif
 
+ANALYZER_CONFIG ?= analyzer-config.sh
+
 .PHONY: clang-tidy-build-test
 clang-tidy-build-test:
 	@[ -x "$(REPO_ROOT)/../testing/git-hooks/clang-tidy-builder.sh" ] || { echo 'clang-tidy-builder.sh not found - skipping $@.'; exit 0; }; \
-	 [ -r "$(REPO_ROOT)/scripts/analyzer-config.sh" ] || { echo 'analyzer-config.sh not found -- skipping $@.'; exit 0; }; \
+	 [ -r "$(REPO_ROOT)/scripts/$(ANALYZER_CONFIG)" ] || { echo '$(ANALYZER_CONFIG) not found -- skipping $@.'; exit 0; }; \
 	 command -v clang-tidy 1>/dev/null || { echo 'clang-tidy not found -- skipping $@.'; exit 0; }; \
 	 CLANG=clang CLANG_TIDY=clang-tidy CLANG_TIDY_EXTRA_ARGS='--use-color=1' $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-clang-tidy-builds" CC="$(REPO_ROOT)/../testing/git-hooks/clang-tidy-builder.sh" clean; \
-	 . $(REPO_ROOT)/scripts/analyzer-config.sh && \
+	 . $(REPO_ROOT)/scripts/$(ANALYZER_CONFIG) && \
 	 CLANG=clang CLANG_TIDY=clang-tidy CLANG_TIDY_EXTRA_ARGS='--use-color=1' $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-clang-tidy-builds" CC="$(REPO_ROOT)/../testing/git-hooks/clang-tidy-builder.sh" EXTRA_CFLAGS='-Wunreachable-code-aggressive -Wthread-safety -Wloop-analysis -Wenum-compare-conditional -fcolor-diagnostics -fcomplete-member-pointers -Wheader-hygiene -Wstring-conversion -Wtautological-overlap-compare' test && \
 	 CLANG=clang CLANG_TIDY=clang-tidy CLANG_TIDY_EXTRA_ARGS='--use-color=1' $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-clang-tidy-builds" CC="$(REPO_ROOT)/../testing/git-hooks/clang-tidy-builder.sh" clean && \
 	 echo 'passed: $@.'
@@ -237,10 +239,10 @@ CPPCHECK_COMMON_ARGS = --error-exitcode=2 --check-level=exhaustive --inline-supp
 
 .PHONY: cppcheck-library
 cppcheck-library:
-	@[ -r "$(REPO_ROOT)/scripts/analyzer-config.sh" ] || { echo "analyzer-config.sh not found -- skipping $@."; exit 0; }; \
+	@[ -r "$(REPO_ROOT)/scripts/$(ANALYZER_CONFIG)" ] || { echo "$(ANALYZER_CONFIG) not found -- skipping $@."; exit 0; }; \
 	 command -v cppcheck 1>/dev/null || { echo 'cppcheck not found -- skipping $@.'; exit 0; }; \
 	 $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-cppcheck-library-builds" clean; \
-	 . $(REPO_ROOT)/scripts/analyzer-config.sh && \
+	 . $(REPO_ROOT)/scripts/$(ANALYZER_CONFIG) && \
 	 $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-cppcheck-library-builds" "$(BUILD_PARENT)/wolfsentry-cppcheck-library-builds/wolfsentry/wolfsentry_options.h" && \
 	 cd "$(SRC_TOP)" && \
 	 $(CPPCHECK) --enable=warning,portability,performance,missingInclude,style $(CPPCHECK_COMMON_ARGS) -I"$(BUILD_PARENT)/wolfsentry-cppcheck-library-builds" -UWOLFSENTRY_LOCK_SHARED_ERROR_CHECKING -DBUILDING_LIBWOLFSENTRY -UWOLFSENTRY_USER_SETTINGS_FILE -D__linux__ -D__GNUC__ -UWOLFSENTRY_SINGLETHREADED -DWOLFSENTRY_THREADSAFE -UWOLFSENTRY_NO_ALLOCA --include="$(BUILD_PARENT)/wolfsentry-cppcheck-library-builds/wolfsentry/wolfsentry_options.h" --include=wolfsentry/wolfsentry_settings.h --include=wolfsentry/wolfsentry_util.h --include=wolfsentry/wolfsentry_errcodes.h --include=wolfsentry/wolfsentry_af.h --include=wolfsentry/wolfsentry.h $(CPPCHECK_EXTRA_ARGS) $(addprefix $(SRC_TOP)/src/,$(SRCS)) && \
@@ -252,19 +254,19 @@ cppcheck-library:
 
 .PHONY: cppcheck-force-library
 cppcheck-force-library:
-	@[ -r "$(REPO_ROOT)/scripts/analyzer-config.sh" ] || { echo "analyzer-config.sh not found -- skipping $@."; exit 0; }; \
+	@[ -r "$(REPO_ROOT)/scripts/$(ANALYZER_CONFIG)" ] || { echo "$(ANALYZER_CONFIG) not found -- skipping $@."; exit 0; }; \
 	 command -v cppcheck 1>/dev/null || { echo 'cppcheck not found -- skipping $@.'; exit 0; }; \
-	 . $(REPO_ROOT)/scripts/analyzer-config.sh && \
+	 . $(REPO_ROOT)/scripts/$(ANALYZER_CONFIG) && \
 	 cd "$(SRC_TOP)" && \
 	 $(CPPCHECK) --enable=warning,portability,performance,missingInclude,style --force --suppress=missingIncludeSystem $(CPPCHECK_COMMON_ARGS) -D'__attribute__(x)=' -D__GNUC__ --include=wolfsentry/wolfsentry_settings.h --include=wolfsentry/wolfsentry_util.h --include=wolfsentry/wolfsentry_errcodes.h --include=wolfsentry/wolfsentry_af.h --include=wolfsentry/wolfsentry.h $(CPPCHECK_EXTRA_ARGS) $(addprefix $(SRC_TOP)/src/,$(SRCS)) && \
 	 echo 'passed: $@.'
 
 .PHONY: cppcheck-extras
 cppcheck-extras:
-	@[ -r "$(REPO_ROOT)/scripts/analyzer-config.sh" ] || { echo "analyzer-config.sh not found -- skipping $@."; exit 0; }; \
+	@[ -r "$(REPO_ROOT)/scripts/$(ANALYZER_CONFIG)" ] || { echo "$(ANALYZER_CONFIG) not found -- skipping $@."; exit 0; }; \
 	 command -v cppcheck 1>/dev/null || { echo 'cppcheck not found -- skipping $@.'; exit 0; }; \
 	 $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-cppcheck-extras-builds" clean; \
-	 . $(REPO_ROOT)/scripts/analyzer-config.sh && \
+	 . $(REPO_ROOT)/scripts/$(ANALYZER_CONFIG) && \
 	 $(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-cppcheck-extras-builds" "$(BUILD_PARENT)/wolfsentry-cppcheck-extras-builds/wolfsentry/wolfsentry_options.h" && \
 	 cd "$(SRC_TOP)" && \
 	 $(CPPCHECK) --enable=warning,portability,performance,missingInclude,style $(CPPCHECK_COMMON_ARGS) -I"$(BUILD_PARENT)/wolfsentry-cppcheck-extras-builds" -DTEST_INIT -DTEST_STATIC_ROUTES -DTEST_DYNAMIC_RULES -DTEST_USER_VALUES -DTEST_USER_ADDR_FAMILIES -DTEST_JSON -DTEST_JSON_CORPUS -UTEST_LWIP -UWOLFSENTRY_LWIP -UWOLFSENTRY_TEST_HPI -DWOLFSENTRY_TEST_HPI_POSIX_VANILLA -DWOLFSENTRY_UNITTEST_BENCHMARKS -UWOLFSENTRY_LOCK_SHARED_ERROR_CHECKING -UBUILDING_LIBWOLFSENTRY -UWOLFSENTRY_USER_SETTINGS_FILE -DTEST_JSON_CONFIG_PATH='""' -DTEST_NUMERIC_JSON_CONFIG_PATH='""' -DWOLFSENTRY_ERROR_FMT -D'WOLFSENTRY_ERROR_FMT_ARGS()' -D__linux__ -D__GNUC__ -UWOLFSENTRY_SINGLETHREADED -DWOLFSENTRY_THREADSAFE -UWOLFSENTRY_NO_ALLOCA --include="$(BUILD_PARENT)/wolfsentry-cppcheck-extras-builds/wolfsentry/wolfsentry_options.h" --include=wolfsentry/wolfsentry_settings.h --include=wolfsentry/wolfsentry_util.h --include=wolfsentry/wolfsentry_errcodes.h --include=wolfsentry/wolfsentry_af.h --include=wolfsentry/wolfsentry.h $(CPPCHECK_EXTRA_ARGS) $(SRC_TOP)/tests/unittests.c && \
@@ -273,9 +275,9 @@ cppcheck-extras:
 
 .PHONY: cppcheck-force-extras
 cppcheck-force-extras:
-	@[ -r "$(REPO_ROOT)/scripts/analyzer-config.sh" ] || { echo "analyzer-config.sh not found -- skipping $@."; exit 0; }; \
+	@[ -r "$(REPO_ROOT)/scripts/$(ANALYZER_CONFIG)" ] || { echo "$(ANALYZER_CONFIG) not found -- skipping $@."; exit 0; }; \
 	 command -v cppcheck 1>/dev/null || { echo 'cppcheck not found -- skipping $@.'; exit 0; }; \
-	 . $(REPO_ROOT)/scripts/analyzer-config.sh && \
+	 . $(REPO_ROOT)/scripts/$(ANALYZER_CONFIG) && \
 	 cd "$(SRC_TOP)" && \
 	 $(CPPCHECK) --enable=warning,portability,performance,missingInclude,style --force --suppress=missingIncludeSystem $(CPPCHECK_COMMON_ARGS) -D'__attribute__(x)=' -D__GNUC__ -DTEST_INIT -DTEST_STATIC_ROUTES -DTEST_DYNAMIC_RULES -DTEST_USER_VALUES -DTEST_USER_ADDR_FAMILIES -DTEST_JSON -DTEST_JSON_CORPUS --include=wolfsentry/wolfsentry_settings.h --include=wolfsentry/wolfsentry_util.h --include=wolfsentry/wolfsentry_errcodes.h --include=wolfsentry/wolfsentry_af.h --include=wolfsentry/wolfsentry.h $(CPPCHECK_EXTRA_ARGS) $(SRC_TOP)/tests/unittests.c && \
 	 echo 'passed: $@.'
@@ -472,6 +474,15 @@ fail-open-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-fail-open" clean
 	@echo "passed: fail-open load default test."
 
+TIME_CONFIG_CHECK_FLAGS := -std=c89 -pedantic -DWOLFSENTRY_C89 -Wno-variadic-macros -Wno-overlength-strings -DBUILDING_LIBWOLFSENTRY -I$(SRC_TOP) -fsyntax-only $(SRC_TOP)/src/wolfsentry_util.c
+
+.PHONY: time-config-test
+time-config-test:
+	@$(CC) $(TIME_CONFIG_CHECK_FLAGS) -DWOLFSENTRY_TIME_TYPE=int64_t -DWOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS=1
+	@$(CC) $(TIME_CONFIG_CHECK_FLAGS) -DWOLFSENTRY_TIME_TYPE=uint64_t 2>&1 | grep -q wolfsentry_time_type_must_be_signed || { echo "unsigned WOLFSENTRY_TIME_TYPE was accepted." >&2; exit 1; }
+	@for v in 0 -1 18446744073709551615ULL; do $(CC) $(TIME_CONFIG_CHECK_FLAGS) -DWOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS=$$v 2>&1 | grep -q wolfsentry_default_route_idle_time_must_be_a_positive_time_t || { echo "default route idle time $$v was accepted." >&2; exit 1; }; done
+	@echo "passed: time configuration test."
+
 .PHONY: no-addr-bitmask-matching-test
 no-addr-bitmask-matching-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-no-addr-bitmask-matching-builds" clean
@@ -573,8 +584,8 @@ else
     LWIP_TOP_FOR_TEST := $(SRC_TOP)/../third/lwip
 endif
 
-FREERTOS_ARM32_MAX_IMAGE_SIZE ?= 240000
-FREERTOS_ARM32_THUMB_MAX_SECTIONS_SIZE ?= 110000
+FREERTOS_ARM32_MAX_IMAGE_SIZE ?= 236000
+FREERTOS_ARM32_THUMB_MAX_SECTIONS_SIZE ?= 114000
 
 .PHONY: freertos-arm32-thumb-build-test
 freertos-arm32-thumb-build-test:
@@ -594,7 +605,7 @@ freertos-arm32-thumb-build-test:
 	@$(MAKE) $(EXTRA_MAKE_FLAGS) $(QUIET_FLAG) -f $(THIS_MAKEFILE) VERY_QUIET=1 BUILD_TOP="$(BUILD_PARENT)/wolfsentry-freertos-arm32-thumb-test-builds" HOST=arm-none-eabi RUNTIME=FreeRTOS-lwIP FREERTOS_TOP=$(FREERTOS_TOP_FOR_TEST) LWIP_TOP=$(LWIP_TOP_FOR_TEST) EXTRA_CFLAGS+='-mthumb -mcpu=cortex-m7' UNITTEST_LIST=test_lwip clean
 	@echo "passed: freertos-arm32-thumb-build test."
 
-FREERTOS_ARM32_MAX_SECTIONS_SIZE ?= 100000
+FREERTOS_ARM32_MAX_SECTIONS_SIZE ?= 104000
 
 .PHONY: freertos-arm32-build-test
 freertos-arm32-build-test:

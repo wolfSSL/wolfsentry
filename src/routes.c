@@ -1207,6 +1207,18 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_check_flags_sensical(wolfse
     WOLFSENTRY_RETURN_OK;
 }
 
+/* deadlines saturate at the latest representable time rather than wrapping. */
+static wolfsentry_time_t wolfsentry_route_deadline(
+    struct wolfsentry_context *wolfsentry,
+    wolfsentry_time_t start,
+    wolfsentry_time_t interval)
+{
+    const wolfsentry_time_t latest = (wolfsentry_time_t)MAX_SINT_OF(start);
+    if ((interval > 0) && (start > latest - interval))
+        return latest;
+    return WOLFSENTRY_ADD_TIME(start, interval);
+}
+
 static wolfsentry_errcode_t wolfsentry_route_insert_1(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
@@ -1215,9 +1227,11 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
     struct wolfsentry_route *route_to_insert,
     struct wolfsentry_route **route_already_there_ret,
     struct wolfsentry_event *trigger_event,
-    wolfsentry_action_res_t *action_results)
+    wolfsentry_action_res_t *action_results,
+    wolfsentry_time_t default_idle)
 {
     wolfsentry_errcode_t ret;
+    wolfsentry_time_t idle;
     struct wolfsentry_eventconfig_internal *config = (route_to_insert->parent_event && route_to_insert->parent_event->config) ? route_to_insert->parent_event->config : &wolfsentry->config;
 
     if (config->config.route_flags_to_clear_on_insert != 0)
@@ -1250,8 +1264,10 @@ static wolfsentry_errcode_t wolfsentry_route_insert_1(
     if ((*action_results & WOLFSENTRY_ACTION_RES_CONNECT) && (! (route_to_insert->flags & WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS)))
         ++route_to_insert->meta.connection_count;
 
-    if ((config->config.route_idle_time_for_purge > 0) && (route_to_insert->meta.purge_after == 0))
-        route_to_insert->meta.purge_after = route_to_insert->meta.insert_time + config->config.route_idle_time_for_purge;
+    /* default_idle applies only when the config sets none, and counts from this insert_time. */
+    idle = (config->config.route_idle_time_for_purge > 0) ? config->config.route_idle_time_for_purge : default_idle;
+    if ((idle > 0) && (route_to_insert->meta.purge_after == 0))
+        route_to_insert->meta.purge_after = wolfsentry_route_deadline(wolfsentry, route_to_insert->meta.insert_time, idle);
 
     if (route_to_insert->meta.purge_after) {
         wolfsentry_hitcount_t max_purgeable_routes;
@@ -1389,7 +1405,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_2(
     if ((ret = wolfsentry_route_new(WOLFSENTRY_CONTEXT_ARGS_OUT, parent_event, remote, local, flags, &new)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
-    ret = wolfsentry_route_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, NULL /* target_route */, route_table, new, &route_already_there, parent_event, action_results);
+    ret = wolfsentry_route_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, NULL /* target_route */, route_table, new, &route_already_there, parent_event, action_results, 0 /* default_idle */);
 
     if (id) {
         if (route_already_there)
@@ -1431,7 +1447,8 @@ static wolfsentry_errcode_t wolfsentry_route_insert_by_exports_2(
     struct wolfsentry_event *parent_event,
     wolfsentry_ent_id_t *id,
     struct wolfsentry_route **route,
-    wolfsentry_action_res_t *action_results)
+    wolfsentry_action_res_t *action_results,
+    wolfsentry_time_t default_idle)
 {
     struct wolfsentry_route *new;
     struct wolfsentry_route *route_already_there = NULL;
@@ -1440,7 +1457,7 @@ static wolfsentry_errcode_t wolfsentry_route_insert_by_exports_2(
     if ((ret = wolfsentry_route_new_by_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, parent_event, route_exports, &new)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
 
-    ret = wolfsentry_route_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, NULL /* target_route */, route_table, new, &route_already_there, parent_event, action_results);
+    ret = wolfsentry_route_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, NULL /* target_route */, route_table, new, &route_already_there, parent_event, action_results, default_idle);
 
     if (id) {
         if (route_already_there)
@@ -1505,11 +1522,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_into_table(
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 }
 
-WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_by_exports_into_table(
+static wolfsentry_errcode_t wolfsentry_route_insert_by_exports_into_table_1(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_route_table *route_table,
     void *caller_arg, /* passed to action callback(s) as the caller_arg. */
     const struct wolfsentry_route_exports *route_exports,
+    wolfsentry_time_t default_idle,
     wolfsentry_ent_id_t *id,
     wolfsentry_action_res_t *action_results)
 {
@@ -1526,10 +1544,37 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_by_exports_into_tabl
             WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
     }
     WOLFSENTRY_CLEAR_ALL_BITS(*action_results);
-    ret = wolfsentry_route_insert_by_exports_2(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, route_table ? route_table : wolfsentry->routes, route_exports, event, id, NULL /* route */, action_results);
+    ret = wolfsentry_route_insert_by_exports_2(WOLFSENTRY_CONTEXT_ARGS_OUT, caller_arg, route_table ? route_table : wolfsentry->routes, route_exports, event, id, NULL /* route */, action_results, default_idle);
     if (event != NULL)
         WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, event, NULL /* action_results */));
     WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+}
+
+WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert_by_exports_into_table(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *route_table,
+    void *caller_arg, /* passed to action callback(s) as the caller_arg. */
+    const struct wolfsentry_route_exports *route_exports,
+    wolfsentry_ent_id_t *id,
+    wolfsentry_action_res_t *action_results)
+{
+    WOLFSENTRY_ERROR_RERETURN(
+        wolfsentry_route_insert_by_exports_into_table_1(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, caller_arg, route_exports, 0 /* default_idle */, id, action_results));
+}
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_insert_by_exports_with_default_idle(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *route_table,
+    void *caller_arg,
+    const struct wolfsentry_route_exports *route_exports,
+    wolfsentry_time_t default_idle,
+    wolfsentry_ent_id_t *id,
+    wolfsentry_action_res_t *action_results)
+{
+    WOLFSENTRY_ERROR_RERETURN(
+        wolfsentry_route_insert_by_exports_into_table_1(
+            WOLFSENTRY_CONTEXT_ARGS_OUT, route_table, caller_arg, route_exports, default_idle, id, action_results));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_insert(
@@ -2468,11 +2513,20 @@ static wolfsentry_errcode_t wolfsentry_route_event_dispatch_0(
         rule_route->meta.last_hit_time = now;
     }
 
-    if (rule_route->meta.purge_after) {
-        wolfsentry_time_t purge_margin, new_purge_after;
+    if (rule_route->meta.purge_after &&
+        (config->config.route_idle_time_for_purge != WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED))
+    {
+        wolfsentry_time_t purge_margin, new_purge_after, idle_time;
         /* use the purge_margin to reduce mutex burden. */
         WOLFSENTRY_FROM_EPOCH_TIME(WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS, 0 /* epoch_nsecs */, &purge_margin);
-        new_purge_after = rule_route->meta.last_hit_time + config->config.route_idle_time_for_purge + purge_margin;
+        ret = wolfsentry_route_effective_idle_time(wolfsentry, config, &idle_time);
+        if (ret < 0) {
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
+            /* keep the existing purge time rather than refreshing to a shorter one. */
+            new_purge_after = rule_route->meta.purge_after;
+        }
+        else
+            new_purge_after = wolfsentry_route_deadline(wolfsentry, wolfsentry_route_deadline(wolfsentry, rule_route->meta.last_hit_time, idle_time), purge_margin);
         /* note that the below read access to rule_route->meta.purge_after is
          * race-prone on 32 bit targets -- this is benign, because the code path
          * on a false positive is to obtain a mutex, whereafter all access is
@@ -3725,6 +3779,29 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_route_get_metadata(
     metadata->derogatory_count = WOLFSENTRY_ATOMIC_LOAD(route->meta.derogatory_count);
     metadata->commendable_count = WOLFSENTRY_ATOMIC_LOAD(route->meta.commendable_count);
     metadata->hit_count = WOLFSENTRY_ATOMIC_LOAD(route->header.hitcount);
+    WOLFSENTRY_RETURN_OK;
+}
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_effective_idle_time(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_eventconfig_internal *config,
+    wolfsentry_time_t *idle_time)
+{
+    wolfsentry_errcode_t ret;
+
+    if (config->config.route_idle_time_for_purge == WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED) {
+        *idle_time = 0;
+        WOLFSENTRY_RETURN_OK;
+    }
+    if (config->config.route_idle_time_for_purge > 0) {
+        *idle_time = config->config.route_idle_time_for_purge;
+        WOLFSENTRY_RETURN_OK;
+    }
+    ret = WOLFSENTRY_INTERVAL_FROM_SECONDS(WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS, 0 /* howlong_nsecs */, idle_time);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    /* a nonpositive interval would leave tracked peers with no purge time at all. */
+    if (*idle_time <= 0)
+        WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     WOLFSENTRY_RETURN_OK;
 }
 

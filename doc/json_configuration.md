@@ -101,7 +101,7 @@ allowed values are as in the ABNF formal syntax later in this document.
     "config-update" : {
         "max-connection-count" : uint32,
         "penalty-box-duration" : duration,
-        "route-idle-time-for-purge" : duration,
+        "route-idle-time-for-purge" : purge_duration,
         "derog-thresh-for-penalty-boxing" : uint16,
         "derog-thresh-ignore-commendable" : boolean,
         "commendable-clears-derogatory" : boolean,
@@ -120,7 +120,7 @@ allowed values are as in the ABNF formal syntax later in this document.
          "config" : {
             "max-connection-count" : uint32,
             "penalty-box-duration" : duration,
-            "route-idle-time-for-purge" : duration,
+            "route-idle-time-for-purge" : purge_duration,
             "derog-thresh-for-penalty-boxing" : uint16,
             "derog-thresh-ignore-commendable" : boolean,
             "commendable-clears-derogatory" : boolean,
@@ -218,7 +218,10 @@ allowed values are as in the ABNF formal syntax later in this document.
 
 * <b>`max-purgeable-idle-time`</b> -- Global absolute maximum idle time for ephemeral routes, controlling purges of stale (expired) ephemeral routes with nonzero `wolfsentry_route_metadata_exports.connection_count`.  Default is no limit.  Not allowed in <b>`config`</b> clauses of events.
 
-* <b>`route-idle-time-for-purge`</b> -- If nonzero, the time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
+* <b>`route-idle-time-for-purge`</b> -- The time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).  Three forms are accepted:
+  * a positive duration -- routes inserted with this config are purged after that idle time.
+  * zero (the default) -- routes inserted with this config get no purge time, but routes created by `track-peer-v1` and routes given an explicit purge time use the library default, `WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS` (300 seconds unless overridden at build time).
+  * `"never"` -- the config gives no route a purge time, including those created by `track-peer-v1`, and dispatch never refreshes one.  A route with an explicit purge time, imported or set with `wolfsentry_route_purge_time_set()`, still expires at that time.  This is `WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED` in C.  Negative durations are rejected.
 
 * <b>`route-flags-to-add-on-insert`</b> -- List of route flags to set on new routes upon insertion.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
@@ -374,7 +377,7 @@ top_config_item = event_config_item / max_purgeable_routes_clause / max_purgeabl
 event_config_item =
   (DQUOTE %s"max-connection-count" DQUOTE ":" uint32) /
   (DQUOTE %s"penalty-box-duration" DQUOTE ":" duration) /
-  (DQUOTE %s"route-idle-time-for-purge" DQUOTE ":" duration) /
+  (DQUOTE %s"route-idle-time-for-purge" DQUOTE ":" purge_duration) /
   (DQUOTE %s"derog-thresh-for-penalty-boxing" DQUOTE ":" uint16 /
   (DQUOTE %s"derog-thresh-ignore-commendable" DQUOTE ":" boolean /
   (DQUOTE %s"commendable-clears-derogatory" DQUOTE ":" boolean /
@@ -382,6 +385,7 @@ event_config_item =
   (DQUOTE (%s"action-res-filter-bits-set" / %s"action-res-filter-bits-unset" / %s"action-res-bits-to-add" / %s"action-res-bits-to-clear") DQUOTE ":" action_res_flag_list)
 
 duration = number_sint64 / (DQUOTE number_sint64 [ %s"d" / %s"h" / %s"m" / %s"s" ] DQUOTE)
+purge_duration = duration / (DQUOTE %s"never" DQUOTE)
 
 max_purgeable_routes_clause = DQUOTE %s"max-purgeable-routes" DQUOTE ":" uint32
 

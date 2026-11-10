@@ -682,7 +682,7 @@ static const struct wolfsentry_eventconfig demo_config = {
         .max_connection_count = 10,                /* by default, don't allow more than 10 simultaneous connections that match the same route. */
         .derogatory_threshold_for_penaltybox = 4,  /* after 4 derogatory events matching the same route, put the route in penalty box status. */
         .penaltybox_duration = 300,                /* keep routes in penalty box status for 5 minutes.  denominated in seconds when passing to wolfsentry_init(). */
-        .route_idle_time_for_purge = 0,            /* 0 to disable -- autopurge doesn't usually make much sense as a default config. */
+        .route_idle_time_for_purge = WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED, /* 0 would give tracked peers the 5 minute default purge time; these tests want them permanent. */
         .flags = WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY, /* automatically clear derogatory count for a route when a commendable event matches the route. */
         .route_flags_to_add_on_insert = 0,
         .route_flags_to_clear_on_insert = 0,
@@ -696,7 +696,7 @@ static const struct wolfsentry_eventconfig demo_config = {
         10,
         4,
         300,
-        0,
+        WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED,
         WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY,
         0,
         0,
@@ -2103,7 +2103,7 @@ static int test_static_routes(void) {
         .max_connection_count = 10,
         .derogatory_threshold_for_penaltybox = 4,
         .penaltybox_duration = 1, /* denominated in seconds when passing to wolfsentry_init(). */
-        .route_idle_time_for_purge = 0,
+        .route_idle_time_for_purge = WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED,
         .flags = WOLFSENTRY_EVENTCONFIG_FLAG_NONE
 #else
         PRIVATE_DATA_SIZE,
@@ -2111,7 +2111,7 @@ static int test_static_routes(void) {
         10,
         4,
         1, /* denominated in seconds when passing to wolfsentry_init(). */
-        0,
+        WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED,
         WOLFSENTRY_EVENTCONFIG_FLAG_NONE,
         0,
         0,
@@ -7794,6 +7794,13 @@ static wolfsentry_errcode_t regression_fake_get_time(void *context, wolfsentry_t
     WOLFSENTRY_RETURN_OK;
 }
 
+/* every reading is later than the last, so two readings never agree. */
+static wolfsentry_errcode_t regression_ticking_get_time(void *context, wolfsentry_time_t *now) {
+    (void)context;
+    *now = ++regression_fake_now;
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t regression_route_meta(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     wolfsentry_ent_id_t id,
@@ -8140,6 +8147,21 @@ static wolfsentry_errcode_t regression_ms_interval_from_seconds(time_t howlong_s
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t regression_failing_interval_from_seconds(time_t howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
+    (void)howlong_secs;
+    (void)howlong_nsecs;
+    (void)howlong;
+    WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+}
+
+/* converts successfully to a nonsensical negative interval. */
+static wolfsentry_errcode_t regression_negative_interval_from_seconds(time_t howlong_secs, long howlong_nsecs, wolfsentry_time_t *howlong) {
+    (void)howlong_secs;
+    (void)howlong_nsecs;
+    *howlong = -1;
+    WOLFSENTRY_RETURN_OK;
+}
+
 static wolfsentry_errcode_t test_regression_bounded_purge_progress(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_route_table *table;
@@ -8386,22 +8408,85 @@ static wolfsentry_errcode_t test_track_peer_sentinel_action(
     WOLFSENTRY_RETURN_OK;
 }
 
+static wolfsentry_errcode_t test_dynamic_ephemeral_route_exports(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    byte remote_last_byte,
+    struct wolfsentry_route_exports *exports_out);
+
+static int test_track_peer_dispatch_batch(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    const char *aux_event_label,
+    byte first_last_byte)
+{
+    struct {
+        struct wolfsentry_sockaddr sa;
+        byte addr_buf[4];
+    } remote, local;
+    wolfsentry_route_flags_t dispatch_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
+    wolfsentry_route_flags_t inexact_matches;
+    wolfsentry_action_res_t action_results;
+    wolfsentry_ent_id_t id;
+    byte addr[4];
+    int i;
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_set_aux_event(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_generator",
+            -1,
+            aux_event_label,
+            -1));
+
+    remote.sa.sa_family = local.sa.sa_family = AF_INET;
+    remote.sa.sa_proto = local.sa.sa_proto = IPPROTO_TCP;
+    local.sa.sa_port = 443;
+    remote.sa.addr_len = local.sa.addr_len = sizeof remote.addr_buf * BITS_PER_BYTE;
+    remote.sa.interface = local.sa.interface = 1;
+    memcpy(local.sa.addr, "\377\376\375\374", sizeof local.addr_buf);
+    WOLFSENTRY_SET_BITS(dispatch_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+
+    for (i = 0; i < 3; ++i) {
+        remote.sa.sa_port = (wolfsentry_port_t)(1000 + first_last_byte + i);
+        addr[0] = 10;
+        addr[1] = 0;
+        addr[2] = 0;
+        addr[3] = (byte)(first_last_byte + i);
+        memcpy(remote.sa.addr, addr, sizeof addr);
+
+        WOLFSENTRY_EXIT_ON_FAILURE(
+            wolfsentry_route_event_dispatch(
+                WOLFSENTRY_CONTEXT_ARGS_OUT,
+                &remote.sa,
+                &local.sa,
+                dispatch_flags,
+                NULL /* event_label */,
+                0 /* event_label_len */,
+                NULL /* caller_arg */,
+                &id,
+                &inexact_matches,
+                &action_results));
+
+        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
+    }
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_track_peer_ephemeral_route_bound(void) {
     struct wolfsentry_context *wolfsentry;
     struct wolfsentry_eventconfig aux_config;
+    struct wolfsentry_route_exports exports;
     int sentinel_hits = 0;
     struct {
         struct wolfsentry_sockaddr sa;
         byte addr_buf[4];
     } remote, local;
     wolfsentry_route_flags_t rule_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
-    wolfsentry_route_flags_t dispatch_flags = WOLFSENTRY_ROUTE_FLAG_NONE;
     wolfsentry_route_flags_t inexact_matches;
     wolfsentry_action_res_t action_results;
     wolfsentry_ent_id_t id;
     wolfsentry_hitcount_t n_routes;
-    int i;
-    byte addr[4];
+    wolfsentry_time_t default_idle_time, explicit_idle_time;
 
 #ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
     static const struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT, .max_connection_count = 10 };
@@ -8420,6 +8505,8 @@ static int test_track_peer_ephemeral_route_bound(void) {
             WOLFSENTRY_INIT_FLAG_NONE));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_route_default_policy_set(WOLFSENTRY_CONTEXT_ARGS_OUT, WOLFSENTRY_ACTION_RES_ACCEPT));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS, 0, &default_idle_time));
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 60, 0, &explicit_idle_time));
 
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_event_insert(
@@ -8431,11 +8518,11 @@ static int test_track_peer_ephemeral_route_bound(void) {
             WOLFSENTRY_EVENT_FLAG_NONE,
             &id));
 
-    /* an aux event with no purge time would make every tracked peer a permanent route. */
+    /* inherits the context config, whose zero idle time means the library default. */
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_event_insert(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "track_peer_unpurgeable",
+            "track_peer_default",
             -1 /* label_len */,
             10,
             NULL /* config */,
@@ -8443,12 +8530,34 @@ static int test_track_peer_ephemeral_route_bound(void) {
             &id));
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_eventconfig_init(wolfsentry, &aux_config));
-    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_interval_from_seconds(wolfsentry, 60, 0, &aux_config.route_idle_time_for_purge));
+    aux_config.route_idle_time_for_purge = WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED;
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_permanent",
+            -1 /* label_len */,
+            10,
+            &aux_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
 
+    aux_config.route_idle_time_for_purge = explicit_idle_time;
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_event_insert(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
             "track_peer_purgeable",
+            -1 /* label_len */,
+            10,
+            &aux_config,
+            WOLFSENTRY_EVENT_FLAG_NONE,
+            &id));
+
+    aux_config.route_idle_time_for_purge = -2;
+    WOLFSENTRY_EXIT_UNLESS_EXPECTED_FAILURE(
+        INVALID_ARG,
+        wolfsentry_event_insert(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            "track_peer_bad_negative",
             -1 /* label_len */,
             10,
             &aux_config,
@@ -8464,7 +8573,6 @@ static int test_track_peer_ephemeral_route_bound(void) {
             WOLFSENTRY_BUILTIN_LABEL_PREFIX "track-peer-v1",
             -1));
 
-    /* a refused insert must not stop the rest of the match chain. */
     WOLFSENTRY_EXIT_ON_FAILURE(
         wolfsentry_action_insert(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
@@ -8482,14 +8590,6 @@ static int test_track_peer_ephemeral_route_bound(void) {
             -1,
             WOLFSENTRY_ACTION_TYPE_MATCH,
             "track_peer_sentinel",
-            -1));
-
-    WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_event_set_aux_event(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "track_peer_generator",
-            -1,
-            "track_peer_unpurgeable",
             -1));
 
     remote.sa.sa_family = local.sa.sa_family = AF_INET;
@@ -8518,74 +8618,73 @@ static int test_track_peer_ephemeral_route_bound(void) {
             &id,
             &action_results));
 
+    /* the generator rule inherits the zero idle time but gets no purge time of its own. */
     WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_count_main_routes(WOLFSENTRY_CONTEXT_ARGS_OUT, &n_routes));
     WOLFSENTRY_EXIT_ON_FALSE(n_routes == 1);
 
-    WOLFSENTRY_SET_BITS(dispatch_flags, WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN);
+    /* the default purge time counts from the route's own insert time, not an earlier clock reading. */
+    regression_fake_now = 1000000;
+    wolfsentry_get_timecbs(wolfsentry)->get_time = regression_ticking_get_time;
+    WOLFSENTRY_EXIT_ON_FAILURE(test_track_peer_dispatch_batch(WOLFSENTRY_CONTEXT_ARGS_OUT, "track_peer_default", 1));
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 1, &exports));
+    WOLFSENTRY_EXIT_ON_FALSE(exports.meta.purge_after == exports.meta.insert_time + default_idle_time);
 
-    for (i = 1; i <= 3; ++i) {
-        remote.sa.sa_port = (wolfsentry_port_t)(1000 + i);
-        addr[0] = 10;
-        addr[1] = 0;
-        addr[2] = 0;
-        addr[3] = (byte)i;
-        memcpy(remote.sa.addr, addr, sizeof addr);
+    WOLFSENTRY_EXIT_ON_FAILURE(test_track_peer_dispatch_batch(WOLFSENTRY_CONTEXT_ARGS_OUT, "track_peer_permanent", 11));
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 11, &exports));
+    WOLFSENTRY_EXIT_ON_FALSE(exports.meta.purge_after == 0);
 
-        WOLFSENTRY_EXIT_ON_FAILURE(
-            wolfsentry_route_event_dispatch(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                &remote.sa,
-                &local.sa,
-                dispatch_flags,
-                NULL /* event_label */,
-                0 /* event_label_len */,
-                NULL /* caller_arg */,
-                &id,
-                &inexact_matches,
-                &action_results));
-
-        WOLFSENTRY_EXIT_ON_TRUE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
-    }
+    WOLFSENTRY_EXIT_ON_FAILURE(test_track_peer_dispatch_batch(WOLFSENTRY_CONTEXT_ARGS_OUT, "track_peer_purgeable", 21));
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_ephemeral_route_exports(WOLFSENTRY_CONTEXT_ARGS_OUT, 21, &exports));
+    WOLFSENTRY_EXIT_ON_FALSE(exports.meta.purge_after == exports.meta.insert_time + explicit_idle_time);
 
     WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_count_main_routes(WOLFSENTRY_CONTEXT_ARGS_OUT, &n_routes));
-    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 1);
-    WOLFSENTRY_EXIT_ON_FALSE(sentinel_hits == 3);
+    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 10);
+    WOLFSENTRY_EXIT_ON_FALSE(sentinel_hits == 9);
 
+    /* a failed default purge time skips the tracked route but not the actions after track-peer-v1. */
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_set_aux_event(WOLFSENTRY_CONTEXT_ARGS_OUT, "track_peer_generator", -1, "track_peer_default", -1));
+    wolfsentry_get_timecbs(wolfsentry)->interval_from_seconds = regression_failing_interval_from_seconds;
+    remote.sa.sa_port = 1031;
+    memcpy(remote.sa.addr, "\012\000\000\037", sizeof remote.addr_buf);
+    rule_flags = WOLFSENTRY_ROUTE_FLAG_DIRECTION_IN;
     WOLFSENTRY_EXIT_ON_FAILURE(
-        wolfsentry_event_set_aux_event(
+        wolfsentry_route_event_dispatch(
             WOLFSENTRY_CONTEXT_ARGS_OUT,
-            "track_peer_generator",
-            -1,
-            "track_peer_purgeable",
-            -1));
-
-    for (i = 1; i <= 3; ++i) {
-        remote.sa.sa_port = (wolfsentry_port_t)(2000 + i);
-        addr[0] = 10;
-        addr[1] = 0;
-        addr[2] = 1;
-        addr[3] = (byte)i;
-        memcpy(remote.sa.addr, addr, sizeof addr);
-
-        WOLFSENTRY_EXIT_ON_FAILURE(
-            wolfsentry_route_event_dispatch(
-                WOLFSENTRY_CONTEXT_ARGS_OUT,
-                &remote.sa,
-                &local.sa,
-                dispatch_flags,
-                NULL /* event_label */,
-                0 /* event_label_len */,
-                NULL /* caller_arg */,
-                &id,
-                &inexact_matches,
-                &action_results));
-
-        WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
-    }
-
+            &remote.sa,
+            &local.sa,
+            rule_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(sentinel_hits == 10);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ERROR));
+    WOLFSENTRY_EXIT_ON_FALSE(! WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_INSERTED));
     WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_count_main_routes(WOLFSENTRY_CONTEXT_ARGS_OUT, &n_routes));
-    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 4);
-    WOLFSENTRY_EXIT_ON_FALSE(sentinel_hits == 6);
+    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 10);
+
+    /* a default that converts to a nonpositive interval must not make the peer permanent. */
+    wolfsentry_get_timecbs(wolfsentry)->interval_from_seconds = regression_negative_interval_from_seconds;
+    remote.sa.sa_port = 1032;
+    memcpy(remote.sa.addr, "\012\000\000\040", sizeof remote.addr_buf);
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_route_event_dispatch(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            &remote.sa,
+            &local.sa,
+            rule_flags,
+            NULL /* event_label */,
+            0 /* event_label_len */,
+            NULL /* caller_arg */,
+            &id,
+            &inexact_matches,
+            &action_results));
+    WOLFSENTRY_EXIT_ON_FALSE(sentinel_hits == 11);
+    WOLFSENTRY_EXIT_ON_FALSE(WOLFSENTRY_CHECK_BITS(action_results, WOLFSENTRY_ACTION_RES_ERROR));
+    WOLFSENTRY_EXIT_ON_FAILURE(test_dynamic_count_main_routes(WOLFSENTRY_CONTEXT_ARGS_OUT, &n_routes));
+    WOLFSENTRY_EXIT_ON_FALSE(n_routes == 10);
 
     WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
 
@@ -14172,6 +14271,53 @@ static int test_json_duration_negative(void) {
     WOLFSENTRY_RETURN_OK;
 }
 
+static int test_json_route_idle_time_never(void) {
+    static const char never_json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"config-update\" : { \"route-idle-time-for-purge\" : \"never\" },"
+        " \"events\" : [ { \"label\" : \"e\", \"priority\" : 1, \"config\" : { \"route-idle-time-for-purge\" : \"never\" } } ] }";
+    static const char negative_json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"config-update\" : { \"route-idle-time-for-purge\" : \"-100s\" } }";
+    static const char never_elsewhere_json[] =
+        "{ \"wolfsentry-config-version\" : 1, \"config-update\" : { \"penalty-box-duration\" : \"never\" } }";
+    struct wolfsentry_context *wolfsentry;
+    struct wolfsentry_eventconfig got;
+#ifdef WOLFSENTRY_HAVE_DESIGNATED_INITIALIZERS
+    struct wolfsentry_eventconfig config = { .route_private_data_size = PRIVATE_DATA_SIZE, .route_private_data_alignment = PRIVATE_DATA_ALIGNMENT };
+#else
+    struct wolfsentry_eventconfig config = { PRIVATE_DATA_SIZE, PRIVATE_DATA_ALIGNMENT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
+    WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_init_ex(
+            wolfsentry_build_settings,
+            WOLFSENTRY_CONTEXT_ARGS_OUT_EX(WOLFSENTRY_TEST_HPI),
+            &config,
+            &wolfsentry,
+            WOLFSENTRY_INIT_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(
+        wolfsentry_config_json_oneshot(
+            WOLFSENTRY_CONTEXT_ARGS_OUT,
+            (const unsigned char *)never_json, strlen(never_json),
+            WOLFSENTRY_CONFIG_LOAD_FLAG_NONE, NULL, 0));
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_defaultconfig_get(WOLFSENTRY_CONTEXT_ARGS_OUT, &got));
+    WOLFSENTRY_EXIT_ON_FALSE(got.route_idle_time_for_purge == WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED);
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_event_get_config(WOLFSENTRY_CONTEXT_ARGS_OUT, "e", -1, &got));
+    WOLFSENTRY_EXIT_ON_FALSE(got.route_idle_time_for_purge == WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED);
+
+    WOLFSENTRY_EXIT_ON_FAILURE(wolfsentry_shutdown(WOLFSENTRY_CONTEXT_ARGS_OUT_EX(&wolfsentry)));
+    WOLFSENTRY_EXIT_ON_FAILURE(WOLFSENTRY_THREAD_TAILER(WOLFSENTRY_THREAD_FLAG_NONE));
+
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(negative_json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+    WOLFSENTRY_EXIT_ON_SUCCESS(
+        test_json_oneshot_string(never_elsewhere_json, WOLFSENTRY_CONFIG_LOAD_FLAG_NONE));
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 static int test_json_uint8_hex_interface(void) {
     static const char json[] =
         "{ \"wolfsentry-config-version\" : 1, \"routes\" : [ { \"direction-in\" : true, \"family\" : 2, \"remote\" : { \"interface\" : \"0xff\" } } ] }";
@@ -15270,6 +15416,12 @@ int main(int argc, char* argv[]) {
     ret = test_json_duration_negative();
     if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
         (void)fprintf(stderr, "test_json_duration_negative failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        err = 1;
+    }
+
+    ret = test_json_route_idle_time_never();
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, OK)) {
+        (void)fprintf(stderr, "test_json_route_idle_time_never failed, " WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
         err = 1;
     }
 #ifdef WOLFSENTRY_ADDR_BITMASK_MATCHING

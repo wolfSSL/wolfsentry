@@ -694,6 +694,21 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
     struct wolfsentry_table_ent_header **new_ent,
     wolfsentry_clone_flags_t flags);
 
+/* inserts with default_idle as the purge time, counted from the insert, when the route's config sets none. */
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_insert_by_exports_with_default_idle(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *route_table,
+    void *caller_arg,
+    const struct wolfsentry_route_exports *route_exports,
+    wolfsentry_time_t default_idle,
+    wolfsentry_ent_id_t *id,
+    wolfsentry_action_res_t *action_results);
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_effective_idle_time(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_eventconfig_internal *config,
+    wolfsentry_time_t *idle_time);
+
 WOLFSENTRY_LOCAL_VOID wolfsentry_route_purge_list_insert(
     struct wolfsentry_route_table *route_table,
     struct wolfsentry_route *route_to_insert);

@@ -3683,6 +3683,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_init(
     WOLFSENTRY_RETURN_OK;
 }
 
+/* negative durations and the never-purge sentinel need a signed WOLFSENTRY_TIME_TYPE; an array, not static_assert, so C89 builds check it too. */
+typedef char wolfsentry_time_type_must_be_signed[((wolfsentry_time_t)-1 < 0) ? 1 : -1];
+/* the default is converted through time_t, and a nonpositive result would expire tracked peers at insertion. */
+typedef char wolfsentry_default_route_idle_time_must_be_a_positive_time_t[
+    ((WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS) > 0) &&
+    ((time_t)(WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS) > 0) &&
+    ((time_t)(WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS) == (WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS)) ? 1 : -1];
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
     const struct wolfsentry_eventconfig *config)
 {
@@ -3701,6 +3709,9 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_eventconfig_check(
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (config->max_connection_count > MAX_UINT_OF(instance_of_field(struct wolfsentry_route, meta.connection_count)))
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
+    if ((config->route_idle_time_for_purge < 0) &&
+        (config->route_idle_time_for_purge != WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED))
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     ret = wolfsentry_route_check_flags_sensical(config->route_flags_to_add_on_insert);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
@@ -4066,7 +4077,8 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_init_ex(
      */
     if ((ret = hpi.timecbs.interval_from_seconds((time_t)(*wolfsentry)->config.config.penaltybox_duration, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.penaltybox_duration))) < 0)
         goto out;
-    if ((ret = hpi.timecbs.interval_from_seconds((time_t)(*wolfsentry)->config.config.route_idle_time_for_purge, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.route_idle_time_for_purge))) < 0)
+    if (((*wolfsentry)->config.config.route_idle_time_for_purge != WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED) &&
+        ((ret = hpi.timecbs.interval_from_seconds((time_t)(*wolfsentry)->config.config.route_idle_time_for_purge, 0 /* howlong_nsecs */, &((*wolfsentry)->config.config.route_idle_time_for_purge))) < 0))
         goto out;
 
     (*wolfsentry)->config_at_creation = (*wolfsentry)->config;

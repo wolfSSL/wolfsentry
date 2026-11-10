@@ -86,6 +86,7 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     wolfsentry_errcode_t ret;
     wolfsentry_action_res_t insert_action_results = WOLFSENTRY_ACTION_RES_NONE;
     wolfsentry_ent_id_t new_route_id = WOLFSENTRY_ENT_ID_NONE;
+    wolfsentry_time_t default_idle = 0;
 
     (void)action;
     (void)handler_arg;
@@ -155,25 +156,30 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     else
         ephemeral_config = &wolfsentry->config;
 
-    /* an ephemeral route with no purge time escapes both the idle purge and
-     * max_purgeable_routes, letting a remote peer grow the table without bound.
-     * skip the insert but return OK so the rest of the match chain still runs.
-     */
-    if (ephemeral_config->config.route_idle_time_for_purge <= 0)
-        WOLFSENTRY_RETURN_OK;
-
     target_exports.private_data = NULL;
     target_exports.private_data_size = 0;
 
     ret = wolfsentry_route_reset_metadata_exports(&target_exports);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
+    /* a zero idle time gives tracked peers the library default purge time, so
+     * they stay subject to the idle purge and max_purgeable_routes.
+     */
+    if (ephemeral_config->config.route_idle_time_for_purge == 0) {
+        /* like a failed insert below, a time failure skips tracking but lets the rest of the chain run. */
+        if (wolfsentry_route_effective_idle_time(wolfsentry, ephemeral_config, &default_idle) < 0) {
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
+            WOLFSENTRY_RETURN_OK;
+        }
+    }
+
     /* can't pass action_results directly to _route_insert -- it would get zeroed. */
-    ret = wolfsentry_route_insert_by_exports_into_table(
+    ret = wolfsentry_route_insert_by_exports_with_default_idle(
         WOLFSENTRY_CONTEXT_ARGS_OUT,
         route_table,
         NULL /* void *caller_arg*/,
         &target_exports,
+        default_idle,
         &new_route_id,
         &insert_action_results);
     WOLFSENTRY_WARN_ON_FAILURE(ret);

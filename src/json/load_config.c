@@ -601,8 +601,13 @@ static wolfsentry_errcode_t handle_eventconfig_clause(struct wolfsentry_json_pro
         WOLFSENTRY_ERROR_RERETURN(convert_uint32(type, data, data_size, &eventconfig->max_connection_count));
     if (! strcmp(jps->cur_keyname, "penalty-box-duration"))
         WOLFSENTRY_ERROR_RERETURN(convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->penaltybox_duration));
-    if (! strcmp(jps->cur_keyname, "route-idle-time-for-purge"))
+    if (! strcmp(jps->cur_keyname, "route-idle-time-for-purge")) {
+        if ((type == JSON_STRING) && streq(data, "never", data_size)) {
+            eventconfig->route_idle_time_for_purge = WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED;
+            WOLFSENTRY_RETURN_OK;
+        }
         WOLFSENTRY_ERROR_RERETURN(convert_wolfsentry_duration(jps->wolfsentry, type, data, data_size, &eventconfig->route_idle_time_for_purge));
+    }
     if (! strcmp(jps->cur_keyname, "derog-thresh-for-penalty-boxing"))
         WOLFSENTRY_ERROR_RERETURN(convert_uint32(type, data, data_size, &eventconfig->derogatory_threshold_for_penaltybox));
     if (! strcmp(jps->cur_keyname, "derog-thresh-ignore-commendable"))

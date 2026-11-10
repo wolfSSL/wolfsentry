@@ -2,6 +2,14 @@
 
 <br>
 
+# Unreleased
+
+## Behavior Changes
+
+A zero `route_idle_time_for_purge` (JSON `route-idle-time-for-purge`) now gives routes inserted by `track-peer-v1` the library default purge time, `WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS` (300 seconds, build-overridable), so tracked peers stay subject to the idle purge and `max-purgeable-routes`.  Applications that relied on zero meaning permanent tracking routes must set `WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED`, or `"never"` in JSON.  Other negative values are rejected.  Routes inserted without a purge time are unaffected.
+
+<br>
+
 # wolfSentry Release 1.6.3 (January 22, 2025)
 
 Release 1.6.3 of the wolfSentry embedded firewall/IDPS has enhancements,

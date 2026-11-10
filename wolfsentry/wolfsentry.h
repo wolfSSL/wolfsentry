@@ -1214,6 +1214,13 @@ typedef enum {
         /*!< \brief Internal use -- Inhibits dispatch of actions listed in this event. @hideinitializer */
 } wolfsentry_eventconfig_flags_t;
 
+#define WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED ((wolfsentry_time_t)-1)
+    /*!< \brief Value for `wolfsentry_eventconfig.route_idle_time_for_purge` that disables automatic purge, including for routes inserted by `track-peer-v1`. @hideinitializer */
+#ifndef WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS
+#define WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS 300
+    /*!< \brief Idle time used when `wolfsentry_eventconfig.route_idle_time_for_purge` is zero, for routes that carry a purge time.  Must be positive and representable as a `time_t`; other values fail to compile. @hideinitializer */
+#endif
+
 /*! \brief struct for representing event configuration */
 struct wolfsentry_eventconfig {
     size_t route_private_data_size;
@@ -1227,7 +1234,7 @@ struct wolfsentry_eventconfig {
     wolfsentry_time_t penaltybox_duration;
         /*!< \brief The duration that a route stays in penalty box status before automatic release.  Zero means time-unbounded. */
     wolfsentry_time_t route_idle_time_for_purge;
-        /*!< \brief The time after the most recent dispatch match for a route to be garbage-collected.  Zero means no automatic purge. */
+        /*!< \brief The time after the most recent dispatch match for a route to be garbage-collected.  Zero gives routes inserted with this config no purge time, except that `track-peer-v1` routes and routes with an explicit purge time use `WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS`.  `WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED` means the config gives no route a purge time and dispatch never refreshes one; a route with an explicit purge time still expires at it. */
     wolfsentry_eventconfig_flags_t flags;
         /*!< \brief Config flags */
     wolfsentry_route_flags_t route_flags_to_add_on_insert;

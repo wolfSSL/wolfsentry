@@ -11524,7 +11524,7 @@ static int test_kv_render_large_int(void) {
      * test stays legal under WOLFSENTRY_C89; compared against the exact decimal
      * rendering to avoid strtoull()/strtoll().
      */
-    uint64_t stored_uint = ((uint64_t)0x12345678u << 32) | (uint64_t)0x90abcdefu;
+    uint64_t stored_uint = ((uint64_t)0x12345678U << 32) | (uint64_t)0x90abcdefU;
     int64_t stored_sint = -((int64_t)1 << 33);
 
     WOLFSENTRY_THREAD_HEADER_CHECKED(WOLFSENTRY_THREAD_FLAG_NONE);

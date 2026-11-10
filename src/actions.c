@@ -676,6 +676,9 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_action_list_dispatch(
     }
 
     WOLFSENTRY_ATOMIC_DECREMENT(wolfsentry->action_dispatch_depth, 1);
+    /* this can free the event only when thread == NULL (mutex held, recursive),
+     * which is why action_list_delete_all()'s MUTEX_OR_RETURN is safe here.
+     */
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_event_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, action_event, NULL /* action_results */));
 
     WOLFSENTRY_RETURN_OK;

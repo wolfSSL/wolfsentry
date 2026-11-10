@@ -8,11 +8,25 @@
 
 A zero `route_idle_time_for_purge` (JSON `route-idle-time-for-purge`) now gives routes inserted by `track-peer-v1` the library default purge time, `WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS` (300 seconds, build-overridable), so tracked peers stay subject to the idle purge and `max-purgeable-routes`.  Applications that relied on zero meaning permanent tracking routes must set `WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED`, or `"never"` in JSON.  Other negative values are rejected.  Routes inserted without a purge time are unaffected.
 
-A failed JSON load that flushed the running configuration now flushes the main route table and sets its default policy to `REJECT`, rather than leaving a partially loaded configuration in force.  Pass `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN` to keep the old behavior for one load, or build with `WOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT` to keep it for all loads.  `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` extends fail-closed to `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` loads.
+A custom `WOLFSENTRY_TIME_TYPE` must now be signed, and an unsigned one fails to compile.  A `WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS` override must be positive.  Negative durations and `WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED` cannot be told apart from large intervals in an unsigned type.
+
+A failed JSON load that flushed the running configuration now clears the default event, flushes the context (routes, events, and user values), and sets the default policy to `REJECT`, rather than leaving a partially loaded configuration in force.  Pass `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN` to keep the old behavior for one load, or build with `WOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT` to keep it for all loads.  `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` extends fail-closed to `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` loads.
 
 `wolfsentry_kv_render_value()` renders floats with `%.17g` so they reload exactly, appends `.0` to integral values so they reload as floats rather than integers, and fails with `INVALID_ARG` for NaN and infinities, which have no JSON encoding that reloads as a float.
 
 The lwIP and wolfIP packet filter glue now deny packets when no wolfSentry context is attached.  Build with `WOLFSENTRY_PACKET_FILTER_FAIL_OPEN` to pass them instead.  The wolfIP install functions now fail with `INVALID_ARG` for mask bits the glue cannot map, rather than passing (previously) or denying every such event at runtime.  An unmapped event that still arrives, from wolfIP version skew, gets the same build-selected verdict and is logged once per value.
+
+## Bug Fixes
+
+Stale route purge now applies `max-purgeable-idle-time` as documented: an expired route with open connections is kept until its idle time exceeds the limit, then purged.  Previously connected routes were purged inside the limit and kept past it, and one connected route at the stale end stopped purging for the whole table.  The opportunistic purge refreshes a connected route's purge time from its own idle time rather than stopping at it.
+
+Insert and delete actions suppressed by `WOLFSENTRY_EVENTCONFIG_FLAG_INHIBIT_ACTIONS` (as during a `LOAD_THEN_COMMIT|NO_FLUSH` JSON load) are no longer marked as called, so `wolfsentry_route_bulk_insert_actions()` now runs them.
+
+`json_value_path()` now implements the `key[n]`, negative index, and trailing garbage rules its documentation has always given.  A dictionary key that contains `[` can no longer be addressed by path.
+
+## Self-Test Enhancements
+
+The FreeRTOS arm32 image and section size limits in `Makefile.analyzers` are now `?=` variables, sized from measured builds, so CI can set limits for its toolchain.
 
 <br>
 

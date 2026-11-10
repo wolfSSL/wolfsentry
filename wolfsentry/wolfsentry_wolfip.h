@@ -57,6 +57,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_udp_callbac
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t udp_mask);
 
+/*! \brief Install the wolfIP filter callbacks for all layers.  Each mask may contain only the `WOLFIP_FILT_MASK()` reasons the glue maps for that layer; any other bit fails with `INVALID_ARG` and leaves the installed masks unchanged.  The same check applies to the per-layer install functions. */
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_install_wolfip_filter_callbacks(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     uint32_t ethernet_mask,

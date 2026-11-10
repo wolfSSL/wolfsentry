@@ -246,6 +246,17 @@ static void install_filter_masks(void)
     wolfsentry_errcode_t ret;
     uint32_t mask = WOLFIP_FILT_MASK(WOLFIP_FILT_RECEIVING);
 
+    /* reasons the glue cannot map must be refused at install, not per packet. */
+    ret = wolfsentry_install_wolfip_filter_ethernet_callback(
+        WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(sentry, NULL),
+        ~0U);
+    if (! WOLFSENTRY_ERROR_CODE_IS(ret, INVALID_ARG)) {
+        fprintf(stderr, "over-broad ethernet mask was not rejected: "
+                WOLFSENTRY_ERROR_FMT "\n", WOLFSENTRY_ERROR_FMT_ARGS(ret));
+        exit(EXIT_FAILURE);
+    }
+    printf("Rejected over-broad filter mask.\n");
+
     ret = wolfsentry_install_wolfip_filter_ethernet_callback(
         WOLFSENTRY_CONTEXT_ARGS_OUT_EX4(sentry, NULL),
         mask);

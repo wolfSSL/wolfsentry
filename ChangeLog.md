@@ -12,6 +12,8 @@ A failed JSON load that flushed the running configuration now flushes the main r
 
 `wolfsentry_kv_render_value()` renders floats with `%.17g` so they reload exactly, appends `.0` to integral values so they reload as floats rather than integers, and fails with `INVALID_ARG` for NaN and infinities, which have no JSON encoding that reloads as a float.
 
+The lwIP and wolfIP packet filter glue now deny packets when no wolfSentry context is attached.  Build with `WOLFSENTRY_PACKET_FILTER_FAIL_OPEN` to pass them instead.  The wolfIP install functions now fail with `INVALID_ARG` for mask bits the glue cannot map, rather than passing (previously) or denying every such event at runtime.  An unmapped event that still arrives, from wolfIP version skew, gets the same build-selected verdict and is logged once per value.
+
 <br>
 
 # wolfSentry Release 1.6.3 (January 22, 2025)

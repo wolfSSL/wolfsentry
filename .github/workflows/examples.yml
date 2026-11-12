@@ -36,7 +36,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build and start the lwIP network
-      run: docker compose up --build --detach
+      run: |
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker compose up --build --detach
     - name: Exercise allowed and rejected traffic
       run: |
         for attempt in $(seq 1 30); do
@@ -94,7 +96,8 @@ jobs:
         path: wolfip
     - name: Build the wolfSentry CI image
       run: |
-        docker build \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker build \
           --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
           --tag wolfsentry-ci:local wolfsentry
     - name: Build and run the wolfIP example
@@ -126,9 +129,25 @@ jobs:
             if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
               exit "$status"
             fi
+            grep -F "Rejected over-broad filter mask." wolfip-example.log
             grep -F "wolfIP ready on wolfip0" wolfip-example.log
             grep -F "drop-icmp-mod7" wolfip-example.log
             grep -F "Exiting." wolfip-example.log
+            make glue-test \
+              WOLFSENTRY_PATH=/tmp/wolfsentry-build \
+              WOLFIP_PATH=/tmp/wolfip
+            make clean
+            make -C /tmp/wolfsentry-build clean
+            make -j2 all glue-test \
+              WOLFSENTRY_PATH=/tmp/wolfsentry-build \
+              WOLFIP_PATH=/tmp/wolfip \
+              WOLFSENTRY_CFLAGS="-std=c89 -pedantic -DWOLFSENTRY_C89 -Wno-variadic-macros -Wno-overlength-strings -DWOLFSENTRY_PACKET_FILTER_FAIL_OPEN"
+            make clean
+            make -C /tmp/wolfsentry-build clean
+            make glue-test \
+              WOLFSENTRY_PATH=/tmp/wolfsentry-build \
+              WOLFIP_PATH=/tmp/wolfip \
+              WOLFSENTRY_CFLAGS=
           '
 
   notification-demo:
@@ -146,7 +165,8 @@ jobs:
         path: wolfssl
     - name: Build the wolfSentry CI image
       run: |
-        docker build \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker build \
           --file wolfsentry/.github/docker/wolfsentry-ci/Dockerfile \
           --tag wolfsentry-ci:local wolfsentry
     - name: Build and exercise the notification demo
@@ -195,7 +215,8 @@ jobs:
         path: lwip
     - name: Check out lwIP contrib
       run: |
-        git clone --branch STABLE-2_1_0_RELEASE --depth 1 \
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry git clone --branch STABLE-2_1_0_RELEASE --depth 1 \
           https://git.savannah.nongnu.org/git/lwip/lwip-contrib.git \
           lwip/contrib
         test "$(git -C lwip/contrib rev-parse HEAD)" = \

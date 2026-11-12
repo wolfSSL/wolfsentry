@@ -40,7 +40,8 @@ int ping_init(void)
   struct raw_pcb *ping_pcb;
   /* Create a new listener instance for ICMP messages */
   ping_pcb = raw_new(IP_PROTO_ICMP);
-  LWIP_ASSERT("ping_pcb != NULL", ping_pcb != NULL);
+  if (ping_pcb == NULL)
+    return -1;
 
   /* Callback to ping_recv in ICMP message received */
   raw_recv(ping_pcb, ping_recv, NULL);

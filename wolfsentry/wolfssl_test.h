@@ -373,7 +373,7 @@ static int wolfsentry_setup(
                   WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD        |
                   WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD  |
                   WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD,
-                  0 /* event_label_len */, 0 /* event_label */, &id,
+                  NULL /* event_label */, 0 /* event_label_len */, &id,
                   &action_results)) < 0) {
                 fprintf(stderr, "wolfsentry_route_insert() returned "
                         WOLFSENTRY_ERROR_FMT "\n",
@@ -432,7 +432,7 @@ static int wolfsentry_setup(
                   WOLFSENTRY_ROUTE_FLAG_SA_PROTO_WILDCARD        |
                   WOLFSENTRY_ROUTE_FLAG_SA_REMOTE_PORT_WILDCARD  |
                   WOLFSENTRY_ROUTE_FLAG_SA_LOCAL_PORT_WILDCARD,
-                  0 /* event_label_len */, 0 /* event_label */, &id,
+                  NULL /* event_label */, 0 /* event_label_len */, &id,
                   &action_results)) < 0) {
                 fprintf(stderr, "wolfsentry_route_insert() returned "
                         WOLFSENTRY_ERROR_FMT "\n",

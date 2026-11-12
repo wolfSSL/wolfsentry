@@ -38,8 +38,9 @@ static const struct wolfsentry_eventconfig demo_config = {
                                                     * denominated in seconds when passing to
                                                     * wolfsentry_init().
                                                     */
-        .route_idle_time_for_purge = 0,            /* 0 to disable -- autopurge doesn't usually make
-                                                    * much sense as a default config.
+        .route_idle_time_for_purge = WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED,
+                                                   /* never purge.  0 gives peers tracked by
+                                                    * track-peer-v1 a 5 minute default purge time.
                                                     */
         .flags = WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY, /* automatically clear
                                                     * derogatory count for a route when a commendable
@@ -57,7 +58,7 @@ static const struct wolfsentry_eventconfig demo_config = {
         10,
         4,
         300,
-        0,
+        WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED,
         WOLFSENTRY_EVENTCONFIG_FLAG_COMMENDABLE_CLEARS_DEROGATORY,
         0,
         0,

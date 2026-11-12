@@ -1,0 +1,88 @@
+name: make check-all
+
+run-name: ${{ inputs.nightly_run_id || github.workflow }}
+
+on:
+  push:
+    branches: [ 'master', 'release/**' ]
+  pull_request:
+    branches: [ '**' ]
+  workflow_dispatch:
+    inputs:
+      nightly_run_id:
+        description: Nightly coordinator run ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -e {0}
+
+jobs:
+  check-all:
+    name: make check-all
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      # built from .github/docker/wolfsentry-check-all by publish-ci-image.yml
+      CHECK_ALL_IMAGE: ghcr.io/wolfssl/wolfsentry-check-all@sha256:99be2efa32df4ea09a87706286b914e949e4b636787759dd4ae806f4b1aaae84
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        path: wolfsentry
+        fetch-depth: 0
+    - uses: actions/checkout@v4
+      with:
+        repository: FreeRTOS/FreeRTOS-Kernel
+        ref: dbf70559b27d39c1fdb68dfb9a32140b6a6777a0
+        path: third/FreeRTOS/FreeRTOS/Source
+    - uses: actions/checkout@v4
+      with:
+        repository: lwip-tcpip/lwip
+        ref: 3fe8d2fc43a9b69f7ed28c63d44a7744f9c0def9
+        path: third/lwip
+    - uses: actions/checkout@v4
+      with:
+        repository: json-schema-org/JSON-Schema-Test-Suite
+        ref: 245a45abc90190c0bff04d97e6d2b541b4bb9f12
+        path: JSON-Schema-Test-Suite
+    - uses: actions/checkout@v4
+      with:
+        repository: wolfSSL/wolfssl
+        ref: master
+        path: wolfssl
+    - name: Apply the lwIP packet filter patch
+      run: patch --directory third/lwip --strip 1 < wolfsentry/lwip/LWIP_PACKET_FILTER_API.patch
+    - name: Lower mmap randomization for ThreadSanitizer
+      run: sudo sysctl -w vm.mmap_rnd_bits=28
+    - name: Pull the check-all image
+      run: |
+        retry() { for attempt in 1 2 3; do "$@" && return 0; [ "$attempt" -lt 3 ] && sleep $((attempt * 15)); done; return 1; }
+        retry docker pull "$CHECK_ALL_IMAGE"
+    # make pre-push-check runs scripts/pre-push.sh, which runs make check-all on this commit.
+    # the distro's gcc 14 arm-none-eabi builds ~9% larger FreeRTOS images than the Makefile limits assume.
+    # the JSON corpus is on tmpfs because qemu-user cannot pass ext4's 64-bit dir cookies to armeb tests.
+    - name: make pre-push-check
+      run: |
+        docker run --rm \
+          --volume "$GITHUB_WORKSPACE:/workspace" \
+          --workdir /workspace/wolfsentry \
+          --mount type=tmpfs,destination=/workspace/wolfsentry/tests/JSON-Schema-Test-Suite \
+          --env TMPDIR=/tmp \
+          --env CLANG_PATH=/usr/bin \
+          --env NOTIFICATION_SANDBOX= \
+          --env ANALYZER_CONFIG=analyzer-config.ci.sh \
+          --env FREERTOS_ARM32_MAX_IMAGE_SIZE=263000 \
+          --env FREERTOS_ARM32_MAX_SECTIONS_SIZE=141000 \
+          --env FREERTOS_ARM32_THUMB_MAX_SECTIONS_SIZE=141000 \
+          "$CHECK_ALL_IMAGE" \
+          bash -ec 'cp -a /workspace/JSON-Schema-Test-Suite/. tests/JSON-Schema-Test-Suite/; git config --global --add safe.directory "*"; make pre-push-check'

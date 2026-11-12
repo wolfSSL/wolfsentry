@@ -24,6 +24,41 @@
 
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_ACTION_BUILTINS_C
 
+/* the public insert wrappers zero action_results before the route table sees
+ * them, so the CONNECT that spawns a tracking route is counted here instead,
+ * on exactly the route that was just inserted.  caller must hold the lock.
+ */
+static wolfsentry_errcode_t wolfsentry_builtin_track_peer_count_connect(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    wolfsentry_ent_id_t route_id,
+    const struct wolfsentry_eventconfig_internal *config)
+{
+    wolfsentry_errcode_t ret;
+    struct wolfsentry_route *route = NULL;
+    uint16_t new_count;
+
+    ret = wolfsentry_table_ent_get_by_id(WOLFSENTRY_CONTEXT_ARGS_OUT, route_id, (struct wolfsentry_table_ent_header **)&route);
+    WOLFSENTRY_RERETURN_IF_ERROR(ret);
+    if (route->header.parent_table == NULL)
+        WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+    if (route->header.parent_table->ent_type != WOLFSENTRY_OBJECT_TYPE_ROUTE)
+        WOLFSENTRY_ERROR_RETURN(WRONG_OBJECT);
+
+    if (WOLFSENTRY_CHECK_BITS(WOLFSENTRY_ATOMIC_LOAD(route->flags), WOLFSENTRY_ROUTE_FLAG_DONT_COUNT_CURRENT_CONNECTIONS))
+        WOLFSENTRY_RETURN_OK;
+
+    /* dispatch counts every connection and enforces the limit only when it is nonzero, so match it. */
+    if ((config->config.max_connection_count > 0) &&
+        (WOLFSENTRY_ATOMIC_LOAD(route->meta.connection_count) >= config->config.max_connection_count))
+        WOLFSENTRY_ERROR_RETURN(INCOMPATIBLE_STATE);
+
+    WOLFSENTRY_ATOMIC_INCREMENT_UNSIGNED_SAFELY_BY_ONE(route->meta.connection_count, new_count);
+    if (new_count == 0)
+        WOLFSENTRY_ERROR_RETURN(OVERFLOW_AVERTED);
+
+    WOLFSENTRY_RETURN_OK;
+}
+
 /* this simple action creates a new tracking rule, either as a fallthrough or as
  * a side effect.  it can be used to open a pinhole route for bidirectional
  * traffic, or to track derogatory events on a locally bound port (e.g. crypto
@@ -44,10 +79,14 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
 {
     wolfsentry_route_flags_t rule_flags;
     const struct wolfsentry_event *rule_parent_event = NULL, *rule_aux_event = NULL;
+    const struct wolfsentry_event *ephemeral_parent_event = NULL;
+    const struct wolfsentry_eventconfig_internal *ephemeral_config;
     wolfsentry_addr_bits_t rule_local_addr_len, rule_remote_addr_len;
     struct wolfsentry_route_exports target_exports;
     wolfsentry_errcode_t ret;
-    wolfsentry_action_res_t insert_action_results;
+    wolfsentry_action_res_t insert_action_results = WOLFSENTRY_ACTION_RES_NONE;
+    wolfsentry_ent_id_t new_route_id = WOLFSENTRY_ENT_ID_NONE;
+    wolfsentry_time_t default_idle = 0;
 
     (void)action;
     (void)handler_arg;
@@ -99,16 +138,23 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     rule_parent_event = wolfsentry_route_parent_event(rule_route);
     if (rule_parent_event)
         rule_aux_event = wolfsentry_event_get_aux_event(rule_parent_event);
-    if (rule_aux_event) {
-        target_exports.parent_event_label = wolfsentry_event_get_label(rule_aux_event);
-        target_exports.parent_event_label_len = WOLFSENTRY_LENGTH_NULL_TERMINATED;
-    } else if (rule_parent_event) {
-        target_exports.parent_event_label = wolfsentry_event_get_label(rule_parent_event);
+    if (rule_aux_event)
+        ephemeral_parent_event = rule_aux_event;
+    else
+        ephemeral_parent_event = rule_parent_event;
+
+    if (ephemeral_parent_event != NULL) {
+        target_exports.parent_event_label = wolfsentry_event_get_label(ephemeral_parent_event);
         target_exports.parent_event_label_len = WOLFSENTRY_LENGTH_NULL_TERMINATED;
     } else {
         target_exports.parent_event_label = NULL;
         target_exports.parent_event_label_len = 0;
     }
+
+    if ((ephemeral_parent_event != NULL) && (ephemeral_parent_event->config != NULL))
+        ephemeral_config = ephemeral_parent_event->config;
+    else
+        ephemeral_config = &wolfsentry->config;
 
     target_exports.private_data = NULL;
     target_exports.private_data_size = 0;
@@ -116,15 +162,36 @@ static wolfsentry_errcode_t wolfsentry_builtin_action_track_peer(
     ret = wolfsentry_route_reset_metadata_exports(&target_exports);
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
 
+    /* a zero idle time gives tracked peers the library default purge time, so
+     * they stay subject to the idle purge and max_purgeable_routes.
+     */
+    if (ephemeral_config->config.route_idle_time_for_purge == 0) {
+        /* like a failed insert below, a time failure skips tracking but lets the rest of the chain run. */
+        if (wolfsentry_route_effective_idle_time(wolfsentry, ephemeral_config, &default_idle) < 0) {
+            *action_results |= WOLFSENTRY_ACTION_RES_ERROR;
+            WOLFSENTRY_RETURN_OK;
+        }
+    }
+
     /* can't pass action_results directly to _route_insert -- it would get zeroed. */
-    WOLFSENTRY_WARN_ON_FAILURE(
-        wolfsentry_route_insert_by_exports_into_table(
-            WOLFSENTRY_CONTEXT_ARGS_OUT,
-            route_table,
-            NULL /* void *caller_arg*/,
-            &target_exports,
-            NULL /* id */,
-            &insert_action_results));
+    ret = wolfsentry_route_insert_by_exports_with_default_idle(
+        WOLFSENTRY_CONTEXT_ARGS_OUT,
+        route_table,
+        NULL /* void *caller_arg*/,
+        &target_exports,
+        default_idle,
+        &new_route_id,
+        &insert_action_results);
+    WOLFSENTRY_WARN_ON_FAILURE(ret);
+    /* no route survives a failed insert, so drop INSERTED (it would suppress generator
+     * accounting); other bits are the chain's decisions and are NONE on early failure. */
+    if (ret < 0) {
+        WOLFSENTRY_CLEAR_BITS(insert_action_results, WOLFSENTRY_ACTION_RES_INSERTED);
+    } else if (WOLFSENTRY_CHECK_BITS(insert_action_results, WOLFSENTRY_ACTION_RES_INSERTED) &&
+               WOLFSENTRY_CHECK_BITS(*action_results, WOLFSENTRY_ACTION_RES_CONNECT))
+    {
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_builtin_track_peer_count_connect(WOLFSENTRY_CONTEXT_ARGS_OUT, new_route_id, ephemeral_config));
+    }
     *action_results |= insert_action_results; /* copying over the bits is crucial to inhibit double-accounting for
                                                * connection_count, derogatory_count, and commendable_count.
                                                */

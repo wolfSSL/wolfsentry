@@ -340,6 +340,7 @@ struct wolfsentry_event {
                                          * policy for the ephemeral route.
                                          */
 
+    wolfsentry_refcount_t aux_owner_count; /* events whose aux_event is this one */
 
     byte label_len;
     char label[WOLFSENTRY_FLEXIBLE_ARRAY_SIZE];
@@ -367,6 +368,10 @@ struct wolfsentry_route {
         wolfsentry_time_t last_hit_time;
         wolfsentry_time_t last_penaltybox_time;
         wolfsentry_time_t purge_after;
+#ifndef WOLFSENTRY_PURGE_SCAN_LIMIT
+#define WOLFSENTRY_PURGE_SCAN_LIMIT 8
+#endif
+
 #ifndef WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS
 #define WOLFSENTRY_ROUTE_PURGE_MARGIN_SECONDS 60
 #endif
@@ -422,6 +427,7 @@ struct wolfsentry_route_table {
         wolfsentry_addr_family_t af;
     } bitmask_matching_afs[WOLFSENTRY_MAX_BITMASK_MATCHED_AFS];
 #endif
+    byte default_policy_configured; /* set by any default_policy_set(), including an explicit NONE. */
 };
 
 struct wolfsentry_kv_pair_internal {
@@ -494,6 +500,7 @@ struct wolfsentry_context {
 #endif
     struct wolfsentry_table_header ents_by_id;
     struct wolfsentry_list_header cleanup_hooks;
+    int action_dispatch_depth; /* nonzero while an action dispatch loop is active, so list mutators refuse to free a live entry */
 };
 
 #ifdef WOLFSENTRY_THREADSAFE
@@ -691,6 +698,21 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_clone(
     struct wolfsentry_context *dest_context,
     struct wolfsentry_table_ent_header **new_ent,
     wolfsentry_clone_flags_t flags);
+
+/* inserts with default_idle as the purge time, counted from the insert, when the route's config sets none. */
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_insert_by_exports_with_default_idle(
+    WOLFSENTRY_CONTEXT_ARGS_IN,
+    struct wolfsentry_route_table *route_table,
+    void *caller_arg,
+    const struct wolfsentry_route_exports *route_exports,
+    wolfsentry_time_t default_idle,
+    wolfsentry_ent_id_t *id,
+    wolfsentry_action_res_t *action_results);
+
+WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_route_effective_idle_time(
+    struct wolfsentry_context *wolfsentry,
+    const struct wolfsentry_eventconfig_internal *config,
+    wolfsentry_time_t *idle_time);
 
 WOLFSENTRY_LOCAL_VOID wolfsentry_route_purge_list_insert(
     struct wolfsentry_route_table *route_table,

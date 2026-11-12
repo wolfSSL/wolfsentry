@@ -26,6 +26,9 @@
 #include <wolfsentry/centijson_dom.h>
 #endif
 
+#include <float.h>
+#include <limits.h>
+
 #define WOLFSENTRY_SOURCE_ID WOLFSENTRY_SOURCE_ID_KV_C
 
 static inline int wolfsentry_kv_key_cmp_1(const char *left_label, const unsigned int left_label_len, const char *right_label, const unsigned int right_label_len) {
@@ -60,7 +63,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_new(
     struct wolfsentry_kv_pair_internal **kv)
 {
     size_t kv_size;
-    if (key_len == 0)
+    if (key == NULL)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (data_len < 0)
         WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
@@ -68,6 +71,8 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_new(
         WOLFSENTRY_ERROR_RETURN(NUMERIC_ARG_TOO_BIG);
     if (key_len < 0)
         key_len = (int)strlen(key);
+    if (key_len <= 0)
+        WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
     if (key_len > WOLFSENTRY_MAX_LABEL_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     kv_size = sizeof **kv + (size_t)key_len + 1 + (size_t)data_len;
@@ -170,9 +175,14 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_insert(
     struct wolfsentry_kv_pair_internal *kv)
 {
     wolfsentry_errcode_t ret;
+    wolfsentry_kv_validator_t validator = WOLFSENTRY_ATOMIC_LOAD(kv_table->validator);
 
-    if (kv_table->validator) {
-        ret = kv_table->validator(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->kv);
+    /* read the validator pointer atomically (paired with the atomic store in
+     * the setter) but call it without the context lock held, to avoid a
+     * lock-order inversion with locks the application callback may take.
+     */
+    if (validator) {
+        ret = validator(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->kv);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
@@ -224,9 +234,14 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set(
 {
     struct wolfsentry_kv_pair_internal *old;
     wolfsentry_errcode_t ret;
+    wolfsentry_kv_validator_t validator = WOLFSENTRY_ATOMIC_LOAD(kv_table->validator);
 
-    if (kv_table->validator) {
-        ret = kv_table->validator(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->kv);
+    /* read the validator pointer atomically (paired with the atomic store in
+     * the setter) but call it without the context lock held, to avoid a
+     * lock-order inversion with locks the application callback may take.
+     */
+    if (validator) {
+        ret = validator(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->kv);
         WOLFSENTRY_RERETURN_IF_ERROR(ret);
     }
 
@@ -242,11 +257,23 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set(
             WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
             WOLFSENTRY_UNLOCK_AND_RETURN_OK;
         }
-        if (((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0) ||
-            ((ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL)) < 0))
-        {
+        /* reserve the replacement ID first, so an ID allocation failure leaves the old entry in place. */
+        if ((ret = wolfsentry_id_allocate(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header)) < 0)
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+        if ((ret = wolfsentry_table_ent_delete_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &old->header)) < 0) {
+            WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header));
             WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
         }
+        if ((ret = wolfsentry_table_ent_insert(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header, &kv_table->header, 1 /* unique_p */)) < 0) {
+            /* the old ID was released by the delete, so restoring needs a fresh one; drop the old entry if that fails. */
+            if (kv->header.id != WOLFSENTRY_ENT_ID_NONE)
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_table_ent_delete_by_id_1(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv->header));
+            if (wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, old) < 0)
+                WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL));
+            WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+        }
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, old, NULL));
+        WOLFSENTRY_UNLOCK_AND_RETURN_OK;
     }
 
     ret = wolfsentry_kv_insert_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv);
@@ -257,6 +284,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_1(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     struct wolfsentry_kv_table *kv_table,
     const struct wolfsentry_kv_pair_internal *kv_template,
+    int take_reference,
     struct wolfsentry_kv_pair_internal **kv)
 {
     wolfsentry_errcode_t ret;
@@ -272,6 +300,13 @@ static wolfsentry_errcode_t wolfsentry_kv_get_1(
     else if ((WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_NONE) &&
         (WOLFSENTRY_KV_TYPE(&kv_template->kv) != WOLFSENTRY_KV_TYPE(&ret_kv->kv)))
         WOLFSENTRY_ERROR_UNLOCK_AND_RETURN(WRONG_TYPE);
+    /* take the reference while the shared lock is still held, so a concurrent
+     * delete cannot free the entry between lookup and increment.
+     */
+    if (take_reference) {
+        WOLFSENTRY_REFCOUNT_INCREMENT(ret_kv->header.refcount, ret);
+        WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
+    }
     *kv = ret_kv;
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
@@ -289,7 +324,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_2(
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     kv_template->kv.v_type = type;
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 1 /* take_reference */, kv);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_ERROR_RERETURN(ret);
 }
@@ -300,11 +335,7 @@ static wolfsentry_errcode_t wolfsentry_kv_get_reference_1(
     const struct wolfsentry_kv_pair_internal *kv_template,
     struct wolfsentry_kv_pair_internal **kv)
 {
-    wolfsentry_errcode_t ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_REFCOUNT_INCREMENT((*kv)->header.refcount, ret);
-    WOLFSENTRY_RERETURN_IF_ERROR(ret);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 1 /* take_reference */, kv));
 }
 
 WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_reference(
@@ -318,7 +349,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_reference(
     struct wolfsentry_kv_pair_internal *kv_template;
     wolfsentry_errcode_t ret;
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
-        WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
+        WOLFSENTRY_ERROR_RERETURN(ret);
     kv_template->kv.v_type = type;
     ret = wolfsentry_kv_get_reference_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, kv);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
@@ -338,11 +369,11 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_get_type(
     struct wolfsentry_kv_pair_internal *kv = NULL;
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &kv);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 1 /* take_reference */, &kv);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_RERETURN_IF_ERROR(ret);
     *type = WOLFSENTRY_KV_TYPE(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_type_to_string(
@@ -402,6 +433,111 @@ static int _json_value_dump_writer(const unsigned char* str, size_t size, void *
 }
 #endif
 
+#ifndef WOLFSENTRY_HAVE_JSON_DOM
+
+#define WOLFSENTRY_KV_EMIT_CHAR(c) do { if (needed < out_space) out[needed] = (char)(c); ++needed; } while (0)
+
+/* escape a KV string into a JSON string literal, mirroring json_dump_string in
+ * the DOM path, and return the snprintf-style length (excluding the null).
+ */
+static int wolfsentry_kv_render_string_escaped(
+    const char *in,
+    size_t in_len,
+    char *out,
+    size_t out_space)
+{
+    static const char hexdigits[] = "0123456789abcdef";
+    size_t in_i;
+    size_t needed = 0;
+    unsigned char c;
+
+    WOLFSENTRY_KV_EMIT_CHAR('"');
+    for (in_i = 0; in_i < in_len; ++in_i) {
+        c = (unsigned char)in[in_i];
+        switch (c) {
+        case '"':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('"');
+            break;
+        case '\\':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            break;
+        case '\n':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('n');
+            break;
+        case '\r':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('r');
+            break;
+        case '\t':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('t');
+            break;
+        case '\b':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('b');
+            break;
+        case '\f':
+            WOLFSENTRY_KV_EMIT_CHAR('\\');
+            WOLFSENTRY_KV_EMIT_CHAR('f');
+            break;
+        default:
+            if (c < 0x20) {
+                WOLFSENTRY_KV_EMIT_CHAR('\\');
+                WOLFSENTRY_KV_EMIT_CHAR('u');
+                WOLFSENTRY_KV_EMIT_CHAR('0');
+                WOLFSENTRY_KV_EMIT_CHAR('0');
+                WOLFSENTRY_KV_EMIT_CHAR(hexdigits[(c >> 4) & 0xf]);
+                WOLFSENTRY_KV_EMIT_CHAR(hexdigits[c & 0xf]);
+            } else {
+                WOLFSENTRY_KV_EMIT_CHAR(c);
+            }
+            break;
+        }
+    }
+    WOLFSENTRY_KV_EMIT_CHAR('"');
+
+    if (out_space > 0) {
+        if (needed < out_space)
+            out[needed] = 0;
+        else
+            out[out_space - 1] = 0;
+    }
+
+    return (int)needed;
+}
+
+#undef WOLFSENTRY_KV_EMIT_CHAR
+
+#endif /* !WOLFSENTRY_HAVE_JSON_DOM */
+
+/* snprintf() semantics; C89 has no portable 64-bit conversion specifier. */
+static int wolfsentry_kv_render_uint64(uint64_t magnitude, int negative, char *out, size_t out_space)
+{
+    char digits[20];
+    size_t n_digits = 0;
+    size_t needed;
+    size_t pos = 0;
+
+    do {
+        digits[n_digits++] = (char)('0' + (int)(magnitude % 10U));
+        magnitude /= 10U;
+    } while (magnitude != 0);
+    needed = n_digits + (negative ? 1U : 0U);
+
+    if (out_space > 0) {
+        if (negative && (pos < out_space - 1))
+            out[pos++] = '-';
+        while ((n_digits > 0) && (pos < out_space - 1))
+            out[pos++] = digits[--n_digits];
+        out[pos] = 0;
+    }
+
+    return (int)needed;
+}
+
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
     WOLFSENTRY_CONTEXT_ARGS_IN,
     const struct wolfsentry_kv_pair *kv,
@@ -425,17 +561,40 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_kv_render_value(
         *out_len = snprintf(out, out_space, "false");
         break;
     case WOLFSENTRY_KV_UINT:
-        *out_len = snprintf(out, out_space, "%lu", (long unsigned int)WOLFSENTRY_KV_V_UINT(kv));
+        *out_len = wolfsentry_kv_render_uint64(WOLFSENTRY_KV_V_UINT(kv), 0, out, out_space);
         break;
-    case WOLFSENTRY_KV_SINT:
-        *out_len = snprintf(out, out_space, "%ld", (long int)WOLFSENTRY_KV_V_SINT(kv));
+    case WOLFSENTRY_KV_SINT: {
+        int64_t v_sint = WOLFSENTRY_KV_V_SINT(kv);
+        if (v_sint < 0)
+            *out_len = wolfsentry_kv_render_uint64((uint64_t)(-(v_sint + 1)) + 1U, 1, out, out_space);
+        else
+            *out_len = wolfsentry_kv_render_uint64((uint64_t)v_sint, 0, out, out_space);
         break;
-    case WOLFSENTRY_KV_FLOAT:
-        *out_len = snprintf(out, out_space, "%.10f", WOLFSENTRY_KV_V_FLOAT(kv));
+    }
+    case WOLFSENTRY_KV_FLOAT: {
+        double v_float = WOLFSENTRY_KV_V_FLOAT(kv);
+        char rendered[32];
+        int rendered_len;
+        int integral_form;
+        /* JSON has no encoding for NaN or infinities that reloads as a float.
+         * (DBL_MAX comparisons rather than C99 isfinite(), for C89.)
+         */
+        if ((! (v_float <= DBL_MAX)) || (! (v_float >= -DBL_MAX)))
+            WOLFSENTRY_ERROR_RETURN(INVALID_ARG);
+        /* render locally first, so the reported length never depends on out_space. */
+        rendered_len = snprintf(rendered, sizeof rendered, "%.17g", v_float);
+        if ((rendered_len < 0) || ((size_t)rendered_len >= sizeof rendered))
+            WOLFSENTRY_ERROR_RETURN(INTERNAL_CHECK_FATAL);
+        /* keep a decimal point, so an integral value reloads as a float, not an int. */
+        integral_form = (memchr(rendered, '.', (size_t)rendered_len) == NULL) &&
+            (memchr(rendered, 'e', (size_t)rendered_len) == NULL) &&
+            (memchr(rendered, 'E', (size_t)rendered_len) == NULL);
+        *out_len = snprintf(out, out_space, "%s%s", rendered, integral_form ? ".0" : "");
         break;
+    }
     case WOLFSENTRY_KV_STRING: {
 #ifndef WOLFSENTRY_HAVE_JSON_DOM
-        *out_len = snprintf(out, out_space, "\"%.*s\"", (int)WOLFSENTRY_KV_V_STRING_LEN(kv), WOLFSENTRY_KV_V_STRING(kv));
+        *out_len = wolfsentry_kv_render_string_escaped(WOLFSENTRY_KV_V_STRING(kv), WOLFSENTRY_KV_V_STRING_LEN(kv), out, out_space);
         break;
 #else
         struct dump_buf_state dbs;
@@ -545,7 +704,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_delete(
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, 0 /* data_len */, &kv_template)) < 0)
         WOLFSENTRY_ERROR_UNLOCK_AND_RERETURN(ret);
 
-    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, &old);
+    ret = wolfsentry_kv_get_1(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_table, kv_template, 0 /* take_reference */, &old);
     WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv_template, NULL));
     WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     if (old->kv.v_type & WOLFSENTRY_KV_FLAG_READONLY)
@@ -591,7 +750,7 @@ WOLFSENTRY_LOCAL wolfsentry_errcode_t wolfsentry_kv_set_validator(
         ret = wolfsentry_table_map(WOLFSENTRY_CONTEXT_ARGS_OUT, &kv_table->header, (wolfsentry_map_function_t)apply_validator, (void *)&context, action_results);
         WOLFSENTRY_UNLOCK_AND_RERETURN_IF_ERROR(ret);
     }
-    wolfsentry->user_values->validator = validator;
+    WOLFSENTRY_ATOMIC_STORE(kv_table->validator, validator);
     WOLFSENTRY_UNLOCK_AND_RETURN_OK;
 }
 
@@ -713,7 +872,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_set_mutability(
     struct wolfsentry_kv_pair_internal *kv = NULL;
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_NONE, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
-    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_set_mutability(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, kv, mutable));
+    ret = wolfsentry_kv_set_mutability(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, kv, mutable);
+    if (ret < 0)
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
+    else
+        ret = wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL);
+    WOLFSENTRY_ERROR_RERETURN(ret);
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_mutability(
@@ -727,7 +891,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_mutability(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_NONE, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *mutable = wolfsentry_kv_get_mutability(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_type(
@@ -805,10 +969,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_bool(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_NONE, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     if ((WOLFSENTRY_KV_TYPE(&kv->kv) != WOLFSENTRY_KV_TRUE) &&
-        (WOLFSENTRY_KV_TYPE(&kv->kv) != WOLFSENTRY_KV_FALSE))
+        (WOLFSENTRY_KV_TYPE(&kv->kv) != WOLFSENTRY_KV_FALSE)) {
+        WOLFSENTRY_WARN_ON_FAILURE(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
         WOLFSENTRY_ERROR_RETURN(WRONG_TYPE);
+    }
     *value = WOLFSENTRY_KV_TYPE(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_uint(
@@ -845,7 +1011,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_uint(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_UINT, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *value = WOLFSENTRY_KV_V_UINT(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_sint(
@@ -883,7 +1049,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_sint(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_SINT, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *value = WOLFSENTRY_KV_V_SINT(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_double(
@@ -921,7 +1087,7 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_get_float(
     if ((ret = wolfsentry_kv_get_2(WOLFSENTRY_CONTEXT_ARGS_OUT, wolfsentry->user_values, key, key_len, WOLFSENTRY_KV_FLOAT, &kv)) < 0)
         WOLFSENTRY_ERROR_RERETURN(ret);
     *value = WOLFSENTRY_KV_V_FLOAT(&kv->kv);
-    WOLFSENTRY_RETURN_OK;
+    WOLFSENTRY_ERROR_RERETURN(wolfsentry_kv_drop_reference(WOLFSENTRY_CONTEXT_ARGS_OUT, kv, NULL));
 }
 
 WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_string(
@@ -934,8 +1100,12 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_string(
 {
     wolfsentry_errcode_t ret;
     struct wolfsentry_kv_pair_internal *kv;
-    if (value_len < 0)
-        value_len = (int)strlen(value);
+    if (value_len < 0) {
+        size_t value_strlen = strlen(value);
+        if (value_strlen > (size_t)WOLFSENTRY_KV_MAX_VALUE_BYTES)
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        value_len = (int)value_strlen;
+    }
     if (value_len > WOLFSENTRY_KV_MAX_VALUE_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     if ((ret = wolfsentry_kv_new(WOLFSENTRY_CONTEXT_ARGS_OUT, key, key_len, value_len + 1, &kv)) < 0)
@@ -1008,8 +1178,14 @@ WOLFSENTRY_API wolfsentry_errcode_t wolfsentry_user_value_store_bytes_base64(
     wolfsentry_errcode_t ret;
     int decoded_len;
     struct wolfsentry_kv_pair_internal *kv;
-    if (value_len < 0)
-        value_len = (int)strlen(value);
+    /* the decoded size computation adds 3 to the length */
+    if (value_len < 0) {
+        size_t value_strlen = strlen(value);
+        if (value_strlen > (size_t)(INT_MAX - 3))
+            WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
+        value_len = (int)value_strlen;
+    } else if (value_len > INT_MAX - 3)
+        WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);
     decoded_len = WOLFSENTRY_BASE64_DECODED_BUFSPC(value, value_len);
     if (decoded_len > WOLFSENTRY_KV_MAX_VALUE_BYTES)
         WOLFSENTRY_ERROR_RETURN(STRING_ARG_TOO_LONG);

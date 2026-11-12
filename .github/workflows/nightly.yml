@@ -33,6 +33,7 @@ jobs:
           const POLL_TIMEOUT_MS = 120 * 60 * 1000;
           const dispatchToken = `nightly-${context.runId}-${context.runAttempt}`;
           const workflows = [
+            'check-all.yml',
             'codeql.yml',
             'coverage.yml',
             'examples.yml',

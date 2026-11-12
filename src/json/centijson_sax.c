@@ -54,6 +54,7 @@
 #ifdef CENTIJSON_USE_LOCALE
 #include <locale.h>     /* localeconv() */
 #endif
+#include <float.h>      /* DBL_MAX */
 #include <stdio.h>      /* snprintf() */
 #include <stdlib.h>
 #include <string.h>
@@ -404,8 +405,12 @@ json_literal_automaton(JSON_PARSER* parser, const unsigned char* input, size_t s
     if(off < size  &&  !IS_TOKEN_BOUNDARY(input[off])) {
         memcpy(&parser->pos, &parser->value_pos, sizeof(JSON_INPUT_POS));
         json_raise(parser, JSON_ERR_SYNTAX);
-    } else if(input == NULL  /* EOF */  ||
-       (off < size  &&  IS_TOKEN_BOUNDARY(input[off]))) {
+    } else if(input == NULL  /* EOF */) {
+        if(parser->substate < literal_size)
+            json_raise_for_value(parser, JSON_ERR_SYNTAX);
+        else
+            json_process(parser, type, NULL, 0);
+    } else if(off < size  &&  IS_TOKEN_BOUNDARY(input[off])) {
         json_process(parser, type, NULL, 0);
     }
     return off;
@@ -980,7 +985,10 @@ json_fini(JSON_PARSER* parser, JSON_INPUT_POS* p_pos)
             if(parser->automaton != AUTOMATON_MAIN) {
                 json_raise(parser, JSON_ERR_SYNTAX);
             }
-        } else if(parser->nesting_level != 0  ||  !(parser->state & CAN_SEE_EOF)) {
+        }
+
+        if(parser->errcode >= 0  &&
+           (parser->nesting_level != 0  ||  !(parser->state & CAN_SEE_EOF))) {
             json_raise_unexpected(parser);
         }
     }
@@ -1221,7 +1229,7 @@ json_number_to_double(const unsigned char* num, size_t num_size, double* p_resul
      * requirements.
      */
 
-    if(num_size + 1 < sizeof(local_buffer)) {
+    if(num_size < sizeof(local_buffer)) {
         /* The number is short enough so we can avoid heap allocation. */
         buffer = local_buffer;
     } else {
@@ -1315,11 +1323,7 @@ json_dump_uint64(uint64_t u64, JSON_DUMP_CALLBACK write_func, void* user_data)
 WOLFSENTRY_API int
 json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 {
-#if defined(FREERTOS) || (__STDC_VERSION__ < 199901L)
-    static const char fmt[] = "%.16f";
-#else
-    static const char fmt[] = "%.16lg";
-#endif
+    static const char fmt[] = "%.17g";
     static const size_t extra_bytes = 2;    /* Space reserved for ".0" */
 #ifdef CENTIJSON_USE_LOCALE
     struct lconv* locale_info;
@@ -1333,6 +1337,10 @@ json_dump_double(double dbl, JSON_DUMP_CALLBACK write_func, void* user_data)
 #endif
     char* fp;
     int ret;
+
+    /* JSON has no representation for infinity or NaN. */
+    if(dbl != dbl  ||  dbl > DBL_MAX  ||  dbl < -DBL_MAX)
+        return write_func((const unsigned char *)"null", 4, user_data);
 
     while(1) {
         n = snprintf(buffer, capacity, fmt, dbl);

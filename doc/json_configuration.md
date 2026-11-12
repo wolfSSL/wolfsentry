@@ -70,9 +70,9 @@ The `flags` argument to `wolfsentry_config_json_init()` and
 `wolfsentry_config_json_oneshot()`, constructed by bitwise-or, changes the way
 the JSON is processed, as follows:
 
-* `WOLFSENTRY_CONFIG_LOAD_FLAG_NONE` -- Not a flag, but all-zeros, signifying default behavior:  The wolfSentry core is locked, the current configuration is flushed, and the new configuration is loaded incrementally.  Any error during load leaves wolfSentry in an undefined state that can be recovered with a subsequent flush and load that succeeds.
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_NONE` -- Not a flag, but all-zeros, signifying default behavior:  The wolfSentry core is locked, the current configuration is flushed, and the new configuration is loaded incrementally.  The flush is `wolfsentry_context_flush()`, which removes routes, events, and user values (the application's KV store), unless `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES` is supplied.  The flush keeps the main route table's default event, so a new configuration that sets no `"default-event"` keeps the previous one.  An error during load fails closed by default (see `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED`), and wolfSentry can be recovered with a subsequent flush and load that succeeds.
 
-* `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` -- Inhibit initial flush of configuration, to allow incremental load.  Error during load leaves wolfSentry in an undefined state that can only be recovered with a subsequent flush and load that succeeds, unless `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` or `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT` was also supplied.
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` -- Inhibit initial flush of configuration, to allow incremental load.  Error during load leaves wolfSentry in an undefined state that can only be recovered with a subsequent flush and load that succeeds, unless `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` or `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT` was also supplied.  With `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED`, a failed load instead leaves a flushed context with a `REJECT` default policy.
 
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` -- Load into a temporary configuration, and deallocate before return.  Running configuration is unchanged.
 
@@ -81,6 +81,10 @@ the JSON is processed, as follows:
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_ROUTES_OR_EVENTS` -- Inhibit loading of `"routes"` and `"events"` sections in the supplied JSON.
 
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES` -- At beginning of load process, retain all current configuration except for routes, which are flushed.  This is convenient in combination with `wolfsentry_route_table_dump_json_*()` for save/restore of dynamically added routes.
+
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` -- If the load fails, clear the main route table's default event, flush the context as `wolfsentry_context_flush()` does (routes, events, and user values), and set the default policy to `REJECT`, so nothing from a partially loaded configuration can admit traffic.  This also removes whatever `WOLFSENTRY_CONFIG_LOAD_FLAG_FLUSH_ONLY_ROUTES` or `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH` would otherwise have kept.  This is the default for loads that flush, unless the library is built with `WOLFSENTRY_CONFIG_LOAD_FAIL_OPEN_BY_DEFAULT`.  With `WOLFSENTRY_CONFIG_LOAD_FLAG_NO_FLUSH`, it applies only when supplied explicitly.
+
+* `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_OPEN` -- If the load fails, leave the partially loaded configuration and the existing default policy in place.  Mutually exclusive with `WOLFSENTRY_CONFIG_LOAD_FLAG_FAIL_CLOSED` (supplying both is `INVALID_ARG`).  Both flags are ignored with `WOLFSENTRY_CONFIG_LOAD_FLAG_DRY_RUN` and `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT`.  Those loads leave the running configuration untouched when parsing fails, but a `WOLFSENTRY_CONFIG_LOAD_FLAG_LOAD_THEN_COMMIT` load commits before running insert actions, so an insert action that fails returns its error with the new configuration already in place.
 
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_ABORT` -- When processing user-defined JSON values, abort load on duplicate keys.
 * `WOLFSENTRY_CONFIG_LOAD_FLAG_JSON_DOM_DUPKEY_USEFIRST` -- When processing user-defined JSON values, for any given key in an object use the first occurrence encountered.
@@ -101,7 +105,7 @@ allowed values are as in the ABNF formal syntax later in this document.
     "config-update" : {
         "max-connection-count" : uint32,
         "penalty-box-duration" : duration,
-        "route-idle-time-for-purge" : duration,
+        "route-idle-time-for-purge" : purge_duration,
         "derog-thresh-for-penalty-boxing" : uint16,
         "derog-thresh-ignore-commendable" : boolean,
         "commendable-clears-derogatory" : boolean,
@@ -120,7 +124,7 @@ allowed values are as in the ABNF formal syntax later in this document.
          "config" : {
             "max-connection-count" : uint32,
             "penalty-box-duration" : duration,
-            "route-idle-time-for-purge" : duration,
+            "route-idle-time-for-purge" : purge_duration,
             "derog-thresh-for-penalty-boxing" : uint16,
             "derog-thresh-ignore-commendable" : boolean,
             "commendable-clears-derogatory" : boolean,
@@ -218,7 +222,10 @@ allowed values are as in the ABNF formal syntax later in this document.
 
 * <b>`max-purgeable-idle-time`</b> -- Global absolute maximum idle time for ephemeral routes, controlling purges of stale (expired) ephemeral routes with nonzero `wolfsentry_route_metadata_exports.connection_count`.  Default is no limit.  Not allowed in <b>`config`</b> clauses of events.
 
-* <b>`route-idle-time-for-purge`</b> -- If nonzero, the time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
+* <b>`route-idle-time-for-purge`</b> -- The time after the most recent dispatch match for a route to be garbage-collected.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).  Three forms are accepted:
+  * a positive duration -- routes inserted with this config are purged after that idle time.
+  * zero (the default) -- routes inserted with this config get no purge time, but routes created by `track-peer-v1` and routes given an explicit purge time use the library default, `WOLFSENTRY_DEFAULT_ROUTE_IDLE_TIME_FOR_PURGE_SECONDS` (300 seconds unless overridden at build time).
+  * `"never"` -- the config gives no route a purge time, including those created by `track-peer-v1`, and dispatch never refreshes one.  A route with an explicit purge time, imported or set with `wolfsentry_route_purge_time_set()`, still expires at that time.  This is `WOLFSENTRY_ROUTE_IDLE_TIME_FOR_PURGE_DISABLED` in C.  Negative durations are rejected.
 
 * <b>`route-flags-to-add-on-insert`</b> -- List of route flags to set on new routes upon insertion.  Useful primarily in <b>`config`</b> clauses of events (see <b>`events`</b> below).
 
@@ -239,7 +246,7 @@ Each event is composed of the following elements, all of which are optional exce
 
 * <b>`label`</b> -- The name by which the event is identified.  See the definition of `label` in the ABNF grammar below for permissible values.
 
-* <b>`priority`</b> -- The priority of routes that have this event as their <b>`parent-event`</b> (see <b>`routes`</b> below).  Lower number means higher priority.
+* <b>`priority`</b> -- The priority of routes that have this event as their <b>`parent-event`</b> (see <b>`routes`</b> below).  Lower number means higher priority.  If omitted, the priority is 0, the highest priority.
 
 * <b>`config`</b> -- The configuration to associate with routes with this <b>`parent-event`</b>, as above for <b>`config-update`</b>.
 
@@ -374,7 +381,7 @@ top_config_item = event_config_item / max_purgeable_routes_clause / max_purgeabl
 event_config_item =
   (DQUOTE %s"max-connection-count" DQUOTE ":" uint32) /
   (DQUOTE %s"penalty-box-duration" DQUOTE ":" duration) /
-  (DQUOTE %s"route-idle-time-for-purge" DQUOTE ":" duration) /
+  (DQUOTE %s"route-idle-time-for-purge" DQUOTE ":" purge_duration) /
   (DQUOTE %s"derog-thresh-for-penalty-boxing" DQUOTE ":" uint16 /
   (DQUOTE %s"derog-thresh-ignore-commendable" DQUOTE ":" boolean /
   (DQUOTE %s"commendable-clears-derogatory" DQUOTE ":" boolean /
@@ -382,6 +389,7 @@ event_config_item =
   (DQUOTE (%s"action-res-filter-bits-set" / %s"action-res-filter-bits-unset" / %s"action-res-bits-to-add" / %s"action-res-bits-to-clear") DQUOTE ":" action_res_flag_list)
 
 duration = number_sint64 / (DQUOTE number_sint64 [ %s"d" / %s"h" / %s"m" / %s"s" ] DQUOTE)
+purge_duration = duration / (DQUOTE %s"never" DQUOTE)
 
 max_purgeable_routes_clause = DQUOTE %s"max-purgeable-routes" DQUOTE ":" uint32
 
